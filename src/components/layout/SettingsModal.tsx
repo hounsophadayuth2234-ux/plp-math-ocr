@@ -12,6 +12,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [geminiKey, setGeminiKey] = useState("");
   const [replicateToken, setReplicateToken] = useState("");
   const [removeBgKey, setRemoveBgKey] = useState("");
+  const [huggingFaceKey, setHuggingFaceKey] = useState("");
   const [status, setStatus] = useState<{
     geminiKeySet: boolean;
     geminiMasked: string | null;
@@ -19,6 +20,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     replicateMasked: string | null;
     removeBgKeySet: boolean;
     removeBgMasked: string | null;
+    huggingFaceKeySet?: boolean;
+    huggingFaceMasked?: string | null;
   } | null>(null);
 
   const [saving, setSaving] = useState(false);
@@ -60,6 +63,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           geminiKey: geminiKey || undefined,
           replicateToken: replicateToken || undefined,
           removeBgKey: removeBgKey || undefined,
+          huggingFaceKey: huggingFaceKey || undefined,
         }),
       });
 
@@ -71,6 +75,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setGeminiKey("");
       setReplicateToken("");
       setRemoveBgKey("");
+      setHuggingFaceKey("");
       await fetchStatus();
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: unknown) {
@@ -180,11 +185,38 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </p>
           </div>
 
+          {/* Hugging Face Token Input (Module 02 briaai/RMBG-1.4) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-200">
+                3. Hugging Face API Token (briaai/RMBG-1.4)
+              </label>
+              <a
+                href="https://huggingface.co/settings/tokens"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300"
+              >
+                Get Free Token <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+            <input
+              type="password"
+              placeholder={status?.huggingFaceKeySet ? `Configured (${status.huggingFaceMasked})` : "hf_..."}
+              value={huggingFaceKey}
+              onChange={(e) => setHuggingFaceKey(e.target.value)}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+            />
+            <p className="text-[10px] text-slate-400">
+              Powers Module 02 server-side background removal via Hugging Face briaai/RMBG-1.4.
+            </p>
+          </div>
+
           {/* Optional Remove.bg Input */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-200">
-                3. Remove.bg Key (Optional)
+                4. Remove.bg Key (Optional)
               </label>
               <a
                 href="https://www.remove.bg/api"
@@ -197,14 +229,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
             <input
               type="password"
-              placeholder={status?.removeBgKeySet ? `Configured (${status.removeBgMasked})` : "Optional (free fallback active)"}
+              placeholder={status?.removeBgKeySet ? `Configured (${status.removeBgMasked})` : "Optional"}
               value={removeBgKey}
               onChange={(e) => setRemoveBgKey(e.target.value)}
               className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
             />
-            <p className="text-[10px] text-slate-400">
-              Powers Module 02. If left empty, the built-in free cutout fallback is used.
-            </p>
           </div>
 
           {/* Footer actions */}
@@ -218,7 +247,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </button>
             <button
               type="submit"
-              disabled={saving || (!geminiKey && !replicateToken && !removeBgKey)}
+              disabled={saving || (!geminiKey && !replicateToken && !removeBgKey && !huggingFaceKey)}
               className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-2 text-xs font-semibold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all"
             >
               <Save className="h-3.5 w-3.5" />

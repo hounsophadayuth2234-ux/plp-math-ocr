@@ -14,7 +14,7 @@ import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import {
-  removeBackgroundClient,
+  requestServerBackgroundRemoval,
   compositeWithSolidColor,
 } from "@/lib/bg-removal-client";
 import { cyberAudio } from "@/lib/cyber-audio";
@@ -34,7 +34,7 @@ export default function BgRemoverPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
 
-  // Trigger processing for specific feature mode with audio & worker optimization
+  // Trigger server-side background removal via Hugging Face briaai/RMBG-1.4 & canvas compositing
   const handleExecuteFeature = async (mode: "question" | "solution") => {
     if (!imageFile || isLoading) return;
 
@@ -44,15 +44,15 @@ export default function BgRemoverPage() {
     setError(null);
     setResult(null);
 
-    // Start subtle robotic scanner hum
+    // Engage subtle sci-fi robotic scanner hum
     cyberAudio.startScanningHum();
     const targetBgColor = mode === "solution" ? "#FFF0F5" : "#FFFFFF";
 
     try {
-      // 1. High-speed neural background removal with Web Worker & pre-scaling
-      const { blob: transparentBlob, provider } = await removeBackgroundClient(imageFile);
+      // 1. Send FormData to server API (/api/remove-bg) -> Receive transparent cutout blob
+      const transparentBlob = await requestServerBackgroundRemoval(imageFile);
 
-      // 2. High-precision Canvas compositing with anti-fringing & sharpening
+      // 2. Draw cutout onto HTML Canvas and fill background with White (#FFFFFF) or Pink (#FFF0F5)
       const { dataUrl, width, height } = await compositeWithSolidColor(
         transparentBlob,
         targetBgColor
@@ -63,16 +63,16 @@ export default function BgRemoverPage() {
         compositeUrl: dataUrl,
         width,
         height,
-        provider,
+        provider: "briaai/RMBG-1.4",
       });
 
       // Play success chime upon completion
       cyberAudio.playSuccessChime();
     } catch (err) {
       cyberAudio.stopScanningHum();
-      console.error("[bg-remover] Processing error:", err);
+      console.error("[bg-remover] Cloud Core processing error:", err);
       setError(
-        err instanceof Error ? err.message : "Segmentation error occurred."
+        err instanceof Error ? err.message : "Cloud Core segmentation failed."
       );
     } finally {
       setIsLoading(false);
@@ -88,14 +88,15 @@ export default function BgRemoverPage() {
 
   const isQuestion = activeFeature === "question";
 
+  // Sleek "Processing via Cloud Core..." telemetry steps
   const scannerSteps = [
-    "ACQUIRING TELEMETRY & PRE-SCALING MATRIX...",
-    "NEURAL SEGMENTATION PIPELINE IN WEB WORKER...",
-    "2-PASS MASK EROSION & COLOR DECONTAMINATION...",
+    "CONNECTING TO CLOUD CORE GATEWAY (/api/remove-bg)...",
+    "DISPATCHING IMAGE BUFFER TO BRIAAI/RMBG-1.4 MODEL...",
+    "CLOUD CORE EXTRACTING HIGH-PRECISION TRANSPARENCY MASK...",
     isQuestion
-      ? "SOLID COMPOSITING // WHITE #FFFFFF..."
-      : "SOLID COMPOSITING // PINK #FFF0F5...",
-    "FINALIZING SHARPENED COMPOSITE BUFFER...",
+      ? "COMPOSITING SOLID WHITE (#FFFFFF) ONTO HTML5 CANVAS..."
+      : "COMPOSITING SOLID PINK (#FFF0F5) ONTO HTML5 CANVAS...",
+    "FINALIZING HIGH-RES RENDER & PREPARING OUTPUT BUFFER...",
   ];
 
   return (
@@ -113,10 +114,10 @@ export default function BgRemoverPage() {
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <span className="flex items-center gap-1.5 text-slate-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            CORE: ONLINE
+            CLOUD CORE: ACTIVE
           </span>
           <span className="rounded border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-cyan-300">
-            MOD 02
+            briaai/RMBG-1.4
           </span>
         </div>
       </div>
@@ -135,7 +136,7 @@ export default function BgRemoverPage() {
                 </h2>
               </div>
               <span className="font-mono text-[10px] text-slate-500">
-                REV 2.4
+                HF SERVERLESS
               </span>
             </div>
 
@@ -200,7 +201,7 @@ export default function BgRemoverPage() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-cyan-300/80">
-                        WHITE BACKDROP · AUTO DEFUSED
+                        WHITE BACKDROP · CLOUD SEGMENTED
                       </span>
                     </div>
                   </div>
@@ -262,7 +263,7 @@ export default function BgRemoverPage() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-pink-300/80">
-                        PINK BACKDROP · AUTO DEFUSED
+                        PINK BACKDROP · CLOUD SEGMENTED
                       </span>
                     </div>
                   </div>
@@ -299,17 +300,17 @@ export default function BgRemoverPage() {
             </div>
           )}
 
-          {/* Sci-Fi Robotic Scanner with Hum Sound */}
+          {/* Sleek "Processing via Cloud Core..." Loading State */}
           {isLoading && (
             <RoboticScanner
               active={true}
               moduleName={
                 isQuestion
-                  ? "SEGMENTATION ENGINE // WHITE #FFFFFF"
-                  : "SEGMENTATION ENGINE // PINK #FFF0F5"
+                  ? "CLOUD CORE // BRIAAI RMBG-1.4 [CH-01: WHITE]"
+                  : "CLOUD CORE // BRIAAI RMBG-1.4 [CH-02: PINK]"
               }
               steps={scannerSteps}
-              subtext="Neural model processing in Web Worker · Anti-fringing erosion active"
+              subtext="Processing via Cloud Core... Server-side neural extraction active"
             />
           )}
 

@@ -37,6 +37,8 @@ export async function GET() {
     replicateMasked: mask(env.REPLICATE_API_TOKEN),
     removeBgKeySet: Boolean(env.REMOVE_BG_API_KEY && !env.REMOVE_BG_API_KEY.includes("your_")),
     removeBgMasked: mask(env.REMOVE_BG_API_KEY),
+    huggingFaceKeySet: Boolean((env.HUGGINGFACE_API_KEY || env.HF_API_TOKEN) && !(env.HUGGINGFACE_API_KEY || env.HF_API_TOKEN).includes("your_")),
+    huggingFaceMasked: mask(env.HUGGINGFACE_API_KEY || env.HF_API_TOKEN),
   });
 }
 
@@ -44,10 +46,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { geminiKey, replicateToken, removeBgKey } = body as {
+    const { geminiKey, replicateToken, removeBgKey, huggingFaceKey } = body as {
       geminiKey?: string;
       replicateToken?: string;
       removeBgKey?: string;
+      huggingFaceKey?: string;
     };
 
     let existingContent = "";
@@ -76,6 +79,10 @@ export async function POST(req: NextRequest) {
     if (removeBgKey !== undefined && removeBgKey.trim()) {
       updated = updateOrAppend(updated, "REMOVE_BG_API_KEY", removeBgKey.trim());
       process.env.REMOVE_BG_API_KEY = removeBgKey.trim();
+    }
+    if (huggingFaceKey !== undefined && huggingFaceKey.trim()) {
+      updated = updateOrAppend(updated, "HUGGINGFACE_API_KEY", huggingFaceKey.trim());
+      process.env.HUGGINGFACE_API_KEY = huggingFaceKey.trim();
     }
 
     fs.writeFileSync(ENV_FILE_PATH, updated, "utf-8");
