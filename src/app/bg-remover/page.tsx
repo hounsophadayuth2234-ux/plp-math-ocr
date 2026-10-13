@@ -14,7 +14,7 @@ import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import {
-  removeBackgroundClient,
+  requestReplicateBackgroundRemoval,
   compositeWithSolidColor,
 } from "@/lib/bg-removal-client";
 import { cyberAudio } from "@/lib/cyber-audio";
@@ -34,7 +34,7 @@ export default function BgRemoverPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
 
-  // Trigger client-side background removal with max-800px downscale & canvas compositing
+  // Trigger Replicate BiRefNet background removal & HTML5 canvas compositing
   const handleExecuteFeature = async (mode: "question" | "solution") => {
     if (!imageFile || isLoading) return;
 
@@ -44,20 +44,17 @@ export default function BgRemoverPage() {
     setError(null);
     setResult(null);
 
-    // Engage sci-fi robotic scanner sound
+    // Engage sci-fi robotic scanner hum
     cyberAudio.startScanningHum();
     const targetBgColor = mode === "solution" ? "#FFF0F5" : "#FFFFFF";
 
     try {
-      // Yield execution to allow React state to render the RoboticScanner and loading UI
-      await new Promise((resolve) => setTimeout(resolve, 80));
-
-      // 1. Safe Client-Side Execution (Downscaled to max 800px + @imgly Web Worker + Edge Refinement)
-      const { blob: transparentBlob, width, height, provider } =
-        await removeBackgroundClient(imageFile);
+      // 1. Send FormData to server API (/api/remove-bg) -> Dispatches to Replicate BiRefNet
+      const { blob: transparentBlob, provider } =
+        await requestReplicateBackgroundRemoval(imageFile);
 
       // 2. Draw cutout onto HTML Canvas and fill background with White (#FFFFFF) or Pink (#FFF0F5)
-      const { dataUrl } = await compositeWithSolidColor(
+      const { dataUrl, width, height } = await compositeWithSolidColor(
         transparentBlob,
         targetBgColor
       );
@@ -74,9 +71,9 @@ export default function BgRemoverPage() {
       cyberAudio.playSuccessChime();
     } catch (err) {
       cyberAudio.stopScanningHum();
-      console.error("[bg-remover] Local processing error:", err);
+      console.error("[bg-remover] Replicate BiRefNet error:", err);
       setError(
-        err instanceof Error ? err.message : "Local neural segmentation failed."
+        err instanceof Error ? err.message : "Replicate BiRefNet segmentation failed."
       );
     } finally {
       setIsLoading(false);
@@ -92,12 +89,12 @@ export default function BgRemoverPage() {
 
   const isQuestion = activeFeature === "question";
 
-  // Non-blocking telemetry steps for local downscaled processing
+  // Replicate BiRefNet telemetry steps for RoboticScanner
   const scannerSteps = [
-    "DOWNSCALING IMAGE BUFFER TO SAFE DIMENSION (MAX 800PX)...",
-    "DISPATCHING BUFFER TO LOCAL NEURAL WORKER (@imgly/isnet)...",
-    "SEGMENTING FOREGROUND SUBJECT & EXTRACTING ALPHA MASK...",
-    "APPLYING 2PX MASK EROSION & COLOR DECONTAMINATION...",
+    "CONNECTING TO REPLICATE BIREFNET CLOUD CORE (/api/remove-bg)...",
+    "DISPATCHING IMAGE TENSORS TO BIREFNET SEGMENTATION PIPELINE...",
+    "EXTRACTING BILATERAL REFERENCE & HIGH-FIDELITY ALPHA MATTE...",
+    "STREAMING TRANSPARENT CUTOUT FROM REPLICATE CLOUD...",
     isQuestion
       ? "COMPOSITING SOLID WHITE (#FFFFFF) ONTO HTML5 CANVAS..."
       : "COMPOSITING SOLID PINK (#FFF0F5) ONTO HTML5 CANVAS...",
@@ -119,10 +116,10 @@ export default function BgRemoverPage() {
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <span className="flex items-center gap-1.5 text-slate-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            LOCAL ENGINE: READY
+            REPLICATE BIREFNET: READY
           </span>
           <span className="rounded border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-cyan-300">
-            @imgly/isnet_quint8
+            BiRefNet / SOTA
           </span>
         </div>
       </div>
@@ -141,7 +138,7 @@ export default function BgRemoverPage() {
                 </h2>
               </div>
               <span className="font-mono text-[10px] text-cyan-400/90 font-semibold">
-                MAX 800PX OPTIMIZED
+                REPLICATE CLOUD CORE
               </span>
             </div>
 
@@ -206,7 +203,7 @@ export default function BgRemoverPage() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-cyan-300/80">
-                        WHITE BACKDROP · LOCAL SEGMENTED
+                        WHITE BACKDROP · BIREFNET SEGMENTED
                       </span>
                     </div>
                   </div>
@@ -268,7 +265,7 @@ export default function BgRemoverPage() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-pink-300/80">
-                        PINK BACKDROP · LOCAL SEGMENTED
+                        PINK BACKDROP · BIREFNET SEGMENTED
                       </span>
                     </div>
                   </div>
@@ -305,17 +302,17 @@ export default function BgRemoverPage() {
             </div>
           )}
 
-          {/* Non-Blocking "Processing..." Robotic Scanner */}
+          {/* High-Tech Robotic Scanner Loading State */}
           {isLoading && (
             <RoboticScanner
               active={true}
               moduleName={
                 isQuestion
-                  ? "LOCAL NEURAL ENGINE // [CH-01: WHITE]"
-                  : "LOCAL NEURAL ENGINE // [CH-02: PINK]"
+                  ? "REPLICATE BIREFNET // [CH-01: WHITE]"
+                  : "REPLICATE BIREFNET // [CH-02: PINK]"
               }
               steps={scannerSteps}
-              subtext="Safe client-side execution active · Zero browser freeze"
+              subtext="High-precision BiRefNet neural segmentation underway · Zero local browser lag"
             />
           )}
 

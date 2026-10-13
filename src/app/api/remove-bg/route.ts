@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import Replicate from "replicate";
 
-export const maxDuration = 60; // Allow up to 60s for cold-start serverless inference
+export const maxDuration = 60; // Allow up to 60s for serverless GPU inference on Replicate
 
-const PRIMARY_URL = "https://api-inference.huggingface.co/models/briaai/RMBG-1.4";
-const FALLBACK_URL = "https://router.huggingface.co/hf-inference/models/briaai/RMBG-1.4";
+// Primary: BiRefNet (High-Resolution Dichotomous Image Segmentation - SOTA hair/edge accuracy)
+const BIREFNET_MODEL =
+  "men1scus/birefnet:f74986db0355b58403ed20963af156525e2891ea3c2d499bfbfb2a28cd87c5d7";
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 5000; // 5 seconds wait on 503 cold start
+// Fallback: Tracer B7 Remove-BG (High-speed robust fallback)
+const FALLBACK_MODEL =
+  "lucataco/remove-bg:95fcc2a26d3899cd6c2691c9004657fe41447a34d6284777d7f7f9353fa7f99b";
 
 /**
- * Server-Side Background Removal API Route
- * Uses Hugging Face Inference API with model "briaai/RMBG-1.4".
- * 
- * Fixes implemented:
- * 1. Auto-retry on 503 (Model loading) with 5s delay up to 3 times.
- * 2. Proper binary blob response (new Response(blob, { headers: { 'Content-Type': 'image/png' } })).
- * 3. Secure Authorization: Bearer header reading HUGGINGFACE_API_KEY.
- * 4. Detailed console logging with status & statusText for easy debugging.
+ * Replicate Background Removal API Route
+ * Integrates high-accuracy BiRefNet segmentation model via Replicate API.
+ * Converts uploaded image to data URI, calls Replicate, fetches the resulting transparent
+ * PNG asset, and streams back binary PNG bytes to the client.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -24,125 +23,122 @@ export async function POST(req: NextRequest) {
     const imageFile = formData.get("image") as File | null;
 
     if (!imageFile) {
-      console.error("[remove-bg] Error: No image file provided in request FormData.");
+      console.error("[/api/remove-bg] Error: No image file provided in request FormData.");
       return NextResponse.json(
         { error: "No image file provided in form data." },
         { status: 400 }
       );
     }
 
-    const apiKey = (
-      process.env.HUGGINGFACE_API_KEY ||
-      process.env.HF_API_TOKEN ||
+    const apiToken = (
+      process.env.REPLICATE_API_TOKEN ||
+      process.env.REPLICATE_API_KEY ||
       ""
     ).trim().replace(/^["']|["']$/g, "");
 
-    if (!apiKey || apiKey.includes("your_")) {
-      console.error("[remove-bg] Error: HUGGINGFACE_API_KEY is missing from environment variables.");
+    if (!apiToken || apiToken.includes("your_replicate_token_here")) {
+      console.error("[/api/remove-bg] Error: REPLICATE_API_TOKEN is missing or placeholder.");
       return NextResponse.json(
         {
           error:
-            "HUGGINGFACE_API_KEY is not configured in server environment variables. Please add your Hugging Face API key in .env.local or Vercel Environment Variables.",
+            "REPLICATE_API_TOKEN is not configured in server environment variables. Please add your Replicate API token in the Settings modal (top-right cog) or in .env.local / Vercel Environment Variables.",
         },
         { status: 401 }
       );
     }
 
+    // Convert input image file to base64 Data URI
     const arrayBuffer = await imageFile.arrayBuffer();
-    const contentType = imageFile.type || "application/octet-stream";
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const mimeType = imageFile.type || "image/png";
+    const dataUri = `data:${mimeType};base64,${base64}`;
 
-    // Attempt inference with auto-retry on 503 cold-starts
-    const targetUrls = [PRIMARY_URL, FALLBACK_URL];
-    let finalErrorText = "";
-    let finalStatus = 500;
-    let finalStatusText = "Internal Server Error";
+    const replicate = new Replicate({ auth: apiToken });
 
-    for (const url of targetUrls) {
-      console.log(`[remove-bg] Connecting to Hugging Face endpoint: ${url}`);
+    let output: unknown;
+    let usedModel = "BiRefNet (men1scus/birefnet)";
 
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          console.log(`[remove-bg] [Attempt ${attempt}/${MAX_RETRIES}] Sending ${arrayBuffer.byteLength} bytes to ${url}...`);
+    console.log(`[/api/remove-bg] Invoking Replicate BiRefNet for image (${(arrayBuffer.byteLength / 1024).toFixed(1)} KB)...`);
 
-          const hfResponse = await fetch(url, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": contentType,
-              Accept: "image/png",
-              "x-wait-for-model": "true",
-            },
-            body: arrayBuffer,
-          });
+    try {
+      // Primary attempt: BiRefNet
+      output = await replicate.run(BIREFNET_MODEL, {
+        input: {
+          image: dataUri,
+        },
+      });
+      console.log("[/api/remove-bg] BiRefNet inference completed successfully.");
+    } catch (primaryErr: unknown) {
+      const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+      console.warn(`[/api/remove-bg] Primary BiRefNet error: ${primaryMsg}. Trying fallback model...`);
 
-          // Check if successful
-          if (hfResponse.ok) {
-            console.log(`[remove-bg] Success! Received 200 OK from Hugging Face (${url}).`);
-            
-            // Correct Binary Handling: Receive blob directly and return as image/png binary response
-            const imageBlob = await hfResponse.blob();
-            
-            return new Response(imageBlob, {
-              status: 200,
-              headers: {
-                "Content-Type": "image/png",
-                "Cache-Control": "no-store",
-              },
-            });
-          }
+      // Fallback attempt: Tracer B7 Remove-BG
+      usedModel = "Tracer B7 (lucataco/remove-bg)";
+      output = await replicate.run(FALLBACK_MODEL, {
+        input: {
+          image: dataUri,
+        },
+      });
+      console.log("[/api/remove-bg] Fallback model inference completed successfully.");
+    }
 
-          // Log exact status and statusText for debugging
-          finalStatus = hfResponse.status;
-          finalStatusText = hfResponse.statusText;
-          console.error(
-            `[remove-bg] Hugging Face returned non-200 status: ${finalStatus} ${finalStatusText} (Attempt ${attempt}/${MAX_RETRIES})`
-          );
+    // Process output from Replicate (can be FileOutput, array of FileOutput, or string URL)
+    let imageBlob: Blob | null = null;
 
-          // Auto-Retry Logic (Cold Start Fix):
-          // If 503 Service Unavailable (Model loading), wait 5 seconds and retry
-          if (hfResponse.status === 503 && attempt < MAX_RETRIES) {
-            const loadingInfo = await hfResponse.text().catch(() => "");
-            console.warn(
-              `[remove-bg] Model is currently loading/waking up (503). Waiting ${RETRY_DELAY_MS / 1000}s before retry ${attempt + 1}... Details: ${loadingInfo}`
-            );
-            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-            continue; // Retry with next attempt
-          }
+    if (output && typeof (output as { blob?: () => Promise<Blob> }).blob === "function") {
+      // Replicate modern SDK FileOutput
+      imageBlob = await (output as { blob: () => Promise<Blob> }).blob();
+    } else {
+      let outputUrl = "";
 
-          // If failed with another status code or exhausted retries
-          finalErrorText = await hfResponse.text().catch(() => "");
-          console.error(`[remove-bg] Hugging Face error body:`, finalErrorText);
-
-          // If not 503, don't keep repeating the same error on this URL
-          if (hfResponse.status !== 503) {
-            break;
-          }
-        } catch (fetchErr: unknown) {
-          const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-          console.error(`[remove-bg] Network fetch exception on ${url}:`, msg);
-          finalErrorText = msg;
-          break; // Try fallback URL if network fetch failed
+      if (Array.isArray(output) && output.length > 0) {
+        const first = output[0];
+        if (first && typeof first.blob === "function") {
+          imageBlob = await first.blob();
+        } else {
+          outputUrl = String(first);
         }
+      } else if (output) {
+        outputUrl = String(output);
+      }
+
+      if (!imageBlob && outputUrl && outputUrl.startsWith("http")) {
+        console.log(`[/api/remove-bg] Fetching transparent image from Replicate delivery URL: ${outputUrl}`);
+        const assetRes = await fetch(outputUrl);
+        if (!assetRes.ok) {
+          throw new Error(
+            `Failed to download processed image from Replicate CDN (${assetRes.status} ${assetRes.statusText})`
+          );
+        }
+        imageBlob = await assetRes.blob();
       }
     }
 
-    // If all attempts failed across endpoints
-    return NextResponse.json(
-      {
-        error: `Failed to remove background via Hugging Face [${finalStatus} ${finalStatusText}]: ${finalErrorText || "Service Unavailable"}`,
-        status: finalStatus,
-        statusText: finalStatusText,
+    if (!imageBlob) {
+      console.error("[/api/remove-bg] Failed to resolve output image from Replicate response:", output);
+      return NextResponse.json(
+        { error: "Replicate returned empty or unrecognizable output payload." },
+        { status: 502 }
+      );
+    }
+
+    console.log(`[/api/remove-bg] Successfully received transparent cutout (${imageBlob.size} bytes) via ${usedModel}.`);
+
+    // Return the transparent PNG cutout directly as a binary response
+    return new Response(imageBlob, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "no-store",
+        "X-Segmentation-Model": usedModel,
       },
-      { status: finalStatus === 503 ? 503 : 502 }
-    );
+    });
   } catch (err: unknown) {
-    console.error("[remove-bg] Unexpected server error in /api/remove-bg:", err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("[/api/remove-bg] Replicate execution exception:", err);
     return NextResponse.json(
       {
-        error:
-          err instanceof Error
-            ? err.message
-            : "An unexpected server error occurred during background removal.",
+        error: `Replicate Segmentation Error: ${errorMsg}`,
       },
       { status: 500 }
     );
