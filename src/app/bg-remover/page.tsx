@@ -8,58 +8,35 @@ import {
   Loader2,
   AlertCircle,
   ImageOff,
-  CheckCircle2,
   FileQuestion,
   Lightbulb,
   ArrowRight,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
-import type { BgRemoveSuccess, BgRemoveError } from "@/app/api/bg-remove/route";
+import {
+  removeBackgroundClient,
+  compositeWithSolidColor,
+  BgRemovalProgress,
+} from "@/lib/bg-removal-client";
+
+interface ProcessResult {
+  transparentBlob: Blob;
+  compositeUrl: string;
+  width: number;
+  height: number;
+  provider: string;
+}
 
 export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [activeFeature, setActiveFeature] = useState<"question" | "solution">("question");
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<BgRemoveSuccess | null>(null);
-
-  // Dynamic status steps for high-tech telemetry
-  const steps =
-    activeFeature === "question"
-      ? [
-          "UPLOADING IMAGE TO SEGMENTATION GATEWAY...",
-          "NEURAL NETWORK SEGMENTING FOREGROUND SUBJECT...",
-          "EXTRACTING LOSSLESS ALPHA TRANSPARENCY MASK...",
-          "AUTO-APPLYING SOLID WHITE (#FFFFFF) BACKGROUND FOR QUESTION...",
-          "GENERATING HIGH-PRECISION QUESTION COMPOSITE...",
-        ]
-      : [
-          "UPLOADING IMAGE TO SEGMENTATION GATEWAY...",
-          "NEURAL NETWORK SEGMENTING FOREGROUND SUBJECT...",
-          "EXTRACTING LOSSLESS ALPHA TRANSPARENCY MASK...",
-          "AUTO-APPLYING SOLID PALE PINK (#FFF0F5) BACKGROUND FOR SOLUTION...",
-          "GENERATING HIGH-PRECISION SOLUTION COMPOSITE...",
-        ];
-
-  // Progress animation
-  const startStepAnimation = () => {
-    setLoadingStep(0);
-    const interval = setInterval(() => {
-      setLoadingStep((prev) => {
-        if (prev >= steps.length - 1) {
-          clearInterval(interval);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 1500);
-    return interval;
-  };
+  const [result, setResult] = useState<ProcessResult | null>(null);
+  const [telemetryStep, setTelemetryStep] = useState<string>("");
 
   // Trigger processing for specific feature mode
   const handleExecuteFeature = async (mode: "question" | "solution") => {
@@ -70,34 +47,47 @@ export default function BgRemoverPage() {
     setError(null);
     setResult(null);
 
-    const interval = startStepAnimation();
     const targetBgColor = mode === "solution" ? "#FFF0F5" : "#FFFFFF";
+    setTelemetryStep("INITIALIZING NEURAL SEGMENTATION ENGINE...");
 
     try {
-      const formData = new FormData();
-      formData.append("image", imageFile);
-      formData.append("mode", mode);
-      formData.append("bgColor", targetBgColor);
+      // Step 1: Actually remove the background to create a transparent PNG blob
+      setTelemetryStep("ISOLATING FOREGROUND SUBJECT & REMOVING BACKGROUND...");
+      const { blob: transparentBlob, provider } = await removeBackgroundClient(
+        imageFile,
+        (prog: BgRemovalProgress) => {
+          if (prog.percent > 0) {
+            setTelemetryStep(`PROCESSING NEURAL WEIGHTS (${prog.percent}%)...`);
+          }
+        }
+      );
 
-      const response = await fetch("/api/bg-remove", {
-        method: "POST",
-        body: formData,
+      // Step 2 & 3: Draw onto HTML Canvas and fill with solid color (#FFFFFF or #FFF0F5)
+      setTelemetryStep(
+        mode === "solution"
+          ? "COMPOSITING PALE PINK (#FFF0F5) BACKGROUND ONTO CANVAS..."
+          : "COMPOSITING SOLID WHITE (#FFFFFF) BACKGROUND ONTO CANVAS..."
+      );
+
+      const { dataUrl, width, height } = await compositeWithSolidColor(
+        transparentBlob,
+        targetBgColor
+      );
+
+      // Step 4: Output the final processed image with the new solid color
+      setResult({
+        transparentBlob,
+        compositeUrl: dataUrl,
+        width,
+        height,
+        provider,
       });
-
-      const data: BgRemoveSuccess | BgRemoveError = await response.json();
-      clearInterval(interval);
-
-      if (!response.ok || "error" in data) {
-        const errData = data as BgRemoveError;
-        setError(errData.error ?? "Background removal failed.");
-        return;
-      }
-
-      setResult(data as BgRemoveSuccess);
     } catch (err) {
-      clearInterval(interval);
+      console.error("[bg-remover] Processing error:", err);
       setError(
-        err instanceof Error ? err.message : "A network error occurred."
+        err instanceof Error
+          ? err.message
+          : "Failed to process image background removal."
       );
     } finally {
       setIsLoading(false);
@@ -111,6 +101,16 @@ export default function BgRemoverPage() {
   };
 
   const isQuestion = activeFeature === "question";
+
+  // Dynamic steps for high-tech scanner
+  const scannerSteps = [
+    "LOADING NEURAL SEGMENTATION PIPELINE...",
+    telemetryStep || "ISOLATING SUBJECT & EXTRACTING ALPHA MASK...",
+    isQuestion
+      ? "COMPOSITING SOLID WHITE (#FFFFFF) BACKGROUND..."
+      : "COMPOSITING PALE PINK (#FFF0F5) BACKGROUND...",
+    "FINALIZING HIGH-RES PNG OUTPUT...",
+  ];
 
   return (
     <div className="space-y-6">
@@ -133,13 +133,13 @@ export default function BgRemoverPage() {
                 MODULE 02
               </span>
               <span>·</span>
-              <span>PLP SPECIALIZED CROP & AUTO BACKGROUND PIPELINE</span>
+              <span>CLIENT-SIDE AI SEGMENTATION &amp; AUTO-COLOR ENGINE</span>
             </div>
             <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
               កាត់រូបភាព៖ កាត់រូបដាក់សំណួរ &amp; កាត់រូបដាក់ដំណោះស្រាយ
             </h2>
             <p className="text-sm leading-relaxed text-slate-300">
-              ប្រព័ន្ធ AI កាត់ផ្ដាច់ផ្ទៃខាងក្រោយ និងជំនួសពណ៌ស្វ័យប្រវត្តិតាមមុខងារពិសេសទាំងពីរ៖{" "}
+              ប្រព័ន្ធកាត់ផ្ដាច់ផ្ទៃខាងក្រោយ និងជំនួសពណ៌ស្វ័យប្រវត្តិតាមមុខងារពិសេសទាំងពីរ៖{" "}
               <span className="font-semibold text-white">
                 "កាត់រូបដាក់សំណួរ" (ផ្ទៃពណ៌ស #FFFFFF)
               </span>{" "}
@@ -147,7 +147,7 @@ export default function BgRemoverPage() {
               <span className="font-semibold text-pink-300">
                 "កាត់រូបដាក់ដំណោះស្រាយ" (ផ្ទៃផ្កាឈូក #FFF0F5)
               </span>{" "}
-              សម្រាប់រៀបចំឯកសារគណិតវិទ្យា PLP បានលឿន និងស្អាតឥតខ្ចោះ។
+              ដំណើរការផ្ទាល់ក្នុង Browser ដោយឥតគិតថ្លៃ និងមិនទាមទារ API Key បន្ថែមឡើយ។
             </p>
           </div>
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 text-white shadow-lg shadow-emerald-500/25 ring-1 ring-cyan-400/30">
@@ -357,12 +357,11 @@ export default function BgRemoverPage() {
               <div className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
                 <span className="text-slate-300 font-semibold">
-                  PLP Neural Auto-Composite Engine
+                  Local Neural AI Engine (@imgly/background-removal)
                 </span>
               </div>
               <p className="text-[11px] leading-relaxed text-slate-400">
-                // ដំណើរការកាត់រូប និងបញ្ចូលពណ៌ផ្ទៃខាងក្រោយ (#FFFFFF ឬ #FFF0F5) ដោយស្វ័យប្រវត្តិភ្លាមៗ
-                ដូច្នេះអ្នកអាចទាញយកឯកសារដែលមានផ្ទៃពណ៌រួចជាស្រេច។
+                // កាត់ផ្ដាច់ផ្ទៃខាងក្រោយពិតប្រាកដក្នុង Browser និងគូរផ្ទៃពណ៌ (#FFFFFF ឬ #FFF0F5) លើ HTML5 Canvas ស្វ័យប្រវត្តិ មិនទាមទារ API Key។
               </p>
             </div>
           </div>
@@ -390,11 +389,11 @@ export default function BgRemoverPage() {
                   ? "PLP QUESTION CROP // AUTO #FFFFFF WHITE"
                   : "PLP SOLUTION CROP // AUTO #FFF0F5 PALE PINK"
               }
-              steps={steps}
+              steps={scannerSteps}
               subtext={
                 isQuestion
-                  ? "AI is segmenting subject and automatically applying solid white (#FFFFFF) background for Question Section"
-                  : "AI is segmenting subject and automatically applying solid pale pink (#FFF0F5) background for Solution Section"
+                  ? "AI is removing original background and compositing solid white (#FFFFFF) background for Question Section"
+                  : "AI is removing original background and compositing solid pale pink (#FFF0F5) background for Solution Section"
               }
             />
           )}
@@ -420,16 +419,18 @@ export default function BgRemoverPage() {
                 </h3>
                 <span className="font-mono text-xs text-emerald-400 flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  AUTO-COMPOSITED
+                  SOLID COLOR BAKED IN
                 </span>
               </div>
 
               <ColorStudio
-                transparentPngBase64={result.imageBase64}
-                width={result.originalWidth || 800}
-                height={result.originalHeight || 600}
+                transparentBlob={result.transparentBlob}
+                initialCompositeUrl={result.compositeUrl}
+                width={result.width || 800}
+                height={result.height || 600}
                 initialMode={activeFeature}
                 initialBgColor={activeFeature === "solution" ? "#FFF0F5" : "#FFFFFF"}
+                provider={result.provider}
                 onReset={handleReset}
               />
             </div>

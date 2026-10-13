@@ -1,95 +1,17 @@
 "use client";
 
-import React, {
-  useRef,
-  useEffect,
-  useState,
-  useCallback,
-  forwardRef,
-  useImperativeHandle,
-} from "react";
-import { Download, RefreshCw, FileQuestion, Lightbulb, Check, Sparkles, Layers } from "lucide-react";
-
-export interface CanvasCompositorHandle {
-  /** Returns a full-resolution data-URL PNG of the current canvas composite */
-  exportPng: () => string | null;
-}
-
-interface CanvasCompositorProps {
-  /** Base64-encoded transparent PNG (no data URI prefix) */
-  transparentPngBase64: string;
-  /** Current background color hex e.g. "#FFFFFF" or "#FFF0F5" */
-  bgColor: string;
-  width: number;
-  height: number;
-}
-
-/**
- * High-precision HTML5 Canvas compositor that draws a solid color background
- * beneath the transparent-PNG subject in real time at full native resolution.
- */
-export const CanvasCompositor = forwardRef<CanvasCompositorHandle, CanvasCompositorProps>(
-  function CanvasCompositor({ transparentPngBase64, bgColor, width, height }, ref) {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const imgRef = useRef<HTMLImageElement | null>(null);
-    const [isReady, setIsReady] = useState(false);
-
-    // Load the transparent PNG once
-    useEffect(() => {
-      const img = new Image();
-      img.onload = () => {
-        imgRef.current = img;
-        setIsReady(true);
-      };
-      img.src = `data:image/png;base64,${transparentPngBase64}`;
-    }, [transparentPngBase64]);
-
-    // Redraw at full native resolution whenever bgColor changes or image becomes ready
-    useEffect(() => {
-      if (!isReady || !imgRef.current) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      const fullW = imgRef.current.naturalWidth || width || 800;
-      const fullH = imgRef.current.naturalHeight || height || 600;
-
-      canvas.width = fullW;
-      canvas.height = fullH;
-
-      // 1. Fill solid background color
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, fullW, fullH);
-
-      // 2. Draw transparent subject on top
-      ctx.drawImage(imgRef.current, 0, 0, fullW, fullH);
-    }, [isReady, bgColor, width, height]);
-
-    // Expose exportPng() to parent
-    useImperativeHandle(ref, () => ({
-      exportPng: () => {
-        return canvasRef.current?.toDataURL("image/png") ?? null;
-      },
-    }));
-
-    return (
-      <canvas
-        ref={canvasRef}
-        className="max-h-[460px] max-w-full object-contain rounded-xl shadow-2xl transition-all"
-        style={{ background: isReady ? undefined : bgColor }}
-        aria-label="Canvas preview with automatic background replacement"
-      />
-    );
-  }
-);
+import React, { useState, useCallback, useEffect } from "react";
+import { Download, RefreshCw, Check, Layers, Sparkles } from "lucide-react";
+import { compositeWithSolidColor } from "@/lib/bg-removal-client";
 
 interface ColorStudioProps {
-  transparentPngBase64: string;
+  transparentBlob: Blob;
+  initialCompositeUrl: string;
   width: number;
   height: number;
   initialMode?: "question" | "solution";
   initialBgColor?: string;
+  provider?: string;
   onReset: () => void;
 }
 
@@ -97,62 +19,86 @@ interface ColorStudioProps {
  * Specialized Auto-Background Studio for PLP Math:
  * Feature 1: "កាត់រូបដាក់សំណួរ" (Solid White #FFFFFF)
  * Feature 2: "កាត់រូបដាក់ដំណោះស្រាយ" (Solid Pale Pink #FFF0F5)
+ * Displays the baked composite image directly in the preview deck and enables 1-click download.
  */
 export function ColorStudio({
-  transparentPngBase64,
+  transparentBlob,
+  initialCompositeUrl,
   width,
   height,
   initialMode = "question",
-  initialBgColor,
+  initialBgColor = "#FFFFFF",
+  provider,
   onReset,
 }: ColorStudioProps) {
   const [activeMode, setActiveMode] = useState<"question" | "solution">(initialMode);
-  const [bgColor, setBgColor] = useState<string>(
-    initialBgColor || (initialMode === "solution" ? "#FFF0F5" : "#FFFFFF")
-  );
-  const compositorRef = useRef<CanvasCompositorHandle>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [bgColor, setBgColor] = useState<string>(initialBgColor);
+  const [currentCompositeUrl, setCurrentCompositeUrl] = useState<string>(initialCompositeUrl);
+  const [isSwitching, setIsSwitching] = useState(false);
 
-  // Switch to Feature 1: កាត់រូបដាក់សំណួរ (Auto #FFFFFF)
-  const handleSelectQuestionMode = () => {
+  // Sync if initialCompositeUrl changes
+  useEffect(() => {
+    setCurrentCompositeUrl(initialCompositeUrl);
+    setActiveMode(initialMode);
+    setBgColor(initialBgColor);
+  }, [initialCompositeUrl, initialMode, initialBgColor]);
+
+  // Switch to Feature 1: កាត់រូបដាក់សំណួរ (Solid White #FFFFFF)
+  const handleSelectQuestionMode = async () => {
+    if (activeMode === "question") return;
+    setIsSwitching(true);
     setActiveMode("question");
     setBgColor("#FFFFFF");
+
+    try {
+      const { dataUrl } = await compositeWithSolidColor(transparentBlob, "#FFFFFF");
+      setCurrentCompositeUrl(dataUrl);
+    } catch (err) {
+      console.error("Failed to re-composite with #FFFFFF:", err);
+    } finally {
+      setIsSwitching(false);
+    }
   };
 
-  // Switch to Feature 2: កាត់រូបដាក់ដំណោះស្រាយ (Auto #FFF0F5)
-  const handleSelectSolutionMode = () => {
+  // Switch to Feature 2: កាត់រូបដាក់ដំណោះស្រាយ (Solid Pale Pink #FFF0F5)
+  const handleSelectSolutionMode = async () => {
+    if (activeMode === "solution") return;
+    setIsSwitching(true);
     setActiveMode("solution");
     setBgColor("#FFF0F5");
+
+    try {
+      const { dataUrl } = await compositeWithSolidColor(transparentBlob, "#FFF0F5");
+      setCurrentCompositeUrl(dataUrl);
+    } catch (err) {
+      console.error("Failed to re-composite with #FFF0F5:", err);
+    } finally {
+      setIsSwitching(false);
+    }
   };
 
-  // Download the final image with the respective solid color already applied
+  // 1-Click Download of the final image with respective solid color baked in
   const handleDownload = useCallback(() => {
-    setIsDownloading(true);
-    setTimeout(() => {
-      const dataUrl = compositorRef.current?.exportPng();
-      if (!dataUrl) {
-        setIsDownloading(false);
-        return;
-      }
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      const timestamp = Date.now();
-      if (activeMode === "solution") {
-        a.download = `PLP-Solution-Pink-FFF0F5-${timestamp}.png`;
-      } else {
-        a.download = `PLP-Question-White-FFFFFF-${timestamp}.png`;
-      }
-      a.click();
-      setIsDownloading(false);
-    }, 80);
-  }, [activeMode]);
-
-  // Transparent PNG download fallback
-  const handleDownloadTransparent = () => {
+    if (!currentCompositeUrl) return;
     const a = document.createElement("a");
-    a.href = `data:image/png;base64,${transparentPngBase64}`;
-    a.download = `PLP-Subject-Transparent-${Date.now()}.png`;
+    a.href = currentCompositeUrl;
+    const timestamp = Date.now();
+    if (activeMode === "solution") {
+      a.download = `PLP-Solution-Pink-FFF0F5-${timestamp}.png`;
+    } else {
+      a.download = `PLP-Question-White-FFFFFF-${timestamp}.png`;
+    }
     a.click();
+  }, [currentCompositeUrl, activeMode]);
+
+  // Transparent PNG download
+  const handleDownloadTransparent = () => {
+    const url = URL.createObjectURL(transparentBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `PLP-Transparent-Subject-${Date.now()}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const isQuestion = activeMode === "question";
@@ -165,6 +111,7 @@ export function ColorStudio({
         <button
           type="button"
           onClick={handleSelectQuestionMode}
+          disabled={isSwitching}
           className={`group relative flex items-center gap-3 rounded-xl p-3.5 text-left transition-all ${
             isQuestion
               ? "bg-slate-900 border border-cyan-400/50 shadow-[0_0_20px_rgba(0,240,255,0.18)]"
@@ -198,6 +145,7 @@ export function ColorStudio({
         <button
           type="button"
           onClick={handleSelectSolutionMode}
+          disabled={isSwitching}
           className={`group relative flex items-center gap-3 rounded-xl p-3.5 text-left transition-all ${
             !isQuestion
               ? "bg-slate-900 border border-pink-400/50 shadow-[0_0_20px_rgba(255,105,180,0.18)]"
@@ -243,22 +191,22 @@ export function ColorStudio({
             {isQuestion ? (
               <>
                 <strong className="text-white">កាត់រូបដាក់សំណួរ:</strong> ផ្ទៃពណ៌ស{" "}
-                <span className="text-cyan-400">#FFFFFF</span> បានអនុវត្តស្វ័យប្រវត្តិ ✓
+                <span className="text-cyan-400 font-bold">#FFFFFF</span> បានអនុវត្តស្វ័យប្រវត្តិ ✓
               </>
             ) : (
               <>
                 <strong className="text-white">កាត់រូបដាក់ដំណោះស្រាយ:</strong> ផ្ទៃផ្កាឈូក{" "}
-                <span className="text-pink-400">#FFF0F5</span> បានអនុវត្តស្វ័យប្រវត្តិ ✓
+                <span className="text-pink-400 font-bold">#FFF0F5</span> បានអនុវត្តស្វ័យប្រវត្តិ ✓
               </>
             )}
           </span>
         </div>
         <span className="hidden sm:inline-block text-[11px] text-slate-400">
-          {width} × {height} px · PNG
+          {width} × {height} px · PNG {provider === "canvas_chroma" ? "(Chroma Core)" : "(IS-Net AI)"}
         </span>
       </div>
 
-      {/* ── Canvas Compositor Preview Deck ── */}
+      {/* ── Baked Composite Preview Deck ── */}
       <div
         className={`relative flex items-center justify-center overflow-hidden rounded-2xl border bg-slate-950 p-4 transition-all duration-300 ${
           isQuestion
@@ -289,21 +237,12 @@ export function ColorStudio({
           }`}
         />
 
-        {/* Holographic backdrop glow */}
-        <div
-          className={`pointer-events-none absolute inset-0 blur-2xl opacity-15 transition-colors ${
-            isQuestion ? "bg-cyan-500" : "bg-pink-500"
-          }`}
-        />
-
-        {/* Live Canvas Composite with automatically applied solid color */}
+        {/* Live Processed Output Image (Baked with the respective solid color background) */}
         <div className="relative z-10 flex items-center justify-center">
-          <CanvasCompositor
-            ref={compositorRef}
-            transparentPngBase64={transparentPngBase64}
-            bgColor={bgColor}
-            width={width}
-            height={height}
+          <img
+            src={currentCompositeUrl}
+            alt={isQuestion ? "Processed Image with White Background" : "Processed Image with Pale Pink Background"}
+            className="max-h-[460px] max-w-full object-contain rounded-xl shadow-2xl transition-all"
           />
         </div>
       </div>
@@ -314,7 +253,7 @@ export function ColorStudio({
         <button
           type="button"
           onClick={handleDownload}
-          disabled={isDownloading}
+          disabled={isSwitching}
           className={`flex w-full items-center justify-center gap-2.5 rounded-xl px-5 py-3.5 text-sm font-bold text-white shadow-lg transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 ${
             isQuestion
               ? "bg-gradient-to-r from-cyan-600 via-indigo-600 to-blue-600 shadow-cyan-900/40 hover:shadow-cyan-500/25 ring-1 ring-cyan-400/40"
@@ -323,9 +262,7 @@ export function ColorStudio({
         >
           <Download className="h-4 w-4" />
           <span>
-            {isDownloading
-              ? "កំពុងរៀបចំទាញយក..."
-              : isQuestion
+            {isQuestion
               ? "ទាញយករូបភាពសំណួរ (PNG ផ្ទៃពណ៌ស #FFFFFF)"
               : "ទាញយករូបភាពដំណោះស្រាយ (PNG ផ្ទៃផ្កាឈូក #FFF0F5)"}
           </span>
