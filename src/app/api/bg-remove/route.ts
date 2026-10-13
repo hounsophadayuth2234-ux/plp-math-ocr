@@ -10,6 +10,8 @@ export interface BgRemoveSuccess {
   originalWidth: number;
   originalHeight: number;
   provider: "removebg" | "huggingface" | "demo_cutout";
+  mode?: "question" | "solution";
+  appliedBgColor?: string;
 }
 
 export interface BgRemoveError {
@@ -20,7 +22,7 @@ export interface BgRemoveError {
 // -----------------------------------------------------------
 // Helper: Remove.bg API
 // -----------------------------------------------------------
-async function removeViaRemoveBg(imageBytes: ArrayBuffer): Promise<Buffer> {
+async function removeViaRemoveBg(imageBytes: ArrayBuffer, bgColor?: string): Promise<Buffer> {
   const apiKey = process.env.REMOVE_BG_API_KEY;
   if (!apiKey || apiKey.includes("your_")) throw new Error("REMOVE_BG_API_KEY not configured.");
 
@@ -31,6 +33,10 @@ async function removeViaRemoveBg(imageBytes: ArrayBuffer): Promise<Buffer> {
     "input.png"
   );
   formData.append("size", "auto");
+  if (bgColor) {
+    const cleanHex = bgColor.replace("#", "");
+    formData.append("bg_color", cleanHex);
+  }
 
   const response = await fetch("https://api.remove.bg/v1.0/removebg", {
     method: "POST",
@@ -110,6 +116,10 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const imageFile = formData.get("image") as File | null;
+    const mode = (formData.get("mode") as "question" | "solution") || "question";
+    const bgColor =
+      (formData.get("bgColor") as string) ||
+      (mode === "solution" ? "#FFF0F5" : "#FFFFFF");
 
     if (!imageFile) {
       return NextResponse.json<BgRemoveError>(
@@ -127,7 +137,7 @@ export async function POST(req: NextRequest) {
     // 1. Try Remove.bg if configured
     if (process.env.REMOVE_BG_API_KEY && !process.env.REMOVE_BG_API_KEY.includes("your_")) {
       try {
-        resultBuffer = await removeViaRemoveBg(imageBytes);
+        resultBuffer = await removeViaRemoveBg(imageBytes, bgColor);
         provider = "removebg";
       } catch (e) {
         console.warn("[bg-remove] Remove.bg failed:", e);
@@ -161,6 +171,8 @@ export async function POST(req: NextRequest) {
         originalWidth: width || 600,
         originalHeight: height || 400,
         provider,
+        mode,
+        appliedBgColor: bgColor,
       },
       { status: 200 }
     );
