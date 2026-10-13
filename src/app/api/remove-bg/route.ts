@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import Replicate from "replicate";
 
-export const maxDuration = 60; // Allow up to 60s for serverless GPU inference on Replicate
+export const maxDuration = 60; // Allow up to 60s for serverless inference / HF Space wake-up
 
-// Primary: BiRefNet (High-Resolution Dichotomous Image Segmentation - SOTA hair/edge accuracy)
-const BIREFNET_MODEL =
-  "men1scus/birefnet:f74986db0355b58403ed20963af156525e2891ea3c2d499bfbfb2a28cd87c5d7";
-
-// Fallback: Tracer B7 Remove-BG (High-speed robust fallback)
-const FALLBACK_MODEL =
-  "lucataco/remove-bg:95fcc2a26d3899cd6c2691c9004657fe41447a34d6284777d7f7f9353fa7f99b";
+const MAX_COLD_START_RETRIES = 3;
+const RETRY_DELAY_MS = 5000; // 5s wait on 503 cold starts
 
 /**
- * Replicate Background Removal API Route
- * Integrates high-accuracy BiRefNet segmentation model via Replicate API.
- * Converts uploaded image to data URI, calls Replicate, fetches the resulting transparent
- * PNG asset, and streams back binary PNG bytes to the client.
+ * Custom Hugging Face Space Python Rembg API Gateway
+ * Forwards user images to the self-hosted free Hugging Face Space microservice running open-source rembg.
+ * Features:
+ * 1. 100% Free, zero third-party subscription or burst limits.
+ * 2. Auto-retry on HF Space cold starts (503 Service Unavailable).
+ * 3. Pure binary streaming response with no JSON or Base64 corruption.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -30,131 +26,123 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiToken = (
-      process.env.REPLICATE_API_TOKEN ||
-      process.env.REPLICATE_API_KEY ||
+    const rawSpaceUrl = (
+      process.env.REMBG_SPACE_URL ||
+      process.env.HF_SPACE_URL ||
       ""
-    ).trim().replace(/^["']|["']$/g, "");
+    ).trim().replace(/^["']|["']$/g, "").replace(/\/+$/, "");
 
-    if (!apiToken || apiToken.includes("your_replicate_token_here")) {
-      console.error("[/api/remove-bg] Error: REPLICATE_API_TOKEN is missing or placeholder.");
+    if (!rawSpaceUrl || rawSpaceUrl.includes("your_space_url_here")) {
+      console.error("[/api/remove-bg] Error: REMBG_SPACE_URL is not configured.");
       return NextResponse.json(
         {
           error:
-            "REPLICATE_API_TOKEN is not configured in server environment variables. Please add your Replicate API token in the Settings modal (top-right cog) or in .env.local / Vercel Environment Variables.",
+            "REMBG_SPACE_URL is not configured. Please set your free Hugging Face Space URL in Settings (top-right cog) or in .env.local (e.g. https://your-username-plp-rembg.hf.space). Check the hf-space-rembg/ directory for the 1-click Python code files.",
         },
         { status: 401 }
       );
     }
 
-    // Convert input image file to base64 Data URI
+    // Construct target URL for the Python microservice
+    const targetUrl = rawSpaceUrl.endsWith("/api/remove-bg")
+      ? rawSpaceUrl
+      : `${rawSpaceUrl}/api/remove-bg`;
+
+    const spaceToken = (
+      process.env.HF_SPACE_TOKEN ||
+      process.env.HUGGINGFACE_API_KEY ||
+      ""
+    ).trim().replace(/^["']|["']$/g, "");
+
+    const headers: Record<string, string> = {};
+    if (spaceToken && !spaceToken.includes("your_")) {
+      headers["Authorization"] = `Bearer ${spaceToken}`;
+    }
+
+    // Convert file to buffer for forwarding
     const arrayBuffer = await imageFile.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
-    const mimeType = imageFile.type || "image/png";
-    const dataUri = `data:${mimeType};base64,${base64}`;
+    const contentType = imageFile.type || "application/octet-stream";
 
-    const replicate = new Replicate({ auth: apiToken });
+    console.log(
+      `[/api/remove-bg] Forwarding ${(arrayBuffer.byteLength / 1024).toFixed(1)} KB to Python Space: ${targetUrl}`
+    );
 
-    let output: unknown;
-    let usedModel = "BiRefNet (men1scus/birefnet)";
+    let lastStatus = 500;
+    let lastStatusText = "Unknown Error";
+    let lastErrorBody = "";
 
-    console.log(`[/api/remove-bg] Invoking Replicate BiRefNet for image (${(arrayBuffer.byteLength / 1024).toFixed(1)} KB)...`);
+    // Retry loop to handle Hugging Face Space cold starts (503 / 504)
+    for (let attempt = 1; attempt <= MAX_COLD_START_RETRIES; attempt++) {
+      try {
+        const forwardFormData = new FormData();
+        const fileBlob = new Blob([arrayBuffer], { type: contentType });
+        forwardFormData.append("image", fileBlob, imageFile.name || "image.png");
 
-    try {
-      // Primary attempt: BiRefNet
-      output = await replicate.run(BIREFNET_MODEL, {
-        input: {
-          image: dataUri,
-        },
-      });
-      console.log("[/api/remove-bg] BiRefNet inference completed successfully.");
-    } catch (primaryErr: unknown) {
-      const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      console.warn(`[/api/remove-bg] Primary BiRefNet error: ${primaryMsg}`);
+        const hfRes = await fetch(targetUrl, {
+          method: "POST",
+          headers,
+          body: forwardFormData,
+        });
 
-      // If rate limited (429 / burst limit), return immediately rather than immediately re-hammering Replicate
-      if (
-        primaryMsg.includes("429") ||
-        primaryMsg.toLowerCase().includes("rate limit") ||
-        primaryMsg.toLowerCase().includes("burst")
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "Replicate rate limit exceeded (burst limit: 1 req/sec). Please wait a few seconds and try again.",
-          },
-          { status: 429 }
+        if (hfRes.ok) {
+          console.log(`[/api/remove-bg] Success from Python Rembg Space! Streaming binary PNG back.`);
+          const outputBlob = await hfRes.blob();
+
+          return new Response(outputBlob, {
+            status: 200,
+            headers: {
+              "Content-Type": "image/png",
+              "Cache-Control": "no-store",
+              "X-Segmentation-Model": "Python Rembg (U2Net / Free Space)",
+            },
+          });
+        }
+
+        lastStatus = hfRes.status;
+        lastStatusText = hfRes.statusText;
+        lastErrorBody = await hfRes.text().catch(() => "");
+
+        console.warn(
+          `[/api/remove-bg] Python Space returned status ${lastStatus} ${lastStatusText} (Attempt ${attempt}/${MAX_COLD_START_RETRIES}). Body:`,
+          lastErrorBody
         );
-      }
 
-      console.warn("[/api/remove-bg] Trying fallback model (lucataco/remove-bg)...");
-      // Fallback attempt: Tracer B7 Remove-BG
-      usedModel = "Tracer B7 (lucataco/remove-bg)";
-      output = await replicate.run(FALLBACK_MODEL, {
-        input: {
-          image: dataUri,
-        },
-      });
-      console.log("[/api/remove-bg] Fallback model inference completed successfully.");
-    }
-
-    // Process output from Replicate (can be FileOutput, array of FileOutput, or string URL)
-    let imageBlob: Blob | null = null;
-
-    if (output && typeof (output as { blob?: () => Promise<Blob> }).blob === "function") {
-      // Replicate modern SDK FileOutput
-      imageBlob = await (output as { blob: () => Promise<Blob> }).blob();
-    } else {
-      let outputUrl = "";
-
-      if (Array.isArray(output) && output.length > 0) {
-        const first = output[0];
-        if (first && typeof first.blob === "function") {
-          imageBlob = await first.blob();
-        } else {
-          outputUrl = String(first);
-        }
-      } else if (output) {
-        outputUrl = String(output);
-      }
-
-      if (!imageBlob && outputUrl && outputUrl.startsWith("http")) {
-        console.log(`[/api/remove-bg] Fetching transparent image from Replicate delivery URL: ${outputUrl}`);
-        const assetRes = await fetch(outputUrl);
-        if (!assetRes.ok) {
-          throw new Error(
-            `Failed to download processed image from Replicate CDN (${assetRes.status} ${assetRes.statusText})`
+        // If Space is waking up (503 Service Unavailable / 504 Gateway Timeout), wait and retry
+        if ((lastStatus === 503 || lastStatus === 504) && attempt < MAX_COLD_START_RETRIES) {
+          console.log(
+            `[/api/remove-bg] Hugging Face Space is warming up. Pausing ${RETRY_DELAY_MS / 1000}s before retry...`
           );
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+          continue;
         }
-        imageBlob = await assetRes.blob();
+
+        // For other status codes (e.g. 404, 401), stop immediately
+        break;
+      } catch (fetchErr: unknown) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        console.error(`[/api/remove-bg] Network connection error to ${targetUrl}:`, msg);
+        lastErrorBody = msg;
+        if (attempt < MAX_COLD_START_RETRIES) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+          continue;
+        }
+        break;
       }
     }
 
-    if (!imageBlob) {
-      console.error("[/api/remove-bg] Failed to resolve output image from Replicate response:", output);
-      return NextResponse.json(
-        { error: "Replicate returned empty or unrecognizable output payload." },
-        { status: 502 }
-      );
-    }
-
-    console.log(`[/api/remove-bg] Successfully received transparent cutout (${imageBlob.size} bytes) via ${usedModel}.`);
-
-    // Return the transparent PNG cutout directly as a binary response
-    return new Response(imageBlob, {
-      status: 200,
-      headers: {
-        "Content-Type": "image/png",
-        "Cache-Control": "no-store",
-        "X-Segmentation-Model": usedModel,
-      },
-    });
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error("[/api/remove-bg] Replicate execution exception:", err);
     return NextResponse.json(
       {
-        error: `Replicate Segmentation Error: ${errorMsg}`,
+        error: `Python Rembg Space returned [${lastStatus} ${lastStatusText}]: ${lastErrorBody || "Space unreachable or warming up. Please verify your Space is Running in Hugging Face."}`,
+        status: lastStatus,
+      },
+      { status: lastStatus >= 400 && lastStatus < 600 ? lastStatus : 502 }
+    );
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("[/api/remove-bg] Unexpected gateway error:", err);
+    return NextResponse.json(
+      {
+        error: `Gateway Error: ${errorMsg}`,
       },
       { status: 500 }
     );

@@ -40,7 +40,7 @@ export default function BgRemoverPage() {
   const isProcessingRef = useRef(false);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
 
-  // Trigger Replicate BiRefNet background removal & HTML5 canvas compositing
+  // Trigger Python Rembg (HF Space) background removal & HTML5 canvas compositing
   const handleExecuteFeature = async (mode: "question" | "solution") => {
     // 1. STRICT LOCK: Immediately abort if already processing or missing file
     if (isProcessingRef.current) {
@@ -69,7 +69,7 @@ export default function BgRemoverPage() {
     activeAbortControllerRef.current = abortController;
 
     try {
-      // 1. Single strictly-controlled fetch to /api/remove-bg (Replicate BiRefNet)
+      // 1. Single strictly-controlled fetch to /api/remove-bg (Python Rembg HF Space)
       const { blob: transparentBlob, provider } =
         await requestReplicateBackgroundRemoval(imageFile, abortController.signal);
 
@@ -94,9 +94,9 @@ export default function BgRemoverPage() {
         console.log("[bg-remover] Request aborted by client.");
         return;
       }
-      console.error("[bg-remover] Replicate BiRefNet error:", err);
+      console.error("[bg-remover] Python Rembg error:", err);
       setError(
-        err instanceof Error ? err.message : "Replicate BiRefNet segmentation failed."
+        err instanceof Error ? err.message : "Python Rembg segmentation failed."
       );
     } finally {
       cyberAudio.stopScanningHum();
@@ -116,16 +116,16 @@ export default function BgRemoverPage() {
 
   const isQuestion = activeFeature === "question";
 
-  // Replicate BiRefNet telemetry steps for RoboticScanner
+  // Telemetry steps for RoboticScanner
   const scannerSteps = [
-    "[1/5] LOCK ENGAGED · SINGLE REPLICATE CLOUD STREAM ACTIVE...",
-    "[2/5] DISPATCHING IMAGE TENSORS TO BIREFNET SEGMENTATION CORE...",
-    "[3/5] COMPUTING HIGH-FIDELITY BILATERAL ALPHA MATTE ON GPU...",
-    "[4/5] STREAMING TRANSPARENT PNG BLOB FROM REPLICATE CLOUD...",
+    "[1/5] ATOMIC LOCK ENGAGED · CONNECTING TO REMBG MICROSERVICE...",
+    "[2/5] STREAMING IMAGE BUFFER TO HUGGING FACE SPACE...",
+    "[3/5] REMBG ENGINE EXECUTING U2NET SEGMENTATION & ALPHA MATTING...",
+    "[4/5] RECEIVING PRISTINE TRANSPARENT PNG BLOB...",
     isQuestion
       ? "[5/5] COMPOSITING SOLID WHITE (#FFFFFF) ONTO HTML5 CANVAS..."
       : "[5/5] COMPOSITING SOLID PINK (#FFF0F5) ONTO HTML5 CANVAS...",
-    "[READY] FINALIZING HIGH-RES RENDER & PREPARING OUTPUT BUFFER...",
+    "[READY] BAKING PIXELS & PREPARING OUTPUT BUFFER...",
   ];
 
   return (
@@ -147,10 +147,10 @@ export default function BgRemoverPage() {
                 isProcessing ? "bg-amber-400 animate-ping" : "bg-emerald-400 animate-pulse"
               }`}
             />
-            {isProcessing ? "REPLICATE: PROCESSING STREAM" : "REPLICATE BIREFNET: READY"}
+            {isProcessing ? "PYTHON REMBG: PROCESSING STREAM" : "PYTHON REMBG CORE: ONLINE"}
           </span>
           <span className="rounded border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-cyan-300">
-            BiRefNet / SOTA
+            U2Net / Free Space
           </span>
         </div>
       </div>
@@ -169,7 +169,7 @@ export default function BgRemoverPage() {
                 </h2>
               </div>
               <span className="font-mono text-[10px] text-cyan-400/90 font-semibold">
-                REPLICATE CLOUD CORE
+                100% FREE · ZERO API FEES
               </span>
             </div>
 
@@ -193,7 +193,7 @@ export default function BgRemoverPage() {
                 <Lock className="h-4 w-4 shrink-0 text-amber-400" />
                 <div className="space-y-0.5">
                   <p className="font-bold uppercase tracking-wider text-amber-200">
-                    PROCESSING VIA REPLICATE CLOUD...
+                    PROCESSING VIA PYTHON REMBG SPACE...
                   </p>
                   <p className="text-[10px] text-amber-400/80">
                     Input locked to prevent double-clicks. Please wait.
@@ -255,7 +255,7 @@ export default function BgRemoverPage() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-cyan-300/80">
-                        WHITE BACKDROP · BIREFNET SEGMENTED
+                        WHITE BACKDROP · REMBG SEGMENTED
                       </span>
                     </div>
                   </div>
@@ -328,7 +328,7 @@ export default function BgRemoverPage() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-pink-300/80">
-                        PINK BACKDROP · BIREFNET SEGMENTED
+                        PINK BACKDROP · REMBG SEGMENTED
                       </span>
                     </div>
                   </div>
@@ -378,11 +378,11 @@ export default function BgRemoverPage() {
               active={true}
               moduleName={
                 isQuestion
-                  ? "REPLICATE BIREFNET // [CH-01: WHITE]"
-                  : "REPLICATE BIREFNET // [CH-02: PINK]"
+                  ? "PYTHON REMBG // [CH-01: WHITE]"
+                  : "PYTHON REMBG // [CH-02: PINK]"
               }
               steps={scannerSteps}
-              subtext="Processing via Replicate Cloud... Single high-priority stream active"
+              subtext="Processing via Python Rembg Space... 100% free open-source neural segmentation"
             />
           )}
 

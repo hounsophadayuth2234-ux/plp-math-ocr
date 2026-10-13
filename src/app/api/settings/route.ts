@@ -30,6 +30,8 @@ export async function GET() {
     return `${val.slice(0, 4)}...${val.slice(-4)}`;
   };
 
+  const spaceUrl = env.REMBG_SPACE_URL || env.HF_SPACE_URL || "";
+
   return NextResponse.json({
     geminiKeySet: Boolean(env.GEMINI_API_KEY && !env.GEMINI_API_KEY.includes("your_")),
     geminiMasked: mask(env.GEMINI_API_KEY),
@@ -39,6 +41,8 @@ export async function GET() {
     removeBgMasked: mask(env.REMOVE_BG_API_KEY),
     huggingFaceKeySet: Boolean((env.HUGGINGFACE_API_KEY || env.HF_API_TOKEN) && !(env.HUGGINGFACE_API_KEY || env.HF_API_TOKEN).includes("your_")),
     huggingFaceMasked: mask(env.HUGGINGFACE_API_KEY || env.HF_API_TOKEN),
+    rembgSpaceUrlSet: Boolean(spaceUrl && !spaceUrl.includes("your_space_url")),
+    rembgSpaceUrl: spaceUrl || null,
   });
 }
 
@@ -46,11 +50,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { geminiKey, replicateToken, removeBgKey, huggingFaceKey } = body as {
+    const { geminiKey, replicateToken, removeBgKey, huggingFaceKey, rembgSpaceUrl } = body as {
       geminiKey?: string;
       replicateToken?: string;
       removeBgKey?: string;
       huggingFaceKey?: string;
+      rembgSpaceUrl?: string;
     };
 
     let existingContent = "";
@@ -84,10 +89,15 @@ export async function POST(req: NextRequest) {
       updated = updateOrAppend(updated, "HUGGINGFACE_API_KEY", huggingFaceKey.trim());
       process.env.HUGGINGFACE_API_KEY = huggingFaceKey.trim();
     }
+    if (rembgSpaceUrl !== undefined && rembgSpaceUrl.trim()) {
+      const cleanedUrl = rembgSpaceUrl.trim().replace(/\/+$/, "");
+      updated = updateOrAppend(updated, "REMBG_SPACE_URL", cleanedUrl);
+      process.env.REMBG_SPACE_URL = cleanedUrl;
+    }
 
     fs.writeFileSync(ENV_FILE_PATH, updated, "utf-8");
 
-    return NextResponse.json({ success: true, message: "API keys updated successfully in .env.local" });
+    return NextResponse.json({ success: true, message: "Settings updated successfully in .env.local" });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to update settings";
     return NextResponse.json({ error: message }, { status: 500 });
