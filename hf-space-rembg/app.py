@@ -156,8 +156,11 @@ async def api_remove_background(
 
 
 # ─────────────────────────────────────────────────────────────
-# 4. Native Gradio Launch (No Port Enforced)
+# 4. Native Gradio Launch (SSR Disabled to prevent Node proxy crashes)
 # Hugging Face Spaces manages port binding automatically
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    demo.queue().launch()
+    try:
+        demo.queue().launch(ssr_mode=False, server_name="0.0.0.0")
+    except TypeError:
+        demo.queue().launch(server_name="0.0.0.0")
