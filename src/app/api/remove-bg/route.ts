@@ -70,8 +70,24 @@ export async function POST(req: NextRequest) {
       console.log("[/api/remove-bg] BiRefNet inference completed successfully.");
     } catch (primaryErr: unknown) {
       const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      console.warn(`[/api/remove-bg] Primary BiRefNet error: ${primaryMsg}. Trying fallback model...`);
+      console.warn(`[/api/remove-bg] Primary BiRefNet error: ${primaryMsg}`);
 
+      // If rate limited (429 / burst limit), return immediately rather than immediately re-hammering Replicate
+      if (
+        primaryMsg.includes("429") ||
+        primaryMsg.toLowerCase().includes("rate limit") ||
+        primaryMsg.toLowerCase().includes("burst")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Replicate rate limit exceeded (burst limit: 1 req/sec). Please wait a few seconds and try again.",
+          },
+          { status: 429 }
+        );
+      }
+
+      console.warn("[/api/remove-bg] Trying fallback model (lucataco/remove-bg)...");
       // Fallback attempt: Tracer B7 Remove-BG
       usedModel = "Tracer B7 (lucataco/remove-bg)";
       output = await replicate.run(FALLBACK_MODEL, {

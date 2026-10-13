@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   AlertCircle,
   ImageOff,
   Zap,
+  Lock,
 } from "lucide-react";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
@@ -30,28 +31,47 @@ interface ProcessResult {
 export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [activeFeature, setActiveFeature] = useState<"question" | "solution">("question");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
 
+  // STRICT SYNCHRONOUS MUTEX LOCK:
+  // Prevents any duplicate/concurrent clicks in the exact same millisecond
+  const isProcessingRef = useRef(false);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
+
   // Trigger Replicate BiRefNet background removal & HTML5 canvas compositing
   const handleExecuteFeature = async (mode: "question" | "solution") => {
-    if (!imageFile || isLoading) return;
+    // 1. STRICT LOCK: Immediately abort if already processing or missing file
+    if (isProcessingRef.current) {
+      console.warn("[bg-remover] Blocked duplicate trigger: already processing.");
+      return;
+    }
+    if (!imageFile) return;
 
-    cyberAudio.playClick();
+    // Engage atomic lock synchronously before any async boundary
+    isProcessingRef.current = true;
+    setIsProcessing(true);
     setActiveFeature(mode);
-    setIsLoading(true);
     setError(null);
     setResult(null);
 
-    // Engage sci-fi robotic scanner hum
+    cyberAudio.playClick();
     cyberAudio.startScanningHum();
+
     const targetBgColor = mode === "solution" ? "#FFF0F5" : "#FFFFFF";
 
+    // Setup AbortController to guarantee single fetch request
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    activeAbortControllerRef.current = abortController;
+
     try {
-      // 1. Send FormData to server API (/api/remove-bg) -> Dispatches to Replicate BiRefNet
+      // 1. Single strictly-controlled fetch to /api/remove-bg (Replicate BiRefNet)
       const { blob: transparentBlob, provider } =
-        await requestReplicateBackgroundRemoval(imageFile);
+        await requestReplicateBackgroundRemoval(imageFile, abortController.signal);
 
       // 2. Draw cutout onto HTML Canvas and fill background with White (#FFFFFF) or Pink (#FFF0F5)
       const { dataUrl, width, height } = await compositeWithSolidColor(
@@ -67,20 +87,27 @@ export default function BgRemoverPage() {
         provider,
       });
 
-      // Play success chime upon completion
       cyberAudio.playSuccessChime();
-    } catch (err) {
+    } catch (err: unknown) {
       cyberAudio.stopScanningHum();
+      if (err instanceof Error && err.name === "AbortError") {
+        console.log("[bg-remover] Request aborted by client.");
+        return;
+      }
       console.error("[bg-remover] Replicate BiRefNet error:", err);
       setError(
         err instanceof Error ? err.message : "Replicate BiRefNet segmentation failed."
       );
     } finally {
-      setIsLoading(false);
+      cyberAudio.stopScanningHum();
+      activeAbortControllerRef.current = null;
+      isProcessingRef.current = false;
+      setIsProcessing(false);
     }
   };
 
   const handleReset = () => {
+    if (isProcessingRef.current) return;
     cyberAudio.playClick();
     setResult(null);
     setError(null);
@@ -91,14 +118,14 @@ export default function BgRemoverPage() {
 
   // Replicate BiRefNet telemetry steps for RoboticScanner
   const scannerSteps = [
-    "CONNECTING TO REPLICATE BIREFNET CLOUD CORE (/api/remove-bg)...",
-    "DISPATCHING IMAGE TENSORS TO BIREFNET SEGMENTATION PIPELINE...",
-    "EXTRACTING BILATERAL REFERENCE & HIGH-FIDELITY ALPHA MATTE...",
-    "STREAMING TRANSPARENT CUTOUT FROM REPLICATE CLOUD...",
+    "[1/5] LOCK ENGAGED · SINGLE REPLICATE CLOUD STREAM ACTIVE...",
+    "[2/5] DISPATCHING IMAGE TENSORS TO BIREFNET SEGMENTATION CORE...",
+    "[3/5] COMPUTING HIGH-FIDELITY BILATERAL ALPHA MATTE ON GPU...",
+    "[4/5] STREAMING TRANSPARENT PNG BLOB FROM REPLICATE CLOUD...",
     isQuestion
-      ? "COMPOSITING SOLID WHITE (#FFFFFF) ONTO HTML5 CANVAS..."
-      : "COMPOSITING SOLID PINK (#FFF0F5) ONTO HTML5 CANVAS...",
-    "FINALIZING HIGH-RES RENDER & PREPARING OUTPUT BUFFER...",
+      ? "[5/5] COMPOSITING SOLID WHITE (#FFFFFF) ONTO HTML5 CANVAS..."
+      : "[5/5] COMPOSITING SOLID PINK (#FFF0F5) ONTO HTML5 CANVAS...",
+    "[READY] FINALIZING HIGH-RES RENDER & PREPARING OUTPUT BUFFER...",
   ];
 
   return (
@@ -115,8 +142,12 @@ export default function BgRemoverPage() {
         </Link>
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <span className="flex items-center gap-1.5 text-slate-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            REPLICATE BIREFNET: READY
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                isProcessing ? "bg-amber-400 animate-ping" : "bg-emerald-400 animate-pulse"
+              }`}
+            />
+            {isProcessing ? "REPLICATE: PROCESSING STREAM" : "REPLICATE BIREFNET: READY"}
           </span>
           <span className="rounded border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-cyan-300">
             BiRefNet / SOTA
@@ -150,26 +181,47 @@ export default function BgRemoverPage() {
                   setImageFile(f);
                 }}
                 selectedFile={imageFile}
-                disabled={isLoading || !!result}
+                disabled={isProcessing || !!result}
                 label="SOURCE INPUT"
                 hint="PNG · JPG · WEBP"
               />
             </div>
 
+            {/* Prominent Loading Lock Banner when Processing */}
+            {isProcessing && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 font-mono text-xs text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.15)] animate-pulse">
+                <Lock className="h-4 w-4 shrink-0 text-amber-400" />
+                <div className="space-y-0.5">
+                  <p className="font-bold uppercase tracking-wider text-amber-200">
+                    PROCESSING VIA REPLICATE CLOUD...
+                  </p>
+                  <p className="text-[10px] text-amber-400/80">
+                    Input locked to prevent double-clicks. Please wait.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Heavy-Duty Mechanical Execution Switches */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between font-mono text-[10px] uppercase text-slate-400">
                 <span>SELECT EXECUTION CHANNEL</span>
-                <span className="text-cyan-400">TACTILE SWITCH</span>
+                <span className="text-cyan-400">
+                  {isProcessing ? "INPUT LOCKED" : "TACTILE SWITCH"}
+                </span>
               </div>
 
               {/* Switch A: White / Question (#FFFFFF) */}
               <button
                 type="button"
                 onClick={() => handleExecuteFeature("question")}
-                disabled={!imageFile || isLoading}
-                className={`group relative w-full overflow-hidden rounded-xl border p-4 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] ${
-                  isQuestion
+                disabled={!imageFile || isProcessing}
+                className={`group relative w-full overflow-hidden rounded-xl border p-4 text-left transition-all duration-200 active:scale-[0.98] ${
+                  isProcessing
+                    ? "pointer-events-none opacity-60 cursor-not-allowed border-slate-800 bg-slate-900/50"
+                    : !imageFile
+                    ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50"
+                    : isQuestion
                     ? "border-cyan-400 bg-gradient-to-r from-slate-900 via-slate-900/90 to-cyan-950/40 shadow-[0_0_25px_rgba(0,240,255,0.25)] ring-1 ring-cyan-400/40"
                     : "border-slate-800 bg-slate-900/70 hover:border-slate-700 hover:bg-slate-900"
                 }`}
@@ -208,8 +260,15 @@ export default function BgRemoverPage() {
                     </div>
                   </div>
 
-                  {isLoading && isQuestion ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+                  {isProcessing && isQuestion ? (
+                    <div className="flex items-center gap-1.5 font-mono text-[10px] text-cyan-400 font-bold">
+                      <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+                      <span>[PROCESSING...]</span>
+                    </div>
+                  ) : isProcessing ? (
+                    <span className="font-mono text-[10px] text-slate-600 font-bold">
+                      [LOCKED]
+                    </span>
                   ) : (
                     <span
                       className={`font-mono text-[10px] font-bold transition-colors ${
@@ -226,9 +285,13 @@ export default function BgRemoverPage() {
               <button
                 type="button"
                 onClick={() => handleExecuteFeature("solution")}
-                disabled={!imageFile || isLoading}
-                className={`group relative w-full overflow-hidden rounded-xl border p-4 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] ${
-                  !isQuestion
+                disabled={!imageFile || isProcessing}
+                className={`group relative w-full overflow-hidden rounded-xl border p-4 text-left transition-all duration-200 active:scale-[0.98] ${
+                  isProcessing
+                    ? "pointer-events-none opacity-60 cursor-not-allowed border-slate-800 bg-slate-900/50"
+                    : !imageFile
+                    ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50"
+                    : !isQuestion
                     ? "border-pink-400 bg-gradient-to-r from-slate-900 via-slate-900/90 to-pink-950/40 shadow-[0_0_25px_rgba(255,105,180,0.25)] ring-1 ring-pink-400/40"
                     : "border-slate-800 bg-slate-900/70 hover:border-slate-700 hover:bg-slate-900"
                 }`}
@@ -270,8 +333,15 @@ export default function BgRemoverPage() {
                     </div>
                   </div>
 
-                  {isLoading && !isQuestion ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-pink-400" />
+                  {isProcessing && !isQuestion ? (
+                    <div className="flex items-center gap-1.5 font-mono text-[10px] text-pink-400 font-bold">
+                      <Loader2 className="h-4 w-4 animate-spin text-pink-400" />
+                      <span>[PROCESSING...]</span>
+                    </div>
+                  ) : isProcessing ? (
+                    <span className="font-mono text-[10px] text-slate-600 font-bold">
+                      [LOCKED]
+                    </span>
                   ) : (
                     <span
                       className={`font-mono text-[10px] font-bold transition-colors ${
@@ -303,7 +373,7 @@ export default function BgRemoverPage() {
           )}
 
           {/* High-Tech Robotic Scanner Loading State */}
-          {isLoading && (
+          {isProcessing && (
             <RoboticScanner
               active={true}
               moduleName={
@@ -312,12 +382,12 @@ export default function BgRemoverPage() {
                   : "REPLICATE BIREFNET // [CH-02: PINK]"
               }
               steps={scannerSteps}
-              subtext="High-precision BiRefNet neural segmentation underway · Zero local browser lag"
+              subtext="Processing via Replicate Cloud... Single high-priority stream active"
             />
           )}
 
           {/* Color Studio Output Deck */}
-          {result && !isLoading && (
+          {result && !isProcessing && (
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2 font-mono text-xs">
                 <span className="flex items-center gap-2 text-white font-bold">
@@ -343,7 +413,7 @@ export default function BgRemoverPage() {
           )}
 
           {/* Minimalist Empty State */}
-          {!result && !isLoading && !error && (
+          {!result && !isProcessing && !error && (
             <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-cyan-500/20 bg-slate-950/40 p-12 text-center shadow-[0_0_30px_rgba(0,0,0,0.6)]">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 shadow-inner">
                 <ImageOff className="h-5 w-5 text-cyan-400" />

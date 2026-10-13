@@ -73,7 +73,8 @@ async function ensureSafePayloadImage(imageFile: File | Blob, maxDim = 2048): Pr
  * the transparent PNG cutout blob.
  */
 export async function requestReplicateBackgroundRemoval(
-  imageFile: File | Blob
+  imageFile: File | Blob,
+  signal?: AbortSignal
 ): Promise<{ blob: Blob; provider: string }> {
   // Pre-guard against payload size limits
   const safeImage = await ensureSafePayloadImage(imageFile, 2048);
@@ -84,6 +85,7 @@ export async function requestReplicateBackgroundRemoval(
   const res = await fetch("/api/remove-bg", {
     method: "POST",
     body: formData,
+    signal,
   });
 
   if (!res.ok) {
