@@ -43,10 +43,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Construct target URL for the Python microservice
-    const targetUrl = rawSpaceUrl.endsWith("/api/remove-bg")
-      ? rawSpaceUrl
-      : `${rawSpaceUrl}/api/remove-bg`;
+    // Construct target URL for the pure FastAPI microservice
+    let targetUrl = rawSpaceUrl;
+    if (!targetUrl.endsWith("/api/remove") && !targetUrl.endsWith("/api/remove-bg")) {
+      targetUrl = `${rawSpaceUrl}/api/remove`;
+    }
 
     const spaceToken = (
       process.env.HF_SPACE_TOKEN ||

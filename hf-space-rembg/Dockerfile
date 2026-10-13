@@ -23,5 +23,5 @@ COPY app.py .
 # Hugging Face Spaces expose port 7860
 EXPOSE 7860
 
-# Run Gradio application without hardcoded port conflict
-CMD ["python", "app.py"]
+# Run FastAPI application via uvicorn on port 7860
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

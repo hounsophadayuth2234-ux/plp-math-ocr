@@ -1,6 +1,6 @@
-# 🚀 How to Deploy the Free Rembg Hugging Face Space in 2 Minutes
+# 🚀 How to Deploy the Free Pure FastAPI Rembg Space in 2 Minutes
 
-This guide walks you through hosting your own 100% free background removal microservice on Hugging Face Spaces with **zero credit card**, **zero subscription fees**, and **unlimited usage**.
+This guide walks you through hosting your own 100% free pure FastAPI background removal microservice on Hugging Face Spaces with **zero credit card**, **zero subscription fees**, and **unlimited usage**.
 
 ---
 
@@ -14,9 +14,9 @@ This guide walks you through hosting your own 100% free background removal micro
 2. Configure your Space:
    - **Space Name**: `plp-rembg` (or any name you like)
    - **License**: `mit`
-   - **Space SDK**: Select **Gradio** (recommended) or **Docker**
+   - **Space SDK**: Select **Docker** (Blank)
    - **Space Hardware**: **CPU basic · 2 vCPU · 16 GB · Free**
-   - **Visibility**: **Public** (recommended for simplest connection, or Private if you add a HF Token)
+   - **Visibility**: **Public** (recommended for simplest connection)
 3. Click **Create Space**.
 
 ---
@@ -25,13 +25,14 @@ This guide walks you through hosting your own 100% free background removal micro
 You can upload the files directly in the browser via the Hugging Face web interface:
 1. Click the **Files** tab in your newly created Space.
 2. Click **Add file** → **Upload files**.
-3. Upload the files from the `hf-space-rembg/` folder:
+3. Upload the 4 files from the `hf-space-rembg/` folder in your project:
    - `app.py`
    - `requirements.txt`
+   - `Dockerfile`
    - `README.md`
-4. Commit the changes.
+4. Click **Commit changes to main**.
 5. Hugging Face will automatically build and launch the container in ~1-2 minutes!
-6. Once the status says **Running**, test it by uploading an image in the Space UI.
+6. Once the status says **Running**, you can test the interactive OpenAPI docs by opening your Space URL in the browser (e.g. `https://<your-username>-<your-space-name>.hf.space/docs`).
 
 ---
 
@@ -50,9 +51,9 @@ You can also find this URL by clicking the three dots `...` in the top right of 
 Add the Space URL to your Next.js project:
 
 #### Option A: In the Web UI (Easiest)
-1. Open your live app dashboard.
+1. Open your live app dashboard at [https://ai-toolkit-hub-nu.vercel.app](https://ai-toolkit-hub-nu.vercel.app).
 2. Click the **⚙️ Settings** icon in the header.
-3. Paste your URL into **Hugging Face Rembg Space URL**:
+3. Paste your URL into **Python Rembg Space URL**:
    `https://<your-username>-<your-space-name>.hf.space`
 4. Click **Save Settings**.
 
