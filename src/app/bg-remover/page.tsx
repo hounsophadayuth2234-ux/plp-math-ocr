@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
+import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import type { BgRemoveSuccess, BgRemoveError } from "@/app/api/bg-remove/route";
 
 // -----------------------------------------------------------
@@ -111,25 +112,24 @@ export default function BgRemoverPage() {
       </Link>
 
       {/* Module Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(16,185,129,0.1)]">
+        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-25" />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between relative z-10">
           <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-400">
-              <span>Module 02</span>
+            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-emerald-400">
+              <span className="rounded bg-emerald-950/80 px-2 py-0.5 border border-emerald-500/40">MODULE 02</span>
               <span>·</span>
-              <span>Remove.bg API / Hugging Face RMBG-1.4 (Free Fallback)</span>
+              <span>Rembg / SegFormer Neural Pipeline</span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              AI Background Removal & Replacement
+            <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+              កាត់រូបភាព
             </h2>
             <p className="text-sm leading-relaxed text-slate-300">
-              Upload any image to instantly isolate the subject into a{" "}
-              <span className="font-semibold text-emerald-400">transparent PNG</span>. Then
-              use the{" "}
+              កាត់ផ្ដាច់ផ្ទៃខាងក្រោយជារូបភាព <span className="font-semibold text-emerald-400">Transparent PNG</span> ភ្លាមៗ។ បន្ទាប់មកប្រើប្រាស់{" "}
               <span className="font-semibold text-teal-400">
                 Color Studio (HTML5 Canvas)
               </span>{" "}
-              to apply any solid background color and download the final composite.
+              ដើម្បីប្ដូរពណ៌ផ្ទៃខាងក្រោយ និងទាញយករូបភាពបានភ្លាមៗ។
             </p>
           </div>
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20">
@@ -254,38 +254,19 @@ export default function BgRemoverPage() {
             </div>
           )}
 
-          {/* Loading progress steps */}
+          {/* High-Tech Robotic Processing Scanner */}
           {isLoading && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
-                <div>
-                  <p className="text-sm font-medium text-white">Processing your image…</p>
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    AI is segmenting the subject and generating an alpha mask
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {STEPS.map((step, i) => (
-                  <div
-                    key={step}
-                    className={`flex items-center gap-2.5 text-xs transition-all ${
-                      i <= loadingStep ? "text-slate-200" : "text-slate-600"
-                    }`}
-                  >
-                    {i < loadingStep ? (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                    ) : i === loadingStep ? (
-                      <Loader2 className="h-4 w-4 shrink-0 text-emerald-400 animate-spin" />
-                    ) : (
-                      <span className="h-4 w-4 shrink-0 rounded-full border border-slate-700" />
-                    )}
-                    {step}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <RoboticScanner
+              active={true}
+              moduleName="PLP SEGMENTATION // REMBG ENGINE"
+              steps={[
+                "UPLOADING IMAGE TO NEURAL GATEWAY...",
+                "AI SEGMENTATION MATRIX ISOLATING SUBJECT...",
+                "EXTRACTING ALPHA TRANSPARENCY MASK...",
+                "COMPOSITING HIGH-QUALITY TRANSPARENT PNG...",
+              ]}
+              subtext="AI is segmenting foreground subject and extracting transparent alpha mask"
+            />
           )}
 
           {/* Color Studio (result state) */}

@@ -93,7 +93,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">API Key Configuration</h3>
-              <p className="text-[11px] text-slate-400">Manage credentials for the 4-person team</p>
+              <p className="text-[11px] text-cyan-400 font-mono">DYT ECOSYSTEM // Credential Gateway</p>
             </div>
           </div>
           <button

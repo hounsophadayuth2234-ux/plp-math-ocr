@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NexusAI Hub | Internal 4-Person AI Workbench",
+  title: "PLP math content | DYT ECOSYSTEM",
   description:
-    "Private all-in-one internal web application integrating Math OCR (LaTeX & Jodit HTML/Inline CSS), Background Removal, Image Upscaling, Text-to-Image, and Web Element Cloning.",
+    "PLP math content & DYT ECOSYSTEM — Futuristic high-tech AI platform uniting LaTeX/Jodit HTML/MathML OCR, background isolation, 4K upscaling, and creative generation.",
 };
 
 export default function RootLayout({

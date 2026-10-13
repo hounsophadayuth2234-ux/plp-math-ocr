@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { BeforeAfterSlider } from "@/components/image-upscaler/BeforeAfterSlider";
+import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import type { UpscaleSuccess, UpscaleError } from "@/app/api/upscale/route";
 
 const SCALE_OPTIONS = [
@@ -99,36 +100,37 @@ export default function ImageUpscalerPage() {
       </Link>
 
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(245,158,11,0.1)]">
+        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-25" />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between relative z-10">
           <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-400">
-              <span>Module 03</span><span>·</span>
+            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400">
+              <span className="rounded bg-amber-950/80 px-2 py-0.5 border border-amber-500/40">MODULE 03</span><span>·</span>
               <span>Replicate Real-ESRGAN 4× Super-Resolution</span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Image Upscaling & Enhancement
+            <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+              ធ្វើរូបឱ្យច្បាស់
             </h2>
             <p className="text-sm leading-relaxed text-slate-300">
-              Upload a low-resolution or blurry image and enhance it to{" "}
-              <span className="font-semibold text-amber-400">HD/4K quality</span> using
-              Real-ESRGAN. Inspect results with the interactive{" "}
-              <span className="font-semibold text-orange-400">Before/After slider</span>.
+              បង្កើនកម្រិតភាពច្បាស់នៃរូបភាពព្រិលៗ ឬទំហំតូចឱ្យទៅជា{" "}
+              <span className="font-semibold text-amber-400">HD/4K Quality</span> តាមរយៈ
+              Real-ESRGAN Super-Resolution និងផ្ទៀងផ្ទាត់ជាមួយ{" "}
+              <span className="font-semibold text-orange-400">Before/After Comparison Slider</span>។
             </p>
           </div>
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/20">
             <Sparkles className="h-7 w-7" />
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3 relative z-10 font-mono">
           {[
             { label: "Real-ESRGAN 4×", desc: "State-of-the-art super-resolution model" },
             { label: "Before/After Slider", desc: "Drag to compare original vs enhanced" },
             { label: "HD Download", desc: "Full-resolution PNG export" },
           ].map((c) => (
-            <div key={c.label} className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-3 text-xs">
-              <span className="font-semibold text-amber-300">{c.label}</span>
-              <p className="mt-0.5 text-slate-400">{c.desc}</p>
+            <div key={c.label} className="rounded-xl border border-amber-500/20 bg-slate-950/70 p-3 text-xs shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+              <span className="font-bold text-amber-300">{c.label}</span>
+              <p className="mt-0.5 text-slate-400 font-sans">{c.desc}</p>
             </div>
           ))}
         </div>
@@ -208,34 +210,20 @@ export default function ImageUpscalerPage() {
             </div>
           )}
 
+          {/* High-Tech Robotic Processing Scanner */}
           {isLoading && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 animate-spin text-amber-400" />
-                <div>
-                  <p className="text-sm font-medium text-white">Real-ESRGAN is processing…</p>
-                  <p className="mt-0.5 text-xs text-slate-400">This may take 20–60 seconds</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {STEPS.map((step, i) => (
-                  <div key={step} className={`flex items-center gap-2.5 text-xs transition-all ${i <= loadingStep ? "text-slate-200" : "text-slate-600"}`}>
-                    {i < loadingStep ? (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-amber-400" />
-                    ) : i === loadingStep ? (
-                      <Loader2 className="h-4 w-4 shrink-0 text-amber-400 animate-spin" />
-                    ) : (
-                      <span className="h-4 w-4 shrink-0 rounded-full border border-slate-700" />
-                    )}
-                    {step}
-                  </div>
-                ))}
-              </div>
-              {/* Pulsing progress bar */}
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                <div className="h-full animate-pulse rounded-full bg-gradient-to-r from-amber-500 to-orange-500" style={{ width: `${((loadingStep + 1) / STEPS.length) * 100}%`, transition: "width 0.5s ease" }} />
-              </div>
-            </div>
+            <RoboticScanner
+              active={true}
+              moduleName="PLP SUPER-RESOLUTION // REAL-ESRGAN"
+              steps={[
+                "DISPATCHING HIGH-RESOLUTION INFERENCE MATRIX...",
+                "LOADING REAL-ESRGAN 4X WEIGHT TENSORS...",
+                "SUPER-RESOLUTION SUB-PIXEL SAMPLING PASS...",
+                "RECONSTRUCTING HIGH-FREQUENCY DETAILS...",
+                "SYNTHESIZING HD/4K FINAL ASSET...",
+              ]}
+              subtext="Real-ESRGAN neural model enhancing pixel density and reconstructing high-frequency details"
+            />
           )}
 
           {result && previewUrl && !isLoading && (

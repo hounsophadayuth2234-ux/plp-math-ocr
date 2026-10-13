@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ImageUploadZone } from "@/components/math-ocr/ImageUploadZone";
 import { OutputTabs } from "@/components/math-ocr/OutputTabs";
+import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import type { MathOcrResponse } from "@/app/api/math-ocr/route";
 
 // -----------------------------------------------------------
@@ -128,33 +129,34 @@ export default function MathOcrPage() {
       </Link>
 
       {/* Module Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(0,240,255,0.1)]">
+        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-25" />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between relative z-10">
           <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-400">
-              <span>Module 01</span>
+            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-cyan-400">
+              <span className="rounded bg-cyan-950/80 px-2 py-0.5 border border-cyan-500/40">MODULE 01</span>
               <span>·</span>
-              <span>Google Gemini 2.5 Flash Vision API</span>
+              <span>PLP VISION ENGINE // GEMINI FLASH</span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Advanced Math OCR & Code Generator
+            <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+              សរសេរកូដ LaTeX, Jodit HTML, MathML
             </h2>
             <p className="text-sm leading-relaxed text-slate-300">
-              Upload a math problem image or type raw text/numbers. The AI will return{" "}
-              <span className="font-semibold text-emerald-400">standard LaTeX</span> and{" "}
-              <span className="font-semibold text-amber-400">
-                Jodit Editor–ready HTML with strict Inline CSS
-              </span>
-              , including vertical arithmetic tables and inline SVG geometry.
+              ស្រង់រូបមន្តគណិតវិទ្យាពីឯកសាររូបភាព ឬអក្សរ។ AI នឹងបំលែងជាទម្រង់{" "}
+              <span className="font-semibold text-emerald-400">LaTeX Code</span>,{" "}
+              <span className="font-semibold text-cyan-400">
+                Jodit Editor HTML (Strict Inline CSS សម្រាប់ប្រព័ន្ធ PLP)
+              </span>{" "}
+              និង <span className="font-semibold text-purple-400">MathML Code</span> យ៉ាងច្បាស់លាស់។
             </p>
           </div>
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/20">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-indigo-600 text-white shadow-lg shadow-cyan-500/20">
             <Calculator className="h-7 w-7" />
           </div>
         </div>
 
         {/* Key capabilities strip - 3 distinct output formats */}
-        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3 relative z-10 font-mono">
           {[
             { label: "Option 1: LaTeX", desc: "Standard math typesetting code" },
             { label: "Option 2: Jodit HTML", desc: "Strict inline CSS for vertical math" },
@@ -162,10 +164,10 @@ export default function MathOcrPage() {
           ].map((cap) => (
             <div
               key={cap.label}
-              className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-3 text-xs"
+              className="rounded-xl border border-cyan-500/20 bg-slate-950/70 p-3 text-xs shadow-[0_0_10px_rgba(0,0,0,0.5)]"
             >
-              <span className="font-semibold text-indigo-300">{cap.label}</span>
-              <p className="mt-0.5 text-slate-400">{cap.desc}</p>
+              <span className="font-bold text-cyan-300">{cap.label}</span>
+              <p className="mt-0.5 text-slate-400 font-sans">{cap.desc}</p>
             </div>
           ))}
         </div>
@@ -291,30 +293,20 @@ export default function MathOcrPage() {
             </div>
           )}
 
-          {/* Loading skeleton */}
+          {/* High-Tech Robotic Processing Scanner */}
           {isLoading && !result && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
-                <div>
-                  <p className="text-sm font-medium text-white">
-                    Gemini Vision is analyzing your input…
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Generating LaTeX, Jodit HTML/Inline CSS, and SVG (if applicable)
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {[80, 65, 90, 50].map((w, i) => (
-                  <div
-                    key={i}
-                    className="h-3 animate-pulse rounded-full bg-slate-800"
-                    style={{ width: `${w}%` }}
-                  />
-                ))}
-              </div>
-            </div>
+            <RoboticScanner
+              active={true}
+              moduleName="PLP MATH OCR // VISION CORE"
+              steps={[
+                "INITIALIZING GEMINI VISION NEURAL MATRIX...",
+                "SCANNING MATH SYMBOLS & FRACTION BARS...",
+                "CHECKING VERTICAL ARITHMETIC & PLACE-VALUE COLUMNS...",
+                "SYNTHESIZING LATEX, MATHML & JODIT STRICT INLINE CSS...",
+                "FINALIZING PLP SHORTCODE [___] VALIDATION...",
+              ]}
+              subtext="Gemini Vision is analyzing mathematical structure and generating code"
+            />
           )}
 
           {/* Results & Refinement */}
@@ -330,42 +322,50 @@ export default function MathOcrPage() {
               />
               
               {/* Refinement UI */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 space-y-4">
-                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-[11px] font-bold text-amber-400">
+              <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/80 p-5 space-y-4 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-bold text-cyan-400 font-mono">
                     2
                   </span>
-                  Refine Results
+                  <span>កែសម្រួលលទ្ធផលបន្ថែម (Refine Results)</span>
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Not quite right? Provide custom instructions and ask the AI to try again.
+                  ប្រសិនបើចង់ផ្លាស់ប្ដូរទម្រង់ ឬកែប្រែសមីការ សូមបញ្ចូលសំណើបន្ថែមហើយចុច "កែសម្រួលលទ្ធផល (Refine)"។
                 </p>
-                <textarea
-                  value={customInstructions}
-                  onChange={(e) => setCustomInstructions(e.target.value)}
-                  disabled={isRefining}
-                  rows={3}
-                  placeholder="e.g. Please make the SVG triangle larger, or use different colors..."
-                  className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50 disabled:opacity-50"
-                />
-                <button
-                  type="button"
-                  onClick={() => submitData(true)}
-                  disabled={!canSubmit || !customInstructions.trim() || isRefining}
-                  className="flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-slate-800 border border-slate-700 px-5 py-2.5 text-sm font-semibold text-slate-200 transition-all hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isRefining ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
-                      Refining...
-                    </>
-                  ) : (
-                    <>
-                      <Lightbulb className="h-4 w-4 text-amber-400" />
-                      Refine Result
-                    </>
-                  )}
-                </button>
+
+                {isRefining ? (
+                  <RoboticScanner
+                    active={true}
+                    moduleName="PLP REFINEMENT MATRIX // AI TUNING"
+                    steps={[
+                      "PARSING REFINEMENT INSTRUCTIONS...",
+                      "RE-EVALUATING DOM NODE STRUCTURE...",
+                      "UPDATING INLINE CSS AND SPACING...",
+                      "GENERATING REVISED PAYLOAD...",
+                    ]}
+                    subtext="Applying refinement directives to update output code"
+                  />
+                ) : (
+                  <>
+                    <textarea
+                      value={customInstructions}
+                      onChange={(e) => setCustomInstructions(e.target.value)}
+                      disabled={isRefining}
+                      rows={3}
+                      placeholder="e.g. Please make the font larger, or make sure [___] is centered..."
+                      className="w-full resize-none rounded-xl border border-cyan-500/30 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 disabled:opacity-50 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => submitData(true)}
+                      disabled={!canSubmit || !customInstructions.trim() || isRefining}
+                      className="flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-cyan-950 border border-cyan-500/40 px-5 py-2.5 text-sm font-semibold text-cyan-300 transition-all hover:bg-cyan-900/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 shadow-[0_0_12px_rgba(0,240,255,0.15)] font-mono"
+                    >
+                      <Lightbulb className="h-4 w-4 text-cyan-400" />
+                      កែសម្រួលលទ្ធផល (Refine Result)
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}

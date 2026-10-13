@@ -6,6 +6,7 @@ import {
   ArrowLeft, ImagePlus, Wand2, Loader2, AlertCircle, Download,
   Trash2, ChevronDown, ChevronUp, ImageIcon,
 } from "lucide-react";
+import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import type { GenerateSuccess, GenerateError } from "@/app/api/generate-image/route";
 
 // -----------------------------------------------------------
@@ -196,36 +197,35 @@ export default function ImageGeneratorPage() {
       </Link>
 
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="relative overflow-hidden rounded-2xl border border-pink-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(236,72,153,0.1)]">
+        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-25" />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between relative z-10">
           <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-400">
-              <span>Module 04</span><span>·</span>
-              <span>Flux Schnell (black-forest-labs) via Replicate</span>
+            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-pink-400">
+              <span className="rounded bg-pink-950/80 px-2 py-0.5 border border-pink-500/40">MODULE 04</span><span>·</span>
+              <span>Flux Schnell Neural Synthesis</span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              AI Text-to-Image Generation
+            <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+              បង្កើតរូបភាព
             </h2>
             <p className="text-sm leading-relaxed text-slate-300">
-              Generate custom images from a text prompt using{" "}
-              <span className="font-semibold text-pink-400">Flux Schnell</span> — the fastest
-              open-source image generation model. Select an aspect ratio, generate up to 4
-              images, and download from the persistent session gallery.
+              បង្កើតរូបភាព និងគំនូរប្លែកៗតាមរយៈការសរសេរ Prompt ជាមួយម៉ូដែល{" "}
+              <span className="font-semibold text-pink-400">Flux Schnell</span> — លឿនរហ័ស គុណភាពខ្ពស់។ អាចកំណត់ Aspect Ratio និងទាញយករូបភាពបានភ្លាមៗ។
             </p>
           </div>
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-lg shadow-pink-500/20">
             <ImagePlus className="h-7 w-7" />
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3 relative z-10 font-mono">
           {[
-            { label: "Flux Schnell", desc: "4-step generation, Apache 2.0 license" },
-            { label: "5 Aspect Ratios", desc: "Square, landscape, portrait, and more" },
+            { label: "Flux Schnell", desc: "Fast 4-step generation engine" },
+            { label: "5 Aspect Ratios", desc: "Square, landscape, portrait, and classic" },
             { label: "Session Gallery", desc: "Persistent grid with one-click download" },
           ].map((c) => (
-            <div key={c.label} className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-3 text-xs">
-              <span className="font-semibold text-pink-300">{c.label}</span>
-              <p className="mt-0.5 text-slate-400">{c.desc}</p>
+            <div key={c.label} className="rounded-xl border border-pink-500/20 bg-slate-950/70 p-3 text-xs shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+              <span className="font-bold text-pink-300">{c.label}</span>
+              <p className="mt-0.5 text-slate-400 font-sans">{c.desc}</p>
             </div>
           ))}
         </div>
@@ -364,16 +364,20 @@ export default function ImageGeneratorPage() {
             </div>
           )}
 
+          {/* High-Tech Robotic Processing Scanner */}
           {isLoading && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 flex items-center gap-4">
-              <Loader2 className="h-6 w-6 animate-spin text-pink-400 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-white">Flux Schnell is generating…</p>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  Typically 5–15 seconds · {numOutputs} image{numOutputs > 1 ? "s" : ""} at {aspectRatio}
-                </p>
-              </div>
-            </div>
+            <RoboticScanner
+              active={true}
+              moduleName="PLP SYNTHESIS // FLUX SCHNELL"
+              steps={[
+                "DISPATCHING TEXT PROMPT EMBEDDINGS...",
+                "INITIALIZING LATENT DIFFUSION NOISE TENSORS...",
+                "RUNNING 4-STEP RECTIFIED FLOW INFERENCE...",
+                "DECODING VAE LATENTS TO HIGH-RESOLUTION RGB...",
+                "COMPILING ASSET TO SESSION GALLERY...",
+              ]}
+              subtext={`Flux Schnell generating ${numOutputs} asset(s) at aspect ratio ${aspectRatio}`}
+            />
           )}
 
           {gallery.length > 0 ? (

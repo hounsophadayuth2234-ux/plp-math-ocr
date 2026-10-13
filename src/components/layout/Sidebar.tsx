@@ -46,27 +46,28 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar container */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-800/80 bg-slate-950 text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-cyan-500/20 bg-slate-950 text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shadow-[4px_0_30px_rgba(0,0,0,0.7)] ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-800/80 px-5">
+        <div className="flex h-16 items-center justify-between border-b border-cyan-500/20 px-5 bg-slate-950/90">
           <Link href="/" className="flex items-center gap-3" onClick={onClose}>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/20">
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 via-indigo-600 to-violet-600 text-white shadow-[0_0_15px_rgba(0,240,255,0.4)]">
               <Cpu className="h-5 w-5" />
+              <div className="absolute -inset-0.5 rounded-xl border border-cyan-300/40 animate-pulse" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className="text-base font-bold tracking-tight text-white">
-                  NexusAI Hub
+                  PLP math content
                 </span>
-                <span className="rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-indigo-400 uppercase ring-1 ring-indigo-500/30">
-                  Internal
+                <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold tracking-wider text-cyan-400 uppercase ring-1 ring-cyan-500/40 shadow-[0_0_6px_rgba(0,240,255,0.2)]">
+                  PLP
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                4-Person Team AI Workbench
+              <p className="font-mono text-[10px] font-semibold tracking-wider text-cyan-400/80 uppercase">
+                DYT ECOSYSTEM
               </p>
             </div>
           </Link>
@@ -174,19 +175,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
         </nav>
 
-        {/* 4-Person Team Workspace Footer */}
-        <div className="border-t border-slate-800/80 p-4">
-          <div className="rounded-xl bg-slate-900/90 p-3.5 ring-1 ring-slate-800">
+        {/* DYT ECOSYSTEM Nodes Footer */}
+        <div className="border-t border-cyan-500/20 p-4 bg-slate-950/80">
+          <div className="rounded-xl bg-slate-900/90 p-3.5 ring-1 ring-cyan-500/20 shadow-[0_0_15px_rgba(0,240,255,0.05)]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Users className="h-3.5 w-3.5 text-indigo-400" />
-                <span className="text-xs font-semibold text-slate-200">
-                  Team Workspace (4 Seats)
+                <Users className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="font-mono text-xs font-bold text-slate-200">
+                  DYT ECOSYSTEM (4 Nodes)
                 </span>
               </div>
-              <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400">
+              <span className="flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Online
+                LINKED
               </span>
             </div>
 
@@ -196,13 +197,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <div
                     key={member.initials}
                     title={`${member.name} — ${member.role}`}
-                    className={`flex h-7 w-7 items-center justify-center rounded-full ${member.color} text-[10px] font-bold text-white ring-2 ring-slate-950`}
+                    className={`flex h-7 w-7 items-center justify-center rounded-full ${member.color} font-mono text-[10px] font-bold text-slate-950 ring-2 ring-slate-950 shadow-[0_0_8px_rgba(0,240,255,0.3)]`}
                   >
                     {member.initials}
                   </div>
                 ))}
               </div>
-              <span className="text-[11px] text-slate-400">Private Mode</span>
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-cyan-400/90">
+                PLP SECURE
+              </span>
             </div>
           </div>
         </div>

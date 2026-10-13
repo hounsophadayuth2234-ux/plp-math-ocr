@@ -7,6 +7,7 @@ import {
   Globe, Copy, Check, Eye, FileCode, ChevronDown, ChevronUp,
   Clock, ExternalLink,
 } from "lucide-react";
+import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import type { ScrapeSuccess, ScrapeError } from "@/app/api/web-scraper/route";
 
 // -----------------------------------------------------------
@@ -243,36 +244,37 @@ export default function WebClonerPage() {
       </Link>
 
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(0,240,255,0.1)]">
+        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-25" />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between relative z-10">
           <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-400">
-              <span>Module 05</span><span>·</span>
+            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-cyan-400">
+              <span className="rounded bg-cyan-950/80 px-2 py-0.5 border border-cyan-500/40">MODULE 05</span><span>·</span>
               <span>Server-Side DOM Extractor · Cheerio + CSS Sanitizer</span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Web Element Cloner & Scraper
+            <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+              ចម្លងកូដគេហទំព័រ (Web Cloner)
             </h2>
             <p className="text-sm leading-relaxed text-slate-300">
-              Input any URL to extract its{" "}
-              <span className="font-semibold text-cyan-400">sanitized HTML structure</span> and{" "}
-              <span className="font-semibold text-blue-400">scoped CSS</span>. Inspect a
-              sandboxed live preview and copy the self-contained code bundle.
+              បញ្ចូល URL គេហទំព័រណាមួយដើម្បីទាញយក{" "}
+              <span className="font-semibold text-cyan-400">Sanitized HTML DOM</span> និង{" "}
+              <span className="font-semibold text-blue-400">Scoped CSS</span>។ អាចមើល
+              Sandboxed Live Preview និងចម្លងកូដទាំងស្រុងបានភ្លាមៗ។
             </p>
           </div>
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20">
             <Code2 className="h-7 w-7" />
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3 relative z-10 font-mono">
           {[
             { label: "DOM Extraction", desc: "Cheerio-powered server-side parsing" },
             { label: "CSS Scoping", desc: "All rules prefixed to prevent leakage" },
             { label: "Sandboxed Preview", desc: "Safe iframe with scripts removed" },
           ].map((c) => (
-            <div key={c.label} className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-3 text-xs">
-              <span className="font-semibold text-cyan-300">{c.label}</span>
-              <p className="mt-0.5 text-slate-400">{c.desc}</p>
+            <div key={c.label} className="rounded-xl border border-cyan-500/20 bg-slate-950/70 p-3 text-xs shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+              <span className="font-bold text-cyan-300">{c.label}</span>
+              <p className="mt-0.5 text-slate-400 font-sans">{c.desc}</p>
             </div>
           ))}
         </div>
@@ -391,16 +393,20 @@ export default function WebClonerPage() {
             </div>
           )}
 
+          {/* High-Tech Robotic Processing Scanner */}
           {isLoading && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 flex items-center gap-4">
-              <Loader2 className="h-6 w-6 animate-spin text-cyan-400 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-white">Fetching and parsing target page…</p>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  Extracting DOM, collecting styles, sanitizing output
-                </p>
-              </div>
-            </div>
+            <RoboticScanner
+              active={true}
+              moduleName="PLP DOM CLONER // CHEERIO PARSER"
+              steps={[
+                "DISPATCHING HEADLESS HTTP REQUEST...",
+                "RESOLVING REMOTE DOM TREE & SANITIZING SCRIPTS...",
+                "AGGREGATING EXTERNAL STYLESHEETS & INLINE CSS...",
+                "PREFIXING CSS SELECTORS WITH .nexusai-cloned...",
+                "GENERATING SANDBOXED PREVIEW BUNDLE...",
+              ]}
+              subtext="Parsing remote DOM structure, extracting styling rules, and enforcing sandbox security"
+            />
           )}
 
           {result && !isLoading && (

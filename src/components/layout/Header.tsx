@@ -17,12 +17,12 @@ export function Header({ onOpenSidebar, onOpenSettings }: HeaderProps) {
   );
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-800/80 bg-slate-950/85 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-cyan-500/20 bg-slate-950/90 px-4 backdrop-blur-md sm:px-6 lg:px-8 shadow-[0_4px_25px_rgba(0,0,0,0.6)]">
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onOpenSidebar}
-          className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-300 hover:bg-slate-800 hover:text-white lg:hidden"
+          className="rounded-lg border border-cyan-500/30 bg-slate-900/90 p-2 text-cyan-300 hover:bg-cyan-950 hover:text-white lg:hidden"
           aria-label="Open navigation menu"
         >
           <Menu className="h-5 w-5" />
@@ -32,43 +32,46 @@ export function Header({ onOpenSidebar, onOpenSettings }: HeaderProps) {
           <div className="flex items-center gap-2">
             {activeTool ? (
               <>
-                <span className="rounded-md bg-slate-800 px-2 py-0.5 font-mono text-xs font-semibold text-indigo-400">
-                  Module 0{activeTool.number}
+                <span className="rounded-md bg-cyan-950/80 px-2.5 py-0.5 font-mono text-xs font-bold text-cyan-400 ring-1 ring-cyan-500/40 shadow-[0_0_8px_rgba(0,240,255,0.2)]">
+                  MOD 0{activeTool.number}
                 </span>
-                <h1 className="text-sm font-semibold text-white sm:text-base">
+                <h1 className="text-sm font-bold text-white sm:text-base tracking-wide">
                   {activeTool.title}
                 </h1>
               </>
             ) : (
               <>
-                <Sparkles className="h-4 w-4 text-indigo-400" />
-                <h1 className="text-sm font-semibold text-white sm:text-base">
-                  All-in-One Internal AI Dashboard
+                <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                <h1 className="text-sm font-bold text-white sm:text-base tracking-wide flex items-center gap-2">
+                  <span>PLP math content</span>
+                  <span className="rounded bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-cyan-400 ring-1 ring-cyan-500/30">
+                    PLP
+                  </span>
                 </h1>
               </>
             )}
           </div>
-          <p className="hidden text-xs text-slate-400 sm:block">
+          <p className="hidden text-xs text-slate-400 sm:block font-mono">
             {activeTool
-              ? `Powered by ${activeTool.engine}`
-              : "Unified multi-tool workspace engineered for your 4-person team"}
+              ? `// ${activeTool.engine}`
+              : "DYT ECOSYSTEM — Neural Robotics & High-Precision Educational Suite"}
           </p>
         </div>
       </div>
 
       {/* Right Status Pills & Settings Button */}
       <div className="flex items-center gap-3">
-        <div className="hidden items-center gap-2 rounded-full border border-slate-800 bg-slate-900/90 px-3 py-1.5 text-xs text-slate-300 md:flex">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-          <span>Interactive Demo / Live API Gateway</span>
+        <div className="hidden items-center gap-2 rounded-full border border-cyan-500/20 bg-slate-900/80 px-3 py-1 text-[11px] font-mono text-cyan-300 md:flex shadow-[0_0_10px_rgba(0,240,255,0.08)]">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span>PLP CORE: ONLINE</span>
         </div>
 
         <button
           type="button"
           onClick={onOpenSettings}
-          className="flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 hover:text-white transition-colors"
+          className="flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-950/40 px-3 py-1.5 text-xs font-mono font-semibold text-cyan-300 hover:bg-cyan-900/50 hover:text-white transition-all shadow-[0_0_12px_rgba(0,240,255,0.15)]"
         >
-          <KeyRound className="h-3.5 w-3.5 text-indigo-400" />
+          <KeyRound className="h-3.5 w-3.5 text-cyan-400" />
           <span>API Keys</span>
         </button>
       </div>

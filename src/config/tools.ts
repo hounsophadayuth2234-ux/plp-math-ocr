@@ -23,14 +23,14 @@ export const CORE_TOOLS: ToolModule[] = [
   {
     id: "math-ocr",
     number: 1,
-    title: "Advanced Math OCR & Code Generator",
-    shortTitle: "Math OCR & Jodit HTML",
+    title: "សរសេរកូដ LaTeX, Jodit HTML, MathML",
+    shortTitle: "សរសេរកូដ LaTeX, Jodit HTML, MathML",
     href: "/math-ocr",
     description:
-      "Extract complex equations, vertical arithmetic, and geometric figures from images or raw text into standard LaTeX and Jodit-ready HTML with strict Inline CSS.",
+      "ស្រង់សមីការ គណនាលេខបញ្ឈរ និងរូបធរណីមាត្រពីឯកសាររូបភាព ឬអក្សរ ទៅជាទម្រង់ LaTeX, Jodit HTML (Strict Inline CSS) និង MathML សម្រាប់ប្រព័ន្ធ PLP។",
     badge: "Gemini Vision",
     engine: "Google Gemini 2.5 Flash / Pro Vision",
-    accentColor: "from-indigo-500 to-violet-600",
+    accentColor: "from-cyan-500 via-indigo-500 to-violet-600",
     highlights: [
       "Option 1: Standard LaTeX code",
       "Option 2: Jodit HTML + strict Inline CSS (vertical tables)",
@@ -41,14 +41,14 @@ export const CORE_TOOLS: ToolModule[] = [
   {
     id: "bg-remover",
     number: 2,
-    title: "AI Background Removal & Replacement",
-    shortTitle: "BG Remover & Color Studio",
+    title: "កាត់រូបភាព",
+    shortTitle: "កាត់រូបភាព",
     href: "/bg-remover",
     description:
-      "Instantly isolate subjects into transparent PNGs and apply custom solid-color studio backdrops in real time using the HTML5 Canvas API.",
+      "កាត់ផ្ដាច់ផ្ទៃខាងក្រោយជារូបភាព Transparent PNG ភ្លាមៗ និងប្ដូរពណ៌ផ្ទៃខាងក្រោយថ្មីតាមរយៈ HTML5 Canvas Color Studio។",
     badge: "Rembg / SegFormer",
     engine: "Open-Source Background Segmentation + HTML5 Canvas",
-    accentColor: "from-emerald-500 to-teal-600",
+    accentColor: "from-emerald-500 via-teal-500 to-cyan-600",
     highlights: [
       "One-click transparent PNG extraction",
       "Real-time HTML5 Canvas solid color replacement",
@@ -59,14 +59,14 @@ export const CORE_TOOLS: ToolModule[] = [
   {
     id: "image-upscaler",
     number: 3,
-    title: "Image Upscaling & Enhancement",
-    shortTitle: "HD/4K Image Upscaler",
+    title: "ធ្វើរូបឱ្យច្បាស់",
+    shortTitle: "ធ្វើរូបឱ្យច្បាស់",
     href: "/image-upscaler",
     description:
-      "Transform low-resolution, compressed, or blurry graphics into crisp HD/4K assets with an interactive side-by-side Before/After comparison slider.",
+      "បង្កើនគុណភាពរូបភាពព្រិលៗ ឬទំហំតូចឱ្យទៅជាកម្រិតច្បាស់ HD/4K ជាមួយ Real-ESRGAN Super-Resolution និង Before/After comparison slider។",
     badge: "Real-ESRGAN 4x",
     engine: "Replicate Real-ESRGAN / Super-Resolution API",
-    accentColor: "from-amber-500 to-orange-600",
+    accentColor: "from-amber-500 via-orange-500 to-rose-600",
     highlights: [
       "Up to 4x super-resolution enhancement",
       "Interactive Before/After split comparison slider",
@@ -77,14 +77,14 @@ export const CORE_TOOLS: ToolModule[] = [
   {
     id: "image-generator",
     number: 4,
-    title: "AI Text-to-Image Generation",
-    shortTitle: "Text-to-Image Studio",
+    title: "បង្កើតរូបភាព",
+    shortTitle: "បង្កើតរូបភាព",
     href: "/image-generator",
     description:
-      "Generate custom illustrations, educational diagrams, and creative assets from text prompts with configurable aspect ratios and a downloadable gallery.",
+      "បង្កើតរូបភាព និងគំនូរប្លែកៗតាមរយៈការសរសេរ Prompt ជាមួយម៉ូដែល Flux Schnell ក្នុងល្បឿនលឿនបំផុត និងទាញយករូបភាពបានភ្លាមៗ។",
     badge: "Flux / DALL-E 3",
     engine: "Multi-Model Text-to-Image API",
-    accentColor: "from-pink-500 to-rose-600",
+    accentColor: "from-pink-500 via-purple-500 to-indigo-600",
     highlights: [
       "Custom prompt & negative prompt controls",
       "1:1, 16:9, 9:16, and 4:3 aspect ratio presets",
@@ -95,14 +95,14 @@ export const CORE_TOOLS: ToolModule[] = [
   {
     id: "web-cloner",
     number: 5,
-    title: "Web Element Cloner & Scraper",
-    shortTitle: "Web UI Cloner & Scraper",
+    title: "ចម្លងកូដគេហទំព័រ (Web Cloner)",
+    shortTitle: "ចម្លងកូដគេហទំព័រ",
     href: "/web-cloner",
     description:
-      "Fetch any target URL, extract and sanitize its core DOM structure and associated styles, and inspect both a live visual preview and copyable HTML/CSS.",
+      "ស្រង់ទាញយក HTML DOM និង CSS Styles ពីគេហទំព័រគោលដៅ ពិនិត្យមើល Visual Preview និងចម្លងកូដបានភ្លាមៗ។",
     badge: "Cheerio / Puppeteer",
     engine: "Server-Side DOM Extractor & CSS Sanitizer",
-    accentColor: "from-cyan-500 to-blue-600",
+    accentColor: "from-cyan-500 via-blue-500 to-indigo-600",
     highlights: [
       "Target URL & optional CSS selector extraction",
       "Sanitized HTML + scoped CSS bundle",
@@ -120,8 +120,8 @@ export interface TeamMember {
 }
 
 export const TEAM_MEMBERS: TeamMember[] = [
-  { name: "Member 1", role: "Content & Math Lead", initials: "M1", color: "bg-indigo-500" },
-  { name: "Member 2", role: "Visual Designer", initials: "M2", color: "bg-emerald-500" },
-  { name: "Member 3", role: "Frontend Engineer", initials: "M3", color: "bg-amber-500" },
-  { name: "Member 4", role: "AI Operations", initials: "M4", color: "bg-rose-500" },
+  { name: "DYT Node 1", role: "PLP Math & Core Architecture", initials: "D1", color: "bg-cyan-500" },
+  { name: "DYT Node 2", role: "Vision & Creative Pipeline", initials: "D2", color: "bg-emerald-500" },
+  { name: "DYT Node 3", role: "Robotic UI & Performance", initials: "D3", color: "bg-amber-500" },
+  { name: "DYT Node 4", role: "Neural Engine & Operations", initials: "D4", color: "bg-purple-500" },
 ];

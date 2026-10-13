@@ -26,41 +26,43 @@ const ICON_MAP: Record<ToolModule["iconName"], React.ComponentType<{ className?:
 export default function DashboardOverviewPage() {
   return (
     <div className="space-y-8">
-      {/* Top Welcome Banner */}
-      <section className="relative overflow-hidden rounded-2xl border border-slate-800/90 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 p-6 sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      {/* Top Welcome Banner - Cyber Command Deck */}
+      <section className="relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(0,240,255,0.12)]">
+        {/* Animated Cyber Grid and Hologram glow */}
+        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-35" />
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-purple-500/15 blur-3xl" />
+
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">
-              <Lock className="h-3.5 w-3.5" />
-              <span>Private 4-Person Team AI Workbench</span>
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/40 bg-cyan-950/50 px-3.5 py-1 text-xs font-mono font-semibold text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.2)]">
+              <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+              <span>DYT ECOSYSTEM // NEURAL WORKBENCH</span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Welcome to NexusAI Internal Studio
+            <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+              PLP math content &amp; AI Studio
             </h2>
             <p className="text-sm leading-relaxed text-slate-300">
-              A centralized Next.js + TypeScript suite uniting math OCR &amp;
-              Jodit-ready inline HTML generation, instant background segmentation,
-              4K super-resolution upscaling, prompt-based image synthesis, and
-              DOM/CSS web element cloning.
+              ប្រព័ន្ធបញ្ញាសិប្បនិម្មិតកម្រិតខ្ពស់សម្រាប់បម្លែងរូបមន្តគណិតវិទ្យាទៅជា <span className="text-cyan-400 font-semibold">LaTeX, Jodit HTML (Strict Inline CSS) និង MathML</span> ព្រមទាំងឧបករណ៍កាត់រូបភាព ធ្វើរូបឱ្យច្បាស់ និងបង្កើតរូបភាពឆ្លាតវៃ។
             </p>
           </div>
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 text-center">
-              <Layers className="mx-auto h-4 w-4 text-indigo-400" />
-              <p className="mt-1.5 text-xl font-bold text-white">5</p>
-              <p className="text-[11px] text-slate-400">Core Modules</p>
+          {/* Quick Stats Telemetry */}
+          <div className="grid grid-cols-3 gap-3 sm:gap-4 font-mono">
+            <div className="rounded-xl border border-cyan-500/30 bg-slate-950/80 p-3.5 text-center shadow-[0_0_12px_rgba(0,240,255,0.06)]">
+              <Layers className="mx-auto h-4 w-4 text-cyan-400" />
+              <p className="mt-1.5 text-xl font-bold text-white">05</p>
+              <p className="text-[10px] text-cyan-300/80 uppercase">Core Modules</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 text-center">
+            <div className="rounded-xl border border-emerald-500/30 bg-slate-950/80 p-3.5 text-center shadow-[0_0_12px_rgba(16,185,129,0.06)]">
               <Users className="mx-auto h-4 w-4 text-emerald-400" />
-              <p className="mt-1.5 text-xl font-bold text-white">4</p>
-              <p className="text-[11px] text-slate-400">Team Seats</p>
+              <p className="mt-1.5 text-xl font-bold text-white">04</p>
+              <p className="text-[10px] text-emerald-300/80 uppercase">DYT Nodes</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 text-center">
+            <div className="rounded-xl border border-amber-500/30 bg-slate-950/80 p-3.5 text-center shadow-[0_0_12px_rgba(245,158,11,0.06)]">
               <Zap className="mx-auto h-4 w-4 text-amber-400" />
-              <p className="mt-1.5 text-xl font-bold text-white">API</p>
-              <p className="text-[11px] text-slate-400">App Router</p>
+              <p className="mt-1.5 text-xl font-bold text-white">ONLINE</p>
+              <p className="text-[10px] text-amber-300/80 uppercase">PLP Engine</p>
             </div>
           </div>
         </div>
@@ -68,15 +70,19 @@ export default function DashboardOverviewPage() {
 
       {/* 5 Core Functional Modules Grid */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-cyan-500/20 pb-3">
           <div>
-            <h3 className="text-lg font-semibold text-white">
-              Core AI Functional Modules
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <span className="text-cyan-400 font-mono text-sm">&gt;&gt;</span>
+              <span>ម៉ូឌុលដំណើរការស្នូល (Core Modules)</span>
             </h3>
             <p className="text-xs text-slate-400">
-              Select a module below or from the left sidebar to launch its workspace
+              ជ្រើសរើសម៉ូឌុលខាងក្រោម ឬតាម Sidebar ខាងឆ្វេងដើម្បីចាប់ផ្ដើមដំណើរការ
             </p>
           </div>
+          <span className="hidden sm:inline-flex rounded font-mono text-[10px] text-cyan-400 border border-cyan-500/30 bg-cyan-950/40 px-2 py-1">
+            STATUS: ACTIVE (5/5)
+          </span>
         </div>
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -87,21 +93,25 @@ export default function DashboardOverviewPage() {
               <Link
                 key={tool.id}
                 href={tool.href}
-                className="group relative flex flex-col justify-between rounded-2xl border border-slate-800/90 bg-slate-900/60 p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-900 hover:shadow-xl hover:shadow-indigo-950/20"
+                className="group relative flex flex-col justify-between rounded-2xl border border-cyan-500/20 bg-slate-900/70 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-cyan-400 hover:bg-slate-900/90 hover:shadow-[0_0_25px_rgba(0,240,255,0.18)]"
               >
+                {/* Tech corner reticle */}
+                <div className="absolute top-2 right-2 h-2 w-2 border-t border-r border-cyan-500/40 group-hover:border-cyan-400" />
+                <div className="absolute bottom-2 left-2 h-2 w-2 border-b border-l border-cyan-500/40 group-hover:border-cyan-400" />
+
                 <div>
                   {/* Card Top Bar */}
                   <div className="flex items-center justify-between">
                     <div
-                      className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${tool.accentColor} text-white shadow-md`}
+                      className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${tool.accentColor} text-white shadow-lg shadow-cyan-500/10 group-hover:scale-105 transition-transform`}
                     >
-                      <Icon className="h-5 w-5" />
+                      <Icon className="h-6 w-6" />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-md bg-slate-800/90 px-2.5 py-1 text-[11px] font-medium text-slate-300">
+                      <span className="rounded-md border border-cyan-500/30 bg-slate-950 px-2.5 py-1 font-mono text-[11px] font-semibold text-cyan-300">
                         {tool.badge}
                       </span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 text-slate-400 transition-colors group-hover:border-indigo-500/40 group-hover:text-white">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 text-slate-400 transition-colors group-hover:border-cyan-400 group-hover:text-cyan-300">
                         <ArrowUpRight className="h-4 w-4" />
                       </span>
                     </div>
@@ -109,10 +119,10 @@ export default function DashboardOverviewPage() {
 
                   {/* Title & Description */}
                   <div className="mt-5">
-                    <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-indigo-400">
+                    <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-400">
                       Module 0{tool.number}
                     </span>
-                    <h4 className="mt-1 text-base font-bold text-white group-hover:text-indigo-200">
+                    <h4 className="mt-1 text-base font-bold text-white group-hover:text-cyan-200 transition-colors">
                       {tool.title}
                     </h4>
                     <p className="mt-2 text-xs leading-relaxed text-slate-400">
@@ -128,7 +138,7 @@ export default function DashboardOverviewPage() {
                       key={highlight}
                       className="flex items-center gap-2 text-xs text-slate-300"
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-cyan-400" />
                       <span className="truncate">{highlight}</span>
                     </div>
                   ))}
@@ -139,33 +149,34 @@ export default function DashboardOverviewPage() {
         </div>
       </section>
 
-      {/* Team Roster Strip */}
-      <section className="rounded-2xl border border-slate-800/90 bg-slate-900/40 p-5">
+      {/* DYT ECOSYSTEM Team Roster Strip */}
+      <section className="rounded-2xl border border-cyan-500/20 bg-slate-900/50 p-5 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h4 className="text-sm font-semibold text-white">
-              Authorized 4-Person Team Roster
+            <h4 className="text-sm font-bold text-white flex items-center gap-2 font-mono">
+              <span className="h-2 w-2 rounded-full bg-cyan-400" />
+              DYT ECOSYSTEM — Neural Team Nodes
             </h4>
             <p className="text-xs text-slate-400">
-              Shared access to Gemini Vision, Image Processing, and Scraper pipelines
+              Shared access to Gemini Vision, Math OCR, and High-Resolution AI Processing Engines
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 font-mono">
             {TEAM_MEMBERS.map((member) => (
               <div
                 key={member.initials}
-                className="flex items-center gap-2.5 rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2"
+                className="flex items-center gap-2.5 rounded-xl border border-cyan-500/20 bg-slate-950/70 px-3 py-2 shadow-[0_0_8px_rgba(0,240,255,0.05)]"
               >
                 <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${member.color} text-xs font-bold text-white`}
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${member.color} text-xs font-bold text-slate-950`}
                 >
                   {member.initials}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-slate-200">
+                  <p className="truncate text-xs font-bold text-slate-200">
                     {member.name}
                   </p>
-                  <p className="truncate text-[10px] text-slate-400">
+                  <p className="truncate text-[10px] text-cyan-400/80">
                     {member.role}
                   </p>
                 </div>
