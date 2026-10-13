@@ -16,9 +16,9 @@ Official 100% Free Open-Source Background Removal Microservice powered by `rembg
 
 ## 🚀 Live Endpoints
 
-- **Web UI**: `/ui` (Interactive browser test page)
+- **Web UI**: `/` (Interactive browser test page)
 - **REST API**: `/api/remove-bg` (POST multipart/form-data with `image` file)
-- **Health Check**: `/` (JSON status)
+- **Health Check**: `/health` or `/api/health` (JSON status)
 
 ## 🔗 Connecting to Next.js Vercel App
 
