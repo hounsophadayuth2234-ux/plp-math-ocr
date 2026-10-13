@@ -106,7 +106,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       : "text-slate-400 group-hover:text-slate-200"
                   }`}
                 />
-                <span>Dashboard Overview</span>
+                <span>ផ្ទាំងគ្រប់គ្រង</span>
               </span>
               {pathname === "/" && (
                 <ChevronRight className="h-4 w-4 text-indigo-400" />

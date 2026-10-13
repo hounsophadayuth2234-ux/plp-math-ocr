@@ -2,7 +2,7 @@
 
 import React from "react";
 import { usePathname } from "next/navigation";
-import { Menu, ShieldCheck, Sparkles, KeyRound } from "lucide-react";
+import { Menu, KeyRound } from "lucide-react";
 import { CORE_TOOLS } from "@/config/tools";
 
 interface HeaderProps {
@@ -28,44 +28,25 @@ export function Header({ onOpenSidebar, onOpenSettings }: HeaderProps) {
           <Menu className="h-5 w-5" />
         </button>
 
-        <div>
-          <div className="flex items-center gap-2">
-            {activeTool ? (
-              <>
-                <span className="rounded-md bg-cyan-950/80 px-2.5 py-0.5 font-mono text-xs font-bold text-cyan-400 ring-1 ring-cyan-500/40 shadow-[0_0_8px_rgba(0,240,255,0.2)]">
-                  MOD 0{activeTool.number}
-                </span>
-                <h1 className="text-sm font-bold text-white sm:text-base tracking-wide">
-                  {activeTool.title}
-                </h1>
-              </>
-            ) : (
-              <>
-                <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
-                <h1 className="text-sm font-bold text-white sm:text-base tracking-wide flex items-center gap-2">
-                  <span>PLP math content</span>
-                  <span className="rounded bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-cyan-400 ring-1 ring-cyan-500/30">
-                    PLP
-                  </span>
-                </h1>
-              </>
-            )}
+        {activeTool && (
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-md bg-cyan-950/80 px-2.5 py-0.5 font-mono text-xs font-bold text-cyan-400 ring-1 ring-cyan-500/40 shadow-[0_0_8px_rgba(0,240,255,0.2)]">
+                MOD 0{activeTool.number}
+              </span>
+              <h1 className="text-sm font-bold text-white sm:text-base tracking-wide">
+                {activeTool.title}
+              </h1>
+            </div>
+            <p className="hidden text-xs text-slate-400 sm:block font-mono">
+              // {activeTool.engine}
+            </p>
           </div>
-          <p className="hidden text-xs text-slate-400 sm:block font-mono">
-            {activeTool
-              ? `// ${activeTool.engine}`
-              : "DYT ECOSYSTEM — Neural Robotics & High-Precision Educational Suite"}
-          </p>
-        </div>
+        )}
       </div>
 
-      {/* Right Status Pills & Settings Button */}
+      {/* Settings Button */}
       <div className="flex items-center gap-3">
-        <div className="hidden items-center gap-2 rounded-full border border-cyan-500/20 bg-slate-900/80 px-3 py-1 text-[11px] font-mono text-cyan-300 md:flex shadow-[0_0_10px_rgba(0,240,255,0.08)]">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span>PLP CORE: ONLINE</span>
-        </div>
-
         <button
           type="button"
           onClick={onOpenSettings}

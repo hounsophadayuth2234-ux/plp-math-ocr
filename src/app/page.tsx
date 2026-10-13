@@ -8,10 +8,6 @@ import {
   Code2,
   ArrowUpRight,
   CheckCircle2,
-  Layers,
-  Lock,
-  Zap,
-  Users,
 } from "lucide-react";
 import { CORE_TOOLS, TEAM_MEMBERS, ToolModule } from "@/config/tools";
 
@@ -26,48 +22,6 @@ const ICON_MAP: Record<ToolModule["iconName"], React.ComponentType<{ className?:
 export default function DashboardOverviewPage() {
   return (
     <div className="space-y-8">
-      {/* Top Welcome Banner - Cyber Command Deck */}
-      <section className="relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(0,240,255,0.12)]">
-        {/* Animated Cyber Grid and Hologram glow */}
-        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-35" />
-        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-500/15 blur-3xl" />
-        <div className="pointer-events-none absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-purple-500/15 blur-3xl" />
-
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-2xl space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/40 bg-cyan-950/50 px-3.5 py-1 text-xs font-mono font-semibold text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.2)]">
-              <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
-              <span>DYT ECOSYSTEM // NEURAL WORKBENCH</span>
-            </div>
-            <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-              PLP math content &amp; AI Studio
-            </h2>
-            <p className="text-sm leading-relaxed text-slate-300">
-              ប្រព័ន្ធបញ្ញាសិប្បនិម្មិតកម្រិតខ្ពស់សម្រាប់បម្លែងរូបមន្តគណិតវិទ្យាទៅជា <span className="text-cyan-400 font-semibold">LaTeX, Jodit HTML (Strict Inline CSS) និង MathML</span> ព្រមទាំងឧបករណ៍កាត់រូបភាព ធ្វើរូបឱ្យច្បាស់ និងបង្កើតរូបភាពឆ្លាតវៃ។
-            </p>
-          </div>
-
-          {/* Quick Stats Telemetry */}
-          <div className="grid grid-cols-3 gap-3 sm:gap-4 font-mono">
-            <div className="rounded-xl border border-cyan-500/30 bg-slate-950/80 p-3.5 text-center shadow-[0_0_12px_rgba(0,240,255,0.06)]">
-              <Layers className="mx-auto h-4 w-4 text-cyan-400" />
-              <p className="mt-1.5 text-xl font-bold text-white">05</p>
-              <p className="text-[10px] text-cyan-300/80 uppercase">Core Modules</p>
-            </div>
-            <div className="rounded-xl border border-emerald-500/30 bg-slate-950/80 p-3.5 text-center shadow-[0_0_12px_rgba(16,185,129,0.06)]">
-              <Users className="mx-auto h-4 w-4 text-emerald-400" />
-              <p className="mt-1.5 text-xl font-bold text-white">04</p>
-              <p className="text-[10px] text-emerald-300/80 uppercase">DYT Nodes</p>
-            </div>
-            <div className="rounded-xl border border-amber-500/30 bg-slate-950/80 p-3.5 text-center shadow-[0_0_12px_rgba(245,158,11,0.06)]">
-              <Zap className="mx-auto h-4 w-4 text-amber-400" />
-              <p className="mt-1.5 text-xl font-bold text-white">ONLINE</p>
-              <p className="text-[10px] text-amber-300/80 uppercase">PLP Engine</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* 5 Core Functional Modules Grid */}
       <section className="space-y-4">
         <div className="flex items-center justify-between border-b border-cyan-500/20 pb-3">
