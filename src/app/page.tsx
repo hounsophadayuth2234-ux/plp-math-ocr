@@ -31,16 +31,22 @@ export default function DashboardOverviewPage() {
               <span>ម៉ូឌុលដំណើរការស្នូល (Core Modules)</span>
             </h3>
             <p className="text-xs text-slate-400">
-              ម៉ូឌុល 01 (Math OCR), ម៉ូឌុល 02 (Bg Remover), ម៉ូឌុល 03 (Image Upscaler), និង ម៉ូឌុល 04 (Image Generator) កំពុងដំណើរការយ៉ាងពេញលេញ។
+              ម៉ូឌុល 01 (Math OCR) កំពុងដំណើរការយ៉ាងពេញលេញ។
             </p>
           </div>
           <span className="hidden sm:inline-flex rounded font-mono text-[10px] text-emerald-400 border border-emerald-500/30 bg-emerald-950/40 px-2.5 py-1">
-            STATUS: MODULES 01, 02, 03, 04 ACTIVE
+            STATUS: MODULE 01 ACTIVE
           </span>
         </div>
 
+        {/* Maintenance Banner */}
+        <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-xs font-mono text-amber-300 flex items-center gap-2.5 shadow-[0_0_15px_rgba(245,158,11,0.08)]">
+          <span className="text-base">⚠️</span>
+          <span>Modules 02–04 are temporarily under maintenance. Only Module 01 (Math OCR) is active.</span>
+        </div>
+
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {CORE_TOOLS.map((tool) => {
+          {CORE_TOOLS.filter((tool) => !tool.disabled).map((tool) => {
             const Icon = ICON_MAP[tool.iconName];
 
             if (tool.disabled) {

@@ -57,7 +57,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "ជំនួសពណ៌ស្វ័យប្រវត្តិតាម Canvas និងទាញយក PNG ភ្លាមៗ",
     ],
     iconName: "Eraser",
-    disabled: false,
+    disabled: true,
   },
   {
     id: "image-upscaler",
@@ -76,7 +76,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "Interactive Before/After split comparison slider",
     ],
     iconName: "Sparkles",
-    disabled: false,
+    disabled: true,
   },
   {
     id: "image-generator",
@@ -96,7 +96,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "Persistent session gallery with one-click download",
     ],
     iconName: "ImagePlus",
-    disabled: false,
+    disabled: true,
   },
   {
     id: "web-cloner",
