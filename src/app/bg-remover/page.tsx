@@ -49,31 +49,33 @@ export default function BgRemoverPage() {
   // Cleanup object URLs on unmount
   useEffect(() => {
     const registry = urlRegistryRef.current;
-    // Check if remote worker is configured in /api/settings
-    fetch("/api/settings")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.backgroundRemovalWorkerConfigured) {
-          setWorkerConfigured(true);
-        }
-    // Preload fastest browser model in Cache API for instant Fast Preview
-    import("@imgly/background-removal")
-      .then(({ preload }) => {
-        preload({
-          model: "isnet_quint8",
-          proxyToWorker: true,
-          fetchArgs: { cache: "force-cache" },
-        }).catch(() => {});
-      })
-      .catch(() => {});
+      fetch("/api/settings")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.backgroundRemovalWorkerConfigured) {
+            setWorkerConfigured(true);
+          }
+        })
+        .catch(() => {});
 
-    return () => {
-      registry.revokeAll();
-      if (activeAbortControllerRef.current) {
-        activeAbortControllerRef.current.abort();
-      }
-    };
-  }, []);
+      // Preload fastest browser model in Cache API for instant Fast Preview
+      import("@imgly/background-removal")
+        .then(({ preload }) => {
+          preload({
+            model: "isnet_quint8",
+            proxyToWorker: true,
+            fetchArgs: { cache: "force-cache" },
+          }).catch(() => {});
+        })
+        .catch(() => {});
+
+      return () => {
+        registry.revokeAll();
+        if (activeAbortControllerRef.current) {
+          activeAbortControllerRef.current.abort();
+        }
+      };
+    }, []);
 
   const handleCancel = () => {
     if (activeAbortControllerRef.current) {
