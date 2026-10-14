@@ -9,6 +9,8 @@ interface OutputTabsProps {
   mathml: string;
   detectedType: string;
   rawDescription: string;
+  transcription?: string;
+  uncertainParts?: string[];
   isDemoMode?: boolean;
 }
 
@@ -27,6 +29,8 @@ export function OutputTabs({
   mathml,
   detectedType,
   rawDescription,
+  transcription,
+  uncertainParts,
   isDemoMode,
 }: OutputTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("latex");
@@ -83,6 +87,16 @@ export function OutputTabs({
           <span className="rounded-md bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30">
             Detected: {detectedType}
           </span>
+          {transcription && (
+            <span className="rounded-md bg-cyan-500/15 px-2.5 py-1 text-xs font-mono font-medium text-cyan-300 ring-1 ring-cyan-500/30">
+              Transcription: {transcription}
+            </span>
+          )}
+          {uncertainParts && uncertainParts.length > 0 && (
+            <span className="rounded-md bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-300 ring-1 ring-amber-500/30">
+              Unclear: {uncertainParts.join(", ")}
+            </span>
+          )}
           {isDemoMode && (
             <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300 ring-1 ring-amber-500/30">
               Interactive Demo

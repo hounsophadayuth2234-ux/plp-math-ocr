@@ -127,6 +127,35 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 const isActive =
                   pathname === tool.href || pathname.startsWith(`${tool.href}/`);
 
+                if (tool.disabled) {
+                  return (
+                    <div
+                      key={tool.id}
+                      className="flex items-center justify-between rounded-xl px-3 py-2 text-sm opacity-40 cursor-not-allowed select-none bg-slate-950/40 border border-slate-900"
+                      title="Temporarily disabled — focusing on Module 01 stabilization"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-slate-500">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-mono text-slate-600">
+                              0{tool.number}
+                            </span>
+                            <p className="truncate font-medium text-slate-400">
+                              {tool.shortTitle}
+                            </p>
+                          </div>
+                          <p className="truncate text-[10px] text-slate-600 font-mono">
+                            Inactive
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <Link
                     key={tool.id}

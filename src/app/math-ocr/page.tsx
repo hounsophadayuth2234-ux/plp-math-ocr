@@ -22,29 +22,29 @@ import type { MathOcrResponse } from "@/app/api/math-ocr/route";
 // -----------------------------------------------------------
 const EXAMPLE_PROMPTS = [
   {
+    label: "Quadratic Equation",
+    text: "x² + 5x + 6 = 0",
+    hint: "Transcribes algebraic equation into LaTeX, Jodit HTML, and MathML",
+  },
+  {
     label: "Vertical Addition",
-    text: "  347\n+ 285\n------",
-    hint: "Generates school-style column table with border-top separator",
+    text: "  347\n+ 285\n-----\n[___]",
+    hint: "Preserves place-value alignment and [___] placeholder without calculating",
   },
   {
-    label: "Vertical Subtraction",
-    text: "  902\n- 476\n------",
-    hint: "Generates aligned column table with borrow notation",
+    label: "Fraction Expression",
+    text: "(3/4) + (2/3) = 17/12",
+    hint: "Produces vertical HTML fraction bars with Jodit inline CSS",
   },
   {
-    label: "Algebraic Equation",
-    text: "Solve: 3x² + 5x - 2 = 0 using the quadratic formula",
-    hint: "Produces fraction bars and superscripts inline",
+    label: "Linear Inequality",
+    text: "2x - 3 <= 7",
+    hint: "Transcribes linear inequality with relational operators",
   },
   {
-    label: "Geometric Shape",
+    label: "Geometric Figure",
     text: "Right triangle with legs a=3, b=4, hypotenuse c=5. Label all sides.",
-    hint: "Generates inline SVG with vertex labels",
-  },
-  {
-    label: "Fraction Arithmetic",
-    text: "(3/4) + (2/3) = ?",
-    hint: "Produces HTML fraction bars with Jodit-compatible inline CSS",
+    hint: "Transcribes geometric figure with inline SVG labels",
   },
 ];
 
@@ -58,6 +58,7 @@ export default function MathOcrPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [result, setResult] = useState<MathOcrResponse | null>(null);
   const [showExamples, setShowExamples] = useState(false);
 
@@ -74,6 +75,7 @@ export default function MathOcrPage() {
       setCustomInstructions(""); // Clear old refinement text on fresh gen
     }
     setError(null);
+    setErrorDetails(null);
 
     try {
       const formData = new FormData();
@@ -92,8 +94,9 @@ export default function MathOcrPage() {
 
       if (!response.ok) {
         // The API returned an error object
-        setError(data.error ?? "Unknown error from server.");
+        setError(data.error ?? "Failed to transcribe math expression.");
         if (data.details) {
+          setErrorDetails(data.details);
           console.error("API Error Details:", data.details);
         }
         return;
@@ -284,11 +287,28 @@ export default function MathOcrPage() {
         <div className="flex flex-col gap-4 lg:col-span-3">
           {/* Error state */}
           {error && (
-            <div className="flex items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-950/40 p-4 text-sm text-rose-300">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
-              <div>
-                <p className="font-semibold">Error processing request</p>
-                <p className="mt-0.5 text-xs opacity-80">{error}</p>
+            <div className="flex flex-col gap-3 rounded-xl border border-rose-500/30 bg-rose-950/40 p-5 text-sm text-rose-300 shadow-lg shadow-rose-950/30">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
+                <div className="flex-1">
+                  <p className="font-semibold text-rose-200">Error processing request</p>
+                  <p className="mt-0.5 text-xs text-rose-300/90">{error}</p>
+                  {errorDetails && (
+                    <p className="mt-1.5 rounded bg-rose-950/80 p-2 font-mono text-[11px] text-rose-400/90 border border-rose-500/20">
+                      {errorDetails}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 pt-2 border-t border-rose-500/20">
+                <button
+                  type="button"
+                  onClick={() => submitData(false)}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-lg bg-rose-600/40 hover:bg-rose-600/60 border border-rose-500/40 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors"
+                >
+                  Retry Transcription
+                </button>
               </div>
             </div>
           )}
@@ -318,6 +338,8 @@ export default function MathOcrPage() {
                 mathml={result.mathml}
                 detectedType={result.detectedType}
                 rawDescription={result.rawDescription}
+                transcription={result.transcription}
+                uncertainParts={result.uncertainParts}
                 isDemoMode={result.isDemoMode}
               />
               

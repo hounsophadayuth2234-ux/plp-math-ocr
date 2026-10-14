@@ -17,6 +17,7 @@ export interface ToolModule {
   accentColor: string;
   highlights: string[];
   iconName: "Calculator" | "Eraser" | "Sparkles" | "ImagePlus" | "Code2";
+  disabled?: boolean;
 }
 
 export const CORE_TOOLS: ToolModule[] = [
@@ -28,8 +29,8 @@ export const CORE_TOOLS: ToolModule[] = [
     href: "/math-ocr",
     description:
       "ស្រង់សមីការ គណនាលេខបញ្ឈរ និងរូបធរណីមាត្រពីឯកសាររូបភាព ឬអក្សរ ទៅជាទម្រង់ LaTeX, Jodit HTML (Strict Inline CSS) និង MathML សម្រាប់ប្រព័ន្ធ PLP។",
-    badge: "Gemini Vision",
-    engine: "Google Gemini 2.5 Flash / Pro Vision",
+    badge: "Gemini Vision (Active)",
+    engine: "Google Gemini Flash Vision",
     accentColor: "from-cyan-500 via-indigo-500 to-violet-600",
     highlights: [
       "Option 1: Standard LaTeX code",
@@ -37,6 +38,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "Option 3: Standard W3C MathML markup",
     ],
     iconName: "Calculator",
+    disabled: false,
   },
   {
     id: "bg-remover",
@@ -46,7 +48,7 @@ export const CORE_TOOLS: ToolModule[] = [
     href: "/bg-remover",
     description:
       "កាត់ផ្ដាច់ផ្ទៃខាងក្រោយ និងជំនួសពណ៌ស្វ័យប្រវត្តិតាមមុខងារពិសេសទាំងពីរ៖ កាត់រូបដាក់សំណួរ (ផ្ទៃពណ៌ស #FFFFFF) និង កាត់រូបដាក់ដំណោះស្រាយ (ផ្ទៃផ្កាឈូក #FFF0F5)។",
-    badge: "Auto Color Replace",
+    badge: "Temporarily Inactive",
     engine: "Rembg / SegFormer + Auto Canvas Compositor",
     accentColor: "from-emerald-500 via-teal-500 to-cyan-600",
     highlights: [
@@ -55,6 +57,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "ជំនួសពណ៌ស្វ័យប្រវត្តិតាម Canvas និងទាញយក PNG ភ្លាមៗ",
     ],
     iconName: "Eraser",
+    disabled: true,
   },
   {
     id: "image-upscaler",
@@ -64,7 +67,7 @@ export const CORE_TOOLS: ToolModule[] = [
     href: "/image-upscaler",
     description:
       "បង្កើនគុណភាពរូបភាពព្រិលៗ ឬទំហំតូចឱ្យទៅជាកម្រិតច្បាស់ HD/4K ជាមួយ Real-ESRGAN Super-Resolution និង Before/After comparison slider។",
-    badge: "Real-ESRGAN 4x",
+    badge: "Temporarily Inactive",
     engine: "Replicate Real-ESRGAN / Super-Resolution API",
     accentColor: "from-amber-500 via-orange-500 to-rose-600",
     highlights: [
@@ -73,6 +76,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "Detail recovery for text, illustrations & photos",
     ],
     iconName: "Sparkles",
+    disabled: true,
   },
   {
     id: "image-generator",
@@ -82,7 +86,7 @@ export const CORE_TOOLS: ToolModule[] = [
     href: "/image-generator",
     description:
       "បង្កើតរូបភាព និងគំនូរប្លែកៗតាមរយៈការសរសេរ Prompt ជាមួយម៉ូដែល Flux Schnell ក្នុងល្បឿនលឿនបំផុត និងទាញយករូបភាពបានភ្លាមៗ។",
-    badge: "Flux / DALL-E 3",
+    badge: "Temporarily Inactive",
     engine: "Multi-Model Text-to-Image API",
     accentColor: "from-pink-500 via-purple-500 to-indigo-600",
     highlights: [
@@ -91,6 +95,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "Persistent session gallery with one-click download",
     ],
     iconName: "ImagePlus",
+    disabled: true,
   },
   {
     id: "web-cloner",
@@ -100,7 +105,7 @@ export const CORE_TOOLS: ToolModule[] = [
     href: "/web-cloner",
     description:
       "ស្រង់ទាញយក HTML DOM និង CSS Styles ពីគេហទំព័រគោលដៅ ពិនិត្យមើល Visual Preview និងចម្លងកូដបានភ្លាមៗ។",
-    badge: "Cheerio / Puppeteer",
+    badge: "Temporarily Inactive",
     engine: "Server-Side DOM Extractor & CSS Sanitizer",
     accentColor: "from-cyan-500 via-blue-500 to-indigo-600",
     highlights: [
@@ -109,6 +114,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "Sandboxed live preview & one-click code copy",
     ],
     iconName: "Code2",
+    disabled: true,
   },
 ];
 
