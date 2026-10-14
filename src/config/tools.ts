@@ -67,16 +67,16 @@ export const CORE_TOOLS: ToolModule[] = [
     href: "/image-upscaler",
     description:
       "បង្កើនគុណភាពរូបភាពព្រិលៗ ឬទំហំតូចឱ្យទៅជាកម្រិតច្បាស់ HD/4K ជាមួយ Real-ESRGAN Super-Resolution និង Before/After comparison slider។",
-    badge: "Temporarily Inactive",
-    engine: "Replicate Real-ESRGAN / Super-Resolution API",
+    badge: "2x Enhanced Resize / 4x AI",
+    engine: "Browser Bicubic Enhancer / Real-ESRGAN",
     accentColor: "from-amber-500 via-orange-500 to-rose-600",
     highlights: [
-      "Up to 4x super-resolution enhancement",
+      "Browser 2x Enhanced Resize (100% free, honest labeling)",
+      "Optional Real-ESRGAN 4x AI Worker / Cloud",
       "Interactive Before/After split comparison slider",
-      "Detail recovery for text, illustrations & photos",
     ],
     iconName: "Sparkles",
-    disabled: true,
+    disabled: false,
   },
   {
     id: "image-generator",
