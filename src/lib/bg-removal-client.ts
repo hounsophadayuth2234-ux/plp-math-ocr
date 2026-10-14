@@ -13,6 +13,8 @@ export interface BgRemovalProgress {
     | "Refining edges"
     | "Compositing"
     | "Exporting";
+  modelLoadingPercent?: number;
+  processingPercent?: number;
 }
 
 export interface BgRemovalOutput {
@@ -381,6 +383,9 @@ export async function removeBackgroundBrowser(
       throw new Error("Aborted by user.");
     }
 
+    let lastModelPct = 0;
+    let lastProcPct = 0;
+
     const tInfStart = Date.now();
     const rawCutoutBlob = await removeBackground(scaledBlob, {
       model: modelName,
@@ -396,9 +401,13 @@ export async function removeBackgroundBrowser(
         if (options?.signal?.aborted) return;
         const pct = total > 0 ? Math.round((current / total) * 100) : 50;
         let stage: BgRemovalProgress["stage"] = "Segmenting";
-        if (key.includes("fetch")) stage = "Loading model";
-        else if (key.includes("compute") || key.includes("inference"))
+        if (key.includes("fetch")) {
+          stage = "Loading model";
+          lastModelPct = Math.min(100, Math.max(lastModelPct, pct));
+        } else if (key.includes("compute") || key.includes("inference")) {
           stage = "Segmenting";
+          lastProcPct = Math.min(100, Math.max(lastProcPct, pct));
+        }
 
         options?.onProgress?.({
           key,
@@ -406,6 +415,8 @@ export async function removeBackgroundBrowser(
           total,
           percent: Math.min(92, Math.max(15, pct)),
           stage,
+          modelLoadingPercent: lastModelPct || (stage === "Loading model" ? pct : 100),
+          processingPercent: lastProcPct || (stage === "Segmenting" ? pct : 0),
         });
       },
     });
@@ -422,6 +433,8 @@ export async function removeBackgroundBrowser(
       total: 100,
       percent: 94,
       stage: "Refining edges",
+      modelLoadingPercent: 100,
+      processingPercent: 95,
     });
 
     const tRefStart = Date.now();
@@ -446,12 +459,26 @@ export async function removeBackgroundBrowser(
       throw new Error("Aborted by user.");
     }
 
+    // Strict validation: Ensure background was actually removed (no fake/silent fallback to original)
+    let transparentCount = 0;
+    for (let i = 0; i < alphaMaskBuffer.length; i++) {
+      if (alphaMaskBuffer[i] < 240) transparentCount++;
+    }
+    const transparentRatio = transparentCount / alphaMaskBuffer.length;
+    if (transparentRatio < 0.005) {
+      throw new Error(
+        "Segmentation failed: Model did not separate foreground from background. Silent fallback rejected."
+      );
+    }
+
     options?.onProgress?.({
       key: "done",
       current: 100,
       total: 100,
       percent: 100,
       stage: "Compositing",
+      modelLoadingPercent: 100,
+      processingPercent: 100,
     });
 
     const transparentUrl = URL.createObjectURL(refinedBlob);

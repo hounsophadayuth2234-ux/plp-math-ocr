@@ -488,6 +488,7 @@ export function ColorStudio({
         {/* 1. White Background */}
         <button
           type="button"
+          data-channel="white"
           onClick={() => handleSelectChannel("white")}
           className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
             activeChannel === "white"
@@ -502,6 +503,7 @@ export function ColorStudio({
         {/* 2. Pink Background */}
         <button
           type="button"
+          data-channel="pink"
           onClick={() => handleSelectChannel("pink")}
           className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
             activeChannel === "pink"
@@ -519,6 +521,7 @@ export function ColorStudio({
         {/* 3. Transparent Checkerboard */}
         <button
           type="button"
+          data-channel="transparent"
           onClick={() => handleSelectChannel("transparent")}
           className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
             activeChannel === "transparent"
@@ -844,6 +847,7 @@ export function ColorStudio({
             <img
               src={activeDisplayUrl}
               alt="Composite Render"
+              data-active-channel={activeChannel}
               className="max-h-[460px] max-w-full object-contain rounded-xl shadow-2xl transition-all"
             />
           </div>
@@ -888,6 +892,7 @@ export function ColorStudio({
         {/* Primary Download Button for Current View */}
         <button
           type="button"
+          data-testid="primary-download"
           onClick={handleDownload}
           disabled={isCompositing}
           className={`flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-xs font-black tracking-wider uppercase text-white shadow-lg transition-all duration-200 active:scale-[0.98] ${

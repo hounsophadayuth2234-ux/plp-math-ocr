@@ -98,6 +98,13 @@ export default function BgRemoverPage() {
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
 
+    // Strict 45-second timeout
+    const timeoutId = setTimeout(() => {
+      if (activeAbortControllerRef.current === abortController) {
+        abortController.abort(new Error("TIMEOUT_45S"));
+      }
+    }, 45000);
+
     try {
       let output: BgRemovalOutput;
 
@@ -126,6 +133,16 @@ export default function BgRemoverPage() {
       cyberAudio.playSuccessChime();
     } catch (err: unknown) {
       cyberAudio.stopScanningHum();
+      const isTimeout =
+        (abortController.signal.reason as Error)?.message === "TIMEOUT_45S" ||
+        (err instanceof Error && (err.name === "TIMEOUT_45S" || err.message.includes("TIMEOUT_45S")));
+
+      if (isTimeout) {
+        setError(
+          "Segmentation timed out after 45 seconds. You can retry with Fast Preview mode or check your network."
+        );
+        return;
+      }
       if (err instanceof Error && err.name === "AbortError") {
         return;
       }
@@ -134,6 +151,7 @@ export default function BgRemoverPage() {
         err instanceof Error ? err.message : "Background removal segmentation failed."
       );
     } finally {
+      clearTimeout(timeoutId);
       cyberAudio.stopScanningHum();
       activeAbortControllerRef.current = null;
       isProcessingRef.current = false;
@@ -353,17 +371,38 @@ export default function BgRemoverPage() {
                   </button>
                 </div>
 
-                {progressInfo && progressInfo.percent > 0 && (
-                  <div className="space-y-1">
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                      <div
-                        className="h-full bg-gradient-to-r from-amber-500 via-cyan-400 to-emerald-400 transition-all duration-300"
-                        style={{ width: `${progressInfo.percent}%` }}
-                      />
+                {progressInfo && (
+                  <div className="space-y-2 pt-1 font-mono">
+                    {/* Model Loading Progress */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-cyan-400">
+                        <span>Model Loading</span>
+                        <span>{progressInfo.modelLoadingPercent ?? (progressInfo.stage === "Loading model" ? progressInfo.percent : 100)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className="h-full bg-cyan-400 transition-all duration-300"
+                          style={{
+                            width: `${progressInfo.modelLoadingPercent ?? (progressInfo.stage === "Loading model" ? progressInfo.percent : 100)}%`,
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="flex justify-between text-[10px] text-amber-400/80">
-                      <span>Stage: {progressInfo.stage}</span>
-                      <span>{progressInfo.percent}%</span>
+
+                    {/* Processing / Segmentation Progress */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-emerald-400">
+                        <span>Inference &amp; Processing</span>
+                        <span>{progressInfo.processingPercent ?? (progressInfo.stage === "Segmenting" ? progressInfo.percent : 0)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className="h-full bg-emerald-400 transition-all duration-300"
+                          style={{
+                            width: `${progressInfo.processingPercent ?? (progressInfo.stage === "Segmenting" ? progressInfo.percent : 0)}%`,
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
