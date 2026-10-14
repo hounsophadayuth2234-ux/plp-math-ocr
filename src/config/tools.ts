@@ -57,7 +57,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "ជំនួសពណ៌ស្វ័យប្រវត្តិតាម Canvas និងទាញយក PNG ភ្លាមៗ",
     ],
     iconName: "Eraser",
-    disabled: true,
+    disabled: false,
   },
   {
     id: "image-upscaler",

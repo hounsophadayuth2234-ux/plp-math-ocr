@@ -175,7 +175,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             {/* Maintenance notice */}
             <div className="mt-3 px-3 py-2.5 rounded-xl border border-amber-500/25 bg-amber-950/25 text-[11px] font-mono text-amber-300/90 leading-relaxed">
-              <span className="text-amber-400 font-semibold">NOTE:</span> Modules 02–04 are temporarily under maintenance.
+              <span className="text-amber-400 font-semibold">NOTE:</span> Modules 03–04 are temporarily under maintenance.
             </div>
           </div>
         </nav>
