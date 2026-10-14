@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useCallback, useEffect } from "react";
-import { Download, RefreshCw, Check, Layers } from "lucide-react";
+import { Download, RefreshCw, Layers, CheckCircle2, Cpu } from "lucide-react";
 import { compositeWithSolidColor } from "@/lib/bg-removal-client";
 import { cyberAudio } from "@/lib/cyber-audio";
+import { ProcessingStatusLabel } from "@/lib/types";
 
 interface ColorStudioProps {
   transparentBlob: Blob;
@@ -13,6 +14,7 @@ interface ColorStudioProps {
   initialMode?: "question" | "solution";
   initialBgColor?: string;
   provider?: string;
+  processingLabel?: ProcessingStatusLabel;
   onReset: () => void;
 }
 
@@ -28,27 +30,25 @@ export function ColorStudio({
   height,
   initialMode = "question",
   initialBgColor = "#FFFFFF",
-  provider,
+  provider = "@imgly/isnet_quint8 (Browser WebGPU/WASM)",
+  processingLabel = "Browser AI result",
   onReset,
 }: ColorStudioProps) {
   const [activeMode, setActiveMode] = useState<"question" | "solution">(initialMode);
-  const [bgColor, setBgColor] = useState<string>(initialBgColor);
   const [currentCompositeUrl, setCurrentCompositeUrl] = useState<string>(initialCompositeUrl);
   const [isSwitching, setIsSwitching] = useState(false);
 
   useEffect(() => {
     setCurrentCompositeUrl(initialCompositeUrl);
     setActiveMode(initialMode);
-    setBgColor(initialBgColor);
-  }, [initialCompositeUrl, initialMode, initialBgColor]);
+  }, [initialCompositeUrl, initialMode]);
 
-  // Switch to Feature 1: កាត់រូបដាក់សំណួរ (Solid White #FFFFFF)
+  // Switch to Feature 1: Question (#FFFFFF)
   const handleSelectQuestionMode = async () => {
     if (activeMode === "question" || isSwitching) return;
     cyberAudio.playClick();
     setIsSwitching(true);
     setActiveMode("question");
-    setBgColor("#FFFFFF");
 
     try {
       const { dataUrl } = await compositeWithSolidColor(transparentBlob, "#FFFFFF");
@@ -60,13 +60,12 @@ export function ColorStudio({
     }
   };
 
-  // Switch to Feature 2: កាត់រូបដាក់ដំណោះស្រាយ (Solid Pale Pink #FFF0F5)
+  // Switch to Feature 2: Solution (#FFF0F5)
   const handleSelectSolutionMode = async () => {
     if (activeMode === "solution" || isSwitching) return;
     cyberAudio.playClick();
     setIsSwitching(true);
     setActiveMode("solution");
-    setBgColor("#FFF0F5");
 
     try {
       const { dataUrl } = await compositeWithSolidColor(transparentBlob, "#FFF0F5");
@@ -106,8 +105,42 @@ export function ColorStudio({
 
   const isQuestion = activeMode === "question";
 
+  // Status badge styling
+  const getBadgeStyle = (label: ProcessingStatusLabel) => {
+    switch (label) {
+      case "Browser AI result":
+        return "border-emerald-500/40 bg-emerald-950/60 text-emerald-300 ring-1 ring-emerald-500/30";
+      case "Local worker result":
+        return "border-cyan-500/40 bg-cyan-950/60 text-cyan-300 ring-1 ring-cyan-500/30";
+      case "Cloud API result":
+        return "border-indigo-500/40 bg-indigo-950/60 text-indigo-300 ring-1 ring-indigo-500/30";
+      default:
+        return "border-slate-700 bg-slate-900 text-slate-300";
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
+      {/* ── Result Transparency Banner ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-2.5 font-mono text-xs">
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${getBadgeStyle(
+              processingLabel
+            )}`}
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            {processingLabel}
+          </span>
+          <span className="hidden sm:inline text-slate-400 text-[11px]">
+            Model: {provider}
+          </span>
+        </div>
+        <span className="text-[11px] text-slate-500">
+          Zero re-run cost to toggle colors
+        </span>
+      </div>
+
       {/* ── Channel Switcher Tabs ── */}
       <div className="grid grid-cols-2 gap-2 rounded-xl border border-cyan-500/20 bg-slate-950 p-1.5 font-mono">
         <button
@@ -124,9 +157,7 @@ export function ColorStudio({
             <span className="h-2.5 w-2.5 rounded-full border border-slate-300 bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)]" />
             <span>CH-01: សំណួរ</span>
           </span>
-          <span className="text-[10px] text-cyan-300 font-semibold">
-            #FFFFFF
-          </span>
+          <span className="text-[10px] text-cyan-300 font-semibold">#FFFFFF</span>
         </button>
 
         <button
@@ -146,9 +177,7 @@ export function ColorStudio({
             />
             <span>CH-02: ដំណោះស្រាយ</span>
           </span>
-          <span className="text-[10px] text-pink-300 font-semibold">
-            #FFF0F5
-          </span>
+          <span className="text-[10px] text-pink-300 font-semibold">#FFF0F5</span>
         </button>
       </div>
 
@@ -206,7 +235,9 @@ export function ColorStudio({
               STATUS: {isQuestion ? "CH-01 (WHITE #FFFFFF)" : "CH-02 (PINK #FFF0F5)"}
             </span>
           </span>
-          <span>{width} × {height} PX</span>
+          <span>
+            {width} × {height} PX
+          </span>
         </div>
 
         {/* Heavy-Duty Download Action */}

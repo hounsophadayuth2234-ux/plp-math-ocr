@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 60; // Allow up to 60s for serverless inference / HF Space wake-up
+export const maxDuration = 60; // Allow up to 60s for inference / Space wake-up
 
 const MAX_COLD_START_RETRIES = 3;
-const RETRY_DELAY_MS = 5000; // 5s wait on 503 cold starts
+const RETRY_DELAY_MS = 4000;
 
 /**
- * Custom Hugging Face Space Python Rembg API Gateway
- * Forwards user images to the self-hosted free Hugging Face Space microservice running open-source rembg.
- * Features:
- * 1. 100% Free, zero third-party subscription or burst limits.
- * 2. Auto-retry on HF Space cold starts (503 Service Unavailable).
- * 3. Pure binary streaming response with no JSON or Base64 corruption.
+ * Universal Background Removal Gateway
+ * Forwards requests to either a local worker (e.g. ComfyUI / local rembg service)
+ * or a cloud service (e.g. Hugging Face Space Rembg).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -19,109 +16,117 @@ export async function POST(req: NextRequest) {
     const imageFile = formData.get("image") as File | null;
 
     if (!imageFile) {
-      console.error("[/api/remove-bg] Error: No image file provided in request FormData.");
       return NextResponse.json(
         { error: "No image file provided in form data." },
         { status: 400 }
       );
     }
 
-    const rawSpaceUrl = (
+    const rawWorkerUrl = (
+      process.env.BACKGROUND_REMOVAL_WORKER_URL ||
       process.env.REMBG_SPACE_URL ||
       process.env.HF_SPACE_URL ||
       ""
-    ).trim().replace(/^["']|["']$/g, "").replace(/\/+$/, "");
+    )
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .replace(/\/+$/, "");
 
-    if (!rawSpaceUrl || rawSpaceUrl.includes("your_space_url_here")) {
-      console.error("[/api/remove-bg] Error: REMBG_SPACE_URL is not configured.");
+    if (!rawWorkerUrl || rawWorkerUrl.includes("your_space_url")) {
       return NextResponse.json(
         {
           error:
-            "REMBG_SPACE_URL is not configured. Please set your free Hugging Face Space URL in Settings (top-right cog) or in .env.local (e.g. https://your-username-plp-rembg.hf.space). Check the hf-space-rembg/ directory for the 1-click Python code files.",
+            "No Background Removal worker configured. Please use Browser AI mode (zero cost, client-side), or set your Worker URL in Settings.",
+          code: "NOT_CONFIGURED",
+          suggestedAction: "SWITCH_TO_BROWSER",
         },
-        { status: 401 }
+        { status: 422 }
       );
     }
 
-    // Construct target URL for the pure FastAPI microservice
-    let targetUrl = rawSpaceUrl;
-    if (!targetUrl.endsWith("/api/remove") && !targetUrl.endsWith("/api/remove-bg")) {
-      targetUrl = `${rawSpaceUrl}/api/remove`;
+    const isLocalWorker =
+      rawWorkerUrl.includes("localhost") ||
+      rawWorkerUrl.includes("127.0.0.1") ||
+      rawWorkerUrl.includes("192.168.") ||
+      rawWorkerUrl.includes("10.0.");
+
+    const sourceLabel = isLocalWorker
+      ? "Local worker result"
+      : "Cloud API result";
+
+    let targetUrl = rawWorkerUrl;
+    if (
+      !targetUrl.endsWith("/api/remove") &&
+      !targetUrl.endsWith("/api/remove-bg") &&
+      !targetUrl.endsWith("/remove")
+    ) {
+      targetUrl = `${rawWorkerUrl}/api/remove`;
     }
 
     const spaceToken = (
+      process.env.BACKGROUND_REMOVAL_WORKER_TOKEN ||
       process.env.HF_SPACE_TOKEN ||
       process.env.HUGGINGFACE_API_KEY ||
       ""
-    ).trim().replace(/^["']|["']$/g, "");
+    )
+      .trim()
+      .replace(/^["']|["']$/g, "");
 
     const headers: Record<string, string> = {};
     if (spaceToken && !spaceToken.includes("your_")) {
       headers["Authorization"] = `Bearer ${spaceToken}`;
     }
 
-    // Convert file to buffer for forwarding
     const arrayBuffer = await imageFile.arrayBuffer();
     const contentType = imageFile.type || "application/octet-stream";
 
-    console.log(
-      `[/api/remove-bg] Forwarding ${(arrayBuffer.byteLength / 1024).toFixed(1)} KB to Python Space: ${targetUrl}`
-    );
-
     let lastStatus = 500;
-    let lastStatusText = "Unknown Error";
+    let lastStatusText = "Worker Error";
     let lastErrorBody = "";
 
-    // Retry loop to handle Hugging Face Space cold starts (503 / 504)
+    // Retry loop for cold starts (503 / 504)
     for (let attempt = 1; attempt <= MAX_COLD_START_RETRIES; attempt++) {
       try {
         const forwardFormData = new FormData();
         const fileBlob = new Blob([arrayBuffer], { type: contentType });
         forwardFormData.append("image", fileBlob, imageFile.name || "image.png");
 
-        const hfRes = await fetch(targetUrl, {
+        const workerRes = await fetch(targetUrl, {
           method: "POST",
           headers,
           body: forwardFormData,
         });
 
-        if (hfRes.ok) {
-          console.log(`[/api/remove-bg] Success from Python Rembg Space! Streaming binary PNG back.`);
-          const outputBlob = await hfRes.blob();
-
+        if (workerRes.ok) {
+          const outputBlob = await workerRes.blob();
           return new Response(outputBlob, {
             status: 200,
             headers: {
               "Content-Type": "image/png",
               "Cache-Control": "no-store",
-              "X-Segmentation-Model": "Python Rembg (U2Net / Free Space)",
+              "X-Processing-Source": sourceLabel,
+              "X-Segmentation-Model": isLocalWorker
+                ? "Rembg (Local AI Worker)"
+                : "Python Rembg (Hugging Face Space)",
             },
           });
         }
 
-        lastStatus = hfRes.status;
-        lastStatusText = hfRes.statusText;
-        lastErrorBody = await hfRes.text().catch(() => "");
+        lastStatus = workerRes.status;
+        lastStatusText = workerRes.statusText;
+        lastErrorBody = await workerRes.text().catch(() => "");
 
-        console.warn(
-          `[/api/remove-bg] Python Space returned status ${lastStatus} ${lastStatusText} (Attempt ${attempt}/${MAX_COLD_START_RETRIES}). Body:`,
-          lastErrorBody
-        );
-
-        // If Space is waking up (503 Service Unavailable / 504 Gateway Timeout), wait and retry
-        if ((lastStatus === 503 || lastStatus === 504) && attempt < MAX_COLD_START_RETRIES) {
-          console.log(
-            `[/api/remove-bg] Hugging Face Space is warming up. Pausing ${RETRY_DELAY_MS / 1000}s before retry...`
-          );
+        if (
+          (lastStatus === 503 || lastStatus === 504) &&
+          attempt < MAX_COLD_START_RETRIES
+        ) {
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
           continue;
         }
 
-        // For other status codes (e.g. 404, 401), stop immediately
         break;
       } catch (fetchErr: unknown) {
         const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-        console.error(`[/api/remove-bg] Network connection error to ${targetUrl}:`, msg);
         lastErrorBody = msg;
         if (attempt < MAX_COLD_START_RETRIES) {
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
@@ -133,18 +138,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        error: `Python Rembg Space returned [${lastStatus} ${lastStatusText}]: ${lastErrorBody || "Space unreachable or warming up. Please verify your Space is Running in Hugging Face."}`,
+        error: `Worker returned [${lastStatus} ${lastStatusText}]: ${
+          lastErrorBody || "Worker offline or warming up."
+        }`,
         status: lastStatus,
       },
       { status: lastStatus >= 400 && lastStatus < 600 ? lastStatus : 502 }
     );
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error("[/api/remove-bg] Unexpected gateway error:", err);
     return NextResponse.json(
-      {
-        error: `Gateway Error: ${errorMsg}`,
-      },
+      { error: `Gateway Error: ${errorMsg}` },
       { status: 500 }
     );
   }

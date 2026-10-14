@@ -1,7 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { KeyRound, X, Check, Save, ExternalLink, ShieldCheck, Sparkles, AlertCircle } from "lucide-react";
+import {
+  KeyRound,
+  X,
+  Check,
+  Save,
+  ExternalLink,
+  Cpu,
+  Server,
+  AlertCircle,
+  Sparkles,
+} from "lucide-react";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -14,6 +24,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [removeBgKey, setRemoveBgKey] = useState("");
   const [huggingFaceKey, setHuggingFaceKey] = useState("");
   const [rembgSpaceUrl, setRembgSpaceUrl] = useState("");
+  const [upscalerWorkerUrl, setUpscalerWorkerUrl] = useState("");
+  const [imageWorkerUrl, setImageWorkerUrl] = useState("");
+
   const [status, setStatus] = useState<{
     geminiKeySet: boolean;
     geminiMasked: string | null;
@@ -25,6 +38,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     huggingFaceMasked?: string | null;
     rembgSpaceUrlSet?: boolean;
     rembgSpaceUrl?: string | null;
+    upscalerWorkerUrlSet?: boolean;
+    upscalerWorkerUrl?: string | null;
+    imageWorkerUrlSet?: boolean;
+    imageWorkerUrl?: string | null;
   } | null>(null);
 
   const [saving, setSaving] = useState(false);
@@ -38,9 +55,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
-        if (data.rembgSpaceUrl) {
-          setRembgSpaceUrl(data.rembgSpaceUrl);
-        }
+        if (data.rembgSpaceUrl) setRembgSpaceUrl(data.rembgSpaceUrl);
+        if (data.upscalerWorkerUrl) setUpscalerWorkerUrl(data.upscalerWorkerUrl);
+        if (data.imageWorkerUrl) setImageWorkerUrl(data.imageWorkerUrl);
       }
     } catch (e) {
       console.warn("Could not load settings status:", e);
@@ -71,6 +88,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           removeBgKey: removeBgKey || undefined,
           huggingFaceKey: huggingFaceKey || undefined,
           rembgSpaceUrl: rembgSpaceUrl || undefined,
+          upscalerWorkerUrl: upscalerWorkerUrl || undefined,
+          imageWorkerUrl: imageWorkerUrl || undefined,
         }),
       });
 
@@ -95,17 +114,19 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm font-mono">
       <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-950/60 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-400">
               <KeyRound className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">System Configuration</h3>
-              <p className="text-[11px] text-slate-400">Manage free API keys &amp; custom Python microservices</p>
+              <h3 className="text-sm font-bold text-white">SYSTEM CONFIGURATION</h3>
+              <p className="text-[11px] text-slate-400 font-sans">
+                Manage AI endpoints, cloud tokens &amp; local workers
+              </p>
             </div>
           </div>
           <button
@@ -117,7 +138,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSave} className="space-y-4 p-6 overflow-y-auto">
+        <form onSubmit={handleSave} className="space-y-4 p-6 overflow-y-auto text-xs">
           {saveSuccess && (
             <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/30 px-3.5 py-2.5 text-xs text-emerald-300">
               <Check className="h-4 w-4 shrink-0 text-emerald-400" />
@@ -132,33 +153,112 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
           )}
 
-          {/* Module 02: Hugging Face Free Rembg Space URL */}
+          {/* Module 02: Rembg Worker / Space URL */}
           <div className="space-y-1.5 rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-3.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                <span>1. Python Rembg Space URL</span>
+                <span>1. Module 02 Worker / Space URL</span>
                 <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-300">
-                  100% FREE
+                  OPTIONAL
                 </span>
               </label>
-              <a
-                href="https://huggingface.co/new-space"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300"
-              >
-                Create Free Space <ExternalLink className="h-3 w-3" />
-              </a>
             </div>
             <input
               type="text"
-              placeholder={status?.rembgSpaceUrlSet ? status.rembgSpaceUrl || "Configured" : "https://your-username-plp-rembg.hf.space"}
+              placeholder={
+                status?.rembgSpaceUrlSet
+                  ? status.rembgSpaceUrl || "Configured"
+                  : "https://your-rembg.hf.space or http://localhost:7860"
+              }
               value={rembgSpaceUrl}
               onChange={(e) => setRembgSpaceUrl(e.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
             />
-            <p className="text-[10px] text-slate-400">
-              Powers Module 02 background removal via your free Hugging Face Space (see hf-space-rembg/ folder in project).
+            <p className="text-[10px] text-slate-400 font-sans">
+              Module 02 runs Browser AI for free by default. Add a URL here if you wish to use a remote worker or free HF Space.
+            </p>
+          </div>
+
+          {/* Module 03: Upscaler Worker URL */}
+          <div className="space-y-1.5 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <span>2. Module 03 Local Upscaler URL</span>
+                <span className="rounded bg-amber-500/20 px-1.5 py-0.2 text-[9px] font-bold text-amber-300">
+                  WORKER
+                </span>
+              </label>
+            </div>
+            <input
+              type="text"
+              placeholder={
+                status?.upscalerWorkerUrlSet
+                  ? status.upscalerWorkerUrl || "Configured"
+                  : "http://localhost:8188 (ComfyUI / Real-ESRGAN)"
+              }
+              value={upscalerWorkerUrl}
+              onChange={(e) => setUpscalerWorkerUrl(e.target.value)}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+            />
+            <p className="text-[10px] text-slate-400 font-sans">
+              Local worker endpoint for Real-ESRGAN super-resolution. Browser 2× mode works without any worker!
+            </p>
+          </div>
+
+          {/* Module 04: Local Image Generation Worker URL */}
+          <div className="space-y-1.5 rounded-xl border border-pink-500/30 bg-pink-950/20 p-3.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <span>3. Module 04 Local Image Gen URL</span>
+                <span className="rounded bg-pink-500/20 px-1.5 py-0.2 text-[9px] font-bold text-pink-300">
+                  WORKER
+                </span>
+              </label>
+            </div>
+            <input
+              type="text"
+              placeholder={
+                status?.imageWorkerUrlSet
+                  ? status.imageWorkerUrl || "Configured"
+                  : "http://localhost:7860 (SD-WebUI / ComfyUI)"
+              }
+              value={imageWorkerUrl}
+              onChange={(e) => setImageWorkerUrl(e.target.value)}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-pink-500 focus:outline-none"
+            />
+            <p className="text-[10px] text-slate-400 font-sans">
+              Local worker endpoint for text-to-image synthesis (ComfyUI / Automatic1111).
+            </p>
+          </div>
+
+          {/* Replicate Token */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-200">
+                4. Replicate API Token (Cloud Provider)
+              </label>
+              <a
+                href="https://replicate.com/account/api-tokens"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 font-sans"
+              >
+                Get Token <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+            <input
+              type="password"
+              placeholder={
+                status?.replicateTokenSet
+                  ? `Configured (${status.replicateMasked})`
+                  : "r8_..."
+              }
+              value={replicateToken}
+              onChange={(e) => setReplicateToken(e.target.value)}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+            />
+            <p className="text-[10px] text-slate-400 font-sans">
+              Optional cloud GPU fallback for Real-ESRGAN and Flux Schnell.
             </p>
           </div>
 
@@ -166,80 +266,30 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-200">
-                2. Google Gemini API Key
+                5. Google Gemini API Key
               </label>
               <a
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"
+                className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-sans"
               >
                 Get Free Key <ExternalLink className="h-3 w-3" />
               </a>
             </div>
             <input
               type="password"
-              placeholder={status?.geminiKeySet ? `Configured (${status.geminiMasked})` : "AIzaSy..."}
+              placeholder={
+                status?.geminiKeySet
+                  ? `Configured (${status.geminiMasked})`
+                  : "AIzaSy..."
+              }
               value={geminiKey}
               onChange={(e) => setGeminiKey(e.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
             />
-            <p className="text-[10px] text-slate-400">
-              Powers Module 01 (Math OCR &amp; LaTeX/Jodit HTML). Free tier: 1,500 req/day.
-            </p>
-          </div>
-
-          {/* Replicate Token Input */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-200">
-                3. Replicate API Token
-              </label>
-              <a
-                href="https://replicate.com/account/api-tokens"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300"
-              >
-                Get Token <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-            <input
-              type="password"
-              placeholder={status?.replicateTokenSet ? `Configured (${status.replicateMasked})` : "r8_..."}
-              value={replicateToken}
-              onChange={(e) => setReplicateToken(e.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-            />
-            <p className="text-[10px] text-slate-400">
-              Powers Module 03 (Real-ESRGAN Upscaling) &amp; Module 04 (Flux Schnell).
-            </p>
-          </div>
-
-          {/* Optional Hugging Face Token */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-200">
-                4. Hugging Face Access Token (Optional)
-              </label>
-              <a
-                href="https://huggingface.co/settings/tokens"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300"
-              >
-                Get Token <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-            <input
-              type="password"
-              placeholder={status?.huggingFaceKeySet ? `Configured (${status.huggingFaceMasked})` : "hf_..."}
-              value={huggingFaceKey}
-              onChange={(e) => setHuggingFaceKey(e.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
-            />
-            <p className="text-[10px] text-slate-400">
-              Only required if your Hugging Face Space is configured as Private.
+            <p className="text-[10px] text-slate-400 font-sans">
+              Powers Module 01 (Math OCR &amp; LaTeX). Free tier: 1,500 req/day.
             </p>
           </div>
 
@@ -255,7 +305,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-2 text-xs font-semibold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all"
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all"
             >
               <Save className="h-3.5 w-3.5" />
               {saving ? "Saving…" : "Save Settings to .env.local"}

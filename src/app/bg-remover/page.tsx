@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -10,15 +10,23 @@ import {
   ImageOff,
   Zap,
   Lock,
+  XCircle,
+  RefreshCw,
+  Server,
+  Layers,
 } from "lucide-react";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import {
-  requestReplicateBackgroundRemoval,
+  removeBackgroundBrowser,
+  removeBackgroundRemote,
   compositeWithSolidColor,
+  BgRemovalProgress,
 } from "@/lib/bg-removal-client";
 import { cyberAudio } from "@/lib/cyber-audio";
+import { ProcessingStatusLabel } from "@/lib/types";
+import { ObjectUrlRegistry } from "@/lib/processing-utils";
 
 interface ProcessResult {
   transparentBlob: Blob;
@@ -26,42 +34,62 @@ interface ProcessResult {
   width: number;
   height: number;
   provider: string;
+  label: ProcessingStatusLabel;
 }
 
 export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [activeFeature, setActiveFeature] = useState<"question" | "solution">("question");
+  const [engineMode, setEngineMode] = useState<"browser" | "remote">("browser");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progressInfo, setProgressInfo] = useState<BgRemovalProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
 
-  // STRICT SYNCHRONOUS MUTEX LOCK:
-  // Prevents any duplicate/concurrent clicks in the exact same millisecond
+  // Synchronous mutex lock & cancellation
   const isProcessingRef = useRef(false);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
+  const urlRegistryRef = useRef<ObjectUrlRegistry>(new ObjectUrlRegistry());
 
-  // Trigger Python Rembg (HF Space) background removal & HTML5 canvas compositing
+  useEffect(() => {
+    const registry = urlRegistryRef.current;
+    return () => {
+      registry.revokeAll();
+    };
+  }, []);
+
+  const handleCancel = () => {
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+    cyberAudio.stopScanningHum();
+    cyberAudio.playClick();
+    isProcessingRef.current = false;
+    setIsProcessing(false);
+    setProgressInfo(null);
+    setError("Operation cancelled by user.");
+  };
+
   const handleExecuteFeature = async (mode: "question" | "solution") => {
-    // 1. STRICT LOCK: Immediately abort if already processing or missing file
     if (isProcessingRef.current) {
       console.warn("[bg-remover] Blocked duplicate trigger: already processing.");
       return;
     }
     if (!imageFile) return;
 
-    // Engage atomic lock synchronously before any async boundary
     isProcessingRef.current = true;
     setIsProcessing(true);
     setActiveFeature(mode);
     setError(null);
     setResult(null);
+    setProgressInfo(null);
 
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
 
     const targetBgColor = mode === "solution" ? "#FFF0F5" : "#FFFFFF";
 
-    // Setup AbortController to guarantee single fetch request
     if (activeAbortControllerRef.current) {
       activeAbortControllerRef.current.abort();
     }
@@ -69,12 +97,24 @@ export default function BgRemoverPage() {
     activeAbortControllerRef.current = abortController;
 
     try {
-      // 1. Single strictly-controlled fetch to /api/remove-bg (Python Rembg HF Space)
-      const { blob: transparentBlob, provider } =
-        await requestReplicateBackgroundRemoval(imageFile, abortController.signal);
+      let removalOutput;
 
-      // 2. Draw cutout onto HTML Canvas and fill background with White (#FFFFFF) or Pink (#FFF0F5)
-      const { dataUrl, width, height } = await compositeWithSolidColor(
+      if (engineMode === "browser") {
+        removalOutput = await removeBackgroundBrowser(imageFile, {
+          signal: abortController.signal,
+          onProgress: (p) => setProgressInfo(p),
+        });
+      } else {
+        removalOutput = await removeBackgroundRemote(
+          imageFile,
+          abortController.signal
+        );
+      }
+
+      const { transparentBlob, width, height, label, model } = removalOutput;
+
+      // Draw cutout onto HTML Canvas with background color
+      const { dataUrl } = await compositeWithSolidColor(
         transparentBlob,
         targetBgColor
       );
@@ -84,7 +124,8 @@ export default function BgRemoverPage() {
         compositeUrl: dataUrl,
         width,
         height,
-        provider,
+        provider: model,
+        label,
       });
 
       cyberAudio.playSuccessChime();
@@ -94,15 +135,16 @@ export default function BgRemoverPage() {
         console.log("[bg-remover] Request aborted by client.");
         return;
       }
-      console.error("[bg-remover] Python Rembg error:", err);
+      console.error("[bg-remover] Background removal error:", err);
       setError(
-        err instanceof Error ? err.message : "Python Rembg segmentation failed."
+        err instanceof Error ? err.message : "Background removal segmentation failed."
       );
     } finally {
       cyberAudio.stopScanningHum();
       activeAbortControllerRef.current = null;
       isProcessingRef.current = false;
       setIsProcessing(false);
+      setProgressInfo(null);
     }
   };
 
@@ -112,20 +154,25 @@ export default function BgRemoverPage() {
     setResult(null);
     setError(null);
     setImageFile(null);
+    setProgressInfo(null);
+    urlRegistryRef.current.revokeAll();
   };
 
   const isQuestion = activeFeature === "question";
 
-  // Telemetry steps for RoboticScanner
   const scannerSteps = [
-    "[1/5] ATOMIC LOCK ENGAGED · CONNECTING TO REMBG MICROSERVICE...",
-    "[2/5] STREAMING IMAGE BUFFER TO HUGGING FACE SPACE...",
-    "[3/5] REMBG ENGINE EXECUTING U2NET SEGMENTATION & ALPHA MATTING...",
-    "[4/5] RECEIVING PRISTINE TRANSPARENT PNG BLOB...",
+    engineMode === "browser"
+      ? "[1/4] INITIALIZING IN-BROWSER WEBGPU/WASM RUNTIME..."
+      : "[1/4] CONNECTING TO REMOTE WORKER ENDPOINT...",
+    engineMode === "browser"
+      ? progressInfo
+        ? `[2/4] ${progressInfo.stage}`
+        : "[2/4] EXECUTING IN-BROWSER ISNET SEGMENTATION..."
+      : "[2/4] STREAMING IMAGE BUFFER TO WORKER...",
+    "[3/4] REFINING ALPHA MATTING & COLOR DECONTAMINATION...",
     isQuestion
-      ? "[5/5] COMPOSITING SOLID WHITE (#FFFFFF) ONTO HTML5 CANVAS..."
-      : "[5/5] COMPOSITING SOLID PINK (#FFF0F5) ONTO HTML5 CANVAS...",
-    "[READY] BAKING PIXELS & PREPARING OUTPUT BUFFER...",
+      ? "[4/4] COMPOSITING SOLID WHITE (#FFFFFF) ONTO HTML5 CANVAS..."
+      : "[4/4] COMPOSITING SOLID PINK (#FFF0F5) ONTO HTML5 CANVAS...",
   ];
 
   return (
@@ -147,10 +194,16 @@ export default function BgRemoverPage() {
                 isProcessing ? "bg-amber-400 animate-ping" : "bg-emerald-400 animate-pulse"
               }`}
             />
-            {isProcessing ? "PYTHON REMBG: PROCESSING STREAM" : "PYTHON REMBG CORE: ONLINE"}
+            {isProcessing
+              ? engineMode === "browser"
+                ? "BROWSER AI: RUNNING"
+                : "WORKER: STREAMING"
+              : engineMode === "browser"
+              ? "BROWSER AI CORE: READY"
+              : "REMOTE WORKER: READY"}
           </span>
           <span className="rounded border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-cyan-300">
-            U2Net / Free Space
+            {engineMode === "browser" ? "Zero Cost · Client-Side" : "Worker / HF Space"}
           </span>
         </div>
       </div>
@@ -169,8 +222,63 @@ export default function BgRemoverPage() {
                 </h2>
               </div>
               <span className="font-mono text-[10px] text-cyan-400/90 font-semibold">
-                100% FREE · ZERO API FEES
+                MODULE 02
               </span>
+            </div>
+
+            {/* Engine Selection Mode */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between font-mono text-[10px] uppercase text-slate-400">
+                <span>EXECUTION ENGINE</span>
+                <span className="text-cyan-400">ENGINE_SELECT</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 font-mono text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isProcessing) return;
+                    cyberAudio.playClick();
+                    setEngineMode("browser");
+                  }}
+                  disabled={isProcessing}
+                  className={`flex flex-col gap-0.5 rounded-xl border p-2.5 text-left transition-all ${
+                    engineMode === "browser"
+                      ? "border-emerald-500 bg-emerald-950/40 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 font-bold text-white text-[11px]">
+                    <Cpu className="h-3.5 w-3.5 text-emerald-400" />
+                    Browser AI
+                  </span>
+                  <span className="text-[10px] text-emerald-400/80">
+                    100% Free · Client-Side
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isProcessing) return;
+                    cyberAudio.playClick();
+                    setEngineMode("remote");
+                  }}
+                  disabled={isProcessing}
+                  className={`flex flex-col gap-0.5 rounded-xl border p-2.5 text-left transition-all ${
+                    engineMode === "remote"
+                      ? "border-cyan-500 bg-cyan-950/40 text-cyan-300 shadow-[0_0_15px_rgba(0,240,255,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 font-bold text-white text-[11px]">
+                    <Server className="h-3.5 w-3.5 text-cyan-400" />
+                    Remote Worker
+                  </span>
+                  <span className="text-[10px] text-cyan-400/80">
+                    HF Space / Local API
+                  </span>
+                </button>
+              </div>
             </div>
 
             {/* Input Upload Area */}
@@ -183,27 +291,49 @@ export default function BgRemoverPage() {
                 selectedFile={imageFile}
                 disabled={isProcessing || !!result}
                 label="SOURCE INPUT"
-                hint="PNG · JPG · WEBP"
+                hint="PNG · JPG · WEBP · max 15MB"
               />
             </div>
 
-            {/* Prominent Loading Lock Banner when Processing */}
+            {/* Progress & Cancel Banner when Processing */}
             {isProcessing && (
-              <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 font-mono text-xs text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.15)] animate-pulse">
-                <Lock className="h-4 w-4 shrink-0 text-amber-400" />
-                <div className="space-y-0.5">
-                  <p className="font-bold uppercase tracking-wider text-amber-200">
-                    PROCESSING VIA PYTHON REMBG SPACE...
-                  </p>
-                  <p className="text-[10px] text-amber-400/80">
-                    Input locked to prevent double-clicks. Please wait.
-                  </p>
+              <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 font-mono text-xs shadow-[0_0_15px_rgba(245,158,11,0.15)]">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-amber-300">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
+                    <span className="font-bold uppercase tracking-wider">
+                      {progressInfo?.stage || "PROCESSING SEGMENTATION..."}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="flex items-center gap-1 rounded border border-rose-500/40 bg-rose-950/60 px-2 py-0.5 text-[10px] text-rose-300 hover:bg-rose-900/60 transition-colors"
+                  >
+                    <XCircle className="h-3 w-3" />
+                    CANCEL
+                  </button>
                 </div>
+
+                {progressInfo && progressInfo.percent > 0 && (
+                  <div className="space-y-1">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-500 to-cyan-400 transition-all duration-200"
+                        style={{ width: `${progressInfo.percent}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-amber-400/80">
+                      <span>Progress</span>
+                      <span>{progressInfo.percent}%</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Heavy-Duty Mechanical Execution Switches */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-3 pt-1">
               <div className="flex items-center justify-between font-mono text-[10px] uppercase text-slate-400">
                 <span>SELECT EXECUTION CHANNEL</span>
                 <span className="text-cyan-400">
@@ -226,12 +356,10 @@ export default function BgRemoverPage() {
                     : "border-slate-800 bg-slate-900/70 hover:border-slate-700 hover:bg-slate-900"
                 }`}
               >
-                {/* Tech Corner Reticle */}
                 <div className="absolute top-1.5 right-1.5 h-2 w-2 border-t border-r border-cyan-400/50" />
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {/* Mechanical LED Switch Latch */}
                     <div
                       className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all ${
                         isQuestion
@@ -255,7 +383,7 @@ export default function BgRemoverPage() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-cyan-300/80">
-                        WHITE BACKDROP · REMBG SEGMENTED
+                        WHITE BACKDROP · ZERO ARTIFACTS
                       </span>
                     </div>
                   </div>
@@ -296,12 +424,10 @@ export default function BgRemoverPage() {
                     : "border-slate-800 bg-slate-900/70 hover:border-slate-700 hover:bg-slate-900"
                 }`}
               >
-                {/* Tech Corner Reticle */}
                 <div className="absolute top-1.5 right-1.5 h-2 w-2 border-t border-r border-pink-400/50" />
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {/* Mechanical LED Switch Latch */}
                     <div
                       className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all ${
                         !isQuestion
@@ -328,7 +454,7 @@ export default function BgRemoverPage() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-pink-300/80">
-                        PINK BACKDROP · REMBG SEGMENTED
+                        PINK BACKDROP · ZERO ARTIFACTS
                       </span>
                     </div>
                   </div>
@@ -359,15 +485,40 @@ export default function BgRemoverPage() {
 
         {/* ── RIGHT: High-Tech Processing Scanner & Output Deck ── */}
         <div className="flex flex-col gap-4 lg:col-span-3">
-          {/* Error Alert */}
+          {/* Error Alert with Retry / Engine switch */}
           {error && (
-            <div className="flex items-start gap-3 rounded-xl border border-rose-500/40 bg-rose-950/40 p-3.5 font-mono text-xs text-rose-300">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
-              <div>
-                <p className="font-bold uppercase tracking-wider text-rose-200">
-                  EXECUTION ERROR
-                </p>
-                <p className="mt-0.5 opacity-90">{error}</p>
+            <div className="flex flex-col gap-2 rounded-xl border border-rose-500/40 bg-rose-950/40 p-4 font-mono text-xs text-rose-300">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                <div>
+                  <p className="font-bold uppercase tracking-wider text-rose-200">
+                    EXECUTION ERROR
+                  </p>
+                  <p className="mt-0.5 opacity-90">{error}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleExecuteFeature(activeFeature)}
+                  className="flex items-center gap-1.5 rounded-lg border border-rose-500/50 bg-rose-900/40 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-900/70 transition-colors"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  RETRY
+                </button>
+                {engineMode === "browser" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEngineMode("remote");
+                      setError(null);
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg border border-cyan-500/50 bg-cyan-950/40 px-3 py-1.5 text-xs text-cyan-300 hover:bg-cyan-900/60 transition-colors"
+                  >
+                    <Server className="h-3 w-3" />
+                    SWITCH TO REMOTE WORKER
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -377,12 +528,16 @@ export default function BgRemoverPage() {
             <RoboticScanner
               active={true}
               moduleName={
-                isQuestion
-                  ? "PYTHON REMBG // [CH-01: WHITE]"
-                  : "PYTHON REMBG // [CH-02: PINK]"
+                engineMode === "browser"
+                  ? "BROWSER AI // [CLIENT-SIDE WEBGPU]"
+                  : "REMOTE WORKER // [REMBG SPACE]"
               }
               steps={scannerSteps}
-              subtext="Processing via Python Rembg Space... 100% free open-source neural segmentation"
+              subtext={
+                engineMode === "browser"
+                  ? "Running client-side @imgly background removal with zero API fees"
+                  : "Streaming image to configured remote segmentation worker"
+              }
             />
           )}
 
@@ -407,6 +562,7 @@ export default function BgRemoverPage() {
                 initialMode={activeFeature}
                 initialBgColor={activeFeature === "solution" ? "#FFF0F5" : "#FFFFFF"}
                 provider={result.provider}
+                processingLabel={result.label}
                 onReset={handleReset}
               />
             </div>
