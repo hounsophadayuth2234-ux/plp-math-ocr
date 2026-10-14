@@ -31,11 +31,11 @@ export default function DashboardOverviewPage() {
               <span>ម៉ូឌុលដំណើរការស្នូល (Core Modules)</span>
             </h3>
             <p className="text-xs text-slate-400">
-              ម៉ូឌុល 01 (Math OCR) កំពុងដំណើរការយ៉ាងពេញលេញ។ ម៉ូឌុលផ្សេងទៀតត្រូវបានផ្អាកបណ្ដោះអាសន្នដើម្បីធានាស្ថិរភាព។
+              ម៉ូឌុល 01 (Math OCR) និង ម៉ូឌុល 02 (Bg Remover) កំពុងដំណើរការយ៉ាងពេញលេញ។
             </p>
           </div>
           <span className="hidden sm:inline-flex rounded font-mono text-[10px] text-emerald-400 border border-emerald-500/30 bg-emerald-950/40 px-2.5 py-1">
-            STATUS: MODULE 01 ACTIVE
+            STATUS: MODULES 01 & 02 ACTIVE
           </span>
         </div>
 

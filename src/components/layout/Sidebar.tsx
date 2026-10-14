@@ -118,7 +118,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div>
             <div className="mb-2 flex items-center justify-between px-3">
               <p className="text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
-                Active Module (01)
+                Active Modules ({CORE_TOOLS.filter((t) => !t.disabled).length})
               </p>
             </div>
             <div className="space-y-1.5">

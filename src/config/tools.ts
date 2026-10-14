@@ -48,8 +48,8 @@ export const CORE_TOOLS: ToolModule[] = [
     href: "/bg-remover",
     description:
       "កាត់ផ្ដាច់ផ្ទៃខាងក្រោយ និងជំនួសពណ៌ស្វ័យប្រវត្តិតាមមុខងារពិសេសទាំងពីរ៖ កាត់រូបដាក់សំណួរ (ផ្ទៃពណ៌ស #FFFFFF) និង កាត់រូបដាក់ដំណោះស្រាយ (ផ្ទៃផ្កាឈូក #FFF0F5)។",
-    badge: "Temporarily Inactive",
-    engine: "Rembg / SegFormer + Auto Canvas Compositor",
+    badge: "Browser-First AI",
+    engine: "@imgly/isnet Browser Model + Local Canvas",
     accentColor: "from-emerald-500 via-teal-500 to-cyan-600",
     highlights: [
       "Feature 1: កាត់រូបដាក់សំណួរ (ផ្ទៃពណ៌ស #FFFFFF)",
@@ -57,7 +57,7 @@ export const CORE_TOOLS: ToolModule[] = [
       "ជំនួសពណ៌ស្វ័យប្រវត្តិតាម Canvas និងទាញយក PNG ភ្លាមៗ",
     ],
     iconName: "Eraser",
-    disabled: true,
+    disabled: false,
   },
   {
     id: "image-upscaler",
