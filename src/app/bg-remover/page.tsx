@@ -56,6 +56,14 @@ export default function BgRemoverPage() {
         if (data?.backgroundRemovalWorkerConfigured) {
           setWorkerConfigured(true);
         }
+    // Preload fastest browser model in Cache API for instant Fast Preview
+    import("@imgly/background-removal")
+      .then(({ preload }) => {
+        preload({
+          model: "isnet_quint8",
+          proxyToWorker: true,
+          fetchArgs: { cache: "force-cache" },
+        }).catch(() => {});
       })
       .catch(() => {});
 
