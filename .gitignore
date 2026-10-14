@@ -35,6 +35,8 @@ yarn-error.log*
 
 # vercel
 .vercel
+.puppeteer-cache/
+test-portrait-downloads/
 
 # typescript
 *.tsbuildinfo
