@@ -67,10 +67,19 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const isQuotaOrCredit =
+        msg.includes("402") ||
+        msg.toLowerCase().includes("credit") ||
+        msg.toLowerCase().includes("billing") ||
+        msg.toLowerCase().includes("payment");
+
       return NextResponse.json<GenerateError>(
         {
-          error: `Generation failed: ${msg}`,
-          code: "GENERATION_ERROR",
+          error: isQuotaOrCredit
+            ? "Replicate Image Generation unavailable (Insufficient Credit). You can configure a Local Worker (IMAGE_WORKER_URL) in Settings or enable Demo Preview Mode."
+            : `Generation failed: ${msg}`,
+          code: isQuotaOrCredit ? "INSUFFICIENT_CREDIT" : "GENERATION_ERROR",
+          suggestedAction: "ENABLE_DEMO",
         },
         { status: 502 }
       );

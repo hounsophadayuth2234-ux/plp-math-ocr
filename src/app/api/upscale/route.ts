@@ -163,11 +163,19 @@ export async function POST(req: NextRequest) {
       } catch (replicateErr: unknown) {
         const msg =
           replicateErr instanceof Error ? replicateErr.message : String(replicateErr);
+        const isQuotaOrCredit =
+          msg.includes("402") ||
+          msg.toLowerCase().includes("credit") ||
+          msg.toLowerCase().includes("billing") ||
+          msg.toLowerCase().includes("payment");
+
         return NextResponse.json<UpscaleError>(
           {
-            error: `Replicate Super-Resolution failed: ${msg}`,
-            code: "INFERENCE_ERROR",
-            suggestedAction: "RETRY",
+            error: isQuotaOrCredit
+              ? "Replicate Super-Resolution unavailable (Insufficient Credit). You can switch to Browser 2× Enhanced Resize for free instant processing."
+              : `Replicate Super-Resolution failed: ${msg}`,
+            code: isQuotaOrCredit ? "INSUFFICIENT_CREDIT" : "INFERENCE_ERROR",
+            suggestedAction: isQuotaOrCredit ? "SWITCH_TO_BROWSER" : "RETRY",
           },
           { status: 502 }
         );

@@ -85,17 +85,18 @@ export const CORE_TOOLS: ToolModule[] = [
     shortTitle: "បង្កើតរូបភាព",
     href: "/image-generator",
     description:
-      "បង្កើតរូបភាព និងគំនូរប្លែកៗតាមរយៈការសរសេរ Prompt ជាមួយម៉ូដែល Flux Schnell ក្នុងល្បឿនលឿនបំផុត និងទាញយករូបភាពបានភ្លាមៗ។",
-    badge: "Temporarily Inactive",
-    engine: "Multi-Model Text-to-Image API",
+      "បង្កើតរូបភាព និងគំនូរប្លែកៗតាមរយៈការសរសេរ Prompt ជាមួយម៉ូដែល Flux Schnell ឬ Local Diffusion Worker ក្នុងល្បឿនលឿនបំផុត និងទាញយករូបភាពបានភ្លាមៗ។",
+    badge: "Flux / Local Worker / Demo",
+    engine: "Local Diffusion Worker / Cloud GPU / Demo",
     accentColor: "from-pink-500 via-purple-500 to-indigo-600",
     highlights: [
+      "Local Worker (IMAGE_WORKER_URL) & Cloud Flux adapter",
+      "Explicit Demo Preview mode (zero fake claims)",
       "Custom prompt & negative prompt controls",
-      "1:1, 16:9, 9:16, and 4:3 aspect ratio presets",
       "Persistent session gallery with one-click download",
     ],
     iconName: "ImagePlus",
-    disabled: true,
+    disabled: false,
   },
   {
     id: "web-cloner",
