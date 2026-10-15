@@ -62,7 +62,7 @@ export default function BgRemoverPage() {
       import("@imgly/background-removal")
         .then(({ preload }) => {
           preload({
-            model: "isnet_quint8",
+            model: "isnet_fp16",
             proxyToWorker: true,
             fetchArgs: { cache: "force-cache" },
           }).catch(() => {});
@@ -89,6 +89,70 @@ export default function BgRemoverPage() {
     setProgressInfo(null);
   };
 
+  const handleOpenManualMode = async () => {
+    if (!imageFile) return;
+    setError(null);
+    setIsProcessing(false);
+    setProgressInfo(null);
+    cyberAudio.playClick();
+
+    try {
+      const imgBitmap = await createImageBitmap(imageFile);
+      const maxDim = 1024;
+      let w = imgBitmap.width;
+      let h = imgBitmap.height;
+      if (w > maxDim || h > maxDim) {
+        if (w >= h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(imgBitmap, 0, 0, w, h);
+      const srcImageData = ctx.getImageData(0, 0, w, h);
+
+      // Initial mask: full foreground (255) so user can carve away background with Remove brush
+      const initialMask = new Uint8ClampedArray(w * h);
+      initialMask.fill(255);
+
+      const { createAlphaMaskDataUrl } = await import("@/lib/bg-removal-client");
+      const maskUrl = createAlphaMaskDataUrl(initialMask, w, h);
+      const { dataUrl: whiteUrl } = await compositeWithSolidColor(imageFile, "#FFFFFF");
+
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const transUrl = URL.createObjectURL(blob);
+        setCachedResult({
+          transparentBlob: blob,
+          transparentUrl: transUrl,
+          alphaMaskUrl: maskUrl,
+          alphaMaskBuffer: initialMask,
+          sourceImageData: srcImageData,
+          width: w,
+          height: h,
+          label: "Browser AI result",
+          model: "Manual Edge Correction Studio",
+          mode: "preview",
+        });
+        setInitialCompositeUrl(whiteUrl);
+      }, "image/png");
+
+      if (typeof imgBitmap.close === "function") {
+        imgBitmap.close();
+      }
+    } catch (e) {
+      console.error("Failed to open manual mode:", e);
+    }
+  };
+
   const handleRunSegmentation = async (mode: "preview" | "final" | "worker") => {
     if (isProcessingRef.current) return;
     if (!imageFile) return;
@@ -108,12 +172,13 @@ export default function BgRemoverPage() {
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
 
-    // Strict 45-second timeout
+    // Hard timeout of 20 seconds for Fast Preview, 45 seconds for final/worker
+    const timeoutDuration = mode === "preview" ? 20000 : 45000;
     const timeoutId = setTimeout(() => {
       if (activeAbortControllerRef.current === abortController) {
-        abortController.abort(new Error("TIMEOUT_45S"));
+        abortController.abort(new Error(mode === "preview" ? "TIMEOUT_20S" : "TIMEOUT_45S"));
       }
-    }, 45000);
+    }, timeoutDuration);
 
     try {
       let output: BgRemovalOutput;
@@ -144,12 +209,14 @@ export default function BgRemoverPage() {
     } catch (err: unknown) {
       cyberAudio.stopScanningHum();
       const isTimeout =
-        (abortController.signal.reason as Error)?.message === "TIMEOUT_45S" ||
-        (err instanceof Error && (err.name === "TIMEOUT_45S" || err.message.includes("TIMEOUT_45S")));
+        (abortController.signal.reason as Error)?.message?.includes("TIMEOUT") ||
+        (err instanceof Error && (err.name.includes("TIMEOUT") || err.message.includes("TIMEOUT")));
 
       if (isTimeout) {
         setError(
-          "Segmentation timed out after 45 seconds. You can retry with Fast Preview mode or check your network."
+          mode === "preview"
+            ? "Fast Preview timed out after 20 seconds. You can retry or open Manual Mask Mode to refine edges directly."
+            : "Processing timed out after 45 seconds. You can retry or open Manual Mask Mode."
         );
         return;
       }
@@ -207,14 +274,13 @@ export default function BgRemoverPage() {
   };
 
   const scannerSteps = [
-    "[1/6] INITIALIZING NEURAL MODEL WEIGHTS & CACHE API...",
-    "[2/6] PREPARING IMAGE MATRIX & BOUNDING ASPECT RATIO...",
+    "[1/5] PREPARING IMAGE MATRIX (MAX 1024PX)...",
+    "[2/5] LOADING MODEL WEIGHTS (ISNET_FP16 CACHE)...",
     progressInfo?.stage
-      ? `[3/6] ${progressInfo.stage.toUpperCase()}...`
-      : "[3/6] EXECUTING NEURAL SEGMENTATION...",
-    "[4/6] REFINING MASK EDGES (ZERO AGGRESSIVE EROSION, SUB-PIXEL MATTING)...",
-    "[5/6] LOCAL FOREGROUND COLOR DECONTAMINATION (REMOVING HALOS)...",
-    "[6/6] COMPOSITING TRANSPARENT RGBA BUFFER ONTO CANVAS...",
+      ? `[3/5] ${progressInfo.stage.toUpperCase()}...`
+      : "[3/5] SEGMENTING FOREGROUND & BACKGROUND...",
+    "[4/5] REFINING MASK EDGES & SUB-PIXEL MATTING (ZERO AGGRESSIVE EROSION)...",
+    "[5/5] READY (COMPOSITING RGB CANVAS & ALPHA BUFFER)...",
   ];
 
   return (
@@ -267,7 +333,7 @@ export default function BgRemoverPage() {
                 <span className="text-cyan-400">SELECT_ENGINE</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                {/* 1. Fast Preview Mode */}
+                {/* 1. Fast Preview Mode (Default Browser AI) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -287,7 +353,7 @@ export default function BgRemoverPage() {
                     Fast Preview
                   </span>
                   <span className="text-[9.5px] text-cyan-400/80">
-                    ISNet 768px · Cached
+                    ISNet FP16 · 1024px
                   </span>
                 </button>
 
@@ -315,7 +381,7 @@ export default function BgRemoverPage() {
                   </span>
                 </button>
 
-                {/* 3. High-Quality Worker Mode (BiRefNet / RMBG) */}
+                {/* 3. Experimental Worker Mode (Optional) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -335,7 +401,7 @@ export default function BgRemoverPage() {
                     HQ Worker
                   </span>
                   <span className="text-[9.5px] text-purple-400/80">
-                    BiRefNet / RMBG
+                    BiRefNet (Optional)
                   </span>
                 </button>
               </div>
@@ -343,10 +409,10 @@ export default function BgRemoverPage() {
               {/* Informational note: Accurate labeling */}
               <p className="text-[10px] text-slate-500 pt-0.5 leading-relaxed">
                 {processingMode === "preview"
-                  ? "ISNet Quantized: Fastest browser turnaround. Perfect for quick alignment."
+                  ? "Fast Preview (Default): @imgly/isnet_fp16 resized to 1024px. Fast cached inference, zero erosion, sub-pixel matting."
                   : processingMode === "final"
-                  ? "ISNet FP16 (Standard Browser AI): Non-destructive edge refinement, zero erosion, sub-pixel feathering."
-                  : "BiRefNet / RMBG Worker: High-fidelity dichotomous matting for complex animal limbs, flyaways & gaps."}
+                  ? "Clean Cut: @imgly/isnet_fp16 up to 2048px with edge refinement."
+                  : "BiRefNet / RMBG Worker: Optional experimental remote microservice."}
               </p>
             </div>
 
@@ -499,14 +565,23 @@ export default function BgRemoverPage() {
                   <p className="text-[11px] text-rose-200/80 leading-relaxed font-sans">{error}</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => handleRunSegmentation(processingMode)}
-                className="self-start mt-2 flex items-center gap-1.5 rounded-lg border border-rose-500/50 bg-rose-900/40 px-3 py-1 text-xs text-rose-200 hover:bg-rose-900/70 transition-colors"
-              >
-                <RefreshCw className="h-3 w-3" />
-                RETRY
-              </button>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => handleRunSegmentation(processingMode)}
+                  className="flex items-center gap-1.5 rounded-lg border border-rose-500/50 bg-rose-900/40 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-900/70 transition-colors"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  RETRY
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenManualMode}
+                  className="flex items-center gap-1.5 rounded-lg border border-cyan-500/50 bg-cyan-950/60 px-3 py-1.5 text-xs text-cyan-300 hover:bg-cyan-900/60 transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                >
+                  <span>OPEN MANUAL MASK MODE</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -516,10 +591,10 @@ export default function BgRemoverPage() {
               active={true}
               moduleName={
                 processingMode === "worker"
-                  ? "HIGH-QUALITY WORKER // [BIREFNET / RMBG]"
+                  ? "HIGH-QUALITY WORKER // [BIREFNET (OPTIONAL)]"
                   : processingMode === "final"
                   ? "CLEAN CUT // [ISNET FP16 + MATTING]"
-                  : "FAST PREVIEW // [ISNET QUINT8]"
+                  : "FAST PREVIEW // [ISNET FP16 1024PX]"
               }
               steps={scannerSteps}
               subtext={
@@ -537,6 +612,7 @@ export default function BgRemoverPage() {
             <div className="space-y-3">
               <ColorStudio
                 originalUrl={originalUrl}
+                originalFile={imageFile}
                 transparentBlob={cachedResult.transparentBlob}
                 transparentUrl={cachedResult.transparentUrl}
                 alphaMaskUrl={cachedResult.alphaMaskUrl}

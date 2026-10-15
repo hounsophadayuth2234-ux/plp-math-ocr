@@ -7,12 +7,11 @@ export interface BgRemovalProgress {
   total: number;
   percent: number;
   stage:
-    | "Loading model"
     | "Preparing image"
+    | "Loading model"
     | "Segmenting"
-    | "Refining edges"
-    | "Compositing"
-    | "Exporting";
+    | "Refining mask"
+    | "Ready";
   modelLoadingPercent?: number;
   processingPercent?: number;
 }
@@ -340,8 +339,8 @@ export async function removeBackgroundBrowser(
   }
 
   const mode = options?.mode || "preview";
-  const maxDim = mode === "preview" ? 768 : 2048;
-  const modelName = mode === "preview" ? "isnet_quint8" : "isnet_fp16";
+  const maxDim = mode === "preview" ? 1024 : 2048;
+  const modelName = "isnet_fp16"; // Stable default browser model
 
   const tStart = Date.now();
   let tModelLoad = 0;
@@ -432,7 +431,7 @@ export async function removeBackgroundBrowser(
       current: 94,
       total: 100,
       percent: 94,
-      stage: "Refining edges",
+      stage: "Refining mask",
       modelLoadingPercent: 100,
       processingPercent: 95,
     });
@@ -476,7 +475,7 @@ export async function removeBackgroundBrowser(
       current: 100,
       total: 100,
       percent: 100,
-      stage: "Compositing",
+      stage: "Ready",
       modelLoadingPercent: 100,
       processingPercent: 100,
     });
@@ -493,9 +492,8 @@ export async function removeBackgroundBrowser(
       width,
       height,
       label: "Browser AI result",
-      // Explicit accurate labeling — ISNet is NOT labeled as highest-quality model!
-      model: `@imgly/${modelName} (${
-        mode === "preview" ? "Fast Preview 768px" : "Standard Browser AI 2048px"
+      model: `@imgly/isnet_fp16 (${
+        mode === "preview" ? "Fast Preview 1024px" : "Standard Browser AI 2048px"
       })`,
       mode,
       metrics: {
@@ -512,6 +510,103 @@ export async function removeBackgroundBrowser(
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Background removal failed: ${message}`);
   }
+}
+
+/**
+ * Exports final composited image at original full image resolution
+ * by resampling the in-memory alpha mask onto the original unscaled image.
+ */
+export async function exportAtFullResolution(
+  originalFileOrBlob: File | Blob,
+  alphaMask: Uint8ClampedArray,
+  maskWidth: number,
+  maskHeight: number,
+  targetBg: "white" | "pink" | "transparent"
+): Promise<{ blob: Blob; dataUrl: string; width: number; height: number }> {
+  const origBitmap = await createImageBitmap(originalFileOrBlob);
+  const origW = origBitmap.width;
+  const origH = origBitmap.height;
+
+  // Mask canvas
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = maskWidth;
+  maskCanvas.height = maskHeight;
+  const maskCtx = maskCanvas.getContext("2d");
+  if (!maskCtx) throw new Error("Could not create mask canvas.");
+
+  const maskImgData = maskCtx.createImageData(maskWidth, maskHeight);
+  const maskPixels = maskImgData.data;
+  for (let i = 0; i < maskWidth * maskHeight; i++) {
+    const a = alphaMask[i];
+    const idx = i * 4;
+    maskPixels[idx] = a;
+    maskPixels[idx + 1] = a;
+    maskPixels[idx + 2] = a;
+    maskPixels[idx + 3] = 255;
+  }
+  maskCtx.putImageData(maskImgData, 0, 0);
+
+  // Scaled mask canvas to original full resolution
+  const scaledMaskCanvas = document.createElement("canvas");
+  scaledMaskCanvas.width = origW;
+  scaledMaskCanvas.height = origH;
+  const scaledMaskCtx = scaledMaskCanvas.getContext("2d");
+  if (!scaledMaskCtx) throw new Error("Could not create scaled mask canvas.");
+  scaledMaskCtx.imageSmoothingEnabled = true;
+  scaledMaskCtx.imageSmoothingQuality = "high";
+  scaledMaskCtx.drawImage(maskCanvas, 0, 0, origW, origH);
+
+  const scaledMaskData = scaledMaskCtx.getImageData(0, 0, origW, origH).data;
+
+  // Output canvas with original dimensions
+  const outCanvas = document.createElement("canvas");
+  outCanvas.width = origW;
+  outCanvas.height = origH;
+  const outCtx = outCanvas.getContext("2d");
+  if (!outCtx) throw new Error("Could not create output canvas.");
+
+  outCtx.drawImage(origBitmap, 0, 0);
+  const outImageData = outCtx.getImageData(0, 0, origW, origH);
+  const outPixels = outImageData.data;
+
+  const total = origW * origH;
+  for (let i = 0; i < total; i++) {
+    const pIdx = i * 4;
+    const a = scaledMaskData[pIdx];
+    const r = outPixels[pIdx];
+    const g = outPixels[pIdx + 1];
+    const b = outPixels[pIdx + 2];
+
+    if (targetBg === "transparent") {
+      outPixels[pIdx + 3] = a;
+    } else if (targetBg === "white") {
+      const aNorm = a / 255;
+      outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
+      outPixels[pIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
+      outPixels[pIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
+      outPixels[pIdx + 3] = 255;
+    } else if (targetBg === "pink") {
+      const aNorm = a / 255;
+      outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
+      outPixels[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
+      outPixels[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
+      outPixels[pIdx + 3] = 255;
+    }
+  }
+
+  outCtx.putImageData(outImageData, 0, 0);
+
+  if (typeof origBitmap.close === "function") {
+    origBitmap.close();
+  }
+
+  return new Promise((resolve, reject) => {
+    outCanvas.toBlob((blob) => {
+      if (!blob) return reject(new Error("Failed to create full resolution blob"));
+      const dataUrl = URL.createObjectURL(blob);
+      resolve({ blob, dataUrl, width: origW, height: origH });
+    }, "image/png", 1.0);
+  });
 }
 
 /**

@@ -24,6 +24,7 @@ import {
   compositeWithSolidColor,
   createAlphaMaskDataUrl,
   recompositeAlphaMask,
+  exportAtFullResolution,
 } from "@/lib/bg-removal-client";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ProcessingStatusLabel } from "@/lib/types";
@@ -41,6 +42,7 @@ export type BrushTool = "keep" | "remove" | "eraser" | "restore-edge" | "pan";
 
 interface ColorStudioProps {
   originalUrl: string;
+  originalFile?: File | null;
   transparentBlob: Blob;
   transparentUrl: string;
   alphaMaskUrl?: string;
@@ -64,6 +66,7 @@ interface ColorStudioProps {
 
 export function ColorStudio({
   originalUrl,
+  originalFile,
   transparentBlob,
   transparentUrl,
   alphaMaskUrl: initialAlphaMaskUrl,
@@ -399,28 +402,73 @@ export function ColorStudio({
     recompositeAll(alphaMaskRef.current);
   };
 
-  // 1-Click Download for active view
-  const handleDownload = useCallback(() => {
+  // 1-Click Download for active view (Full original resolution export with alpha channel)
+  const handleDownload = useCallback(async () => {
     cyberAudio.playClick();
-    const a = document.createElement("a");
     const timestamp = Date.now();
+    let downloadUrl = "";
+    let filename = "";
+
+    // If originalFile is provided, export at full original dimensions
+    if (
+      originalFile &&
+      alphaMaskRef.current &&
+      (activeChannel === "transparent" || activeChannel === "white" || activeChannel === "pink")
+    ) {
+      try {
+        const fullRes = await exportAtFullResolution(
+          originalFile,
+          alphaMaskRef.current,
+          width,
+          height,
+          activeChannel
+        );
+        downloadUrl = fullRes.dataUrl;
+      } catch (err) {
+        console.warn("Full-resolution export error, falling back to canvas:", err);
+      }
+    }
+
+    if (!downloadUrl) {
+      if (activeChannel === "transparent") {
+        downloadUrl = currentTransparentUrl || transparentUrl;
+      } else if (activeChannel === "pink") {
+        downloadUrl = pinkCompositeUrl || activeDisplayUrl;
+      } else if (activeChannel === "mask") {
+        downloadUrl = currentAlphaMaskUrl || initialAlphaMaskUrl || transparentUrl;
+      } else {
+        downloadUrl = whiteCompositeUrl || activeDisplayUrl;
+      }
+    }
 
     if (activeChannel === "transparent") {
-      a.href = currentTransparentUrl || transparentUrl;
-      a.download = `PLP-Cutout-Transparent-${mode}-${timestamp}.png`;
+      filename = `PLP-Cutout-Transparent-${mode}-${timestamp}.png`;
     } else if (activeChannel === "pink") {
-      a.href = pinkCompositeUrl || activeDisplayUrl;
-      a.download = `PLP-Solution-Pink-FFF0F5-${mode}-${timestamp}.png`;
+      filename = `PLP-Solution-Pink-FFF0F5-${mode}-${timestamp}.png`;
     } else if (activeChannel === "mask") {
-      a.href = currentAlphaMaskUrl || initialAlphaMaskUrl || transparentUrl;
-      a.download = `PLP-AlphaMask-Debug-${mode}-${timestamp}.png`;
+      filename = `PLP-AlphaMask-Debug-${mode}-${timestamp}.png`;
     } else {
-      a.href = whiteCompositeUrl || activeDisplayUrl;
-      a.download = `PLP-Question-White-FFFFFF-${mode}-${timestamp}.png`;
+      filename = `PLP-Question-White-FFFFFF-${mode}-${timestamp}.png`;
     }
+
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
     a.click();
+
+    // Revoke temporary export URL
+    if (
+      downloadUrl.startsWith("blob:") &&
+      downloadUrl !== currentTransparentUrl &&
+      downloadUrl !== transparentUrl
+    ) {
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+    }
   }, [
+    originalFile,
     activeChannel,
+    width,
+    height,
     currentTransparentUrl,
     transparentUrl,
     pinkCompositeUrl,
