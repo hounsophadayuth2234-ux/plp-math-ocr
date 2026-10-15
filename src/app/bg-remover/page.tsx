@@ -178,7 +178,7 @@ export default function BgRemoverPage() {
     const startModelLoadingTimeout = () => {
       if (timeoutStarted) return;
       timeoutStarted = true;
-      const duration = mode === "preview" ? 20000 : 45000;
+      const duration = mode === "preview" ? 40000 : 60000;
       timeoutId = setTimeout(() => {
         if (activeAbortControllerRef.current === abortController) {
           console.log(`[bg-remover] ABORT TRIGGER: startModelLoadingTimeout reached ${duration}ms`);
@@ -190,10 +190,10 @@ export default function BgRemoverPage() {
     // Safety timeout in case setup hangs before model loading begins
     const safetyTimeout = setTimeout(() => {
       if (!timeoutStarted && activeAbortControllerRef.current === abortController) {
-        console.log(`[bg-remover] ABORT TRIGGER: safetyTimeout reached 30000ms`);
+        console.log(`[bg-remover] ABORT TRIGGER: safetyTimeout reached 45000ms`);
         abortController.abort(new Error(mode === "preview" ? "TIMEOUT_20S" : "TIMEOUT_45S"));
       }
-    }, 30000);
+    }, 45000);
 
     try {
       console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, controllerId=${abortController.signal}`);

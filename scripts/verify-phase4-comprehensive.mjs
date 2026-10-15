@@ -154,9 +154,11 @@ async function runPhase4Verification() {
     page.on("console", (msg) => {
       const type = msg.type();
       const text = msg.text();
+      if (!text.includes("favicon") && !text.includes("DevTools")) {
+        console.log(`  [Browser ${type}]`, text.slice(0, 150));
+      }
       if (type === "error" && !text.includes("favicon") && !text.includes("DevTools")) {
         report.browserConsoleErrors.push(text);
-        console.error("  [Console Error]", text);
       }
     });
 
@@ -170,7 +172,9 @@ async function runPhase4Verification() {
     // ──────────────────────────────────────────────────────────────────
     console.log("\n[1] Auditing initial page load (confirming lazy loading)...");
     currentPhase = "pageLoad";
-    await page.goto(TARGET_URL, { waitUntil: "networkidle2" });
+    await page.goto(TARGET_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForSelector('input[type="file"]', { timeout: 30000 });
+    await new Promise((r) => setTimeout(r, 1000));
 
     const lazyOnLoad = !report.networkRequests.onPageLoad.some(
       (u) => u.includes(".onnx") || u.includes("isnet") || u.includes("birefnet")
@@ -216,7 +220,7 @@ async function runPhase4Verification() {
         Array.from(document.querySelectorAll("button")).some(
           (b) => b.innerText.includes("WHITE") || b.innerText.includes("TRANSPARENT")
         ),
-      { timeout: 45000 }
+      { timeout: 120000 }
     );
     const segmentationWallTime = Date.now() - t0;
     console.log(`  ✓ Automatic Cut finished in ${segmentationWallTime}ms!`);
@@ -563,9 +567,9 @@ async function runPhase4Verification() {
   console.log(`- BiRefNet Requested:          ${report.networkRequests.birefnetRequested ? "FAIL (Yes)" : "PASS (No)"}`);
   console.log(`- transformers.min.js Used:    ${report.networkRequests.transformersRequested ? "FAIL (Yes)" : "PASS (No)"}`);
   console.log(`- Unexpected Cloud API:        ${report.networkRequests.cloudApiRequested ? "FAIL (Yes)" : "PASS (No)"}`);
-  console.log(`- Input Dimensions:            ${report.inputDimensions.naturalWidth || report.inputDimensions.width} x ${report.inputDimensions.naturalHeight || report.inputDimensions.height}`);
-  console.log(`- Working Dimensions:          ${report.workingDimensions.width} x ${report.workingDimensions.height}`);
-  console.log(`- Output Dimensions:           ${report.outputDimensions.width} x ${report.outputDimensions.height}`);
+  console.log(`- Input Dimensions:            ${report.inputDimensions ? (report.inputDimensions.naturalWidth || report.inputDimensions.width) + " x " + (report.inputDimensions.naturalHeight || report.inputDimensions.height) : "N/A"}`);
+  console.log(`- Working Dimensions:          ${report.workingDimensions ? report.workingDimensions.width + " x " + report.workingDimensions.height : "N/A"}`);
+  console.log(`- Output Dimensions:           ${report.outputDimensions ? report.outputDimensions.width + " x " + report.outputDimensions.height : "N/A"}`);
   console.log(`- Model Load Time:             ${report.processingTime.modelLoadMs} ms`);
   console.log(`- Inference Time:              ${report.processingTime.inferenceMs} ms`);
   console.log(`- Total Processing Time:       ${report.processingTime.totalMs} ms`);

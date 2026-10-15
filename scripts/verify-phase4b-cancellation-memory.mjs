@@ -177,10 +177,17 @@ async function runPhase4bTests() {
     });
     console.log("  Buttons present in DOM:", btnInfo);
 
-    await page.waitForFunction(() => {
+    const match = await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll("button"));
       return btns.some((b) => b.innerText.includes("AUTOMATIC CUT") && !b.disabled);
-    }, { timeout: 10000 });
+    });
+    console.log("  Direct evaluate match:", match);
+    if (!match) {
+      await page.waitForFunction(() => {
+        const btns = Array.from(document.querySelectorAll("button"));
+        return btns.some((b) => b.innerText.includes("AUTOMATIC CUT") && !b.disabled);
+      }, { timeout: 10000 });
+    }
     console.log("  Starting processing for Image B...");
     await clickExecuteButton(page);
 
