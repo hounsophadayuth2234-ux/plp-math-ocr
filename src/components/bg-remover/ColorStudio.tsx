@@ -19,6 +19,9 @@ import {
   Hand,
   Sliders,
   Maximize2,
+  Check,
+  X,
+  Feather,
 } from "lucide-react";
 import {
   compositeWithSolidColor,
@@ -38,7 +41,7 @@ export type ViewChannel =
   | "original"
   | "split";
 
-export type BrushTool = "keep" | "remove" | "eraser" | "restore-edge" | "pan";
+export type BrushTool = "keep" | "remove" | "soft" | "eraser" | "pan";
 
 interface ColorStudioProps {
   originalUrl: string;
@@ -64,6 +67,8 @@ interface ColorStudioProps {
   onRerunFinal?: () => void;
 }
 
+const MAX_HISTORY_STATES = 20;
+
 export function ColorStudio({
   originalUrl,
   originalFile,
@@ -82,7 +87,7 @@ export function ColorStudio({
   onReset,
   onRerunFinal,
 }: ColorStudioProps) {
-  // ── Channel & View State ──
+  // ── Channel & Preview State ──
   const [activeChannel, setActiveChannel] = useState<ViewChannel>("white");
   const [whiteCompositeUrl, setWhiteCompositeUrl] = useState<string>(initialCompositeUrl);
   const [pinkCompositeUrl, setPinkCompositeUrl] = useState<string>("");
@@ -91,34 +96,46 @@ export function ColorStudio({
   const [currentTransparentBlob, setCurrentTransparentBlob] = useState<Blob>(transparentBlob);
   const [isCompositing, setIsCompositing] = useState(false);
 
-  // ── Manual Mask Correction State (Applied to Alpha Mask Before Compositing) ──
-  const [isEditMode, setIsEditMode] = useState(false);
+  // ── Manual Mask Refinement Studio State ──
+  const [isEditMode, setIsEditMode] = useState(true);
   const [activeTool, setActiveTool] = useState<BrushTool>("keep");
-  const [brushSize, setBrushSize] = useState<number>(18);
+  const [brushSize, setBrushSize] = useState<number>(20);
+  const [brushHardness, setBrushHardness] = useState<number>(80); // 0 = ultra soft, 100 = hard edge
   const [zoom, setZoom] = useState<number>(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDirty, setIsDirty] = useState(false);
+  const [hasAppliedCorrections, setHasAppliedCorrections] = useState(false);
 
-  // In-memory working alpha mask (length: width * height)
+  // ── In-Memory Grayscale Alpha Mask Buffers (Length = width * height) ──
+  // Working alpha mask currently being painted
   const alphaMaskRef = useRef<Uint8ClampedArray | null>(null);
+  // Unchangeable base AI mask from @imgly/isnet_fp16
   const baseAlphaMaskRef = useRef<Uint8ClampedArray | null>(null);
+  // Last committed/applied state for "Cancel Changes"
+  const committedAlphaMaskRef = useRef<Uint8ClampedArray | null>(null);
 
-  // Undo / Redo stacks
+  // Undo / Redo stacks (Limited to MAX_HISTORY_STATES)
   const [history, setHistory] = useState<Uint8ClampedArray[]>([]);
   const [redoStack, setRedoStack] = useState<Uint8ClampedArray[]>([]);
 
-  // Interactive editing canvas ref
+  // Interactive editing canvas ref & offscreen mask canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const offscreenMaskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const animFrameIdRef = useRef<number | null>(null);
 
-  // Initialize working alpha mask
+  // Initialize in-memory grayscale alpha mask buffers
   useEffect(() => {
-    if (initialAlphaBuffer && initialAlphaBuffer.length === width * height) {
+    const totalPixels = width * height;
+    if (initialAlphaBuffer && initialAlphaBuffer.length === totalPixels) {
       alphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
       baseAlphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
+      committedAlphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
     } else {
-      // Fallback: extract alpha from transparentBlob if initialAlphaBuffer is missing
+      // Fallback: extract alpha from transparentBlob
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
@@ -128,16 +145,23 @@ export function ColorStudio({
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
           const data = ctx.getImageData(0, 0, width, height).data;
-          const buf = new Uint8ClampedArray(width * height);
-          for (let i = 0; i < width * height; i++) {
+          const buf = new Uint8ClampedArray(totalPixels);
+          for (let i = 0; i < totalPixels; i++) {
             buf[i] = data[i * 4 + 3];
           }
           alphaMaskRef.current = buf;
           baseAlphaMaskRef.current = new Uint8ClampedArray(buf);
+          committedAlphaMaskRef.current = new Uint8ClampedArray(buf);
         }
       };
       img.src = transparentUrl;
     }
+
+    // Initialize offscreen mask canvas
+    const offscreen = document.createElement("canvas");
+    offscreen.width = width;
+    offscreen.height = height;
+    offscreenMaskCanvasRef.current = offscreen;
   }, [initialAlphaBuffer, transparentUrl, width, height]);
 
   // Pre-generate initial pink composite
@@ -151,7 +175,7 @@ export function ColorStudio({
     };
   }, [transparentBlob]);
 
-  // Active display URL based on selected channel
+  // Active display URL for passive image view
   const activeDisplayUrl = useMemo(() => {
     switch (activeChannel) {
       case "white":
@@ -204,7 +228,7 @@ export function ColorStudio({
         const pink = await recompositeAlphaMask(sourceImageData, mask, "pink");
         setPinkCompositeUrl(pink.dataUrl);
 
-        // Alpha Mask Debug visualizer
+        // Alpha Mask Debug visualizer (pure 8-bit black-and-white)
         const maskDebugUrl = createAlphaMaskDataUrl(mask, width, height);
         setCurrentAlphaMaskUrl(maskDebugUrl);
       } catch (err) {
@@ -216,7 +240,7 @@ export function ColorStudio({
     [sourceImageData, width, height]
   );
 
-  // Redraw interactive edit canvas
+  // Redraw interactive canvas based on working alpha mask and activeChannel
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !alphaMaskRef.current || !sourceImageData) return;
@@ -225,16 +249,18 @@ export function ColorStudio({
 
     const w = width;
     const h = height;
-    canvas.width = w;
-    canvas.height = h;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
 
     const mask = alphaMaskRef.current;
     const sPixels = sourceImageData.data;
     const imgData = ctx.createImageData(w, h);
     const data = imgData.data;
+    const total = w * h;
 
-    // Render depending on active preview
-    for (let i = 0; i < w * h; i++) {
+    for (let i = 0; i < total; i++) {
       const pIdx = i * 4;
       const a = mask[i];
       const r = sPixels[pIdx];
@@ -242,6 +268,7 @@ export function ColorStudio({
       const b = sPixels[pIdx + 2];
 
       if (activeChannel === "mask") {
+        // Pure grayscale mask visualizer: Black = 0 (background), White = 255 (foreground), Gray = boundary
         data[pIdx] = a;
         data[pIdx + 1] = a;
         data[pIdx + 2] = a;
@@ -257,8 +284,13 @@ export function ColorStudio({
         data[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
         data[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
         data[pIdx + 3] = 255;
+      } else if (activeChannel === "original") {
+        data[pIdx] = r;
+        data[pIdx + 1] = g;
+        data[pIdx + 2] = b;
+        data[pIdx + 3] = 255;
       } else {
-        // default white
+        // Default white composite #FFFFFF
         const aNorm = a / 255;
         data[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
         data[pIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
@@ -276,78 +308,151 @@ export function ColorStudio({
     }
   }, [isEditMode, activeChannel, redrawCanvas]);
 
-  // ── Brush Stroke Engine (Modifies Alpha Mask Before Compositing) ──
-  const applyBrushAtPoint = useCallback(
-    (canvasX: number, canvasY: number) => {
+  // Push current mask to history snapshot before each stroke (max 20 states)
+  const saveSnapshotToHistory = useCallback(() => {
+    if (!alphaMaskRef.current) return;
+    const snapshot = new Uint8ClampedArray(alphaMaskRef.current);
+    setHistory((prev) => {
+      const next = [...prev, snapshot];
+      return next.length > MAX_HISTORY_STATES
+        ? next.slice(next.length - MAX_HISTORY_STATES)
+        : next;
+    });
+    setRedoStack([]); // Clear redo stack on new action
+    setIsDirty(true);
+  }, []);
+
+  // ── Brush Mathematics & Radial Gradient Falloff ──
+  const applyBrushCircle = useCallback(
+    (
+      cx: number,
+      cy: number,
+      tool: BrushTool,
+      radius: number,
+      hardnessRatio: number
+    ) => {
       if (!alphaMaskRef.current) return;
       const mask = alphaMaskRef.current;
       const baseMask = baseAlphaMaskRef.current;
       const w = width;
       const h = height;
-      const r = Math.max(1, Math.round(brushSize / 2));
-      const rSq = r * r;
 
-      const minX = Math.max(0, Math.floor(canvasX - r));
-      const maxX = Math.min(w - 1, Math.ceil(canvasX + r));
-      const minY = Math.max(0, Math.floor(canvasY - r));
-      const maxY = Math.min(h - 1, Math.ceil(canvasY + r));
+      const rSq = radius * radius;
+      const minX = Math.max(0, Math.floor(cx - radius));
+      const maxX = Math.min(w - 1, Math.ceil(cx + radius));
+      const minY = Math.max(0, Math.floor(cy - radius));
+      const maxY = Math.min(h - 1, Math.ceil(cy + radius));
 
       for (let y = minY; y <= maxY; y++) {
-        const dy = y - canvasY;
+        const dy = y - cy;
         const yOff = y * w;
         for (let x = minX; x <= maxX; x++) {
-          const dx = x - canvasX;
+          const dx = x - cx;
           const distSq = dx * dx + dy * dy;
           if (distSq <= rSq) {
-            const idx = yOff + x;
-            if (activeTool === "keep") {
-              mask[idx] = 255; // Force opaque foreground
-            } else if (activeTool === "remove") {
-              mask[idx] = 0;   // Force transparent background
-            } else if (activeTool === "eraser") {
-              // Restore to initial AI mask state
-              if (baseMask) mask[idx] = baseMask[idx];
-            } else if (activeTool === "restore-edge") {
-              // Local soft bilateral blur for boundary refinement
-              let sum = 0;
-              let count = 0;
-              for (let sy = Math.max(0, y - 1); sy <= Math.min(h - 1, y + 1); sy++) {
-                const sOff = sy * w;
-                for (let sx = Math.max(0, x - 1); sx <= Math.min(w - 1, x + 1); sx++) {
-                  sum += mask[sOff + sx];
-                  count++;
-                }
+            const d = Math.sqrt(distSq);
+            const u = d / radius; // Normalized distance [0..1]
+            let weight = 1.0;
+
+            if (hardnessRatio < 0.99) {
+              if (u > hardnessRatio) {
+                const t = (u - hardnessRatio) / (1 - hardnessRatio);
+                // Cubic Hermite smoothstep falloff
+                weight = Math.max(0, 1 - (3 * t * t - 2 * t * t * t));
               }
-              mask[idx] = Math.round(sum / count);
+            }
+
+            const idx = yOff + x;
+            const currentAlpha = mask[idx];
+
+            if (tool === "keep") {
+              // Keep Brush: Paints white (255) onto the mask, restoring foreground areas
+              mask[idx] = Math.round(currentAlpha + (255 - currentAlpha) * weight);
+            } else if (tool === "remove") {
+              // Remove Brush: Paints black (0) onto the mask, removing unwanted background
+              mask[idx] = Math.round(currentAlpha * (1 - weight));
+            } else if (tool === "soft") {
+              // Soft Edge Brush: Paints semi-transparent feathering (~128) with smooth radial gradient
+              const targetVal = 128;
+              mask[idx] = Math.round(currentAlpha + (targetVal - currentAlpha) * (weight * 0.45));
+            } else if (tool === "eraser") {
+              // Eraser: Removes mask content, restoring the original AI segmentation
+              if (baseMask) {
+                const baseVal = baseMask[idx];
+                mask[idx] = Math.round(currentAlpha + (baseVal - currentAlpha) * weight);
+              }
             }
           }
         }
       }
-      redrawCanvas();
     },
-    [brushSize, activeTool, width, height, redrawCanvas]
+    [width, height]
   );
 
-  // Pointer event handlers on interactive canvas
+  // Stroke Interpolation: Paints along path between (x0, y0) and (x1, y1)
+  const applyBrushStroke = useCallback(
+    (x0: number, y0: number, x1: number, y1: number) => {
+      const radius = Math.max(1, Math.round(brushSize / 2));
+      const hardnessRatio =
+        activeTool === "soft"
+          ? Math.min(0.2, brushHardness / 100) // Soft Edge Brush enforces gentle feathering
+          : Math.max(0, Math.min(1, brushHardness / 100));
+
+      const dist = Math.hypot(x1 - x0, y1 - y0);
+      const step = Math.max(1, radius / 3);
+      const steps = Math.ceil(dist / step);
+
+      for (let i = 0; i <= steps; i++) {
+        const t = steps > 0 ? i / steps : 0;
+        const px = x0 + (x1 - x0) * t;
+        const py = y0 + (y1 - y0) * t;
+        applyBrushCircle(px, py, activeTool, radius, hardnessRatio);
+      }
+    },
+    [brushSize, brushHardness, activeTool, applyBrushCircle]
+  );
+
+  // ── Exact Coordinate Mapping with Zoom and Pan Invariance ──
+  const getMaskCoordinates = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return { x: 0, y: 0 };
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+
+      // Bounding box mapping: exactly accounts for client position, canvas scale, and pan
+      const normX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const normY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+
+      const maskX = Math.min(width - 1, Math.floor(normX * width));
+      const maskY = Math.min(height - 1, Math.floor(normY * height));
+
+      return { x: maskX, y: maskY };
+    },
+    [width, height]
+  );
+
+  // Pointer event handlers with Pointer Capture for seamless dragging
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (activeTool === "pan") {
       setIsPanning(true);
       setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+      e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
 
     if (!alphaMaskRef.current) return;
-    // Push current mask to undo history before starting new stroke
-    setHistory((prev) => [...prev.slice(-14), new Uint8ClampedArray(alphaMaskRef.current!)]);
-    setRedoStack([]); // Clear redo stack on new action
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    // Save snapshot for Undo
+    saveSnapshotToHistory();
+
+    const { x, y } = getMaskCoordinates(e);
+    lastPointRef.current = { x, y };
     setIsDrawing(true);
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const scaleX = width / rect.width;
-    const scaleY = height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-    applyBrushAtPoint(x, y);
+    applyBrushStroke(x, y, x, y);
+    redrawCanvas();
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -359,66 +464,178 @@ export function ColorStudio({
       return;
     }
 
-    if (!isDrawing) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const scaleX = width / rect.width;
-    const scaleY = height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-    applyBrushAtPoint(x, y);
+    if (!isDrawing || !lastPointRef.current) return;
+    const { x, y } = getMaskCoordinates(e);
+    const last = lastPointRef.current;
+
+    applyBrushStroke(last.x, last.y, x, y);
+    lastPointRef.current = { x, y };
+
+    if (!animFrameIdRef.current) {
+      animFrameIdRef.current = requestAnimationFrame(() => {
+        redrawCanvas();
+        animFrameIdRef.current = null;
+      });
+    }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignore if pointer already released
+    }
+
     if (isPanning) {
       setIsPanning(false);
       return;
     }
-    if (isDrawing && alphaMaskRef.current) {
+
+    if (isDrawing) {
       setIsDrawing(false);
-      recompositeAll(alphaMaskRef.current);
+      lastPointRef.current = null;
+      if (animFrameIdRef.current) {
+        cancelAnimationFrame(animFrameIdRef.current);
+        animFrameIdRef.current = null;
+      }
+      redrawCanvas();
     }
   };
 
-  // Undo & Redo
-  const handleUndo = () => {
+  // Undo & Redo Handlers (Max 20 snapshots)
+  const handleUndo = useCallback(() => {
     if (history.length === 0 || !alphaMaskRef.current) return;
     cyberAudio.playClick();
-    const prev = history[history.length - 1];
+    const prevSnapshot = history[history.length - 1];
     setRedoStack((r) => [...r, new Uint8ClampedArray(alphaMaskRef.current!)]);
-    alphaMaskRef.current.set(prev);
+    alphaMaskRef.current.set(prevSnapshot);
     setHistory((h) => h.slice(0, -1));
     redrawCanvas();
-    recompositeAll(alphaMaskRef.current);
-  };
+    setIsDirty(true);
+  }, [history, redrawCanvas]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     if (redoStack.length === 0 || !alphaMaskRef.current) return;
     cyberAudio.playClick();
-    const next = redoStack[redoStack.length - 1];
+    const nextSnapshot = redoStack[redoStack.length - 1];
     setHistory((h) => [...h, new Uint8ClampedArray(alphaMaskRef.current!)]);
-    alphaMaskRef.current.set(next);
+    alphaMaskRef.current.set(nextSnapshot);
     setRedoStack((r) => r.slice(0, -1));
     redrawCanvas();
-    recompositeAll(alphaMaskRef.current);
-  };
+    setIsDirty(true);
+  }, [redoStack, redrawCanvas]);
 
-  // 1-Click Download for active view (Full original resolution export with alpha channel)
+  // Keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleUndo, handleRedo]);
+
+  // "Apply Corrections": Commits changes and updates all composite views
+  const handleApplyCorrections = useCallback(async () => {
+    if (!alphaMaskRef.current) return;
+    cyberAudio.playSuccessChime();
+    committedAlphaMaskRef.current = new Uint8ClampedArray(alphaMaskRef.current);
+    await recompositeAll(alphaMaskRef.current);
+    setHasAppliedCorrections(true);
+    setIsDirty(false);
+  }, [recompositeAll]);
+
+  // "Cancel Changes": Discards uncommitted strokes made during this session
+  const handleCancelChanges = useCallback(() => {
+    if (!committedAlphaMaskRef.current || !alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    alphaMaskRef.current.set(committedAlphaMaskRef.current);
+    redrawCanvas();
+    setIsDirty(false);
+  }, [redrawCanvas]);
+
+  // "Reset Mask": Reverts working mask back to initial AI segmentation
+  const handleResetMask = useCallback(async () => {
+    if (!baseAlphaMaskRef.current || !alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    alphaMaskRef.current.set(baseAlphaMaskRef.current);
+    committedAlphaMaskRef.current = new Uint8ClampedArray(baseAlphaMaskRef.current);
+    redrawCanvas();
+    await recompositeAll(alphaMaskRef.current);
+    setHasAppliedCorrections(false);
+    setIsDirty(false);
+  }, [saveSnapshotToHistory, redrawCanvas, recompositeAll]);
+
+  // "Export Transparent PNG": Full resolution composite with genuine alpha channel
+  const handleExportTransparentPng = useCallback(async () => {
+    cyberAudio.playClick();
+    const timestamp = Date.now();
+    let downloadUrl = "";
+    const activeMask = alphaMaskRef.current;
+
+    if (originalFile && activeMask) {
+      try {
+        const fullRes = await exportAtFullResolution(
+          originalFile,
+          activeMask,
+          width,
+          height,
+          "transparent"
+        );
+        downloadUrl = fullRes.dataUrl;
+      } catch (err) {
+        console.warn("Full-resolution export error, falling back to working canvas:", err);
+      }
+    }
+
+    if (!downloadUrl) {
+      downloadUrl = currentTransparentUrl || transparentUrl;
+    }
+
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `PLP-Cutout-Transparent-${mode}-${timestamp}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Clean up temporary Object URL
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(downloadUrl);
+      } catch {
+        // Ignore revocation errors
+      }
+    }, 5000);
+  }, [originalFile, width, height, mode, currentTransparentUrl, transparentUrl]);
+
+  // 1-Click Download for active preview channel
   const handleDownload = useCallback(async () => {
     cyberAudio.playClick();
     const timestamp = Date.now();
     let downloadUrl = "";
     let filename = "";
+    const activeMask = alphaMaskRef.current;
 
-    // If originalFile is provided, export at full original dimensions
     if (
       originalFile &&
-      alphaMaskRef.current &&
+      activeMask &&
       (activeChannel === "transparent" || activeChannel === "white" || activeChannel === "pink")
     ) {
       try {
         const fullRes = await exportAtFullResolution(
           originalFile,
-          alphaMaskRef.current,
+          activeMask,
           width,
           height,
           activeChannel
@@ -448,55 +665,42 @@ export function ColorStudio({
     } else if (activeChannel === "mask") {
       filename = `PLP-AlphaMask-Debug-${mode}-${timestamp}.png`;
     } else {
-      filename = `PLP-Question-White-FFFFFF-${mode}-${timestamp}.png`;
+      filename = `PLP-Product-White-FFFFFF-${mode}-${timestamp}.png`;
     }
 
     const a = document.createElement("a");
     a.href = downloadUrl;
     a.download = filename;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
 
-    // Revoke temporary export URL
-    if (
-      downloadUrl.startsWith("blob:") &&
-      downloadUrl !== currentTransparentUrl &&
-      downloadUrl !== transparentUrl
-    ) {
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
-    }
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(downloadUrl);
+      } catch {
+        // Ignore
+      }
+    }, 5000);
   }, [
     originalFile,
     activeChannel,
     width,
     height,
+    mode,
     currentTransparentUrl,
     transparentUrl,
     pinkCompositeUrl,
-    whiteCompositeUrl,
     activeDisplayUrl,
     currentAlphaMaskUrl,
     initialAlphaMaskUrl,
-    mode,
+    whiteCompositeUrl,
   ]);
 
-  // High-Res HD Transparent Export
-  const handleDownloadTransparent = () => {
-    cyberAudio.playClick();
-    const a = document.createElement("a");
-    a.href = currentTransparentUrl || transparentUrl;
-    a.download = `PLP-Cutout-Transparent-HD-${Date.now()}.png`;
-    a.click();
-  };
-
-  const getBadgeStyle = () => {
-    if (mode === "final") {
-      return "border-emerald-400 bg-emerald-950/70 text-emerald-300 ring-1 ring-emerald-400/40";
-    }
-    if (mode === "worker") {
-      return "border-purple-400 bg-purple-950/70 text-purple-300 ring-1 ring-purple-400/40";
-    }
-    return "border-cyan-500/40 bg-cyan-950/60 text-cyan-300 ring-1 ring-cyan-500/30";
-  };
+  // Provenance Label
+  const provenanceText = hasAppliedCorrections
+    ? "Manual mask corrections applied"
+    : `${processingLabel} — ${provider}`;
 
   return (
     <div className="flex flex-col gap-4 font-mono">
@@ -504,14 +708,18 @@ export function ColorStudio({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-2.5 text-xs">
         <div className="flex items-center gap-2">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${getBadgeStyle()}`}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${
+              hasAppliedCorrections
+                ? "border-amber-500/40 bg-amber-950/50 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                : "border-cyan-500/40 bg-cyan-950/50 text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+            }`}
           >
             <CheckCircle2 className="h-3 w-3" />
-            <span>{processingLabel}</span>
+            <span>{provenanceText}</span>
           </span>
           <span className="hidden sm:inline text-slate-500">·</span>
           <span className="text-slate-400 text-[11px]">
-            Model: <strong className="text-white">{provider}</strong>
+            Engine: <strong className="text-white">@imgly/isnet_fp16</strong>
           </span>
         </div>
 
@@ -590,7 +798,7 @@ export function ColorStudio({
               ? "bg-slate-900 border border-amber-400 text-white shadow-[0_0_12px_rgba(245,158,11,0.25)] font-bold"
               : "text-slate-400 hover:text-white hover:bg-slate-900/40"
           }`}
-          title="Inspect edge alpha & halo boundary"
+          title="Inspect edge alpha & halo boundary (Black = 0, White = 255)"
         >
           <Eye className="h-3 w-3 text-amber-400" />
           <span>MASK DEBUG</span>
@@ -624,9 +832,10 @@ export function ColorStudio({
         </button>
       </div>
 
-      {/* ── Manual Mask Correction Toolbar (Applied Before Compositing) ── */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs shadow-inner">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+      {/* ── Manual Mask Refinement Studio Toolbar ── */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-950 p-3.5 text-xs shadow-inner">
+        {/* Top Control Bar: Studio Toggle, Undo, Redo, Apply & Cancel */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -643,142 +852,175 @@ export function ColorStudio({
               <Paintbrush className="h-3.5 w-3.5" />
               <span>{isEditMode ? "MANUAL MASK STUDIO [ACTIVE]" : "EDIT ALPHA MASK TOOLS"}</span>
             </button>
-            <span className="text-[11px] text-slate-500 hidden sm:inline">
-              (Preserves thin legs, hair &amp; narrow gaps before compositing)
+            <span className="text-[11px] text-slate-500 hidden md:inline">
+              (Refines alpha mask directly before final compositing)
             </span>
           </div>
 
-          {/* Undo / Redo */}
-          {isEditMode && (
-            <div className="flex items-center gap-1.5">
+          {/* Action Buttons: Undo, Redo, Reset Mask, Cancel, Apply Corrections */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={history.length === 0}
+              className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Undo stroke (Ctrl+Z)"
+            >
+              <Undo2 className="h-3 w-3" />
+              <span className="text-[10px]">Undo</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Redo stroke (Ctrl+Y)"
+            >
+              <Redo2 className="h-3 w-3" />
+              <span className="text-[10px]">Redo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResetMask}
+              className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-950/40 px-2.5 py-1 text-[10px] text-rose-300 hover:bg-rose-900/60 transition-colors"
+              title="Reset mask back to initial AI segmentation"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>Reset Mask</span>
+            </button>
+
+            {isDirty && (
               <button
                 type="button"
-                onClick={handleUndo}
-                disabled={history.length === 0}
-                className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Undo (Ctrl+Z)"
+                onClick={handleCancelChanges}
+                className="flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300 hover:text-white transition-colors"
+                title="Discard unapplied changes"
               >
-                <Undo2 className="h-3 w-3" />
-                <span className="text-[10px]">UNDO</span>
+                <X className="h-3 w-3" />
+                <span>Cancel Changes</span>
               </button>
-              <button
-                type="button"
-                onClick={handleRedo}
-                disabled={redoStack.length === 0}
-                className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Redo (Ctrl+Y)"
-              >
-                <Redo2 className="h-3 w-3" />
-                <span className="text-[10px]">REDO</span>
-              </button>
-            </div>
-          )}
+            )}
+
+            <button
+              type="button"
+              onClick={handleApplyCorrections}
+              disabled={!isDirty && hasAppliedCorrections}
+              className={`flex items-center gap-1 rounded-md px-3 py-1 text-[10px] font-bold transition-all ${
+                isDirty
+                  ? "bg-emerald-500 text-black shadow-[0_0_12px_rgba(16,185,129,0.5)] animate-pulse"
+                  : "border border-emerald-500/40 bg-emerald-950/60 text-emerald-300"
+              }`}
+              title="Re-composite preview channels with corrected mask"
+            >
+              <Check className="h-3 w-3" />
+              <span>Apply Corrections</span>
+            </button>
+          </div>
         </div>
 
-        {/* Edit Mode Controls (Active when Edit Mode is On) */}
+        {/* Brush Tools & Settings Deck */}
         {isEditMode && (
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-            {/* Tool Selection */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              {/* Keep Brush */}
-              <button
-                type="button"
-                onClick={() => setActiveTool("keep")}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
-                  activeTool === "keep"
-                    ? "bg-emerald-900/80 border border-emerald-400 text-emerald-200 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                    : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-emerald-300"
-                }`}
-                title="Paint to keep foreground details (α = 255)"
-              >
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                <span>KEEP BRUSH</span>
-              </button>
+          <div className="flex flex-col gap-3 pt-1">
+            {/* Tool Selection Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* 1. Keep Brush */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("keep")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                    activeTool === "keep"
+                      ? "bg-emerald-900/90 border border-emerald-400 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-emerald-300"
+                  }`}
+                  title="Paints white/opaque (α = 255) to restore missing foreground details"
+                >
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
+                  <span>Keep Brush</span>
+                </button>
 
-              {/* Remove Brush */}
-              <button
-                type="button"
-                onClick={() => setActiveTool("remove")}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
-                  activeTool === "remove"
-                    ? "bg-rose-900/80 border border-rose-400 text-rose-200 shadow-[0_0_10px_rgba(244,63,94,0.3)]"
-                    : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-rose-300"
-                }`}
-                title="Paint to remove background (α = 0)"
-              >
-                <Scissors className="h-3 w-3 text-rose-400" />
-                <span>REMOVE BRUSH</span>
-              </button>
+                {/* 2. Remove Brush */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("remove")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                    activeTool === "remove"
+                      ? "bg-rose-900/90 border border-rose-400 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-rose-300"
+                  }`}
+                  title="Paints black/transparent (α = 0) to carve away background"
+                >
+                  <Scissors className="h-3 w-3 text-rose-400" />
+                  <span>Remove Brush</span>
+                </button>
 
-              {/* Eraser */}
-              <button
-                type="button"
-                onClick={() => setActiveTool("eraser")}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
-                  activeTool === "eraser"
-                    ? "bg-sky-900/80 border border-sky-400 text-sky-200 shadow-[0_0_10px_rgba(56,189,248,0.3)]"
-                    : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-sky-300"
-                }`}
-                title="Restore to original AI segmentation mask"
-              >
-                <RotateCcw className="h-3 w-3 text-sky-400" />
-                <span>ERASER</span>
-              </button>
+                {/* 3. Soft Edge Brush */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("soft")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                    activeTool === "soft"
+                      ? "bg-cyan-900/90 border border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(0,240,255,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-cyan-300"
+                  }`}
+                  title="Paints partially transparent gray alpha values for hair flyaways & soft edges"
+                >
+                  <Feather className="h-3 w-3 text-cyan-400" />
+                  <span>Soft Edge Brush</span>
+                </button>
 
-              {/* Restore Edge */}
-              <button
-                type="button"
-                onClick={() => setActiveTool("restore-edge")}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
-                  activeTool === "restore-edge"
-                    ? "bg-cyan-900/80 border border-cyan-400 text-cyan-200 shadow-[0_0_10px_rgba(0,240,255,0.3)]"
-                    : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-cyan-300"
-                }`}
-                title="Smooth and restore antialiased boundary"
-              >
-                <Sparkles className="h-3 w-3 text-cyan-400" />
-                <span>RESTORE EDGE</span>
-              </button>
+                {/* 4. Eraser */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("eraser")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                    activeTool === "eraser"
+                      ? "bg-sky-900/90 border border-sky-400 text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-sky-300"
+                  }`}
+                  title="Erases brush strokes back to original AI mask content"
+                >
+                  <RotateCcw className="h-3 w-3 text-sky-400" />
+                  <span>Eraser</span>
+                </button>
 
-              {/* Pan Tool */}
-              <button
-                type="button"
-                onClick={() => setActiveTool("pan")}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
-                  activeTool === "pan"
-                    ? "bg-amber-900/80 border border-amber-400 text-amber-200 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
-                    : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-amber-300"
-                }`}
-                title="Pan and navigate around zoomed canvas"
-              >
-                <Hand className="h-3 w-3 text-amber-400" />
-                <span>PAN</span>
-              </button>
-            </div>
+                {/* 5. Pan Tool */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("pan")}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                    activeTool === "pan"
+                      ? "bg-amber-900/90 border border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-amber-300"
+                  }`}
+                  title="Pan and navigate around zoomed canvas"
+                >
+                  <Hand className="h-3 w-3 text-amber-400" />
+                  <span>Pan</span>
+                </button>
+              </div>
 
-            {/* Brush Size & Zoom Controls */}
-            <div className="flex items-center gap-3">
-              {/* Brush Size presets */}
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                <span>SIZE:</span>
-                {[6, 16, 32, 60].map((sz) => (
+              {/* Zoom Presets: 100%, 200%, 400% */}
+              <div className="flex items-center gap-1 border-l border-slate-800 pl-2">
+                <span className="text-[10px] text-slate-500 mr-1">ZOOM:</span>
+                {[1, 2, 4].map((z) => (
                   <button
-                    key={sz}
+                    key={z}
                     type="button"
-                    onClick={() => setBrushSize(sz)}
-                    className={`rounded px-1.5 py-0.5 text-[10px] ${
-                      brushSize === sz
-                        ? "bg-cyan-500 text-black font-bold"
+                    onClick={() => {
+                      setZoom(z);
+                      if (z === 1) setPanOffset({ x: 0, y: 0 });
+                    }}
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
+                      zoom === z
+                        ? "bg-cyan-500 text-black"
                         : "bg-slate-900 text-slate-400 hover:text-white"
                     }`}
                   >
-                    {sz}px
+                    {z * 100}%
                   </button>
                 ))}
-              </div>
-
-              {/* Zoom Controls */}
-              <div className="flex items-center gap-1 border-l border-slate-800 pl-3">
                 <button
                   type="button"
                   onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
@@ -787,9 +1029,6 @@ export function ColorStudio({
                 >
                   <ZoomOut className="h-3 w-3" />
                 </button>
-                <span className="text-[10px] text-slate-400 w-10 text-center font-bold">
-                  {Math.round(zoom * 100)}%
-                </span>
                 <button
                   type="button"
                   onClick={() => setZoom((z) => Math.min(4, z + 0.5))}
@@ -804,11 +1043,71 @@ export function ColorStudio({
                     setZoom(1);
                     setPanOffset({ x: 0, y: 0 });
                   }}
-                  className="rounded p-1 bg-slate-900 text-slate-400 hover:text-white ml-1"
+                  className="rounded p-1 bg-slate-900 text-slate-400 hover:text-white ml-0.5"
                   title="Reset Zoom & Pan"
                 >
                   <Maximize2 className="h-3 w-3" />
                 </button>
+              </div>
+            </div>
+
+            {/* Sliders: Brush Size & Brush Hardness/Softness */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-slate-800/80 bg-slate-900/60 p-2.5">
+              {/* Brush Size Slider */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between w-24 text-[10.5px] text-slate-300">
+                  <span>Size:</span>
+                  <span className="font-bold text-cyan-400">{brushSize}px</span>
+                </div>
+                <input
+                  type="range"
+                  min="2"
+                  max="100"
+                  step="1"
+                  value={brushSize}
+                  onChange={(e) => setBrushSize(Number(e.target.value))}
+                  className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                />
+                <div className="flex items-center gap-1">
+                  {[6, 16, 32, 60].map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setBrushSize(sz)}
+                      className={`rounded px-1 py-0.5 text-[9px] ${
+                        brushSize === sz
+                          ? "bg-cyan-500 text-black font-bold"
+                          : "bg-slate-800 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Brush Hardness / Softness Slider */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between w-28 text-[10.5px] text-slate-300">
+                  <span>Hardness:</span>
+                  <span className="font-bold text-cyan-400">{brushHardness}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={brushHardness}
+                  onChange={(e) => setBrushHardness(Number(e.target.value))}
+                  className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                />
+                <span className="text-[10px] text-slate-500 font-sans whitespace-nowrap">
+                  {brushHardness <= 25
+                    ? "Feathered"
+                    : brushHardness >= 85
+                    ? "Sharp"
+                    : "Balanced"}
+                </span>
               </div>
             </div>
           </div>
@@ -821,12 +1120,12 @@ export function ColorStudio({
           activeChannel === "pink"
             ? "border-pink-500/40 shadow-[0_0_35px_rgba(255,105,180,0.12)] bg-slate-950"
             : activeChannel === "transparent"
-            ? "border-indigo-500/40 shadow-[0_0_35px_rgba(99,102,241,0.12)] bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] bg-slate-950"
+            ? "border-indigo-500/40 shadow-[0_0_35px_rgba(99,102,241,0.12)] bg-slate-950"
             : activeChannel === "mask"
             ? "border-amber-500/40 shadow-[0_0_35px_rgba(245,158,11,0.12)] bg-black"
             : "border-cyan-500/40 shadow-[0_0_35px_rgba(0,240,255,0.12)] bg-slate-950"
         }`}
-        style={{ minHeight: 380 }}
+        style={{ minHeight: 400 }}
       >
         {/* Reticles */}
         <div className="absolute top-2 left-2 h-3 w-3 border-t-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
@@ -847,10 +1146,12 @@ export function ColorStudio({
         ) : isEditMode ? (
           /* Interactive Mask Painting Canvas */
           <div
-            className="relative overflow-hidden cursor-crosshair flex items-center justify-center"
+            className="relative overflow-hidden flex items-center justify-center"
             style={{
               transform: `scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,
+              transformOrigin: "center center",
               transition: isPanning ? "none" : "transform 0.1s ease-out",
+              cursor: activeTool === "pan" ? "grab" : "crosshair",
             }}
           >
             {activeChannel === "transparent" && (
@@ -870,7 +1171,7 @@ export function ColorStudio({
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp}
+              onPointerCancel={handlePointerUp}
               className="max-h-[460px] max-w-full object-contain rounded-xl shadow-2xl"
               style={{ touchAction: "none" }}
             />
@@ -954,7 +1255,7 @@ export function ColorStudio({
           <Download className="h-4 w-4" />
           <span>
             {activeChannel === "transparent"
-              ? "DOWNLOAD // TRANSPARENT PNG (ALPHA CHANNEL)"
+              ? "Export Transparent PNG (Alpha Channel)"
               : activeChannel === "pink"
               ? "DOWNLOAD // SOLID PINK (#FFF0F5)"
               : activeChannel === "mask"
@@ -967,11 +1268,11 @@ export function ColorStudio({
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1">
           <button
             type="button"
-            onClick={handleDownloadTransparent}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-1.5 text-slate-400 hover:text-white hover:border-slate-700 transition-colors"
+            onClick={handleExportTransparentPng}
+            className="flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-950/60 px-3.5 py-1.5 text-cyan-300 hover:bg-cyan-900/70 hover:text-white transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] font-bold"
           >
-            <Layers className="h-3 w-3" />
-            <span>EXPORT HD TRANSPARENT PNG</span>
+            <Layers className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Export Transparent PNG</span>
           </button>
 
           <button

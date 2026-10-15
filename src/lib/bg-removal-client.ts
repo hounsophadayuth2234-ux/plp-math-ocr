@@ -524,8 +524,15 @@ export async function exportAtFullResolution(
   targetBg: "white" | "pink" | "transparent"
 ): Promise<{ blob: Blob; dataUrl: string; width: number; height: number }> {
   const origBitmap = await createImageBitmap(originalFileOrBlob);
-  const origW = origBitmap.width;
-  const origH = origBitmap.height;
+  const maxSafeDim = 4096;
+  let targetW = origBitmap.width;
+  let targetH = origBitmap.height;
+  if (targetW > maxSafeDim || targetH > maxSafeDim) {
+    const scale = maxSafeDim / Math.max(targetW, targetH);
+    targetW = Math.round(targetW * scale);
+    targetH = Math.round(targetH * scale);
+    console.warn(`Original image (${origBitmap.width}x${origBitmap.height}) clamped to safe export limit: ${targetW}x${targetH}`);
+  }
 
   // Mask canvas
   const maskCanvas = document.createElement("canvas");
@@ -546,30 +553,31 @@ export async function exportAtFullResolution(
   }
   maskCtx.putImageData(maskImgData, 0, 0);
 
-  // Scaled mask canvas to original full resolution
+  // Scaled mask canvas to target resolution
   const scaledMaskCanvas = document.createElement("canvas");
-  scaledMaskCanvas.width = origW;
-  scaledMaskCanvas.height = origH;
+  scaledMaskCanvas.width = targetW;
+  scaledMaskCanvas.height = targetH;
   const scaledMaskCtx = scaledMaskCanvas.getContext("2d");
   if (!scaledMaskCtx) throw new Error("Could not create scaled mask canvas.");
   scaledMaskCtx.imageSmoothingEnabled = true;
   scaledMaskCtx.imageSmoothingQuality = "high";
-  scaledMaskCtx.drawImage(maskCanvas, 0, 0, origW, origH);
+  scaledMaskCtx.drawImage(maskCanvas, 0, 0, targetW, targetH);
 
-  const scaledMaskData = scaledMaskCtx.getImageData(0, 0, origW, origH).data;
+  const scaledMaskData = scaledMaskCtx.getImageData(0, 0, targetW, targetH).data;
 
-  // Output canvas with original dimensions
+  // Output canvas with target dimensions
   const outCanvas = document.createElement("canvas");
-  outCanvas.width = origW;
-  outCanvas.height = origH;
+  outCanvas.width = targetW;
+  outCanvas.height = targetH;
   const outCtx = outCanvas.getContext("2d");
   if (!outCtx) throw new Error("Could not create output canvas.");
 
-  outCtx.drawImage(origBitmap, 0, 0);
-  const outImageData = outCtx.getImageData(0, 0, origW, origH);
+  outCtx.drawImage(origBitmap, 0, 0, targetW, targetH);
+  const outImageData = outCtx.getImageData(0, 0, targetW, targetH);
   const outPixels = outImageData.data;
 
-  const total = origW * origH;
+  const total = targetW * targetH;
+  let hasTransparentPixel = false;
   for (let i = 0; i < total; i++) {
     const pIdx = i * 4;
     const a = scaledMaskData[pIdx];
@@ -579,6 +587,7 @@ export async function exportAtFullResolution(
 
     if (targetBg === "transparent") {
       outPixels[pIdx + 3] = a;
+      if (a === 0) hasTransparentPixel = true;
     } else if (targetBg === "white") {
       const aNorm = a / 255;
       outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
@@ -596,6 +605,10 @@ export async function exportAtFullResolution(
 
   outCtx.putImageData(outImageData, 0, 0);
 
+  if (targetBg === "transparent" && !hasTransparentPixel) {
+    console.warn("Alpha channel verification: no pixels with alpha=0 detected in transparent export.");
+  }
+
   if (typeof origBitmap.close === "function") {
     origBitmap.close();
   }
@@ -604,7 +617,7 @@ export async function exportAtFullResolution(
     outCanvas.toBlob((blob) => {
       if (!blob) return reject(new Error("Failed to create full resolution blob"));
       const dataUrl = URL.createObjectURL(blob);
-      resolve({ blob, dataUrl, width: origW, height: origH });
+      resolve({ blob, dataUrl, width: targetW, height: targetH });
     }, "image/png", 1.0);
   });
 }

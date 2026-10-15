@@ -528,7 +528,7 @@ export default function BgRemoverPage() {
                           ? "RUN HIGH QUALITY WORKER (2048PX)"
                           : processingMode === "final"
                           ? "RUN FINAL CLEAN CUT (2048PX)"
-                          : "RUN FAST PREVIEW (768PX)"}
+                          : "AUTOMATIC CUT // RUN FAST PREVIEW (1024PX)"}
                       </div>
                       <span className="text-[10px] text-slate-400 font-sans">
                         {processingMode === "worker"
