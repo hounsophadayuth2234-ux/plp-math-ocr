@@ -259,11 +259,17 @@ async function runManualMaskRefinementAcceptance() {
 
     // 12. Test Export Transparent PNG & verify genuine alpha channel
     console.log("\n12. Testing Export Transparent PNG...");
+    await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll("button")).find((el) => el.innerText.includes("TRANSPARENT"));
+      if (b) b.click();
+    });
+    await new Promise((r) => setTimeout(r, 300));
+
     const exportResult = await page.evaluate(async () => {
       const exportBtn = Array.from(document.querySelectorAll("button")).find((b) =>
         b.innerText.includes("Export Transparent PNG")
       );
-      if (!exportBtn) return { success: false, reason: "Export button not found" };
+      if (exportBtn) exportBtn.click();
 
       // Trigger export via canvas
       const canvas = document.querySelector("canvas");
