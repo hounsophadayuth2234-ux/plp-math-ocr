@@ -81,8 +81,8 @@ export function ColorStudio({
   width,
   height,
   mode,
-  provider = "@imgly/isnet_fp16",
-  processingLabel = "Browser AI result",
+  provider: _provider = "@imgly/isnet_fp16",
+  processingLabel: _processingLabel = "Browser AI result",
   metrics,
   onReset,
   onRerunFinal,
@@ -93,7 +93,7 @@ export function ColorStudio({
   const [pinkCompositeUrl, setPinkCompositeUrl] = useState<string>("");
   const [currentTransparentUrl, setCurrentTransparentUrl] = useState<string>(transparentUrl);
   const [currentAlphaMaskUrl, setCurrentAlphaMaskUrl] = useState<string>(initialAlphaMaskUrl || "");
-  const [currentTransparentBlob, setCurrentTransparentBlob] = useState<Blob>(transparentBlob);
+  const [, setCurrentTransparentBlob] = useState<Blob>(transparentBlob);
   const [isCompositing, setIsCompositing] = useState(false);
 
   // ── Manual Mask Refinement Studio State ──
@@ -105,7 +105,7 @@ export function ColorStudio({
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [panStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDirty, setIsDirty] = useState(false);
   const [hasAppliedCorrections, setHasAppliedCorrections] = useState(false);
 
@@ -167,10 +167,12 @@ export function ColorStudio({
     }
 
     // Clear undo history & dirty states when a new image or buffer is uploaded
-    setHistory([]);
-    setRedoStack([]);
-    setIsDirty(false);
-    setHasAppliedCorrections(false);
+    queueMicrotask(() => {
+      setHistory([]);
+      setRedoStack([]);
+      setIsDirty(false);
+      setHasAppliedCorrections(false);
+    });
 
     // Initialize offscreen mask canvas
     const offscreen = document.createElement("canvas");
@@ -651,9 +653,12 @@ export function ColorStudio({
   }, [redoStack, redrawCanvas]);
 
   const handleUndoRef = useRef(handleUndo);
-  handleUndoRef.current = handleUndo;
   const handleRedoRef = useRef(handleRedo);
-  handleRedoRef.current = handleRedo;
+
+  useEffect(() => {
+    handleUndoRef.current = handleUndo;
+    handleRedoRef.current = handleRedo;
+  }, [handleUndo, handleRedo]);
 
   // Keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z) - registered only once
   useEffect(() => {
@@ -738,6 +743,7 @@ export function ColorStudio({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    cyberAudio.playMetallicDing();
 
     // Clean up temporary Object URL
     setTimeout(() => {
@@ -804,6 +810,7 @@ export function ColorStudio({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    cyberAudio.playMetallicDing();
 
     setTimeout(() => {
       try {
@@ -827,18 +834,13 @@ export function ColorStudio({
     whiteCompositeUrl,
   ]);
 
-  // Provenance Label
-  const provenanceText = hasAppliedCorrections
-    ? "Manual mask corrections applied"
-    : `${processingLabel} — ${provider}`;
-
   return (
     <div className="flex flex-col gap-4 font-mono">
       {/* ── Status & Provenance Bar ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-none border border-slate-800 bg-slate-950/80 px-4 py-2.5 text-xs">
         <div data-testid="provenance-badge" className="flex flex-wrap items-center gap-2">
           <span
-            className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-950/50 text-cyan-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+            className="inline-flex items-center gap-1.5 rounded-none border border-cyan-500/40 bg-cyan-950/50 text-cyan-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(0,240,255,0.2)]"
           >
             <CheckCircle2 className="h-3 w-3" />
             <span>Browser AI result — @imgly/isnet_fp16</span>
@@ -846,7 +848,7 @@ export function ColorStudio({
           {hasAppliedCorrections && (
             <span
               data-testid="corrections-badge"
-              className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-950/50 text-amber-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+              className="inline-flex items-center gap-1.5 rounded-none border border-amber-500/40 bg-amber-950/50 text-amber-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(245,158,11,0.2)]"
             >
               <Sparkles className="h-3 w-3 text-amber-400" />
               <span>Manual mask corrections applied</span>
@@ -866,7 +868,7 @@ export function ColorStudio({
               cyberAudio.playClick();
               onRerunFinal();
             }}
-            className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-950/40 px-3 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-900/60 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+            className="flex items-center gap-1.5 rounded-none border border-emerald-500/40 bg-emerald-950/40 px-3 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-900/60 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)] uppercase tracking-wider"
           >
             <Sparkles className="h-3 w-3 text-emerald-400" />
             <span>RENDER FINAL CLEAN CUT (2048PX)</span>
@@ -875,19 +877,19 @@ export function ColorStudio({
       </div>
 
       {/* ── Channel & Quality View Controls (Instant Switching < 5ms) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 rounded-xl border border-cyan-500/20 bg-slate-950 p-1.5 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 rounded-none border border-cyan-500/30 bg-slate-950 p-1.5 text-xs">
         {/* 1. White Background */}
         <button
           type="button"
           data-channel="white"
           onClick={() => handleSelectChannel("white")}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
+          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "white"
               ? "bg-slate-900 border border-cyan-400 text-white shadow-[0_0_12px_rgba(0,240,255,0.25)] font-bold"
-              : "text-slate-400 hover:text-white hover:bg-slate-900/40"
+              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
           }`}
         >
-          <span className="h-2 w-2 rounded-full border border-slate-300 bg-white" />
+          <span className="h-2 w-2 rounded-none border border-slate-300 bg-white" />
           <span>WHITE</span>
         </button>
 
@@ -896,14 +898,14 @@ export function ColorStudio({
           type="button"
           data-channel="pink"
           onClick={() => handleSelectChannel("pink")}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
+          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "pink"
               ? "bg-slate-900 border border-pink-400 text-white shadow-[0_0_12px_rgba(255,105,180,0.25)] font-bold"
-              : "text-slate-400 hover:text-white hover:bg-slate-900/40"
+              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
           }`}
         >
           <span
-            className="h-2 w-2 rounded-full border border-pink-300"
+            className="h-2 w-2 rounded-none border border-pink-300"
             style={{ backgroundColor: "#FFF0F5" }}
           />
           <span>PINK</span>
@@ -914,10 +916,10 @@ export function ColorStudio({
           type="button"
           data-channel="transparent"
           onClick={() => handleSelectChannel("transparent")}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
+          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "transparent"
               ? "bg-slate-900 border border-indigo-400 text-white shadow-[0_0_12px_rgba(99,102,241,0.25)] font-bold"
-              : "text-slate-400 hover:text-white hover:bg-slate-900/40"
+              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
           }`}
         >
           <Grid className="h-3 w-3 text-indigo-400" />
@@ -928,10 +930,10 @@ export function ColorStudio({
         <button
           type="button"
           onClick={() => handleSelectChannel("mask")}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
+          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "mask"
               ? "bg-slate-900 border border-amber-400 text-white shadow-[0_0_12px_rgba(245,158,11,0.25)] font-bold"
-              : "text-slate-400 hover:text-white hover:bg-slate-900/40"
+              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
           }`}
           title="Inspect edge alpha & halo boundary (Black = 0, White = 255)"
         >
@@ -943,10 +945,10 @@ export function ColorStudio({
         <button
           type="button"
           onClick={() => handleSelectChannel("original")}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
+          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "original"
               ? "bg-slate-900 border border-slate-500 text-white shadow-[0_0_12px_rgba(148,163,184,0.25)] font-bold"
-              : "text-slate-400 hover:text-white hover:bg-slate-900/40"
+              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
           }`}
         >
           <span>ORIGINAL</span>
@@ -956,10 +958,10 @@ export function ColorStudio({
         <button
           type="button"
           onClick={() => handleSelectChannel("split")}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 transition-all ${
+          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "split"
               ? "bg-slate-900 border border-emerald-400 text-white shadow-[0_0_12px_rgba(16,185,129,0.25)] font-bold"
-              : "text-slate-400 hover:text-white hover:bg-slate-900/40"
+              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
           }`}
         >
           <Sliders className="h-3 w-3 text-emerald-400" />
@@ -968,7 +970,7 @@ export function ColorStudio({
       </div>
 
       {/* ── Manual Mask Refinement Studio Toolbar ── */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-950 p-3.5 text-xs shadow-inner">
+      <div className="flex flex-col gap-3 rounded-none border border-slate-800 bg-slate-950 p-3.5 text-xs shadow-inner">
         {/* Top Control Bar: Studio Toggle, Undo, Redo, Apply & Cancel */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
           <div className="flex items-center gap-2">
@@ -978,7 +980,7 @@ export function ColorStudio({
                 cyberAudio.playClick();
                 setIsEditMode(!isEditMode);
               }}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition-all ${
+              className={`flex items-center gap-1.5 rounded-none px-3 py-1.5 font-bold transition-all font-mono tracking-wider text-xs ${
                 isEditMode
                   ? "bg-cyan-500 text-black shadow-[0_0_15px_rgba(0,240,255,0.4)]"
                   : "border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/50"
@@ -987,18 +989,18 @@ export function ColorStudio({
               <Paintbrush className="h-3.5 w-3.5" />
               <span>{isEditMode ? "MANUAL MASK STUDIO [ACTIVE]" : "EDIT ALPHA MASK TOOLS"}</span>
             </button>
-            <span className="text-[11px] text-slate-500 hidden md:inline">
+            <span className="text-[11px] text-slate-500 hidden md:inline font-mono">
               (Refines alpha mask directly before final compositing)
             </span>
           </div>
 
           {/* Action Buttons: Undo, Redo, Reset Mask, Cancel, Apply Corrections */}
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 font-mono">
             <button
               type="button"
               onClick={handleUndo}
               disabled={history.length === 0}
-              className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 rounded-none border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors tracking-wider uppercase"
               title="Undo stroke (Ctrl+Z)"
             >
               <Undo2 className="h-3 w-3" />
@@ -1008,7 +1010,7 @@ export function ColorStudio({
               type="button"
               onClick={handleRedo}
               disabled={redoStack.length === 0}
-              className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 rounded-none border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors tracking-wider uppercase"
               title="Redo stroke (Ctrl+Y)"
             >
               <Redo2 className="h-3 w-3" />
@@ -1018,7 +1020,7 @@ export function ColorStudio({
             <button
               type="button"
               onClick={handleResetMask}
-              className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-950/40 px-2.5 py-1 text-[10px] text-rose-300 hover:bg-rose-900/60 transition-colors"
+              className="flex items-center gap-1 rounded-none border border-rose-500/30 bg-rose-950/40 px-2.5 py-1 text-[10px] text-rose-300 hover:bg-rose-900/60 transition-colors tracking-wider uppercase"
               title="Reset mask back to initial AI segmentation"
             >
               <RotateCcw className="h-3 w-3" />
@@ -1029,7 +1031,7 @@ export function ColorStudio({
               <button
                 type="button"
                 onClick={handleCancelChanges}
-                className="flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300 hover:text-white transition-colors"
+                className="flex items-center gap-1 rounded-none border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300 hover:text-white transition-colors tracking-wider uppercase"
                 title="Discard unapplied changes"
               >
                 <X className="h-3 w-3" />
@@ -1041,7 +1043,7 @@ export function ColorStudio({
               type="button"
               onClick={handleApplyCorrections}
               disabled={!isDirty && hasAppliedCorrections}
-              className={`flex items-center gap-1 rounded-md px-3 py-1 text-[10px] font-bold transition-all ${
+              className={`flex items-center gap-1 rounded-none px-3 py-1 text-[10px] font-bold transition-all tracking-wider uppercase ${
                 isDirty
                   ? "bg-emerald-500 text-black shadow-[0_0_12px_rgba(16,185,129,0.5)] animate-pulse"
                   : "border border-emerald-500/40 bg-emerald-950/60 text-emerald-300"
@@ -1064,14 +1066,14 @@ export function ColorStudio({
                 <button
                   type="button"
                   onClick={() => setActiveTool("keep")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "keep"
                       ? "bg-emerald-900/90 border border-emerald-400 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.35)]"
                       : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-emerald-300"
                   }`}
                   title="Paints white/opaque (α = 255) to restore missing foreground details"
                 >
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
+                  <span className="h-2 w-2 rounded-none bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
                   <span>Keep Brush</span>
                 </button>
 
@@ -1079,7 +1081,7 @@ export function ColorStudio({
                 <button
                   type="button"
                   onClick={() => setActiveTool("remove")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "remove"
                       ? "bg-rose-900/90 border border-rose-400 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.35)]"
                       : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-rose-300"
@@ -1094,7 +1096,7 @@ export function ColorStudio({
                 <button
                   type="button"
                   onClick={() => setActiveTool("soft")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "soft"
                       ? "bg-cyan-900/90 border border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(0,240,255,0.35)]"
                       : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-cyan-300"
@@ -1109,7 +1111,7 @@ export function ColorStudio({
                 <button
                   type="button"
                   onClick={() => setActiveTool("eraser")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "eraser"
                       ? "bg-sky-900/90 border border-sky-400 text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.35)]"
                       : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-sky-300"
@@ -1124,7 +1126,7 @@ export function ColorStudio({
                 <button
                   type="button"
                   onClick={() => setActiveTool("pan")}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "pan"
                       ? "bg-amber-900/90 border border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.35)]"
                       : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-amber-300"
@@ -1137,7 +1139,7 @@ export function ColorStudio({
               </div>
 
               {/* Zoom Presets: 100%, 200%, 400% */}
-              <div className="flex items-center gap-1 border-l border-slate-800 pl-2">
+              <div className="flex items-center gap-1 border-l border-slate-800 pl-2 font-mono">
                 <span className="text-[10px] text-slate-500 mr-1">ZOOM:</span>
                 {[1, 2, 4].map((z) => (
                   <button
@@ -1147,10 +1149,10 @@ export function ColorStudio({
                       setZoom(z);
                       if (z === 1) setPanOffset({ x: 0, y: 0 });
                     }}
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
+                    className={`rounded-none px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
                       zoom === z
                         ? "bg-cyan-500 text-black"
-                        : "bg-slate-900 text-slate-400 hover:text-white"
+                        : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
                     }`}
                   >
                     {z * 100}%
@@ -1159,7 +1161,7 @@ export function ColorStudio({
                 <button
                   type="button"
                   onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
-                  className="rounded p-1 bg-slate-900 text-slate-400 hover:text-white"
+                  className="rounded-none p-1 bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
                   title="Zoom Out"
                 >
                   <ZoomOut className="h-3 w-3" />
@@ -1167,7 +1169,7 @@ export function ColorStudio({
                 <button
                   type="button"
                   onClick={() => setZoom((z) => Math.min(4, z + 0.5))}
-                  className="rounded p-1 bg-slate-900 text-slate-400 hover:text-white"
+                  className="rounded-none p-1 bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
                   title="Zoom In"
                 >
                   <ZoomIn className="h-3 w-3" />
@@ -1178,7 +1180,7 @@ export function ColorStudio({
                     setZoom(1);
                     setPanOffset({ x: 0, y: 0 });
                   }}
-                  className="rounded p-1 bg-slate-900 text-slate-400 hover:text-white ml-0.5"
+                  className="rounded-none p-1 bg-slate-900 text-slate-400 hover:text-white ml-0.5 border border-slate-800"
                   title="Reset Zoom & Pan"
                 >
                   <Maximize2 className="h-3 w-3" />
@@ -1187,7 +1189,7 @@ export function ColorStudio({
             </div>
 
             {/* Sliders: Brush Size & Brush Hardness/Softness */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-slate-800/80 bg-slate-900/60 p-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-none border border-slate-800 bg-slate-900/60 p-2.5 font-mono">
               {/* Brush Size Slider */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-between w-24 text-[10.5px] text-slate-300">
@@ -1201,7 +1203,7 @@ export function ColorStudio({
                   step="1"
                   value={brushSize}
                   onChange={(e) => setBrushSize(Number(e.target.value))}
-                  className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-none appearance-none"
                 />
                 <div className="flex items-center gap-1">
                   {[6, 16, 32, 60].map((sz) => (
@@ -1209,7 +1211,7 @@ export function ColorStudio({
                       key={sz}
                       type="button"
                       onClick={() => setBrushSize(sz)}
-                      className={`rounded px-1 py-0.5 text-[9px] ${
+                      className={`rounded-none px-1 py-0.5 text-[9px] border border-slate-800 ${
                         brushSize === sz
                           ? "bg-cyan-500 text-black font-bold"
                           : "bg-slate-800 text-slate-400 hover:text-white"
@@ -1234,9 +1236,9 @@ export function ColorStudio({
                   step="5"
                   value={brushHardness}
                   onChange={(e) => setBrushHardness(Number(e.target.value))}
-                  className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-none appearance-none"
                 />
-                <span className="text-[10px] text-slate-500 font-sans whitespace-nowrap">
+                <span className="text-[10px] text-slate-500 font-mono whitespace-nowrap">
                   {brushHardness <= 25
                     ? "Feathered"
                     : brushHardness >= 85
@@ -1251,7 +1253,7 @@ export function ColorStudio({
 
       {/* ── Holographic Preview Deck with Transparent Checkerboard ── */}
       <div
-        className={`relative flex items-center justify-center overflow-hidden rounded-2xl border p-4 transition-all duration-300 ${
+        className={`relative flex items-center justify-center overflow-hidden rounded-none border p-4 transition-all duration-300 font-mono ${
           activeChannel === "pink"
             ? "border-pink-500/40 shadow-[0_0_35px_rgba(255,105,180,0.12)] bg-slate-950"
             : activeChannel === "transparent"
@@ -1263,10 +1265,39 @@ export function ColorStudio({
         style={{ minHeight: 400 }}
       >
         {/* Reticles */}
-        <div className="absolute top-2 left-2 h-3 w-3 border-t-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
-        <div className="absolute top-2 right-2 h-3 w-3 border-t-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
-        <div className="absolute bottom-2 left-2 h-3 w-3 border-b-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
-        <div className="absolute bottom-2 right-2 h-3 w-3 border-b-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
+        <div className="absolute top-1.5 left-1.5 h-3 w-3 border-t-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
+        <div className="absolute top-1.5 right-1.5 h-3 w-3 border-t-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
+        <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
+        <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
+
+        {/* Corner HUD Telemetry Badges */}
+        <div className="pointer-events-none absolute top-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+          <span className="text-slate-500">RES:</span>
+          <span className="text-white font-bold">{width}×{height}PX</span>
+        </div>
+        <div className="pointer-events-none absolute top-2 right-2 z-20 flex items-center gap-1.5 border border-slate-700 bg-slate-950/85 px-2 py-0.5 text-[10px] text-slate-300 font-mono">
+          <span
+            className={`h-1.5 w-1.5 rounded-none ${
+              isCompositing
+                ? "bg-amber-400 animate-ping"
+                : isDirty
+                ? "bg-amber-400"
+                : "bg-emerald-400 animate-pulse"
+            }`}
+          />
+          <span className="text-slate-500">STATUS:</span>
+          <span className="font-bold text-white">
+            {isCompositing ? "COMPOSITING" : isDirty ? "MODIFIED" : "READY"}
+          </span>
+        </div>
+        <div className="pointer-events-none absolute bottom-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+          <span className="text-slate-500">ENGINE:</span>
+          <span className="text-white font-bold">@IMGLY/ISNET_FP16</span>
+        </div>
+        <div className="pointer-events-none absolute bottom-2 right-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+          <span className="text-slate-500">ZOOM:</span>
+          <span className="text-white font-bold">{Math.round(zoom * 100)}%</span>
+        </div>
 
         {/* View Mode: Split Comparison Slider vs Interactive Canvas vs Image */}
         {activeChannel === "split" ? (
@@ -1291,7 +1322,7 @@ export function ColorStudio({
           >
             {activeChannel === "transparent" && (
               <div
-                className="absolute inset-0 rounded-xl opacity-40 pointer-events-none"
+                className="absolute inset-0 rounded-none opacity-40 pointer-events-none"
                 style={{
                   backgroundImage: `linear-gradient(45deg, #334155 25%, transparent 25%), 
                                     linear-gradient(-45deg, #334155 25%, transparent 25%), 
@@ -1307,7 +1338,7 @@ export function ColorStudio({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              className="max-h-[460px] max-w-full object-contain rounded-xl shadow-2xl"
+              className="max-h-[460px] max-w-full object-contain rounded-none shadow-2xl"
               style={{ touchAction: "none" }}
             />
           </div>
@@ -1316,7 +1347,7 @@ export function ColorStudio({
           <div className="relative z-10 flex items-center justify-center">
             {activeChannel === "transparent" && (
               <div
-                className="absolute inset-0 rounded-xl opacity-40 pointer-events-none"
+                className="absolute inset-0 rounded-none opacity-40 pointer-events-none"
                 style={{
                   backgroundImage: `linear-gradient(45deg, #334155 25%, transparent 25%), 
                                     linear-gradient(-45deg, #334155 25%, transparent 25%), 
@@ -1332,18 +1363,18 @@ export function ColorStudio({
               src={activeDisplayUrl}
               alt="Composite Render"
               data-active-channel={activeChannel}
-              className="max-h-[460px] max-w-full object-contain rounded-xl shadow-2xl transition-all"
+              className="max-h-[460px] max-w-full object-contain rounded-none shadow-2xl transition-all"
             />
           </div>
         )}
       </div>
 
       {/* ── Telemetry HUD & Download Actions ── */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
+      <div className="rounded-none border border-slate-800 bg-slate-900/80 p-4 space-y-3 font-mono">
         <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-2">
           <span className="flex items-center gap-1.5">
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
+              className={`h-1.5 w-1.5 rounded-none ${
                 activeChannel === "pink"
                   ? "bg-pink-400"
                   : activeChannel === "mask"
@@ -1379,7 +1410,7 @@ export function ColorStudio({
           data-testid="primary-download"
           onClick={handleDownload}
           disabled={isCompositing}
-          className={`flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-xs font-black tracking-wider uppercase text-white shadow-lg transition-all duration-200 active:scale-[0.98] ${
+          className={`flex w-full items-center justify-center gap-2 rounded-none px-5 py-3.5 text-xs font-black tracking-wider uppercase text-white shadow-lg transition-all duration-200 active:scale-[0.98] font-mono ${
             activeChannel === "pink"
               ? "bg-gradient-to-r from-pink-600 via-rose-600 to-fuchsia-600 shadow-pink-900/40 hover:shadow-pink-500/25 ring-1 ring-pink-400/40"
               : activeChannel === "transparent"
@@ -1400,11 +1431,11 @@ export function ColorStudio({
         </button>
 
         {/* Secondary Download Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 font-mono">
           <button
             type="button"
             onClick={handleExportTransparentPng}
-            className="flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-950/60 px-3.5 py-1.5 text-cyan-300 hover:bg-cyan-900/70 hover:text-white transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] font-bold"
+            className="flex items-center gap-1.5 rounded-none border border-cyan-500/40 bg-cyan-950/60 px-3.5 py-1.5 text-cyan-300 hover:bg-cyan-900/70 hover:text-white transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] font-bold tracking-wider uppercase"
           >
             <Layers className="h-3.5 w-3.5 text-cyan-400" />
             <span>Export Transparent PNG</span>
@@ -1413,7 +1444,7 @@ export function ColorStudio({
           <button
             type="button"
             onClick={onReset}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-1.5 text-slate-400 hover:text-rose-300 hover:border-rose-500/30 transition-colors"
+            className="flex items-center gap-1.5 rounded-none border border-slate-800 bg-slate-950/80 px-3 py-1.5 text-slate-400 hover:text-rose-300 hover:border-rose-500/30 transition-colors tracking-wider uppercase"
           >
             <RefreshCw className="h-3 w-3" />
             <span>RESET HUD</span>

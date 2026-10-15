@@ -1,0 +1,73 @@
+{
+  "audioControls": {
+    "hasMuteBtn": true,
+    "muteBtnText": "AUDIO",
+    "hasVolSlider": true,
+    "sliderVal": "0.7",
+    "hasFontMonoClass": true
+  },
+  "borderRadii": {
+    "totalElementsChecked": 24,
+    "nonZeroCount": 0,
+    "sampleNonZero": []
+  },
+  "colorStudioHud": {
+    "hasResBadge": true,
+    "resText": "PLP math contentPLPDYT ECOSYSTEMWorkspaceផ្ទាំងគ្រប់គ្រងActive Modules (2)01សរសេរកូដ LaTeX, Jodit HTML, MathMLGemini Vision (Active)02កាត់រូបភាពBrowser-First AINOTE: Modules 03–04 are temporarily under maintenance.DYT ECOSYSTEM (4 Nodes)LINKEDD1D2D3D4PLP SECUREMOD 02កាត់រូបភាព (សំណួរ & ដំណោះស្រាយ)// @imgly/isnet Browser Model + Local CanvasAPI KeysSYS://RETURN_DASHBOARDAUDIO|70%BROWSER AI: ONLINEFast Preview (1024px)// SEGMENTATION_CONFIGMODULE 02MODEL SELECTION LAYERSELECT_ENGINEFast PreviewISNet FP16 · 1024pxClean CutISNet FP16 · 2048pxRemote WorkerOptional WorkerFAST PREVIEW (DEFAULT): @IMGLY/ISNET_FP16 (1024PX MAX). CACHED INFERENCE, ZERO EROSION, SUB-PIXEL MATTING.SOURCE INPUTPNG · JPG · WEBP01-portrait-black-hair-pink-bg.png[4 KB] REMOVEAUTOMATIC CUT // RUN FAST PREVIEW (1024PX)High-speed preview · browser model caching[ENGAGE]Browser AI result — @imgly/isnet_fp16·Engine: @imgly/isnet_fp16RENDER FINAL CLEAN CUT (2048PX)WHITEPINKTRANSPARENTMASK DEBUGORIGINALSPLIT SLIDERMANUAL MASK STUDIO [ACTIVE](Refines alpha mask directly before final compositing)UndoRedoReset MaskApply CorrectionsKeep BrushRemove BrushSoft Edge BrushEraserPanZOOM:100%200%400%Size:20px6163260Hardness:80%BalancedRES:400×500PXSTATUS:READYENGINE:@IMGLY/ISNET_FP16ZOOM:100%VIEW: white (#FFFFFF)Inference: 34700ms400 × 500 PX · PREVIEW BUFFERDOWNLOAD // SOLID WHITE (#FFFFFF)Export Transparent PNGRESET HUD",
+    "hasStatusBadge": true,
+    "statusText": "PLP math contentPLPDYT ECOSYSTEMWorkspaceផ្ទាំងគ្រប់គ្រងActive Modules (2)01សរសេរកូដ LaTeX, Jodit HTML, MathMLGemini Vision (Active)02កាត់រូបភាពBrowser-First AINOTE: Modules 03–04 are temporarily under maintenance.DYT ECOSYSTEM (4 Nodes)LINKEDD1D2D3D4PLP SECUREMOD 02កាត់រូបភាព (សំណួរ & ដំណោះស្រាយ)// @imgly/isnet Browser Model + Local CanvasAPI KeysSYS://RETURN_DASHBOARDAUDIO|70%BROWSER AI: ONLINEFast Preview (1024px)// SEGMENTATION_CONFIGMODULE 02MODEL SELECTION LAYERSELECT_ENGINEFast PreviewISNet FP16 · 1024pxClean CutISNet FP16 · 2048pxRemote WorkerOptional WorkerFAST PREVIEW (DEFAULT): @IMGLY/ISNET_FP16 (1024PX MAX). CACHED INFERENCE, ZERO EROSION, SUB-PIXEL MATTING.SOURCE INPUTPNG · JPG · WEBP01-portrait-black-hair-pink-bg.png[4 KB] REMOVEAUTOMATIC CUT // RUN FAST PREVIEW (1024PX)High-speed preview · browser model caching[ENGAGE]Browser AI result — @imgly/isnet_fp16·Engine: @imgly/isnet_fp16RENDER FINAL CLEAN CUT (2048PX)WHITEPINKTRANSPARENTMASK DEBUGORIGINALSPLIT SLIDERMANUAL MASK STUDIO [ACTIVE](Refines alpha mask directly before final compositing)UndoRedoReset MaskApply CorrectionsKeep BrushRemove BrushSoft Edge BrushEraserPanZOOM:100%200%400%Size:20px6163260Hardness:80%BalancedRES:400×500PXSTATUS:READYENGINE:@IMGLY/ISNET_FP16ZOOM:100%VIEW: white (#FFFFFF)Inference: 34700ms400 × 500 PX · PREVIEW BUFFERDOWNLOAD // SOLID WHITE (#FFFFFF)Export Transparent PNGRESET HUD",
+    "hasEngineBadge": true,
+    "engineText": "PLP math contentPLPDYT ECOSYSTEMWorkspaceផ្ទាំងគ្រប់គ្រងActive Modules (2)01សរសេរកូដ LaTeX, Jodit HTML, MathMLGemini Vision (Active)02កាត់រូបភាពBrowser-First AINOTE: Modules 03–04 are temporarily under maintenance.DYT ECOSYSTEM (4 Nodes)LINKEDD1D2D3D4PLP SECUREMOD 02កាត់រូបភាព (សំណួរ & ដំណោះស្រាយ)// @imgly/isnet Browser Model + Local CanvasAPI KeysSYS://RETURN_DASHBOARDAUDIO|70%BROWSER AI: ONLINEFast Preview (1024px)// SEGMENTATION_CONFIGMODULE 02MODEL SELECTION LAYERSELECT_ENGINEFast PreviewISNet FP16 · 1024pxClean CutISNet FP16 · 2048pxRemote WorkerOptional WorkerFAST PREVIEW (DEFAULT): @IMGLY/ISNET_FP16 (1024PX MAX). CACHED INFERENCE, ZERO EROSION, SUB-PIXEL MATTING.SOURCE INPUTPNG · JPG · WEBP01-portrait-black-hair-pink-bg.png[4 KB] REMOVEAUTOMATIC CUT // RUN FAST PREVIEW (1024PX)High-speed preview · browser model caching[ENGAGE]Browser AI result — @imgly/isnet_fp16·Engine: @imgly/isnet_fp16RENDER FINAL CLEAN CUT (2048PX)WHITEPINKTRANSPARENTMASK DEBUGORIGINALSPLIT SLIDERMANUAL MASK STUDIO [ACTIVE](Refines alpha mask directly before final compositing)UndoRedoReset MaskApply CorrectionsKeep BrushRemove BrushSoft Edge BrushEraserPanZOOM:100%200%400%Size:20px6163260Hardness:80%BalancedRES:400×500PXSTATUS:READYENGINE:@IMGLY/ISNET_FP16ZOOM:100%VIEW: white (#FFFFFF)Inference: 34700ms400 × 500 PX · PREVIEW BUFFERDOWNLOAD // SOLID WHITE (#FFFFFF)Export Transparent PNGRESET HUD",
+    "hasZoomBadge": true,
+    "zoomText": "PLP math contentPLPDYT ECOSYSTEMWorkspaceផ្ទាំងគ្រប់គ្រងActive Modules (2)01សរសេរកូដ LaTeX, Jodit HTML, MathMLGemini Vision (Active)02កាត់រូបភាពBrowser-First AINOTE: Modules 03–04 are temporarily under maintenance.DYT ECOSYSTEM (4 Nodes)LINKEDD1D2D3D4PLP SECUREMOD 02កាត់រូបភាព (សំណួរ & ដំណោះស្រាយ)// @imgly/isnet Browser Model + Local CanvasAPI KeysSYS://RETURN_DASHBOARDAUDIO|70%BROWSER AI: ONLINEFast Preview (1024px)// SEGMENTATION_CONFIGMODULE 02MODEL SELECTION LAYERSELECT_ENGINEFast PreviewISNet FP16 · 1024pxClean CutISNet FP16 · 2048pxRemote WorkerOptional WorkerFAST PREVIEW (DEFAULT): @IMGLY/ISNET_FP16 (1024PX MAX). CACHED INFERENCE, ZERO EROSION, SUB-PIXEL MATTING.SOURCE INPUTPNG · JPG · WEBP01-portrait-black-hair-pink-bg.png[4 KB] REMOVEAUTOMATIC CUT // RUN FAST PREVIEW (1024PX)High-speed preview · browser model caching[ENGAGE]Browser AI result — @imgly/isnet_fp16·Engine: @imgly/isnet_fp16RENDER FINAL CLEAN CUT (2048PX)WHITEPINKTRANSPARENTMASK DEBUGORIGINALSPLIT SLIDERMANUAL MASK STUDIO [ACTIVE](Refines alpha mask directly before final compositing)UndoRedoReset MaskApply CorrectionsKeep BrushRemove BrushSoft Edge BrushEraserPanZOOM:100%200%400%Size:20px6163260Hardness:80%BalancedRES:400×500PXSTATUS:READYENGINE:@IMGLY/ISNET_FP16ZOOM:100%VIEW: white (#FFFFFF)Inference: 34700ms400 × 500 PX · PREVIEW BUFFERDOWNLOAD // SOLID WHITE (#FFFFFF)Export Transparent PNGRESET HUD",
+    "allStudioButtonsZeroRadius": false,
+    "sampleButtons": [
+      {
+        "text": "",
+        "borderRadius": "8px"
+      },
+      {
+        "text": "",
+        "borderRadius": "8px"
+      },
+      {
+        "text": "API Keys",
+        "borderRadius": "12px"
+      },
+      {
+        "text": "AUDIO",
+        "borderRadius": "0px"
+      },
+      {
+        "text": "Fast PreviewISNet FP16 · ",
+        "borderRadius": "0px"
+      },
+      {
+        "text": "Clean CutISNet FP16 · 204",
+        "borderRadius": "0px"
+      },
+      {
+        "text": "Remote WorkerOptional Wor",
+        "borderRadius": "0px"
+      },
+      {
+        "text": "REMOVE",
+        "borderRadius": "0px"
+      },
+      {
+        "text": "AUTOMATIC CUT // RUN FAST",
+        "borderRadius": "0px"
+      },
+      {
+        "text": "RENDER FINAL CLEAN CUT (2",
+        "borderRadius": "0px"
+      }
+    ]
+  },
+  "audioToggleResult": {
+    "toggled": true,
+    "afterMute": "AUDIO",
+    "afterUnmute": "AUDIO"
+  },
+  "timestamp": "2026-10-15T08:46:13.993Z"
+}
