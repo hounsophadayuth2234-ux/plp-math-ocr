@@ -26,6 +26,7 @@ async function runProductionWorkflowVerification() {
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
+      "--enable-features=WebGPU",
       "--enable-webgl",
       "--ignore-gpu-blocklist",
     ],
