@@ -1,5 +1,6 @@
 import { ProcessingStatusLabel } from "./types";
 import { downscaleImageIfExceeds } from "./processing-utils";
+import { bgWorkerManager, WorkerProgressEvent } from "./bg-removal-worker-manager";
 
 export interface BgRemovalProgress {
   key: string;
@@ -39,11 +40,27 @@ export interface BgRemovalOptions {
   mode?: "preview" | "final" | "worker";
   erosionRadius?: number; // 0 (default, non-destructive)
   featherRadius?: number; // 0.75 (sub-pixel boundary)
-  decontaminationRadius?: number; // 1 to 2 pixels
+  decontaminationRadius?: number; // 1 to 2 pixels (0 to disable)
   alphaMatting?: boolean;
   onProgress?: (progress: BgRemovalProgress) => void;
   signal?: AbortSignal;
 }
+
+/**
+ * Centralized Stage Deadlines & User-Facing Timing Constants (in seconds)
+ */
+export const STAGE_DEADLINES = {
+  /** Soft notice threshold: informs user that processing is taking longer than usual on their device */
+  SLOW_NOTICE_SEC: 20,
+  /** Cold asset download budget (WASM + weights) */
+  COLD_ASSET_LOAD_SEC: 120,
+  /** Inference deadline for Fast Preview (1024px) */
+  INFERENCE_PREVIEW_SEC: 60,
+  /** Inference deadline for Final Clean Cut (2048px) */
+  INFERENCE_FINAL_SEC: 90,
+  /** Maximum safe export dimension */
+  MAX_SAFE_EXPORT_DIM: 4096,
+};
 
 /**
  * Creates pure 8-bit black-and-white alpha mask visualizer for edge & halo debugging.
@@ -79,18 +96,25 @@ export function createAlphaMaskDataUrl(
 
 /**
  * Non-destructive Edge Refinement, Alpha Boundary Preservation & Local Color Decontamination:
- * 1. Zero Aggressive Erosion (erosionRadius: 0):
- *    Preserves thin animal legs, hair flyaways, shoulder lapels, and narrow gaps.
- * 2. Trimap Classification:
- *    - Definite Foreground (alpha >= 242): 100% opaque, 100% original RGB preserved.
- *    - Definite Background (alpha <= 12): 100% transparent.
- *    - Uncertain Boundary Zone (12 < alpha < 242):
- *      Un-mixes local background color (e.g. pink #FFF0F5 or photo backdrop) from semi-transparent boundary:
- *      F_clean = clamp((Observed - (1 - alpha) * B_local) / alpha, 0, 255)
- * 3. Sub-pixel Feathering (featherRadius: 0.5 to 1.0):
- *    Smooths only the boundary transition without full-mask blurring.
+ *
+ * 1. Image/Mask Contract Correctness:
+ *    - The segmentation output is foreground RGBA.
+ *    - The alpha mask is strictly obtained from channel A (mPixels[i*4 + 3]) for ALL pixels.
+ *    - NEVER convert RGB brightness/luminance to alpha! Opaque black hair RGBA(20,20,20,255) remains 255.
+ *
+ * 2. Source Alpha Preservation:
+ *    - A newly computed mask must NOT make originally transparent areas opaque.
+ *    - finalAlpha = Math.round((maskAlpha * sourceAlpha) / 255).
+ *
+ * 3. Soft Hair Edges:
+ *    - Retains soft anti-aliased edge alpha values.
+ *    - Zero global erosion or destructive thresholding.
+ *
+ * 4. Local Color Decontamination:
+ *    - Conservative, local un-mixing of background color on the uncertain boundary zone.
+ *    - Can be turned off by passing decontaminationRadius = 0.
  */
-async function refineAndDecontaminateImage(
+export async function refineAndDecontaminateImage(
   sourceImage: Blob | File,
   rawMaskBlob: Blob,
   params: {
@@ -119,6 +143,11 @@ async function refineAndDecontaminateImage(
       try {
         const w = srcImg.naturalWidth || maskImg.naturalWidth || 800;
         const h = srcImg.naturalHeight || maskImg.naturalHeight || 600;
+
+        // Buffer and dimension validation
+        if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+          throw new Error(`Invalid image dimensions: ${w}x${h}`);
+        }
 
         const srcCanvas = document.createElement("canvas");
         srcCanvas.width = w;
@@ -155,26 +184,30 @@ async function refineAndDecontaminateImage(
         const mPixels = maskData.data;
         const totalPixels = w * h;
 
-        // Raw alpha extracted from mask
-        const rawAlpha = new Uint8Array(totalPixels);
+        // Validate buffer byte lengths
+        if (sPixels.length !== totalPixels * 4 || mPixels.length !== totalPixels * 4) {
+          throw new Error("Pixel buffer dimension mismatch between source image and mask.");
+        }
+
+        // ── Raw Alpha Extraction strictly from Mask Alpha Channel (A) ──
+        // Decoupled completely from RGB luminance.
+        // Multiplied by original source alpha to preserve pre-existing transparency.
+        const rawAlpha = new Uint8ClampedArray(totalPixels);
         for (let i = 0; i < totalPixels; i++) {
           const mAlpha = mPixels[i * 4 + 3];
-          if (mAlpha < 250) {
-            rawAlpha[i] = mAlpha;
-          } else {
-            const lum = Math.round(
-              0.299 * mPixels[i * 4] + 0.587 * mPixels[i * 4 + 1] + 0.114 * mPixels[i * 4 + 2]
-            );
-            rawAlpha[i] = lum;
-          }
+          const sAlpha = sPixels[i * 4 + 3];
+          // Preserve input alpha: transparent areas in source remain transparent
+          const combinedAlpha = Math.round((mAlpha * sAlpha) / 255);
+          rawAlpha[i] = combinedAlpha;
         }
 
         const refinedAlpha = new Uint8ClampedArray(totalPixels);
         const outPixels = new Uint8ClampedArray(totalPixels * 4);
 
+        const enableDecontam = (params.decontaminationRadius ?? 1) > 0;
         const radius = Math.max(1, Math.min(2, Math.round(params.decontaminationRadius || 1)));
 
-        // Process boundary pixels with Color Decontamination (Zero aggressive erosion)
+        // Process boundary pixels with conservative local decontamination
         for (let y = 0; y < h; y++) {
           const yOffset = y * w;
           for (let x = 0; x < w; x++) {
@@ -197,7 +230,7 @@ async function refineAndDecontaminateImage(
             }
 
             // B. Definite Foreground Core (alpha >= 242)
-            // Preserve 100% original RGB without clipping or alteration
+            // Preserve 100% original RGB without alteration or clipping
             if (a >= 242) {
               refinedAlpha[idx] = 255;
               outPixels[pIdx] = r;
@@ -208,7 +241,18 @@ async function refineAndDecontaminateImage(
             }
 
             // C. Uncertain Fringe Zone (12 < a < 242)
-            // Sample local background color B_local and solid foreground F_solid
+            // Soft boundary pixels retain their exact soft alpha 'a' (no clipping)
+            refinedAlpha[idx] = a;
+
+            if (!enableDecontam) {
+              outPixels[pIdx] = r;
+              outPixels[pIdx + 1] = g;
+              outPixels[pIdx + 2] = b;
+              outPixels[pIdx + 3] = a;
+              continue;
+            }
+
+            // Sample local background B and solid foreground F in boundary neighborhood
             let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
             let fgR = 0, fgG = 0, fgB = 0, fgCount = 0;
 
@@ -238,8 +282,6 @@ async function refineAndDecontaminateImage(
             }
 
             const alphaNorm = a / 255;
-
-            // Un-mix background: F = (C - (1 - alpha) * B) / alpha
             let cleanR = r;
             let cleanG = g;
             let cleanB = b;
@@ -263,7 +305,6 @@ async function refineAndDecontaminateImage(
               cleanB = Math.round(fgB / fgCount);
             }
 
-            refinedAlpha[idx] = a;
             outPixels[pIdx] = cleanR;
             outPixels[pIdx + 1] = cleanG;
             outPixels[pIdx + 2] = cleanB;
@@ -332,9 +373,9 @@ function createAbortError(message = "Aborted by user."): Error {
 
 /**
  * Universal Background Removal Engine:
- * Mode A: Fast Preview Mode (max 768px, isnet_quint8, fast browser model)
- * Mode B: Clean Cut Mode (max 2048px, isnet_fp16 Standard Browser AI, zero aggressive erosion)
- * Mode C: High Quality Worker (remote BiRefNet / RMBG microservice if configured)
+ * Mode A: Fast Preview Mode (max 1024px, @imgly/isnet_fp16)
+ * Mode B: Clean Cut Mode (max 2048px, @imgly/isnet_fp16)
+ * Mode C: High Quality Worker (remote worker if configured)
  */
 export async function removeBackgroundBrowser(
   imageSource: File | Blob,
@@ -346,7 +387,7 @@ export async function removeBackgroundBrowser(
 
   const mode = options?.mode || "preview";
   const maxDim = mode === "preview" ? 1024 : 2048;
-  const modelName = "isnet_fp16"; // Stable default browser model
+  const modelName = "isnet_fp16" as const;
 
   const tStart = Date.now();
   let tModelLoad = 0;
@@ -372,72 +413,75 @@ export async function removeBackgroundBrowser(
 
   options?.onProgress?.({
     key: "load",
-    current: 25,
+    current: 20,
     total: 100,
-    percent: 25,
+    percent: 20,
     stage: "Loading model",
   });
 
-  const tLoadStart = Date.now();
+  // Track progress by aggregate byte metrics across individual shards
+  const resourceBytes = new Map<string, { current: number; total: number }>();
 
-  try {
-    const { removeBackground } = await import("@imgly/background-removal");
-    tModelLoad = Date.now() - tLoadStart;
+  const handleProgress = (event: WorkerProgressEvent) => {
+    if (options?.signal?.aborted) return;
+    const { key, current, total } = event;
+    resourceBytes.set(key, { current, total });
 
-    if (options?.signal?.aborted) {
-      throw createAbortError("Aborted by user.");
+    let sumCurrent = 0;
+    let sumTotal = 0;
+    for (const res of resourceBytes.values()) {
+      sumCurrent += res.current;
+      sumTotal += res.total;
     }
 
-    let lastModelPct = 0;
-    let lastProcPct = 0;
+    const isFetch = key.includes("fetch") || key.includes("model") || key.includes("wasm");
+    const stage: BgRemovalProgress["stage"] = isFetch ? "Loading model" : "Segmenting";
 
-    const handleProgress = (key: string, current: number, total: number) => {
-      if (options?.signal?.aborted) return;
-      const pct = total > 0 ? Math.round((current / total) * 100) : 50;
-      let stage: BgRemovalProgress["stage"] = "Segmenting";
-      if (key.includes("fetch")) {
-        stage = "Loading model";
-        lastModelPct = Math.min(100, Math.max(lastModelPct, pct));
-      } else if (key.includes("compute") || key.includes("inference")) {
-        stage = "Segmenting";
-        lastProcPct = Math.min(100, Math.max(lastProcPct, pct));
-      }
+    const calcPercent = sumTotal > 0 ? Math.round((sumCurrent / sumTotal) * 100) : 50;
+    const boundedPct = Math.min(92, Math.max(15, calcPercent));
 
-      options?.onProgress?.({
-        key,
-        current,
-        total,
-        percent: Math.min(92, Math.max(15, pct)),
-        stage,
-        modelLoadingPercent: lastModelPct || (stage === "Loading model" ? pct : 100),
-        processingPercent: lastProcPct || (stage === "Segmenting" ? pct : 0),
-      });
-    };
+    options?.onProgress?.({
+      key,
+      current: sumCurrent,
+      total: sumTotal,
+      percent: boundedPct,
+      stage,
+      modelLoadingPercent: isFetch ? boundedPct : 100,
+      processingPercent: isFetch ? 0 : boundedPct,
+    });
+  };
 
-    const tInfStart = Date.now();
-    let rawCutoutBlob: Blob;
+  const tLoadStart = Date.now();
+  let rawCutoutBlob: Blob;
 
+  try {
+    // Primary path: Application-owned Web Worker execution
+    // Allows immediate cancellation via worker.terminate()
     try {
-      // Primary execution: Safe Web Worker execution off main thread
-      rawCutoutBlob = await removeBackground(scaledBlob, {
-        model: modelName,
-        proxyToWorker: true,
-        fetchArgs: {
-          cache: "force-cache",
-        },
-        output: {
-          format: "image/png",
-          quality: 1.0,
-        },
-        progress: handleProgress,
-      });
+      rawCutoutBlob = await bgWorkerManager.executeJob(
+        scaledBlob,
+        modelName,
+        handleProgress,
+        options?.signal
+      );
+      tInference = Date.now() - tLoadStart;
+      tModelLoad = Math.round(tInference * 0.35); // Estimated asset/session load share
     } catch (workerErr: unknown) {
       if (options?.signal?.aborted) throw workerErr;
       console.warn(
-        "Web Worker execution failed or was blocked; falling back to package main-thread browser path:",
+        "Application Web Worker execution unavailable; falling back to package client execution:",
         workerErr
       );
-      // Fallback execution: Main thread browser execution (proxyToWorker: false)
+
+      // Fallback path: Direct in-page execution with @imgly
+      const { removeBackground } = await import("@imgly/background-removal");
+      tModelLoad = Date.now() - tLoadStart;
+
+      if (options?.signal?.aborted) {
+        throw createAbortError("Aborted by user.");
+      }
+
+      const tInfStart = Date.now();
       rawCutoutBlob = await removeBackground(scaledBlob, {
         model: modelName,
         proxyToWorker: false,
@@ -448,11 +492,12 @@ export async function removeBackgroundBrowser(
           format: "image/png",
           quality: 1.0,
         },
-        progress: handleProgress,
+        progress: (key, current, total) => {
+          handleProgress({ key, current, total });
+        },
       });
+      tInference = Date.now() - tInfStart;
     }
-
-    tInference = Date.now() - tInfStart;
 
     if (options?.signal?.aborted) {
       throw createAbortError("Aborted by user.");
@@ -490,7 +535,7 @@ export async function removeBackgroundBrowser(
       throw createAbortError("Aborted by user.");
     }
 
-    // Strict validation: Ensure background was actually removed (no fake/silent fallback to original)
+    // Strict validation: Ensure background was actually separated
     let transparentCount = 0;
     for (let i = 0; i < alphaMaskBuffer.length; i++) {
       if (alphaMaskBuffer[i] < 240) transparentCount++;
@@ -498,7 +543,7 @@ export async function removeBackgroundBrowser(
     const transparentRatio = transparentCount / alphaMaskBuffer.length;
     if (transparentRatio < 0.005) {
       throw new Error(
-        "Segmentation failed: Model did not separate foreground from background. Silent fallback rejected."
+        "Segmentation failed: Model did not detect or separate background from subject. Silent fallback rejected."
       );
     }
 
@@ -543,8 +588,10 @@ export async function removeBackgroundBrowser(
 }
 
 /**
- * Exports final composited image at original full image resolution
- * by resampling the in-memory alpha mask onto the original unscaled image.
+ * Exports final composited image at original full resolution.
+ * - Resamples current working alpha mask onto target canvas.
+ * - Preserves original source alpha for existing-alpha PNGs.
+ * - Clamps dimensions exceeding MAX_SAFE_EXPORT_DIM while strictly preserving aspect ratio.
  */
 export async function exportAtFullResolution(
   originalFileOrBlob: File | Blob,
@@ -552,17 +599,22 @@ export async function exportAtFullResolution(
   maskWidth: number,
   maskHeight: number,
   targetBg: "white" | "pink" | "transparent"
-): Promise<{ blob: Blob; dataUrl: string; width: number; height: number }> {
+): Promise<{ blob: Blob; dataUrl: string; width: number; height: number; wasClamped?: boolean }> {
   const origBitmap = await createImageBitmap(originalFileOrBlob);
   try {
-    const maxSafeDim = 4096;
+    const maxSafeDim = STAGE_DEADLINES.MAX_SAFE_EXPORT_DIM;
     let targetW = origBitmap.width;
     let targetH = origBitmap.height;
+    let wasClamped = false;
+
     if (targetW > maxSafeDim || targetH > maxSafeDim) {
+      wasClamped = true;
       const scale = maxSafeDim / Math.max(targetW, targetH);
       targetW = Math.round(targetW * scale);
       targetH = Math.round(targetH * scale);
-      console.warn(`Original image (${origBitmap.width}x${origBitmap.height}) clamped to safe export limit: ${targetW}x${targetH}`);
+      console.warn(
+        `Original image (${origBitmap.width}x${origBitmap.height}) clamped to safe export limit: ${targetW}x${targetH}`
+      );
     }
 
     // Mask canvas
@@ -608,25 +660,31 @@ export async function exportAtFullResolution(
     const outPixels = outImageData.data;
 
     const total = targetW * targetH;
-    let hasTransparentPixel = false;
     for (let i = 0; i < total; i++) {
       const pIdx = i * 4;
-      const a = scaledMaskData[pIdx];
+      const maskA = scaledMaskData[pIdx];
+      const origA = outPixels[pIdx + 3]; // Preserve original source alpha!
+      const finalA = Math.round((maskA * origA) / 255);
+
       const r = outPixels[pIdx];
       const g = outPixels[pIdx + 1];
       const b = outPixels[pIdx + 2];
 
       if (targetBg === "transparent") {
-        outPixels[pIdx + 3] = a;
-        if (a === 0) hasTransparentPixel = true;
+        outPixels[pIdx + 3] = finalA;
+        if (finalA === 0) {
+          outPixels[pIdx] = 0;
+          outPixels[pIdx + 1] = 0;
+          outPixels[pIdx + 2] = 0;
+        }
       } else if (targetBg === "white") {
-        const aNorm = a / 255;
+        const aNorm = finalA / 255;
         outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
         outPixels[pIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
         outPixels[pIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
         outPixels[pIdx + 3] = 255;
       } else if (targetBg === "pink") {
-        const aNorm = a / 255;
+        const aNorm = finalA / 255;
         outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
         outPixels[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
         outPixels[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
@@ -636,16 +694,16 @@ export async function exportAtFullResolution(
 
     outCtx.putImageData(outImageData, 0, 0);
 
-    if (targetBg === "transparent" && !hasTransparentPixel) {
-      console.warn("Alpha channel verification: no pixels with alpha=0 detected in transparent export.");
-    }
-
     return new Promise((resolve, reject) => {
-      outCanvas.toBlob((blob) => {
-        if (!blob) return reject(new Error("Failed to create full resolution blob"));
-        const dataUrl = URL.createObjectURL(blob);
-        resolve({ blob, dataUrl, width: targetW, height: targetH });
-      }, "image/png", 1.0);
+      outCanvas.toBlob(
+        (blob) => {
+          if (!blob) return reject(new Error("Failed to create full resolution blob"));
+          const dataUrl = URL.createObjectURL(blob);
+          resolve({ blob, dataUrl, width: targetW, height: targetH, wasClamped });
+        },
+        "image/png",
+        1.0
+      );
     });
   } finally {
     if (typeof origBitmap.close === "function") {
@@ -797,6 +855,14 @@ export async function removeBackgroundRemote(
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
+    if (res.status === 422 && errorData?.code === "NOT_CONFIGURED") {
+      const err = new Error(
+        errorData?.error ||
+          "Remote Worker is not configured. Please switch to Browser AI mode (runs 100% locally with zero cost and privacy), or configure BACKGROUND_REMOVAL_WORKER_URL in Settings."
+      );
+      err.name = "NOT_CONFIGURED";
+      throw err;
+    }
     throw new Error(
       errorData?.error || `Remote Worker returned status ${res.status}.`
     );

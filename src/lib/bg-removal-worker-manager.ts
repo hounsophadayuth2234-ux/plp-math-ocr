@@ -1,0 +1,136 @@
+/**
+ * Application-Owned Web Worker Lifecycle Manager
+ * Handles job dispatch, progress forwarding, and hard cancellation via worker.terminate()
+ */
+
+export interface WorkerProgressEvent {
+  key: string;
+  current: number;
+  total: number;
+}
+
+class BgWorkerManager {
+  private worker: Worker | null = null;
+  private activeJobId: string | null = null;
+  private jobCounter = 0;
+
+  /**
+   * Spawns or returns existing Web Worker
+   */
+  private getWorker(): Worker {
+    if (!this.worker) {
+      if (typeof window === "undefined" || typeof Worker === "undefined") {
+        throw new Error("Web Workers are not supported in this environment.");
+      }
+      this.worker = new Worker(
+        new URL("../workers/bg-remover.worker.ts", import.meta.url),
+        { type: "module" }
+      );
+    }
+    return this.worker;
+  }
+
+  /**
+   * Terminate active worker to immediately abort running inference on CPU/WASM
+   */
+  public terminateActiveWorker(): void {
+    if (this.worker) {
+      try {
+        this.worker.terminate();
+      } catch (err) {
+        console.warn("Worker termination error:", err);
+      }
+      this.worker = null;
+      this.activeJobId = null;
+    }
+  }
+
+  /**
+   * Run background removal inference inside the application worker
+   */
+  public async executeJob(
+    imageBlob: Blob,
+    model: "isnet_fp16" | "isnet_quint8" | "isnet",
+    onProgress?: (event: WorkerProgressEvent) => void,
+    signal?: AbortSignal
+  ): Promise<Blob> {
+    if (signal?.aborted) {
+      const err = new Error("Aborted by user.");
+      err.name = "AbortError";
+      throw err;
+    }
+
+    // Terminate any previous running worker job to prevent concurrency overlap
+    this.terminateActiveWorker();
+
+    const jobId = `job_${Date.now()}_${++this.jobCounter}`;
+    this.activeJobId = jobId;
+
+    const worker = this.getWorker();
+
+    return new Promise<Blob>((resolve, reject) => {
+      let settled = false;
+
+      const cleanup = () => {
+        settled = true;
+        if (signal) {
+          signal.removeEventListener("abort", onAbort);
+        }
+        if (this.activeJobId === jobId) {
+          this.activeJobId = null;
+        }
+      };
+
+      const onAbort = () => {
+        if (settled) return;
+        cleanup();
+        this.terminateActiveWorker();
+        const err = new Error("Aborted by user.");
+        err.name = "AbortError";
+        reject(err);
+      };
+
+      if (signal) {
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      worker.onmessage = (e: MessageEvent) => {
+        if (settled) return;
+        const data = e.data;
+        if (data.jobId !== jobId) return;
+
+        if (data.type === "PROGRESS") {
+          onProgress?.({
+            key: data.key,
+            current: data.current,
+            total: data.total,
+          });
+        } else if (data.type === "COMPLETE") {
+          cleanup();
+          resolve(data.resultBlob);
+        } else if (data.type === "ERROR") {
+          cleanup();
+          this.terminateActiveWorker();
+          reject(new Error(data.error || "Worker inference error."));
+        }
+      };
+
+      worker.onerror = (err: ErrorEvent) => {
+        if (settled) return;
+        cleanup();
+        this.terminateActiveWorker();
+        reject(new Error(`Worker execution failed: ${err.message || "Unknown error"}`));
+      };
+
+      // Dispatch job to worker
+      worker.postMessage({
+        type: "START",
+        jobId,
+        imageBlob,
+        model,
+      });
+    });
+  }
+}
+
+export const bgWorkerManager = new BgWorkerManager();

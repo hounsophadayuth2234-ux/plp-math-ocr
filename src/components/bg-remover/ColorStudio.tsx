@@ -81,8 +81,8 @@ export function ColorStudio({
   width,
   height,
   mode,
-  provider: _provider = "@imgly/isnet_fp16",
-  processingLabel: _processingLabel = "Browser AI result",
+  provider = "@imgly/isnet_fp16",
+  processingLabel = "Browser AI result",
   metrics,
   onReset,
   onRerunFinal,
@@ -834,6 +834,23 @@ export function ColorStudio({
     whiteCompositeUrl,
   ]);
 
+  const displayProvenance = useMemo(() => {
+    if (mode === "worker") {
+      return `Remote Worker — ${provider || "BiRefNet"}`;
+    }
+    if (
+      provider.includes("Manual") ||
+      processingLabel.includes("Manual") ||
+      provider === "Manual Edge Correction Studio"
+    ) {
+      return "Manual Mask Studio (User Defined)";
+    }
+    if (hasAppliedCorrections) {
+      return "Browser AI result — @imgly/isnet_fp16 + Manual Corrections";
+    }
+    return `Browser AI result — ${provider || "@imgly/isnet_fp16"}`;
+  }, [mode, provider, processingLabel, hasAppliedCorrections]);
+
   return (
     <div className="flex flex-col gap-4 font-mono">
       {/* ── Status & Provenance Bar ── */}
@@ -843,9 +860,9 @@ export function ColorStudio({
             className="inline-flex items-center gap-1.5 rounded-none border border-cyan-500/40 bg-cyan-950/50 text-cyan-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(0,240,255,0.2)]"
           >
             <CheckCircle2 className="h-3 w-3" />
-            <span>Browser AI result — @imgly/isnet_fp16</span>
+            <span>{displayProvenance}</span>
           </span>
-          {hasAppliedCorrections && (
+          {hasAppliedCorrections && mode !== "worker" && !provider.includes("Manual") && (
             <span
               data-testid="corrections-badge"
               className="inline-flex items-center gap-1.5 rounded-none border border-amber-500/40 bg-amber-950/50 text-amber-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(245,158,11,0.2)]"
@@ -856,7 +873,7 @@ export function ColorStudio({
           )}
           <span className="hidden sm:inline text-slate-500">·</span>
           <span className="text-slate-400 text-[11px]">
-            Engine: <strong className="text-white">@imgly/isnet_fp16</strong>
+            Engine: <strong className="text-white">{provider}</strong>
           </span>
         </div>
 

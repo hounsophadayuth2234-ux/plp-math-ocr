@@ -21,7 +21,9 @@ import {
   compositeWithSolidColor,
   BgRemovalOutput,
   BgRemovalProgress,
+  STAGE_DEADLINES,
 } from "@/lib/bg-removal-client";
+import { bgWorkerManager } from "@/lib/bg-removal-worker-manager";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ObjectUrlRegistry } from "@/lib/processing-utils";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
@@ -39,6 +41,10 @@ export default function BgRemoverPage() {
   const [processingMode, setProcessingMode] = useState<"preview" | "final" | "worker">("preview");
   const [progressInfo, setProgressInfo] = useState<BgRemovalProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [slowNotice, setSlowNotice] = useState<string | null>(null);
+  const [isModelCached, setIsModelCached] = useState(false);
+  const [isWorkerConfigured, setIsWorkerConfigured] = useState(false);
+  const [remoteNoticeOpen, setRemoteNoticeOpen] = useState(false);
 
   // Audio settings state
   const [audioMuted, setAudioMuted] = useState(() => cyberAudio.isMuted());
@@ -58,12 +64,25 @@ export default function BgRemoverPage() {
     });
   }, []);
 
+  // Check settings for remote worker configuration on mount
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.rembgSpaceUrlSet) {
+          setIsWorkerConfigured(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Cleanup object URLs and active abort controller on unmount
   useEffect(() => {
     const registry = urlRegistryRef.current;
     return () => {
       registry.revokeAll();
       cyberAudio.stopScanningHum();
+      bgWorkerManager.terminateActiveWorker();
       if (activeAbortControllerRef.current) {
         console.log("[bg-remover] ABORT TRIGGER: useEffect cleanup");
         activeAbortControllerRef.current.abort();
@@ -72,6 +91,7 @@ export default function BgRemoverPage() {
   }, []);
 
   const handleCancel = () => {
+    bgWorkerManager.terminateActiveWorker();
     if (activeAbortControllerRef.current) {
       console.log("[bg-remover] ABORT TRIGGER: handleCancel");
       activeAbortControllerRef.current.abort();
@@ -82,6 +102,7 @@ export default function BgRemoverPage() {
     isProcessingRef.current = false;
     setIsProcessing(false);
     setProgressInfo(null);
+    setSlowNotice(null);
   };
 
   const handleOpenManualMode = async () => {
@@ -139,7 +160,7 @@ export default function BgRemoverPage() {
           sourceImageData: srcImageData,
           width: w,
           height: h,
-          label: "Browser AI result",
+          label: "Manual mask result",
           model: "Manual Edge Correction Studio",
           mode: "preview",
         });
@@ -157,6 +178,12 @@ export default function BgRemoverPage() {
   const handleRunSegmentation = async (mode: "preview" | "final" | "worker") => {
     if (!imageFile) return;
 
+    if (mode === "worker" && !isWorkerConfigured) {
+      setRemoteNoticeOpen(true);
+      return;
+    }
+
+    bgWorkerManager.terminateActiveWorker();
     if (activeAbortControllerRef.current) {
       console.log(`[bg-remover] ABORT TRIGGER: handleRunSegmentation starting new mode=${mode}`);
       activeAbortControllerRef.current.abort();
@@ -168,38 +195,62 @@ export default function BgRemoverPage() {
     isProcessingRef.current = true;
     setIsProcessing(true);
     setError(null);
+    setSlowNotice(null);
     setProgressInfo(null);
     setProcessingMode(mode);
 
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
 
-    // Start timeout strictly after model loading begins
-    let timeoutId: NodeJS.Timeout | null = null;
-    let timeoutStarted = false;
+    // ── Stage Deadlines & Stall Detection ──
+    // 1. Soft slow notice at 20 seconds: Informational only, does NOT fail or abort
+    const slowTimer = setTimeout(() => {
+      if (activeAbortControllerRef.current === abortController) {
+        setSlowNotice(
+          `SYS_NOTICE: Model processing taking longer than usual on this device (elapsed: ${STAGE_DEADLINES.SLOW_NOTICE_SEC}s)...`
+        );
+      }
+    }, STAGE_DEADLINES.SLOW_NOTICE_SEC * 1000);
 
-    const startModelLoadingTimeout = () => {
-      if (timeoutStarted) return;
-      timeoutStarted = true;
-      const duration = mode === "preview" ? 40000 : 60000;
-      timeoutId = setTimeout(() => {
-        if (activeAbortControllerRef.current === abortController) {
-          console.log(`[bg-remover] ABORT TRIGGER: startModelLoadingTimeout reached ${duration}ms`);
-          abortController.abort(new Error(mode === "preview" ? "TIMEOUT_20S" : "TIMEOUT_45S"));
-        }
-      }, duration);
+    // 2. Cold asset download deadline: 120 seconds
+    let assetLoadTimer: NodeJS.Timeout | null = setTimeout(() => {
+      if (activeAbortControllerRef.current === abortController) {
+        console.log(`[bg-remover] Asset download deadline reached (${STAGE_DEADLINES.COLD_ASSET_LOAD_SEC}s)`);
+        abortController.abort(
+          new Error(
+            `ASSET_LOAD_TIMEOUT: Model asset loading timed out after ${STAGE_DEADLINES.COLD_ASSET_LOAD_SEC}s. Please check network connection and retry.`
+          )
+        );
+      }
+    }, STAGE_DEADLINES.COLD_ASSET_LOAD_SEC * 1000);
+
+    // 3. Inference deadline: 60s for preview, 90s for final
+    let inferenceTimer: NodeJS.Timeout | null = null;
+    const startInferenceDeadline = () => {
+      if (assetLoadTimer) {
+        clearTimeout(assetLoadTimer);
+        assetLoadTimer = null;
+      }
+      if (!inferenceTimer) {
+        const infDuration =
+          mode === "preview"
+            ? STAGE_DEADLINES.INFERENCE_PREVIEW_SEC
+            : STAGE_DEADLINES.INFERENCE_FINAL_SEC;
+        inferenceTimer = setTimeout(() => {
+          if (activeAbortControllerRef.current === abortController) {
+            console.log(`[bg-remover] Inference deadline reached (${infDuration}s)`);
+            abortController.abort(
+              new Error(
+                `INFERENCE_TIMEOUT: Model inference timed out after ${infDuration}s on this device. You can retry or open Manual Mask Mode.`
+              )
+            );
+          }
+        }, infDuration * 1000);
+      }
     };
 
-    // Safety timeout in case setup hangs before model loading begins
-    const safetyTimeout = setTimeout(() => {
-      if (!timeoutStarted && activeAbortControllerRef.current === abortController) {
-        console.log(`[bg-remover] ABORT TRIGGER: safetyTimeout reached 45000ms`);
-        abortController.abort(new Error(mode === "preview" ? "TIMEOUT_20S" : "TIMEOUT_45S"));
-      }
-    }, 45000);
-
     try {
-      console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, controllerId=${abortController.signal}`);
+      console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, mode=${mode}`);
       let output: BgRemovalOutput;
 
       if (mode === "worker") {
@@ -207,28 +258,28 @@ export default function BgRemoverPage() {
       } else {
         output = await removeBackgroundBrowser(imageFile, {
           mode,
-          erosionRadius: 0, // Zero aggressive erosion: preserves thin legs, hair flyaways & lapels
-          featherRadius: 0.75, // Sub-pixel boundary feathering
-          decontaminationRadius: mode === "preview" ? 1 : 1.5, // Color decontamination
+          erosionRadius: 0,
+          featherRadius: 0.75,
+          decontaminationRadius: mode === "preview" ? 1 : 1.5,
           alphaMatting: true,
           signal: abortController.signal,
           onProgress: (p) => {
             setProgressInfo(p);
-            if (p.stage === "Loading model" || p.stage === "Segmenting") {
-              startModelLoadingTimeout();
+            if (p.stage === "Segmenting" || p.stage === "Refining mask") {
+              startInferenceDeadline();
             }
           },
         });
       }
 
-      console.log(`[bg-remover] Segmentation finished for ${imageFile.name}, aborted=${abortController.signal.aborted}, isCurrent=${activeAbortControllerRef.current === abortController}`);
+      console.log(`[bg-remover] Segmentation finished for ${imageFile.name}`);
 
       if (
         requestGenerationIdRef.current !== currentGenerationId ||
         abortController.signal.aborted ||
         activeAbortControllerRef.current !== abortController
       ) {
-        console.log(`[bg-remover] Discarding result for ${imageFile.name} because superseded/stale (gen=${currentGenerationId}, current=${requestGenerationIdRef.current})`);
+        console.log(`[bg-remover] Discarding result for ${imageFile.name} because superseded/stale`);
         return;
       }
 
@@ -240,42 +291,54 @@ export default function BgRemoverPage() {
         abortController.signal.aborted ||
         activeAbortControllerRef.current !== abortController
       ) {
-        console.log(`[bg-remover] Discarding composite for ${imageFile.name} because superseded/stale`);
         return;
       }
 
       setCachedResult(output);
       setInitialCompositeUrl(dataUrl);
-      console.log(`[bg-remover] Set cachedResult successfully for ${imageFile.name}!`);
+      setIsModelCached(true);
 
-      // Play mechanical shutter click and metallic ding upon successful segmentation
       cyberAudio.playShutter();
       cyberAudio.playMetallicDing();
     } catch (err: unknown) {
-      console.log(`[bg-remover] Catch block for ${imageFile.name}:`, err, `aborted=${abortController.signal.aborted}, isCurrent=${activeAbortControllerRef.current === abortController}`);
       cyberAudio.stopScanningHum();
 
+      const errMessage = err instanceof Error ? err.message : String(err);
       const isTimeout =
-        (abortController.signal.reason as Error)?.message?.includes("TIMEOUT") ||
-        (err instanceof Error && (err.name.includes("TIMEOUT") || err.message.includes("TIMEOUT")));
+        errMessage.includes("TIMEOUT") ||
+        (abortController.signal.reason instanceof Error &&
+          abortController.signal.reason.message.includes("TIMEOUT"));
 
       if (isTimeout) {
-        console.log(`[bg-remover] TIMEOUT TRIGGERED for ${imageFile.name}`);
-        setError(
-          mode === "preview"
-            ? "Fast Preview timed out after 20 seconds. You can retry or open Manual Mask Mode to refine edges directly."
-            : "Processing timed out after 45 seconds. You can retry or open Manual Mask Mode."
-        );
+        const rawReason =
+          abortController.signal.reason instanceof Error
+            ? abortController.signal.reason.message
+            : errMessage;
+        const cleanMsg = rawReason
+          .replace("ASSET_LOAD_TIMEOUT: ", "")
+          .replace("INFERENCE_TIMEOUT: ", "");
+        setError(cleanMsg);
         return;
       }
 
-      // If this execution was aborted by user or superseded by another operation, silently exit
+      if (
+        err instanceof Error &&
+        (err.name === "NOT_CONFIGURED" || errMessage.includes("NOT_CONFIGURED"))
+      ) {
+        setError(
+          "Remote Worker microservice is not configured in settings. Switched to Browser AI mode (runs locally with complete privacy and zero cost)."
+        );
+        setProcessingMode("preview");
+        return;
+      }
+
       if (
         abortController.signal.aborted ||
         activeAbortControllerRef.current !== abortController ||
-        (err instanceof Error && (err.name === "AbortError" || err.message.toLowerCase().includes("abort")))
+        (err instanceof Error &&
+          (err.name === "AbortError" || errMessage.toLowerCase().includes("abort")))
       ) {
-        console.log(`[bg-remover] Exiting catch silently for ${imageFile.name}`);
+        console.log(`[bg-remover] Exiting catch silently for ${imageFile.name} (aborted/superseded)`);
         return;
       }
 
@@ -284,9 +347,11 @@ export default function BgRemoverPage() {
         err instanceof Error ? err.message : "Background removal segmentation failed."
       );
     } finally {
-      clearTimeout(safetyTimeout);
-      if (timeoutId) clearTimeout(timeoutId);
-      console.log(`[bg-remover] Finally block for ${imageFile.name}, isCurrent=${activeAbortControllerRef.current === abortController}`);
+      clearTimeout(slowTimer);
+      if (assetLoadTimer) clearTimeout(assetLoadTimer);
+      if (inferenceTimer) clearTimeout(inferenceTimer);
+      setSlowNotice(null);
+
       if (activeAbortControllerRef.current === abortController) {
         cyberAudio.stopScanningHum();
         activeAbortControllerRef.current = null;
@@ -300,6 +365,7 @@ export default function BgRemoverPage() {
   const handleFileSelect = (file: File | null) => {
     console.log(`[bg-remover] handleFileSelect called for file=${file?.name}`);
     ++requestGenerationIdRef.current;
+    bgWorkerManager.terminateActiveWorker();
     if (activeAbortControllerRef.current) {
       console.log(`[bg-remover] ABORT TRIGGER: handleFileSelect aborting active controller for new file=${file?.name}`);
       activeAbortControllerRef.current.abort();
@@ -403,17 +469,29 @@ export default function BgRemoverPage() {
             <span className="flex items-center gap-1.5 text-slate-400">
               <span
                 className={`h-1.5 w-1.5 rounded-none ${
-                  isProcessing ? "bg-amber-400 animate-ping" : "bg-emerald-400 animate-pulse"
+                  isProcessing
+                    ? "bg-amber-400 animate-ping"
+                    : isModelCached
+                    ? "bg-emerald-400 animate-pulse"
+                    : "bg-cyan-400"
                 }`}
               />
-              {isProcessing ? "SEGMENTATION: ACTIVE" : "BROWSER AI: ONLINE"}
+              {isProcessing
+                ? progressInfo?.stage === "Loading model"
+                  ? "LOADING ASSETS (WASM / WEIGHTS)"
+                  : progressInfo?.stage === "Refining mask"
+                  ? "REFINING MASK"
+                  : "INFERENCE ACTIVE"
+                : isModelCached
+                ? "BROWSER AI: ONLINE (CACHED)"
+                : "BROWSER AI: STANDBY (READY)"}
             </span>
             <span className="rounded-none border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-cyan-300 uppercase tracking-wider text-[10px] font-bold">
               {processingMode === "preview"
                 ? "Fast Preview (1024px)"
                 : processingMode === "final"
-                ? "Final Clean Cut (2048px)"
-                : "High-Quality Worker"}
+                ? "Clean Cut (2048px)"
+                : "Remote Worker"}
             </span>
           </div>
         </div>
@@ -492,6 +570,9 @@ export default function BgRemoverPage() {
                   onClick={() => {
                     if (isProcessing) return;
                     cyberAudio.playClick();
+                    if (!isWorkerConfigured) {
+                      setRemoteNoticeOpen(true);
+                    }
                     setProcessingMode("worker");
                   }}
                   disabled={isProcessing}
@@ -501,12 +582,19 @@ export default function BgRemoverPage() {
                       : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700"
                   }`}
                 >
-                  <span className="flex items-center gap-1 font-bold text-white text-[10.5px] uppercase font-mono">
-                    <Server className="h-3 w-3 text-purple-400 shrink-0" />
-                    Remote Worker
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1 font-bold text-white text-[10.5px] uppercase font-mono">
+                      <Server className="h-3 w-3 text-purple-400 shrink-0" />
+                      Remote Worker
+                    </span>
+                    {!isWorkerConfigured && (
+                      <span className="text-[8px] bg-rose-950/80 text-rose-300 border border-rose-500/40 px-1 py-0.5">
+                        NOT CONFIGURED
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[9.5px] text-purple-400/80 font-mono">
-                    Optional Worker
+                    {isWorkerConfigured ? "Configured Service" : "Requires Setting"}
                   </span>
                 </button>
               </div>
@@ -514,12 +602,46 @@ export default function BgRemoverPage() {
               {/* Informational note: Accurate labeling */}
               <p className="text-[10px] text-slate-500 pt-0.5 leading-relaxed font-mono">
                 {processingMode === "preview"
-                  ? "FAST PREVIEW (DEFAULT): @IMGLY/ISNET_FP16 (1024PX MAX). CACHED INFERENCE, ZERO EROSION, SUB-PIXEL MATTING."
+                  ? "FAST PREVIEW (DEFAULT): @IMGLY/ISNET_FP16 (1024PX WORKING MASK). LOCAL CACHED INFERENCE, ZERO EROSION, SUB-PIXEL MATTING."
                   : processingMode === "final"
-                  ? "CLEAN CUT: @IMGLY/ISNET_FP16 UP TO 2048PX WITH REFINED MATTING."
-                  : "REMOTE WORKER: OPTIONAL REMOTE MICROSERVICE."}
+                  ? "CLEAN CUT: @IMGLY/ISNET_FP16 UP TO 2048PX INPUT LIMIT WITH REFINED MATTING."
+                  : isWorkerConfigured
+                  ? "REMOTE WORKER: EXTERNAL MICROSERVICE CONFIGURED (IMAGE WILL BE UPLOADED TO WORKER)."
+                  : "REMOTE WORKER: NOT CONFIGURED IN SETTINGS. PLEASE SWITCH TO BROWSER AI MODE (ZERO COST, LOCAL PRIVACY)."}
               </p>
             </div>
+
+            {/* Remote notice banner if clicked when unconfigured */}
+            {remoteNoticeOpen && !isWorkerConfigured && (
+              <div className="rounded-none border border-amber-500/40 bg-amber-950/40 p-3 text-xs text-amber-200 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span>REMOTE WORKER NOT CONFIGURED</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRemoteNoticeOpen(false)}
+                    className="text-amber-400 hover:text-white"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <p className="text-[10.5px] leading-relaxed text-amber-200/90 font-mono">
+                  No remote background removal worker URL is configured. Browser AI mode is active and recommended (runs 100% locally on your machine with zero cloud cost and full privacy). To enable a remote worker, set BACKGROUND_REMOVAL_WORKER_URL in Settings.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProcessingMode("preview");
+                    setRemoteNoticeOpen(false);
+                  }}
+                  className="rounded-none border border-cyan-500/50 bg-cyan-950/60 px-2.5 py-1 text-[10px] font-bold text-cyan-300 hover:bg-cyan-900/60"
+                >
+                  SWITCH TO BROWSER AI (RECOMMENDED)
+                </button>
+              </div>
+            )}
 
             {/* Input Upload Area */}
             <div>
@@ -599,6 +721,12 @@ export default function BgRemoverPage() {
                         />
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {slowNotice && (
+                  <div className="rounded-none border border-amber-500/30 bg-amber-950/40 p-2 text-[10px] text-amber-300 font-mono">
+                    {slowNotice}
                   </div>
                 )}
               </div>

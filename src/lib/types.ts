@@ -5,6 +5,7 @@
 
 export type ProcessingStatusLabel =
   | "Browser AI result"
+  | "Manual mask result"
   | "Local worker result"
   | "Cloud API result"
   | "Demo preview"
