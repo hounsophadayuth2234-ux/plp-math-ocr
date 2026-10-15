@@ -226,7 +226,7 @@ async function runManualMaskRefinementAcceptance() {
       if (applyBtn) applyBtn.click();
     });
     await page.waitForFunction(
-      () => document.body.innerText.includes("Manual mask corrections applied"),
+      () => document.querySelector('[data-testid="provenance-badge"]')?.innerText.toLowerCase().includes("manual mask corrections applied"),
       { timeout: 6000 }
     );
     console.log("✓ Provenance updated to 'Manual mask corrections applied': true");
@@ -308,7 +308,7 @@ async function runManualMaskRefinementAcceptance() {
       if (resetBtn) resetBtn.click();
     });
     await page.waitForFunction(
-      () => !document.body.innerText.includes("Manual mask corrections applied"),
+      () => !document.querySelector('[data-testid="provenance-badge"]')?.innerText.toLowerCase().includes("manual mask corrections applied"),
       { timeout: 6000 }
     );
     console.log("✓ Reset Mask cleanly restored initial AI state: true");
