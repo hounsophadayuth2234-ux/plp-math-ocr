@@ -548,10 +548,10 @@ export function ColorStudio({
   const handleApplyCorrections = useCallback(async () => {
     if (!alphaMaskRef.current) return;
     cyberAudio.playSuccessChime();
-    committedAlphaMaskRef.current = new Uint8ClampedArray(alphaMaskRef.current);
-    await recompositeAll(alphaMaskRef.current);
     setHasAppliedCorrections(true);
     setIsDirty(false);
+    committedAlphaMaskRef.current = new Uint8ClampedArray(alphaMaskRef.current);
+    await recompositeAll(alphaMaskRef.current);
   }, [recompositeAll]);
 
   // "Cancel Changes": Discards uncommitted strokes made during this session
@@ -568,12 +568,12 @@ export function ColorStudio({
     if (!baseAlphaMaskRef.current || !alphaMaskRef.current) return;
     cyberAudio.playClick();
     saveSnapshotToHistory();
+    setHasAppliedCorrections(false);
+    setIsDirty(false);
     alphaMaskRef.current.set(baseAlphaMaskRef.current);
     committedAlphaMaskRef.current = new Uint8ClampedArray(baseAlphaMaskRef.current);
     redrawCanvas();
     await recompositeAll(alphaMaskRef.current);
-    setHasAppliedCorrections(false);
-    setIsDirty(false);
   }, [saveSnapshotToHistory, redrawCanvas, recompositeAll]);
 
   // "Export Transparent PNG": Full resolution composite with genuine alpha channel
