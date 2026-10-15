@@ -385,40 +385,66 @@ export async function removeBackgroundBrowser(
     let lastModelPct = 0;
     let lastProcPct = 0;
 
-    const tInfStart = Date.now();
-    const rawCutoutBlob = await removeBackground(scaledBlob, {
-      model: modelName,
-      proxyToWorker: true,
-      fetchArgs: {
-        cache: "force-cache",
-      },
-      output: {
-        format: "image/png",
-        quality: 1.0,
-      },
-      progress: (key: string, current: number, total: number) => {
-        if (options?.signal?.aborted) return;
-        const pct = total > 0 ? Math.round((current / total) * 100) : 50;
-        let stage: BgRemovalProgress["stage"] = "Segmenting";
-        if (key.includes("fetch")) {
-          stage = "Loading model";
-          lastModelPct = Math.min(100, Math.max(lastModelPct, pct));
-        } else if (key.includes("compute") || key.includes("inference")) {
-          stage = "Segmenting";
-          lastProcPct = Math.min(100, Math.max(lastProcPct, pct));
-        }
+    const handleProgress = (key: string, current: number, total: number) => {
+      if (options?.signal?.aborted) return;
+      const pct = total > 0 ? Math.round((current / total) * 100) : 50;
+      let stage: BgRemovalProgress["stage"] = "Segmenting";
+      if (key.includes("fetch")) {
+        stage = "Loading model";
+        lastModelPct = Math.min(100, Math.max(lastModelPct, pct));
+      } else if (key.includes("compute") || key.includes("inference")) {
+        stage = "Segmenting";
+        lastProcPct = Math.min(100, Math.max(lastProcPct, pct));
+      }
 
-        options?.onProgress?.({
-          key,
-          current,
-          total,
-          percent: Math.min(92, Math.max(15, pct)),
-          stage,
-          modelLoadingPercent: lastModelPct || (stage === "Loading model" ? pct : 100),
-          processingPercent: lastProcPct || (stage === "Segmenting" ? pct : 0),
-        });
-      },
-    });
+      options?.onProgress?.({
+        key,
+        current,
+        total,
+        percent: Math.min(92, Math.max(15, pct)),
+        stage,
+        modelLoadingPercent: lastModelPct || (stage === "Loading model" ? pct : 100),
+        processingPercent: lastProcPct || (stage === "Segmenting" ? pct : 0),
+      });
+    };
+
+    const tInfStart = Date.now();
+    let rawCutoutBlob: Blob;
+
+    try {
+      // Primary execution: Safe Web Worker execution off main thread
+      rawCutoutBlob = await removeBackground(scaledBlob, {
+        model: modelName,
+        proxyToWorker: true,
+        fetchArgs: {
+          cache: "force-cache",
+        },
+        output: {
+          format: "image/png",
+          quality: 1.0,
+        },
+        progress: handleProgress,
+      });
+    } catch (workerErr: unknown) {
+      if (options?.signal?.aborted) throw workerErr;
+      console.warn(
+        "Web Worker execution failed or was blocked; falling back to package main-thread browser path:",
+        workerErr
+      );
+      // Fallback execution: Main thread browser execution (proxyToWorker: false)
+      rawCutoutBlob = await removeBackground(scaledBlob, {
+        model: modelName,
+        proxyToWorker: false,
+        fetchArgs: {
+          cache: "force-cache",
+        },
+        output: {
+          format: "image/png",
+          quality: 1.0,
+        },
+        progress: handleProgress,
+      });
+    }
 
     tInference = Date.now() - tInfStart;
 
@@ -492,9 +518,7 @@ export async function removeBackgroundBrowser(
       width,
       height,
       label: "Browser AI result",
-      model: `@imgly/isnet_fp16 (${
-        mode === "preview" ? "Fast Preview 1024px" : "Standard Browser AI 2048px"
-      })`,
+      model: "@imgly/isnet_fp16",
       mode,
       metrics: {
         modelLoadMs: tModelLoad,

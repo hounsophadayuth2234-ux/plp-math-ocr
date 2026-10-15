@@ -49,33 +49,22 @@ export default function BgRemoverPage() {
   // Cleanup object URLs on unmount
   useEffect(() => {
     const registry = urlRegistryRef.current;
-      fetch("/api/settings")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.backgroundRemovalWorkerConfigured) {
-            setWorkerConfigured(true);
-          }
-        })
-        .catch(() => {});
-
-      // Preload fastest browser model in Cache API for instant Fast Preview
-      import("@imgly/background-removal")
-        .then(({ preload }) => {
-          preload({
-            model: "isnet_fp16",
-            proxyToWorker: true,
-            fetchArgs: { cache: "force-cache" },
-          }).catch(() => {});
-        })
-        .catch(() => {});
-
-      return () => {
-        registry.revokeAll();
-        if (activeAbortControllerRef.current) {
-          activeAbortControllerRef.current.abort();
+    fetch("/api/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.backgroundRemovalWorkerConfigured) {
+          setWorkerConfigured(true);
         }
-      };
-    }, []);
+      })
+      .catch(() => {});
+
+    return () => {
+      registry.revokeAll();
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleCancel = () => {
     if (activeAbortControllerRef.current) {
@@ -398,10 +387,10 @@ export default function BgRemoverPage() {
                 >
                   <span className="flex items-center gap-1 font-bold text-white text-[10.5px]">
                     <Server className="h-3 w-3 text-purple-400 shrink-0" />
-                    HQ Worker
+                    Remote Worker
                   </span>
                   <span className="text-[9.5px] text-purple-400/80">
-                    BiRefNet (Optional)
+                    Optional Worker
                   </span>
                 </button>
               </div>
@@ -412,7 +401,7 @@ export default function BgRemoverPage() {
                   ? "Fast Preview (Default): @imgly/isnet_fp16 resized to 1024px. Fast cached inference, zero erosion, sub-pixel matting."
                   : processingMode === "final"
                   ? "Clean Cut: @imgly/isnet_fp16 up to 2048px with edge refinement."
-                  : "BiRefNet / RMBG Worker: Optional experimental remote microservice."}
+                  : "Remote Worker: Optional remote microservice if configured."}
               </p>
             </div>
 
@@ -532,7 +521,7 @@ export default function BgRemoverPage() {
                       </div>
                       <span className="text-[10px] text-slate-400 font-sans">
                         {processingMode === "worker"
-                          ? "BiRefNet / RMBG microservice · high precision"
+                          ? "Remote microservice · optional"
                           : processingMode === "final"
                           ? "Zero erosion · sub-pixel matting · hair preserved"
                           : "High-speed preview · browser model caching"}
@@ -591,18 +580,18 @@ export default function BgRemoverPage() {
               active={true}
               moduleName={
                 processingMode === "worker"
-                  ? "HIGH-QUALITY WORKER // [BIREFNET (OPTIONAL)]"
+                  ? "REMOTE WORKER // [OPTIONAL SERVICE]"
                   : processingMode === "final"
-                  ? "CLEAN CUT // [ISNET FP16 + MATTING]"
-                  : "FAST PREVIEW // [ISNET FP16 1024PX]"
+                  ? "CLEAN CUT // [@IMGLY/ISNET_FP16 2048PX]"
+                  : "FAST PREVIEW // [@IMGLY/ISNET_FP16 1024PX]"
               }
               steps={scannerSteps}
               subtext={
                 processingMode === "worker"
-                  ? "BiRefNet dichotomous image segmentation preserving fine animal limbs and narrow gaps"
+                  ? "Remote background removal microservice if configured in settings"
                   : processingMode === "final"
-                  ? "Standard browser AI with zero aggressive erosion and local color decontamination"
-                  : "High-speed preview segmentation with browser model caching"
+                  ? "@imgly/isnet_fp16 browser AI with zero aggressive erosion and local color decontamination"
+                  : "@imgly/isnet_fp16 high-speed preview segmentation with browser model caching"
               }
             />
           )}
