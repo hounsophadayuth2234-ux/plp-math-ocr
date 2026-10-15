@@ -126,6 +126,7 @@ export function ColorStudio({
   const offscreenMaskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
+  const dirtyRectRef = useRef<{ minX: number; minY: number; maxX: number; maxY: number } | null>(null);
 
   // Initialize in-memory grayscale alpha mask buffers
   useEffect(() => {
@@ -157,11 +158,36 @@ export function ColorStudio({
       img.src = transparentUrl;
     }
 
+    // Clear interactive canvas when new image or buffer is loaded
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
+
+    // Clear undo history & dirty states when a new image or buffer is uploaded
+    setHistory([]);
+    setRedoStack([]);
+    setIsDirty(false);
+    setHasAppliedCorrections(false);
+
     // Initialize offscreen mask canvas
     const offscreen = document.createElement("canvas");
     offscreen.width = width;
     offscreen.height = height;
     offscreenMaskCanvasRef.current = offscreen;
+
+    return () => {
+      if (animFrameIdRef.current) {
+        cancelAnimationFrame(animFrameIdRef.current);
+        animFrameIdRef.current = null;
+      }
+      offscreenMaskCanvasRef.current = null;
+      alphaMaskRef.current = null;
+      baseAlphaMaskRef.current = null;
+      committedAlphaMaskRef.current = null;
+    };
   }, [initialAlphaBuffer, transparentUrl, width, height]);
 
   // Pre-generate initial pink composite
@@ -302,6 +328,80 @@ export function ColorStudio({
     ctx.putImageData(imgData, 0, 0);
   }, [width, height, sourceImageData, activeChannel]);
 
+  // Redraw ONLY the dirty region modified by the brush stroke (draws only the brush region)
+  const redrawCanvasRegion = useCallback(
+    (minX: number, minY: number, maxX: number, maxY: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !alphaMaskRef.current || !sourceImageData) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const w = width;
+      const h = height;
+      const mask = alphaMaskRef.current;
+      const sPixels = sourceImageData.data;
+
+      const cMinX = Math.max(0, Math.floor(minX));
+      const cMaxX = Math.min(w - 1, Math.ceil(maxX));
+      const cMinY = Math.max(0, Math.floor(minY));
+      const cMaxY = Math.min(h - 1, Math.ceil(maxY));
+
+      const subW = cMaxX - cMinX + 1;
+      const subH = cMaxY - cMinY + 1;
+      if (subW <= 0 || subH <= 0) return;
+
+      const imgData = ctx.createImageData(subW, subH);
+      const data = imgData.data;
+
+      let dIdx = 0;
+      for (let y = cMinY; y <= cMaxY; y++) {
+        const yOff = y * w;
+        for (let x = cMinX; x <= cMaxX; x++) {
+          const i = yOff + x;
+          const pIdx = i * 4;
+          const a = mask[i];
+          const r = sPixels[pIdx];
+          const g = sPixels[pIdx + 1];
+          const b = sPixels[pIdx + 2];
+
+          if (activeChannel === "mask") {
+            data[dIdx] = a;
+            data[dIdx + 1] = a;
+            data[dIdx + 2] = a;
+            data[dIdx + 3] = 255;
+          } else if (activeChannel === "transparent") {
+            data[dIdx] = r;
+            data[dIdx + 1] = g;
+            data[dIdx + 2] = b;
+            data[dIdx + 3] = a;
+          } else if (activeChannel === "pink") {
+            const aNorm = a / 255;
+            data[dIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
+            data[dIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
+            data[dIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
+            data[dIdx + 3] = 255;
+          } else if (activeChannel === "original") {
+            data[dIdx] = r;
+            data[dIdx + 1] = g;
+            data[dIdx + 2] = b;
+            data[dIdx + 3] = 255;
+          } else {
+            // Default white composite #FFFFFF
+            const aNorm = a / 255;
+            data[dIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
+            data[dIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
+            data[dIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
+            data[dIdx + 3] = 255;
+          }
+          dIdx += 4;
+        }
+      }
+
+      ctx.putImageData(imgData, cMinX, cMinY);
+    },
+    [width, height, sourceImageData, activeChannel]
+  );
+
   useEffect(() => {
     if (isEditMode) {
       redrawCanvas();
@@ -342,6 +442,16 @@ export function ColorStudio({
       const maxX = Math.min(w - 1, Math.ceil(cx + radius));
       const minY = Math.max(0, Math.floor(cy - radius));
       const maxY = Math.min(h - 1, Math.ceil(cy + radius));
+
+      // Track dirty bounding box for targeted sub-region redraw
+      if (!dirtyRectRef.current) {
+        dirtyRectRef.current = { minX, minY, maxX, maxY };
+      } else {
+        dirtyRectRef.current.minX = Math.min(dirtyRectRef.current.minX, minX);
+        dirtyRectRef.current.minY = Math.min(dirtyRectRef.current.minY, minY);
+        dirtyRectRef.current.maxX = Math.max(dirtyRectRef.current.maxX, maxX);
+        dirtyRectRef.current.maxY = Math.max(dirtyRectRef.current.maxY, maxY);
+      }
 
       for (let y = minY; y <= maxY; y++) {
         const dy = y - cy;
@@ -436,15 +546,18 @@ export function ColorStudio({
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (activeTool === "pan") {
       setIsPanning(true);
-      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
-      e.currentTarget.setPointerCapture(e.pointerId);
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
       return;
     }
 
     if (!alphaMaskRef.current) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
 
-    // Save snapshot for Undo
+    // Save snapshot for Undo (one snapshot at pointerdown)
     saveSnapshotToHistory();
 
     const { x, y } = getMaskCoordinates(e);
@@ -452,7 +565,11 @@ export function ColorStudio({
     setIsDrawing(true);
 
     applyBrushStroke(x, y, x, y);
-    redrawCanvas();
+    if (dirtyRectRef.current) {
+      const { minX, minY, maxX, maxY } = dirtyRectRef.current;
+      redrawCanvasRegion(minX, minY, maxX, maxY);
+      dirtyRectRef.current = null;
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -473,7 +590,11 @@ export function ColorStudio({
 
     if (!animFrameIdRef.current) {
       animFrameIdRef.current = requestAnimationFrame(() => {
-        redrawCanvas();
+        if (dirtyRectRef.current) {
+          const { minX, minY, maxX, maxY } = dirtyRectRef.current;
+          redrawCanvasRegion(minX, minY, maxX, maxY);
+          dirtyRectRef.current = null;
+        }
         animFrameIdRef.current = null;
       });
     }
@@ -498,7 +619,11 @@ export function ColorStudio({
         cancelAnimationFrame(animFrameIdRef.current);
         animFrameIdRef.current = null;
       }
-      redrawCanvas();
+      if (dirtyRectRef.current) {
+        const { minX, minY, maxX, maxY } = dirtyRectRef.current;
+        redrawCanvasRegion(minX, minY, maxX, maxY);
+        dirtyRectRef.current = null;
+      }
     }
   };
 
@@ -525,24 +650,29 @@ export function ColorStudio({
     setIsDirty(true);
   }, [redoStack, redrawCanvas]);
 
-  // Keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z)
+  const handleUndoRef = useRef(handleUndo);
+  handleUndoRef.current = handleUndo;
+  const handleRedoRef = useRef(handleRedo);
+  handleRedoRef.current = handleRedo;
+
+  // Keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z) - registered only once
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) {
-          handleRedo();
+          handleRedoRef.current();
         } else {
-          handleUndo();
+          handleUndoRef.current();
         }
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
         e.preventDefault();
-        handleRedo();
+        handleRedoRef.current();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleUndo, handleRedo]);
+  }, []);
 
   // "Apply Corrections": Commits changes and updates all composite views
   const handleApplyCorrections = useCallback(async () => {
@@ -706,18 +836,22 @@ export function ColorStudio({
     <div className="flex flex-col gap-4 font-mono">
       {/* ── Status & Provenance Bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-2.5 text-xs">
-        <div className="flex items-center gap-2">
+        <div data-testid="provenance-badge" className="flex flex-wrap items-center gap-2">
           <span
-            data-testid="provenance-badge"
-            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold tracking-wider ${
-              hasAppliedCorrections
-                ? "border-amber-500/40 bg-amber-950/50 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-                : "border-cyan-500/40 bg-cyan-950/50 text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
-            }`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-950/50 text-cyan-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(0,240,255,0.2)]"
           >
             <CheckCircle2 className="h-3 w-3" />
-            <span>{provenanceText}</span>
+            <span>Browser AI result — @imgly/isnet_fp16</span>
           </span>
+          {hasAppliedCorrections && (
+            <span
+              data-testid="corrections-badge"
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-950/50 text-amber-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+            >
+              <Sparkles className="h-3 w-3 text-amber-400" />
+              <span>Manual mask corrections applied</span>
+            </span>
+          )}
           <span className="hidden sm:inline text-slate-500">·</span>
           <span className="text-slate-400 text-[11px]">
             Engine: <strong className="text-white">@imgly/isnet_fp16</strong>

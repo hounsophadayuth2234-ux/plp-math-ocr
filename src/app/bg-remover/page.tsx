@@ -45,6 +45,7 @@ export default function BgRemoverPage() {
   const isProcessingRef = useRef(false);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const urlRegistryRef = useRef<ObjectUrlRegistry>(new ObjectUrlRegistry());
+  const requestGenerationIdRef = useRef<number>(0);
 
   // Cleanup object URLs on unmount
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function BgRemoverPage() {
     return () => {
       registry.revokeAll();
       if (activeAbortControllerRef.current) {
+        console.log("[bg-remover] ABORT TRIGGER: useEffect cleanup");
         activeAbortControllerRef.current.abort();
       }
     };
@@ -68,6 +70,7 @@ export default function BgRemoverPage() {
 
   const handleCancel = () => {
     if (activeAbortControllerRef.current) {
+      console.log("[bg-remover] ABORT TRIGGER: handleCancel");
       activeAbortControllerRef.current.abort();
       activeAbortControllerRef.current = null;
     }
@@ -85,8 +88,9 @@ export default function BgRemoverPage() {
     setProgressInfo(null);
     cyberAudio.playClick();
 
+    let imgBitmap: ImageBitmap | null = null;
     try {
-      const imgBitmap = await createImageBitmap(imageFile);
+      imgBitmap = await createImageBitmap(imageFile);
       const maxDim = 1024;
       let w = imgBitmap.width;
       let h = imgBitmap.height;
@@ -118,7 +122,12 @@ export default function BgRemoverPage() {
 
       canvas.toBlob((blob) => {
         if (!blob) return;
-        const transUrl = URL.createObjectURL(blob);
+        if (cachedResult?.transparentUrl) {
+          try {
+            URL.revokeObjectURL(cachedResult.transparentUrl);
+          } catch {}
+        }
+        const transUrl = urlRegistryRef.current.create(blob);
         setCachedResult({
           transparentBlob: blob,
           transparentUrl: transUrl,
@@ -133,22 +142,23 @@ export default function BgRemoverPage() {
         });
         setInitialCompositeUrl(whiteUrl);
       }, "image/png");
-
-      if (typeof imgBitmap.close === "function") {
-        imgBitmap.close();
-      }
     } catch (e) {
       console.error("Failed to open manual mode:", e);
+    } finally {
+      if (imgBitmap && typeof imgBitmap.close === "function") {
+        imgBitmap.close();
+      }
     }
   };
 
   const handleRunSegmentation = async (mode: "preview" | "final" | "worker") => {
-    if (isProcessingRef.current) return;
     if (!imageFile) return;
 
     if (activeAbortControllerRef.current) {
+      console.log(`[bg-remover] ABORT TRIGGER: handleRunSegmentation starting new mode=${mode}`);
       activeAbortControllerRef.current.abort();
     }
+    const currentGenerationId = ++requestGenerationIdRef.current;
     const abortController = new AbortController();
     activeAbortControllerRef.current = abortController;
 
@@ -161,15 +171,32 @@ export default function BgRemoverPage() {
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
 
-    // Hard timeout of 20 seconds for Fast Preview, 45 seconds for final/worker
-    const timeoutDuration = mode === "preview" ? 20000 : 45000;
-    const timeoutId = setTimeout(() => {
-      if (activeAbortControllerRef.current === abortController) {
+    // Start 20-second timeout strictly after model loading begins
+    let timeoutId: NodeJS.Timeout | null = null;
+    let timeoutStarted = false;
+
+    const startModelLoadingTimeout = () => {
+      if (timeoutStarted) return;
+      timeoutStarted = true;
+      const duration = mode === "preview" ? 20000 : 45000;
+      timeoutId = setTimeout(() => {
+        if (activeAbortControllerRef.current === abortController) {
+          console.log(`[bg-remover] ABORT TRIGGER: startModelLoadingTimeout reached ${duration}ms`);
+          abortController.abort(new Error(mode === "preview" ? "TIMEOUT_20S" : "TIMEOUT_45S"));
+        }
+      }, duration);
+    };
+
+    // Safety timeout in case setup hangs before model loading begins
+    const safetyTimeout = setTimeout(() => {
+      if (!timeoutStarted && activeAbortControllerRef.current === abortController) {
+        console.log(`[bg-remover] ABORT TRIGGER: safetyTimeout reached 30000ms`);
         abortController.abort(new Error(mode === "preview" ? "TIMEOUT_20S" : "TIMEOUT_45S"));
       }
-    }, timeoutDuration);
+    }, 30000);
 
     try {
+      console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, controllerId=${abortController.signal}`);
       let output: BgRemovalOutput;
 
       if (mode === "worker") {
@@ -182,26 +209,53 @@ export default function BgRemoverPage() {
           decontaminationRadius: mode === "preview" ? 1 : 1.5, // Color decontamination
           alphaMatting: true,
           signal: abortController.signal,
-          onProgress: (p) => setProgressInfo(p),
+          onProgress: (p) => {
+            setProgressInfo(p);
+            if (p.stage === "Loading model" || p.stage === "Segmenting") {
+              startModelLoadingTimeout();
+            }
+          },
         });
       }
 
-      if (abortController.signal.aborted) return;
+      console.log(`[bg-remover] Segmentation finished for ${imageFile.name}, aborted=${abortController.signal.aborted}, isCurrent=${activeAbortControllerRef.current === abortController}`);
+
+      if (
+        requestGenerationIdRef.current !== currentGenerationId ||
+        abortController.signal.aborted ||
+        activeAbortControllerRef.current !== abortController
+      ) {
+        console.log(`[bg-remover] Discarding result for ${imageFile.name} because superseded/stale (gen=${currentGenerationId}, current=${requestGenerationIdRef.current})`);
+        return;
+      }
 
       // Composite initially onto White #FFFFFF
       const { dataUrl } = await compositeWithSolidColor(output.transparentBlob, "#FFFFFF");
 
+      if (
+        requestGenerationIdRef.current !== currentGenerationId ||
+        abortController.signal.aborted ||
+        activeAbortControllerRef.current !== abortController
+      ) {
+        console.log(`[bg-remover] Discarding composite for ${imageFile.name} because superseded/stale`);
+        return;
+      }
+
       setCachedResult(output);
       setInitialCompositeUrl(dataUrl);
+      console.log(`[bg-remover] Set cachedResult successfully for ${imageFile.name}!`);
 
       cyberAudio.playSuccessChime();
     } catch (err: unknown) {
+      console.log(`[bg-remover] Catch block for ${imageFile.name}:`, err, `aborted=${abortController.signal.aborted}, isCurrent=${activeAbortControllerRef.current === abortController}`);
       cyberAudio.stopScanningHum();
+
       const isTimeout =
         (abortController.signal.reason as Error)?.message?.includes("TIMEOUT") ||
         (err instanceof Error && (err.name.includes("TIMEOUT") || err.message.includes("TIMEOUT")));
 
       if (isTimeout) {
+        console.log(`[bg-remover] TIMEOUT TRIGGERED for ${imageFile.name}`);
         setError(
           mode === "preview"
             ? "Fast Preview timed out after 20 seconds. You can retry or open Manual Mask Mode to refine edges directly."
@@ -209,25 +263,41 @@ export default function BgRemoverPage() {
         );
         return;
       }
-      if (err instanceof Error && err.name === "AbortError") {
+
+      // If this execution was aborted by user or superseded by another operation, silently exit
+      if (
+        abortController.signal.aborted ||
+        activeAbortControllerRef.current !== abortController ||
+        (err instanceof Error && (err.name === "AbortError" || err.message.toLowerCase().includes("abort")))
+      ) {
+        console.log(`[bg-remover] Exiting catch silently for ${imageFile.name}`);
         return;
       }
+
       console.error("[bg-remover] Error:", err);
       setError(
         err instanceof Error ? err.message : "Background removal segmentation failed."
       );
     } finally {
-      clearTimeout(timeoutId);
-      cyberAudio.stopScanningHum();
-      activeAbortControllerRef.current = null;
-      isProcessingRef.current = false;
-      setIsProcessing(false);
-      setProgressInfo(null);
+      clearTimeout(safetyTimeout);
+      if (timeoutId) clearTimeout(timeoutId);
+      console.log(`[bg-remover] Finally block for ${imageFile.name}, isCurrent=${activeAbortControllerRef.current === abortController}`);
+      // Only tear down UI active state if THIS abortController is still the active one
+      if (activeAbortControllerRef.current === abortController) {
+        cyberAudio.stopScanningHum();
+        activeAbortControllerRef.current = null;
+        isProcessingRef.current = false;
+        setIsProcessing(false);
+        setProgressInfo(null);
+      }
     }
   };
 
   const handleFileSelect = (file: File | null) => {
+    console.log(`[bg-remover] handleFileSelect called for file=${file?.name}`);
+    ++requestGenerationIdRef.current;
     if (activeAbortControllerRef.current) {
+      console.log(`[bg-remover] ABORT TRIGGER: handleFileSelect aborting active controller for new file=${file?.name}`);
       activeAbortControllerRef.current.abort();
       activeAbortControllerRef.current = null;
       isProcessingRef.current = false;
@@ -253,6 +323,7 @@ export default function BgRemoverPage() {
   const handleReset = () => {
     if (isProcessingRef.current) return;
     cyberAudio.playClick();
+    ++requestGenerationIdRef.current;
     setImageFile(null);
     setOriginalUrl(null);
     setCachedResult(null);
@@ -410,7 +481,7 @@ export default function BgRemoverPage() {
               <BgUploadZone
                 onFileSelect={handleFileSelect}
                 selectedFile={imageFile}
-                disabled={isProcessing}
+                disabled={false}
                 label="SOURCE INPUT"
                 hint="PNG · JPG · WEBP"
               />

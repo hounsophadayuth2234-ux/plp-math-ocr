@@ -324,6 +324,12 @@ async function refineAndDecontaminateImage(
   });
 }
 
+function createAbortError(message = "Aborted by user."): Error {
+  const err = new Error(message);
+  err.name = "AbortError";
+  return err;
+}
+
 /**
  * Universal Background Removal Engine:
  * Mode A: Fast Preview Mode (max 768px, isnet_quint8, fast browser model)
@@ -335,7 +341,7 @@ export async function removeBackgroundBrowser(
   options?: BgRemovalOptions
 ): Promise<BgRemovalOutput> {
   if (options?.signal?.aborted) {
-    throw new Error("Aborted by user.");
+    throw createAbortError("Aborted by user.");
   }
 
   const mode = options?.mode || "preview";
@@ -361,7 +367,7 @@ export async function removeBackgroundBrowser(
   );
 
   if (options?.signal?.aborted) {
-    throw new Error("Aborted by user.");
+    throw createAbortError("Aborted by user.");
   }
 
   options?.onProgress?.({
@@ -379,7 +385,7 @@ export async function removeBackgroundBrowser(
     tModelLoad = Date.now() - tLoadStart;
 
     if (options?.signal?.aborted) {
-      throw new Error("Aborted by user.");
+      throw createAbortError("Aborted by user.");
     }
 
     let lastModelPct = 0;
@@ -449,7 +455,7 @@ export async function removeBackgroundBrowser(
     tInference = Date.now() - tInfStart;
 
     if (options?.signal?.aborted) {
-      throw new Error("Aborted by user.");
+      throw createAbortError("Aborted by user.");
     }
 
     options?.onProgress?.({
@@ -481,7 +487,7 @@ export async function removeBackgroundBrowser(
     tRefine = Date.now() - tRefStart;
 
     if (options?.signal?.aborted) {
-      throw new Error("Aborted by user.");
+      throw createAbortError("Aborted by user.");
     }
 
     // Strict validation: Ensure background was actually removed (no fake/silent fallback to original)
@@ -529,7 +535,7 @@ export async function removeBackgroundBrowser(
     };
   } catch (err: unknown) {
     if (options?.signal?.aborted) {
-      throw new Error("Aborted by user.");
+      throw createAbortError("Aborted by user.");
     }
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Background removal failed: ${message}`);
@@ -548,102 +554,104 @@ export async function exportAtFullResolution(
   targetBg: "white" | "pink" | "transparent"
 ): Promise<{ blob: Blob; dataUrl: string; width: number; height: number }> {
   const origBitmap = await createImageBitmap(originalFileOrBlob);
-  const maxSafeDim = 4096;
-  let targetW = origBitmap.width;
-  let targetH = origBitmap.height;
-  if (targetW > maxSafeDim || targetH > maxSafeDim) {
-    const scale = maxSafeDim / Math.max(targetW, targetH);
-    targetW = Math.round(targetW * scale);
-    targetH = Math.round(targetH * scale);
-    console.warn(`Original image (${origBitmap.width}x${origBitmap.height}) clamped to safe export limit: ${targetW}x${targetH}`);
-  }
+  try {
+    const maxSafeDim = 4096;
+    let targetW = origBitmap.width;
+    let targetH = origBitmap.height;
+    if (targetW > maxSafeDim || targetH > maxSafeDim) {
+      const scale = maxSafeDim / Math.max(targetW, targetH);
+      targetW = Math.round(targetW * scale);
+      targetH = Math.round(targetH * scale);
+      console.warn(`Original image (${origBitmap.width}x${origBitmap.height}) clamped to safe export limit: ${targetW}x${targetH}`);
+    }
 
-  // Mask canvas
-  const maskCanvas = document.createElement("canvas");
-  maskCanvas.width = maskWidth;
-  maskCanvas.height = maskHeight;
-  const maskCtx = maskCanvas.getContext("2d");
-  if (!maskCtx) throw new Error("Could not create mask canvas.");
+    // Mask canvas
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = maskWidth;
+    maskCanvas.height = maskHeight;
+    const maskCtx = maskCanvas.getContext("2d");
+    if (!maskCtx) throw new Error("Could not create mask canvas.");
 
-  const maskImgData = maskCtx.createImageData(maskWidth, maskHeight);
-  const maskPixels = maskImgData.data;
-  for (let i = 0; i < maskWidth * maskHeight; i++) {
-    const a = alphaMask[i];
-    const idx = i * 4;
-    maskPixels[idx] = a;
-    maskPixels[idx + 1] = a;
-    maskPixels[idx + 2] = a;
-    maskPixels[idx + 3] = 255;
-  }
-  maskCtx.putImageData(maskImgData, 0, 0);
+    const maskImgData = maskCtx.createImageData(maskWidth, maskHeight);
+    const maskPixels = maskImgData.data;
+    for (let i = 0; i < maskWidth * maskHeight; i++) {
+      const a = alphaMask[i];
+      const idx = i * 4;
+      maskPixels[idx] = a;
+      maskPixels[idx + 1] = a;
+      maskPixels[idx + 2] = a;
+      maskPixels[idx + 3] = 255;
+    }
+    maskCtx.putImageData(maskImgData, 0, 0);
 
-  // Scaled mask canvas to target resolution
-  const scaledMaskCanvas = document.createElement("canvas");
-  scaledMaskCanvas.width = targetW;
-  scaledMaskCanvas.height = targetH;
-  const scaledMaskCtx = scaledMaskCanvas.getContext("2d");
-  if (!scaledMaskCtx) throw new Error("Could not create scaled mask canvas.");
-  scaledMaskCtx.imageSmoothingEnabled = true;
-  scaledMaskCtx.imageSmoothingQuality = "high";
-  scaledMaskCtx.drawImage(maskCanvas, 0, 0, targetW, targetH);
+    // Scaled mask canvas to target resolution
+    const scaledMaskCanvas = document.createElement("canvas");
+    scaledMaskCanvas.width = targetW;
+    scaledMaskCanvas.height = targetH;
+    const scaledMaskCtx = scaledMaskCanvas.getContext("2d");
+    if (!scaledMaskCtx) throw new Error("Could not create scaled mask canvas.");
+    scaledMaskCtx.imageSmoothingEnabled = true;
+    scaledMaskCtx.imageSmoothingQuality = "high";
+    scaledMaskCtx.drawImage(maskCanvas, 0, 0, targetW, targetH);
 
-  const scaledMaskData = scaledMaskCtx.getImageData(0, 0, targetW, targetH).data;
+    const scaledMaskData = scaledMaskCtx.getImageData(0, 0, targetW, targetH).data;
 
-  // Output canvas with target dimensions
-  const outCanvas = document.createElement("canvas");
-  outCanvas.width = targetW;
-  outCanvas.height = targetH;
-  const outCtx = outCanvas.getContext("2d");
-  if (!outCtx) throw new Error("Could not create output canvas.");
+    // Output canvas with target dimensions
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = targetW;
+    outCanvas.height = targetH;
+    const outCtx = outCanvas.getContext("2d");
+    if (!outCtx) throw new Error("Could not create output canvas.");
 
-  outCtx.drawImage(origBitmap, 0, 0, targetW, targetH);
-  const outImageData = outCtx.getImageData(0, 0, targetW, targetH);
-  const outPixels = outImageData.data;
+    outCtx.drawImage(origBitmap, 0, 0, targetW, targetH);
+    const outImageData = outCtx.getImageData(0, 0, targetW, targetH);
+    const outPixels = outImageData.data;
 
-  const total = targetW * targetH;
-  let hasTransparentPixel = false;
-  for (let i = 0; i < total; i++) {
-    const pIdx = i * 4;
-    const a = scaledMaskData[pIdx];
-    const r = outPixels[pIdx];
-    const g = outPixels[pIdx + 1];
-    const b = outPixels[pIdx + 2];
+    const total = targetW * targetH;
+    let hasTransparentPixel = false;
+    for (let i = 0; i < total; i++) {
+      const pIdx = i * 4;
+      const a = scaledMaskData[pIdx];
+      const r = outPixels[pIdx];
+      const g = outPixels[pIdx + 1];
+      const b = outPixels[pIdx + 2];
 
-    if (targetBg === "transparent") {
-      outPixels[pIdx + 3] = a;
-      if (a === 0) hasTransparentPixel = true;
-    } else if (targetBg === "white") {
-      const aNorm = a / 255;
-      outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-      outPixels[pIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
-      outPixels[pIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
-      outPixels[pIdx + 3] = 255;
-    } else if (targetBg === "pink") {
-      const aNorm = a / 255;
-      outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-      outPixels[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
-      outPixels[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
-      outPixels[pIdx + 3] = 255;
+      if (targetBg === "transparent") {
+        outPixels[pIdx + 3] = a;
+        if (a === 0) hasTransparentPixel = true;
+      } else if (targetBg === "white") {
+        const aNorm = a / 255;
+        outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
+        outPixels[pIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
+        outPixels[pIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
+        outPixels[pIdx + 3] = 255;
+      } else if (targetBg === "pink") {
+        const aNorm = a / 255;
+        outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
+        outPixels[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
+        outPixels[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
+        outPixels[pIdx + 3] = 255;
+      }
+    }
+
+    outCtx.putImageData(outImageData, 0, 0);
+
+    if (targetBg === "transparent" && !hasTransparentPixel) {
+      console.warn("Alpha channel verification: no pixels with alpha=0 detected in transparent export.");
+    }
+
+    return new Promise((resolve, reject) => {
+      outCanvas.toBlob((blob) => {
+        if (!blob) return reject(new Error("Failed to create full resolution blob"));
+        const dataUrl = URL.createObjectURL(blob);
+        resolve({ blob, dataUrl, width: targetW, height: targetH });
+      }, "image/png", 1.0);
+    });
+  } finally {
+    if (typeof origBitmap.close === "function") {
+      origBitmap.close();
     }
   }
-
-  outCtx.putImageData(outImageData, 0, 0);
-
-  if (targetBg === "transparent" && !hasTransparentPixel) {
-    console.warn("Alpha channel verification: no pixels with alpha=0 detected in transparent export.");
-  }
-
-  if (typeof origBitmap.close === "function") {
-    origBitmap.close();
-  }
-
-  return new Promise((resolve, reject) => {
-    outCanvas.toBlob((blob) => {
-      if (!blob) return reject(new Error("Failed to create full resolution blob"));
-      const dataUrl = URL.createObjectURL(blob);
-      resolve({ blob, dataUrl, width: targetW, height: targetH });
-    }, "image/png", 1.0);
-  });
 }
 
 /**

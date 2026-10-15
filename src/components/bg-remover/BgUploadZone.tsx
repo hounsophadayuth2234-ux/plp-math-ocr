@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import { Upload, X, ImageIcon, AlertCircle } from "lucide-react";
 
 interface BgUploadZoneProps {
@@ -26,6 +26,7 @@ export function BgUploadZone({
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
   const [sizeError, setSizeError] = useState<string | null>(null);
 
   const handleFile = useCallback(
@@ -39,7 +40,15 @@ export function BgUploadZone({
         setSizeError("File exceeds 12 MB limit.");
         return;
       }
-      setPreviewUrl(URL.createObjectURL(file));
+      // Revoke old object URL before creating a new one
+      if (previewUrlRef.current) {
+        try {
+          URL.revokeObjectURL(previewUrlRef.current);
+        } catch {}
+      }
+      const newUrl = URL.createObjectURL(file);
+      previewUrlRef.current = newUrl;
+      setPreviewUrl(newUrl);
       onFileSelect(file);
     },
     [onFileSelect]
@@ -47,10 +56,42 @@ export function BgUploadZone({
 
   const handleClear = () => {
     setSizeError(null);
+    if (previewUrlRef.current) {
+      try {
+        URL.revokeObjectURL(previewUrlRef.current);
+      } catch {}
+      previewUrlRef.current = null;
+    }
     setPreviewUrl(null);
     onFileSelect(null);
     if (inputRef.current) inputRef.current.value = "";
   };
+
+  // Synchronize and clean up when parent resets selectedFile to null
+  useEffect(() => {
+    if (!selectedFile) {
+      if (previewUrlRef.current) {
+        try {
+          URL.revokeObjectURL(previewUrlRef.current);
+        } catch {}
+        previewUrlRef.current = null;
+      }
+      setPreviewUrl(null);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }, [selectedFile]);
+
+  // Revoke preview URL on component unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        try {
+          URL.revokeObjectURL(previewUrlRef.current);
+        } catch {}
+        previewUrlRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div className="space-y-2">
