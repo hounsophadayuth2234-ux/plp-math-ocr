@@ -523,6 +523,101 @@ export function generateQuadMask(
 }
 
 /**
+ * Deterministic Document / Poster Safe Mode Output Generator.
+ *
+ * Guarantees:
+ * - NO RMBG
+ * - NO SAM
+ * - NO Alpha Matting
+ * - NO Guided Filter
+ * - NO thresholding of white or light pixels
+ * - Preserves EVERY original RGB pixel byte-identical.
+ * - Sets alpha to 255 for every pixel by default.
+ * - If an explicit user-confirmed polygon or box is provided, only pixels OUTSIDE
+ *   become 0, while all pixels INSIDE remain strictly byte-identical to source.
+ */
+export function createDocumentSafeRgba(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  options?: {
+    polygon?: [number, number][];
+    box?: [number, number, number, number];
+    corners?: QuadCorners;
+  }
+): {
+  outputRgba: Uint8ClampedArray;
+  alphaMask: Uint8ClampedArray;
+  isAllOpaque: boolean;
+} {
+  const totalPixels = width * height;
+  const outputRgba = new Uint8ClampedArray(totalPixels * 4);
+  const alphaMask = new Uint8ClampedArray(totalPixels);
+
+  const hasPolygon = options?.polygon && options.polygon.length >= 3;
+  const hasBox = options?.box && options.box.length === 4;
+  const hasCorners = Boolean(options?.corners);
+
+  if (!hasPolygon && !hasBox && !hasCorners) {
+    // Default Safe Mode: All-Opaque Copy (every pixel alpha = 255)
+    for (let i = 0; i < totalPixels; i++) {
+      const pIdx = i * 4;
+      outputRgba[pIdx] = sourceRgba[pIdx];
+      outputRgba[pIdx + 1] = sourceRgba[pIdx + 1];
+      outputRgba[pIdx + 2] = sourceRgba[pIdx + 2];
+      outputRgba[pIdx + 3] = 255;
+      alphaMask[i] = 255;
+    }
+    return { outputRgba, alphaMask, isAllOpaque: true };
+  }
+
+  // User explicitly specified or confirmed boundary
+  let poly: [number, number][] | null = null;
+  if (hasPolygon) {
+    poly = options!.polygon!;
+  } else if (hasCorners) {
+    const c = options!.corners!;
+    poly = [c.topLeft, c.topRight, c.bottomRight, c.bottomLeft];
+  }
+
+  let isAllOpaque = true;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      const pIdx = idx * 4;
+
+      let isInside = true;
+      if (poly) {
+        isInside = pointInPolygon(x, y, poly);
+      } else if (hasBox) {
+        const [bx1, by1, bx2, by2] = options!.box!;
+        isInside = x >= bx1 && x <= bx2 && y >= by1 && y <= by2;
+      }
+
+      if (isInside) {
+        // Inside page polygon: Strictly byte-identical to source RGB
+        outputRgba[pIdx] = sourceRgba[pIdx];
+        outputRgba[pIdx + 1] = sourceRgba[pIdx + 1];
+        outputRgba[pIdx + 2] = sourceRgba[pIdx + 2];
+        outputRgba[pIdx + 3] = 255;
+        alphaMask[idx] = 255;
+      } else {
+        // Outside page polygon: Transparent
+        outputRgba[pIdx] = 0;
+        outputRgba[pIdx + 1] = 0;
+        outputRgba[pIdx + 2] = 0;
+        outputRgba[pIdx + 3] = 0;
+        alphaMask[idx] = 0;
+        isAllOpaque = false;
+      }
+    }
+  }
+
+  return { outputRgba, alphaMask, isAllOpaque };
+}
+
+/**
  * Rectifies / warps a 4-point quadrilateral document region into an upright rectangle.
  */
 export function warpPerspectiveQuad(

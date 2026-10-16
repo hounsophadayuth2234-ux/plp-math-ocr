@@ -1060,6 +1060,56 @@ export function ColorStudio({
     }
   }, [sourceImageData, width, height, documentCorners]);
 
+  const handleTransparentOutsidePage = useCallback(async () => {
+    if (!sourceImageData || !alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+
+    let corners = documentCorners;
+    if (!corners) {
+      const docResult = detectDocumentQuad(sourceImageData.data, width, height);
+      if (docResult.hasDocumentBoundary && !docResult.isFullImage) {
+        corners = docResult.corners;
+        setDocumentCorners(corners);
+      }
+    }
+
+    if (corners) {
+      const quadMask = generateQuadMask(corners, width, height);
+      alphaMaskRef.current.set(quadMask);
+      setContainerWarning(
+        "📄 [POSTER/DOCUMENT] កំណត់ផ្ទៃខាងក្រៅឱ្យថ្លា (Transparent outside page polygon applied. Inside page remains 100% byte-identical)."
+      );
+    } else {
+      alphaMaskRef.current.fill(255);
+      setContainerWarning(
+        "📄 [POSTER/DOCUMENT] រក្សាទំព័រពេញលេញ (Full canvas preserved as page boundary was uncertain)."
+      );
+    }
+
+    await recompositeAll(alphaMaskRef.current);
+    redrawCanvas();
+    setIsDirty(true);
+  }, [sourceImageData, width, height, documentCorners, saveSnapshotToHistory, recompositeAll, redrawCanvas]);
+
+  const handleResetDocument = useCallback(async () => {
+    if (!alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    setDocumentCorners(null);
+    setIsPerspectiveMode(false);
+    alphaMaskRef.current.fill(255);
+    if (manualKeepMaskRef.current) {
+      manualKeepMaskRef.current.fill(255);
+    }
+    setContainerWarning(null);
+    setActiveChannel(initialPurpose || "white");
+    await recompositeAll(alphaMaskRef.current);
+    redrawCanvas();
+    setIsDirty(false);
+    if (onReset) onReset();
+  }, [saveSnapshotToHistory, initialPurpose, onReset, recompositeAll, redrawCanvas]);
+
   // Confirm Mask & Run Alpha Matting Refinement with Automated Safety Check
   const handleConfirmMaskAndExport = useCallback(async () => {
     if (!alphaMaskRef.current || !sourceImageData) return;
@@ -1076,6 +1126,8 @@ export function ColorStudio({
         alphaMaskRef.current,
         excludedMaskRef.current,
         {
+          mode: selectionMode,
+          documentSafeMode: selectionMode === "document_poster",
           initialMask,
           manualKeepMask: manualKeepMaskRef.current,
           maxDropRatio: 0.20,
@@ -1739,91 +1791,147 @@ export function ColorStudio({
 
         {/* Document / Poster Mode Controls & Tools */}
         {selectionMode === "document_poster" && (
-          <div className="flex flex-wrap items-center justify-between gap-2 p-3 border border-cyan-500/40 bg-cyan-950/40 text-xs font-mono">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] text-cyan-300 uppercase font-bold">DOCUMENT TOOLS:</span>
-              <button
-                type="button"
-                data-testid="detect-page-boundary-btn"
-                onClick={handleDetectPageBoundary}
-                className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-cyan-500/50 bg-slate-900 text-cyan-300 hover:text-white hover:bg-cyan-950 transition-all font-bold"
-              >
-                <span>🔍 រកព្រំដែនទំព័រ (Detect Page Boundary)</span>
-              </button>
-              <button
-                type="button"
-                data-testid="four-corner-crop-btn"
-                onClick={() => {
-                  cyberAudio.playClick();
-                  setIsPerspectiveMode(!isPerspectiveMode);
-                }}
-                className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border transition-all font-bold ${
-                  isPerspectiveMode
-                    ? "border-amber-400 bg-amber-950 text-white ring-1 ring-amber-400"
-                    : "border-slate-800 bg-slate-900 text-slate-300 hover:text-white"
-                }`}
-              >
-                <span>📐 កាត់តម្រង់ ៤ជ្រុង (Four-Corner Crop)</span>
-              </button>
-              {isPerspectiveMode && (
-                <button
-                  type="button"
-                  data-testid="warp-page-btn"
-                  onClick={handleWarpPerspective}
-                  className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-amber-400 bg-amber-900/80 text-white font-bold hover:brightness-110 shadow-[0_0_12px_rgba(245,158,11,0.4)]"
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-amber-200" />
-                  <span>តម្រង់ផ្ទៃក្រដាស (Warp &amp; Rectify)</span>
-                </button>
-              )}
-              <button
-                type="button"
-                data-testid="keep-original-page-btn"
-                onClick={handleKeepOriginalPage}
-                className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 hover:text-white transition-all font-bold"
-              >
-                <span>📄 រក្សាទំព័រដើមទាំងស្រុង (Keep Full Canvas)</span>
-              </button>
+          <div className="space-y-2">
+            {/* Prominent Badge */}
+            <div
+              data-testid="document-safe-mode-badge"
+              className="flex items-center justify-between px-3.5 py-2.5 bg-emerald-950/80 border border-emerald-400 text-emerald-300 font-mono text-xs font-bold shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-none bg-emerald-400 animate-pulse" />
+                <span className="tracking-wider">DOCUMENT SAFE MODE: AI MATTE DISABLED</span>
+              </div>
+              <span className="text-[10px] text-emerald-400/80 font-normal">
+                0% Fading · 100% Opaque Text · Byte-Preserved
+              </span>
             </div>
 
-            {/* Preview Tabs for Document/Poster */}
-            <div className="flex items-center gap-1 bg-slate-950 p-1 border border-slate-800">
-              <button
-                type="button"
-                data-testid="tab-original"
-                onClick={() => handleSelectChannel("original")}
-                className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
-                  activeChannel === "original"
-                    ? "bg-cyan-500 text-black shadow"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                Original
-              </button>
-              <button
-                type="button"
-                data-testid="tab-page-mask"
-                onClick={() => handleSelectChannel("initial_mask")}
-                className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
-                  activeChannel === "initial_mask"
-                    ? "bg-cyan-500 text-black shadow"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                Page Mask
-              </button>
-              <button
-                type="button"
-                data-testid="tab-final"
-                onClick={() => handleSelectChannel("transparent")}
-                className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
-                  activeChannel === "transparent"
-                    ? "bg-cyan-500 text-black shadow"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                Final Cutout
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 border border-cyan-500/40 bg-cyan-950/40 text-xs font-mono">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* 1. Keep original document */}
+                <button
+                  type="button"
+                  data-testid="keep-original-document-btn"
+                  onClick={handleKeepOriginalPage}
+                  className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-cyan-400/60 bg-cyan-950/70 text-cyan-200 hover:text-white hover:bg-cyan-900 transition-all font-bold shadow-sm"
+                >
+                  <span>📄 រក្សាទំព័រដើម (Keep Original Document)</span>
+                </button>
+
+                {/* 2. Draw page boundary */}
+                <button
+                  type="button"
+                  data-testid="draw-page-boundary-btn"
+                  onClick={handleDetectPageBoundary}
+                  className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-cyan-500/50 bg-slate-900 text-cyan-300 hover:text-white hover:bg-cyan-950 transition-all font-bold"
+                >
+                  <span>📐 គូសព្រំដែនទំព័រ (Draw Page Boundary)</span>
+                </button>
+
+                {/* 3. Perspective crop */}
+                <button
+                  type="button"
+                  data-testid="perspective-crop-btn"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setIsPerspectiveMode(!isPerspectiveMode);
+                  }}
+                  className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border transition-all font-bold ${
+                    isPerspectiveMode
+                      ? "border-amber-400 bg-amber-950 text-white ring-1 ring-amber-400"
+                      : "border-slate-800 bg-slate-900 text-slate-300 hover:text-white"
+                  }`}
+                >
+                  <span>✂️ តម្រង់ផ្ទៃក្រដាស (Perspective Crop)</span>
+                </button>
+                {isPerspectiveMode && (
+                  <button
+                    type="button"
+                    data-testid="warp-page-btn"
+                    onClick={handleWarpPerspective}
+                    className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-amber-400 bg-amber-900/80 text-white font-bold hover:brightness-110 shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-200" />
+                    <span>បញ្ជាក់ការតម្រង់ (Apply Warp)</span>
+                  </button>
+                )}
+
+                {/* 4. Transparent outside page (opt-in) */}
+                <button
+                  type="button"
+                  data-testid="transparent-outside-page-btn"
+                  onClick={handleTransparentOutsidePage}
+                  className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-indigo-400/60 bg-indigo-950/60 text-indigo-200 hover:text-white hover:bg-indigo-900 transition-all font-bold"
+                >
+                  <span>🏁 ផ្ទៃខាងក្រៅថ្លា (Transparent Outside Page - Opt-In)</span>
+                </button>
+
+                {/* 5. Original preview */}
+                <button
+                  type="button"
+                  data-testid="original-preview-btn"
+                  onClick={() => handleSelectChannel("original")}
+                  className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border transition-all font-bold ${
+                    activeChannel === "original"
+                      ? "border-cyan-400 bg-cyan-900 text-white ring-1 ring-cyan-400"
+                      : "border-slate-800 bg-slate-900 text-slate-300 hover:text-white"
+                  }`}
+                >
+                  <Eye className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>👁️ មើលរូបដើម (Original Preview)</span>
+                </button>
+
+                {/* 6. Reset */}
+                <button
+                  type="button"
+                  data-testid="reset-document-btn"
+                  onClick={handleResetDocument}
+                  className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-rose-500/40 bg-rose-950/40 text-rose-300 hover:text-white hover:bg-rose-900/60 transition-all font-bold"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>🔄 កំណត់ឡើងវិញ (Reset)</span>
+                </button>
+              </div>
+
+              {/* Preview Tabs for Document/Poster */}
+              <div className="flex items-center gap-1 bg-slate-950 p-1 border border-slate-800">
+                <button
+                  type="button"
+                  data-testid="tab-original"
+                  onClick={() => handleSelectChannel("original")}
+                  className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
+                    activeChannel === "original"
+                      ? "bg-cyan-500 text-black shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Original
+                </button>
+                <button
+                  type="button"
+                  data-testid="tab-page-mask"
+                  onClick={() => handleSelectChannel("initial_mask")}
+                  className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
+                    activeChannel === "initial_mask"
+                      ? "bg-cyan-500 text-black shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Page Mask
+                </button>
+                <button
+                  type="button"
+                  data-testid="tab-final"
+                  onClick={() => handleSelectChannel("transparent")}
+                  className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
+                    activeChannel === "transparent"
+                      ? "bg-cyan-500 text-black shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Final Cutout
+                </button>
+              </div>
             </div>
           </div>
         )}

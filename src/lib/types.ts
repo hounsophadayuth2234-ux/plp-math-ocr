@@ -9,7 +9,8 @@ export type ProcessingStatusLabel =
   | "Local worker result"
   | "Cloud API result"
   | "Demo preview"
-  | "Enhanced resize — not AI super-resolution";
+  | "Enhanced resize — not AI super-resolution"
+  | "Document Safe Mode (AI Matte Disabled)";
 
 export interface AppError {
   code:

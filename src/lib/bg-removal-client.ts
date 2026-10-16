@@ -19,6 +19,7 @@ import {
   MaskDiagnostics,
   computeMaskDiagnostics,
   applyAreaSafetyCheck,
+  createDocumentSafeRgba,
 } from "./bg-compositor";
 
 export type { ContentMode, QuadCorners, DocumentDetectionResult };
@@ -27,11 +28,17 @@ export {
   generateQuadMask,
   warpPerspectiveQuad,
   applyColorDehalo,
+  createDocumentSafeRgba,
 };
 
 /**
  * Feature Flags for Rescue & Safety
  */
+export const DOCUMENT_SAFE_MODE =
+  typeof process !== "undefined" && process.env.DOCUMENT_SAFE_MODE !== undefined
+    ? process.env.DOCUMENT_SAFE_MODE !== "false"
+    : true;
+
 export const BACKGROUND_REMOVAL_CONSERVATIVE =
   typeof process !== "undefined" && process.env.BACKGROUND_REMOVAL_CONSERVATIVE !== undefined
     ? process.env.BACKGROUND_REMOVAL_CONSERVATIVE !== "false"
@@ -1172,23 +1179,27 @@ export async function segmentObjectSelection(
       srcImageData = new ImageData(imgW, imgH);
     }
 
+    // DOCUMENT / POSTER SAFE MODE:
+    // - Zero RMBG / Zero SAM / Zero AI inference
+    // - Default: 100% opaque full canvas (all alpha = 255)
+    // - Only allows transparency outside user-confirmed polygon/box
     const docResult = detectDocumentQuad(srcImageData.data, imgW, imgH);
-    const activeMask = generateQuadMask(docResult.corners, imgW, imgH);
+    const safeDoc = createDocumentSafeRgba(srcImageData.data, imgW, imgH, {
+      polygon: options?.polygon,
+      box: options?.boxes?.[0],
+    });
+    const activeMask = safeDoc.alphaMask;
     const excludedMask = new Uint8ClampedArray(imgW * imgH);
 
     // Apply interactive prompts if any provided
     if (
       (options?.positivePoints && options.positivePoints.length > 0) ||
-      (options?.negativePoints && options.negativePoints.length > 0) ||
-      (options?.boxes && options.boxes.length > 0) ||
-      (options?.polygon && options.polygon.length >= 3)
+      (options?.negativePoints && options.negativePoints.length > 0)
     ) {
       const updatedWithPrompts = applyInteractivePromptsToMask(activeMask, imgW, imgH, {
         mode,
         positivePoints: options?.positivePoints,
         negativePoints: options?.negativePoints,
-        boxes: options?.boxes,
-        polygon: options?.polygon,
         pointRadius: options?.pointRadius || 18,
       });
       activeMask.set(updatedWithPrompts);
@@ -1211,7 +1222,7 @@ export async function segmentObjectSelection(
 
     return {
       sourceImageData: srcImageData,
-      initialMask: activeMask,
+      initialMask: new Uint8ClampedArray(activeMask),
       activeMask,
       excludedMask,
       width: imgW,
@@ -1359,6 +1370,8 @@ export async function segmentObjectSelection(
 }
 
 export interface RefineAlphaMattingOptions {
+  mode?: SelectionMode;
+  documentSafeMode?: boolean;
   quality?: "fast" | "balanced" | "quality";
   edgeQuality?: "fast" | "balanced" | "fine";
   remoteWorker?: boolean;
@@ -1385,6 +1398,70 @@ export async function refineAlphaMattingWithMask(
   const w = sourceImageData.width;
   const h = sourceImageData.height;
   const totalPixels = w * h;
+
+  // DOCUMENT SAFE MODE: AI MATTE DISABLED
+  // - Do not run RMBG.
+  // - Do not run SAM.
+  // - Do not run alpha matting.
+  // - Do not run guided filter.
+  // - Do not threshold white pixels.
+  // - Preserve every original RGB pixel byte-identical.
+  // - Alpha is activeMask (all 255 unless user explicitly cut an outside polygon).
+  const isDocSafe = options?.mode === "document_poster" || options?.documentSafeMode;
+  if (isDocSafe) {
+    let transparentBlob: Blob;
+    let transparentUrl = "";
+    let alphaMaskUrl = "";
+
+    if (typeof document !== "undefined") {
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const outImgData = ctx.createImageData(w, h);
+        const outPixels = outImgData.data;
+        const srcPixels = sourceImageData.data;
+        for (let i = 0; i < totalPixels; i++) {
+          const pIdx = i * 4;
+          outPixels[pIdx] = srcPixels[pIdx];
+          outPixels[pIdx + 1] = srcPixels[pIdx + 1];
+          outPixels[pIdx + 2] = srcPixels[pIdx + 2];
+          outPixels[pIdx + 3] = activeMask[i];
+        }
+        ctx.putImageData(outImgData, 0, 0);
+
+        transparentBlob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((b) => {
+            if (b) resolve(b);
+            else reject(new Error("Failed to create blob for document safe cutout."));
+          }, "image/png");
+        });
+        transparentUrl = URL.createObjectURL(transparentBlob);
+        alphaMaskUrl = createAlphaMaskDataUrl(activeMask, w, h);
+      } else {
+        transparentBlob = new Blob([], { type: "image/png" });
+      }
+    } else {
+      transparentBlob = new Blob([], { type: "image/png" });
+    }
+
+    return {
+      transparentBlob,
+      transparentUrl,
+      alphaMaskUrl,
+      alphaMaskBuffer: activeMask,
+      sourceImageData,
+      width: w,
+      height: h,
+      sourceWidth: w,
+      sourceHeight: h,
+      wasDownscaled: false,
+      label: "Document Safe Mode (AI Matte Disabled)",
+      model: "DOCUMENT SAFE MODE: AI MATTE DISABLED",
+      mode: "preview",
+    };
+  }
 
   const quality = options?.quality || (options?.edgeQuality === "fine" ? "quality" : "balanced");
   const trimapRadius = quality === "fast" ? 3 : quality === "quality" ? 6 : 4;

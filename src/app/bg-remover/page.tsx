@@ -24,6 +24,7 @@ import {
   BgRemovalOutput,
   BgRemovalProgress,
   STAGE_DEADLINES,
+  DOCUMENT_SAFE_MODE,
 } from "@/lib/bg-removal-client";
 import { SelectionMode } from "@/lib/bg-compositor";
 import { bgWorkerManager } from "@/lib/bg-removal-worker-manager";
@@ -45,7 +46,9 @@ export default function BgRemoverPage() {
   const [workflowStep, setWorkflowStep] = useState<
     "detecting" | "edit_mask" | "refining" | "ready" | "failed"
   >("ready");
-  const [activeSelectionMode, setActiveSelectionMode] = useState<SelectionMode>("whole_product");
+  const [activeSelectionMode, setActiveSelectionMode] = useState<SelectionMode>(
+    DOCUMENT_SAFE_MODE ? "document_poster" : "whole_product"
+  );
   const excludedMaskRef = useRef<Uint8ClampedArray | null>(null);
 
   // Processing state
@@ -260,6 +263,8 @@ export default function BgRemoverPage() {
           confirmedMask,
           excludedMaskRef.current,
           {
+            mode: activeSelectionMode,
+            documentSafeMode: activeSelectionMode === "document_poster",
             quality: edgeQuality,
             remoteWorker: processingMode === "worker",
             directUrl: directWorkerUrl,
@@ -395,7 +400,65 @@ export default function BgRemoverPage() {
       console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, mode=${mode}`);
       let output: BgRemovalOutput;
 
-      if (mode === "worker") {
+      if (activeSelectionMode === "document_poster") {
+        // DOCUMENT SAFE MODE: AI MATTE DISABLED
+        // Zero worker calls, zero model inference, 100% byte-identical RGB preservation.
+        const segResult = await segmentObjectSelection(imageFile, {
+          mode: "document_poster",
+          signal: abortController.signal,
+        });
+
+        excludedMaskRef.current = segResult.excludedMask;
+
+        const { width, height, sourceImageData, activeMask } = segResult;
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Could not create canvas context for document segmentation.");
+
+        const outImgData = ctx.createImageData(width, height);
+        const outData = outImgData.data;
+        const srcData = sourceImageData.data;
+        const total = width * height;
+        for (let i = 0; i < total; i++) {
+          const pIdx = i * 4;
+          outData[pIdx] = srcData[pIdx];
+          outData[pIdx + 1] = srcData[pIdx + 1];
+          outData[pIdx + 2] = srcData[pIdx + 2];
+          outData[pIdx + 3] = activeMask[i];
+        }
+        ctx.putImageData(outImgData, 0, 0);
+
+        const transparentBlob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((b) => {
+            if (b) resolve(b);
+            else reject(new Error("Failed to create blob for document cutout."));
+          }, "image/png");
+        });
+
+        const transUrl = urlRegistryRef.current.create(transparentBlob);
+        const { createAlphaMaskDataUrl } = await import("@/lib/bg-removal-client");
+        const maskUrl = createAlphaMaskDataUrl(activeMask, width, height);
+
+        const elapsedTotal = Math.round(performance.now() - startTime);
+        output = {
+          transparentBlob,
+          transparentUrl: transUrl,
+          alphaMaskUrl: maskUrl,
+          alphaMaskBuffer: activeMask,
+          sourceImageData,
+          width,
+          height,
+          sourceWidth: segResult.sourceWidth,
+          sourceHeight: segResult.sourceHeight,
+          wasDownscaled: false,
+          label: "Document Safe Mode (AI Matte Disabled)",
+          model: "DOCUMENT SAFE MODE: AI MATTE DISABLED",
+          mode: "preview",
+          metrics: { totalMs: elapsedTotal },
+        };
+      } else if (mode === "worker") {
         output = await removeBackgroundRemote(imageFile, {
           refine: edgeQuality !== "fast",
           quality: edgeQuality,
@@ -907,9 +970,9 @@ export default function BgRemoverPage() {
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-cyan-400" />
-                    <span>📄 ឯកសារ/Poster</span>
+                    <span>📄 Document / Poster</span>
                   </div>
-                  <span className="text-[9px] text-cyan-300/80 mt-0.5">Preserve full page</span>
+                  <span className="text-[9px] text-cyan-300/80 mt-0.5">Preserve all content</span>
                 </button>
 
                 {/* 2. Person Mode */}
@@ -930,9 +993,9 @@ export default function BgRemoverPage() {
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-purple-400" />
-                    <span>👤 មនុស្ស</span>
+                    <span>👤 Person cutout</span>
                   </div>
-                  <span className="text-[9px] text-purple-300/80 mt-0.5">Person cutout</span>
+                  <span className="text-[9px] text-purple-300/80 mt-0.5">Isolated portrait</span>
                 </button>
 
                 {/* 3. Product Mode */}
@@ -953,9 +1016,9 @@ export default function BgRemoverPage() {
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-emerald-400" />
-                    <span>📦 ផលិតផល</span>
+                    <span>📦 Product cutout</span>
                   </div>
-                  <span className="text-[9px] text-emerald-300/80 mt-0.5">Whole product</span>
+                  <span className="text-[9px] text-emerald-300/80 mt-0.5">Keep whole product</span>
                 </button>
 
                 {/* 4. Custom Mode */}
@@ -976,11 +1039,25 @@ export default function BgRemoverPage() {
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-amber-400" />
-                    <span>🎯 Custom</span>
+                    <span>🎯 Custom selection</span>
                   </div>
                   <span className="text-[9px] text-amber-300/80 mt-0.5">Draw selection</span>
                 </button>
               </div>
+
+              {/* Document Safe Mode Badge */}
+              {activeSelectionMode === "document_poster" && (
+                <div
+                  data-testid="document-safe-mode-badge"
+                  className="flex items-center justify-between px-3 py-2 bg-emerald-950/80 border border-emerald-400 text-emerald-300 font-mono text-[11px] font-bold shadow-[0_0_12px_rgba(16,185,129,0.3)] mt-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-none bg-emerald-400 animate-pulse" />
+                    <span>DOCUMENT SAFE MODE: AI MATTE DISABLED</span>
+                  </div>
+                  <span className="text-[9px] text-emerald-400/80 font-normal">Byte-Preserved</span>
+                </div>
+              )}
 
               {/* Mode Explanation */}
               <div className="text-[9.5px] text-slate-300 leading-relaxed font-mono bg-slate-950/60 p-2.5 border border-slate-800/80">
