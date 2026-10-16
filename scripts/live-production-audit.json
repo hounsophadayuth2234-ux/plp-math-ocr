@@ -1,0 +1,58 @@
+{
+  "redirectCheck": {
+    "status": 308,
+    "location": "/plp-math-content",
+    "passed": true
+  },
+  "metadataCheck": {
+    "title": "PLP Math Content",
+    "canonical": "https://ai-toolkit-hub-nu.vercel.app/plp-math-content",
+    "ogTitle": "PLP Math Content",
+    "passed": true
+  },
+  "viewports": [
+    {
+      "name": "320px (iPhone SE)",
+      "clientWidth": 320,
+      "scrollWidth": 320,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    },
+    {
+      "name": "360px (Android)",
+      "clientWidth": 360,
+      "scrollWidth": 360,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    },
+    {
+      "name": "390px (iPhone 14/15/16)",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    },
+    {
+      "name": "768px (iPad/Tablet)",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    },
+    {
+      "name": "1280px (Desktop)",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    }
+  ],
+  "keyboardAndA11y": null,
+  "uiWorkflow": {
+    "latexRendered": "x^2 + 5x + 6 = 0",
+    "elapsedText": "Elapsed: 5.79s",
+    "spinnerStopped": true,
+    "passed": true
+  },
+  "success": true
+}

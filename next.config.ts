@@ -29,6 +29,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/math-ocr",
+        destination: "/plp-math-content",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

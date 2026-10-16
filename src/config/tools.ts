@@ -22,15 +22,15 @@ export interface ToolModule {
 
 export const CORE_TOOLS: ToolModule[] = [
   {
-    id: "math-ocr",
+    id: "plp-math-content",
     number: 1,
-    title: "សរសេរកូដ LaTeX, Jodit HTML, MathML",
-    shortTitle: "សរសេរកូដ LaTeX, Jodit HTML, MathML",
-    href: "/math-ocr",
+    title: "PLP Math Content",
+    shortTitle: "PLP Math Content",
+    href: "/plp-math-content",
     description:
-      "ស្រង់សមីការ គណនាលេខបញ្ឈរ និងរូបធរណីមាត្រពីឯកសាររូបភាព ឬអក្សរ ទៅជាទម្រង់ LaTeX, Jodit HTML (Strict Inline CSS) និង MathML សម្រាប់ប្រព័ន្ធ PLP។",
-    badge: "Gemini Vision (Active)",
-    engine: "Google Gemini Flash Vision",
+      "Convert math images and text into LaTeX, Jodit HTML, and MathML. ស្រង់រូបមន្ត និងបំលែងជាទម្រង់ LaTeX, Jodit HTML (Strict Inline CSS) និង MathML សម្រាប់ប្រព័ន្ធ PLP។",
+    badge: "Active",
+    engine: "Gemini Vision Core",
     accentColor: "from-cyan-500 via-indigo-500 to-violet-600",
     highlights: [
       "Option 1: Standard LaTeX code",

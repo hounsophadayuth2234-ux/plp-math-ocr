@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import {
+  validateLatexWithKatex,
+  sanitizeJoditHtml,
+  validateMathML,
+} from "@/lib/math-ocr-utils";
 
 export const maxDuration = 45;
 
@@ -19,9 +24,59 @@ export interface MathOcrResponse {
 }
 
 export interface MathOcrError {
+  ok?: boolean;
   error: string;
   details?: string;
   code?: string;
+  retryable?: boolean;
+  requestId?: string;
+  message?: string;
+}
+
+// -----------------------------------------------------------
+// Magic bytes validator for PNG, JPEG, WEBP
+// -----------------------------------------------------------
+function validateImageMagicBytes(buffer: ArrayBuffer): {
+  valid: boolean;
+  format?: "image/png" | "image/jpeg" | "image/webp";
+} {
+  if (buffer.byteLength < 12) return { valid: false };
+  const bytes = new Uint8Array(buffer.slice(0, 16));
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return { valid: true, format: "image/png" };
+  }
+
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { valid: true, format: "image/jpeg" };
+  }
+
+  // WEBP: RIFF .... WEBP
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return { valid: true, format: "image/webp" };
+  }
+
+  return { valid: false };
 }
 
 // -----------------------------------------------------------
@@ -48,6 +103,17 @@ STRICT RULES:
 - Do NOT guess unclear content. Mark unclear content in "uncertainParts".
 - The three outputs must represent exactly the same transcription.
 
+CRITICAL LATEX FORMATTING RULES:
+1. STRICT KATEX (0.19.0) COMPATIBILITY:
+   - Placeholders, blanks, or answer boxes such as [___] or [____] MUST escape literal underscores: write [\\_\\_\\_] or [\\_], NEVER raw unescaped [_..._] in math mode (raw underscores in LaTeX denote subscripts and break rendering).
+2. VERTICAL ARITHMETIC IN LATEX:
+   - Use standard array column alignments: \\begin{array}{r} or \\begin{array}{rr} with \\hline.
+   - NEVER use @{\\quad} or @{...} in array column specifiers because KaTeX rejects @ column alignments with "Unknown column alignment: @".
+3. FRACTIONS:
+   - Use standard \\frac{numerator}{denominator}.
+4. MULTILINE EQUATIONS:
+   - Use \\begin{aligned} ... \\end{aligned} or \\begin{array}{l} ... \\end{array}.
+
 CRITICAL JODIT HTML FORMATTING RULES:
 1. ABSOLUTE STRICT INLINE CSS ONLY:
    - NO <style> tags, NO CSS classes, NO external stylesheets.
@@ -65,6 +131,10 @@ CRITICAL JODIT HTML FORMATTING RULES:
 5. GEOMETRY (SVG):
    - If shapes/diagrams are present, generate clean self-contained <svg> with stroke-width="3" and legible font-size="24".
 
+CRITICAL MATHML FORMATTING RULES:
+1. Wrap in standard <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">...</math>.
+2. Use standard elements: <mrow>, <mfrac>, <msup>, <msub>, <mtable>, <mtr>, <mtd>, <mn>, <mi>, <mo>, <mtext>.
+
 Return a valid JSON object with EXACTLY this structure:
 {
   "transcription": "literal raw text of the transcription",
@@ -77,14 +147,49 @@ Return a valid JSON object with EXACTLY this structure:
   "uncertainParts": []
 }`;
 
-// Candidate models in order of speed and stability
-const CANDIDATE_MODELS = [
-  "gemini-flash-lite-latest",
-  "gemini-3.1-flash-lite",
-  "gemini-3.5-flash-lite",
-  "gemini-flash-latest",
-  "gemini-3.8-flash",
-];
+// Configurable candidate models in order of priority (overridable via server environment variable)
+export function getCandidateModels(): string[] {
+  const envPriority = process.env.GEMINI_MODEL_PRIORITY;
+  if (envPriority && envPriority.trim()) {
+    const list = envPriority
+      .split(",")
+      .map((m) => m.trim())
+      .filter((m) => m.length > 0);
+    if (list.length > 0) return list;
+  }
+  return [
+    "gemini-3.5-flash",
+    "gemini-3.8-flash",
+    "gemini-flash-lite-latest",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+  ];
+}
+
+// Transient/provider-availability error classifier (429, 500, 502, 503, 504, network failure, timeout)
+export function isTransientProviderError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/\b(429|500|502|503|504)\b/i.test(msg)) return true;
+  if (
+    /high demand|temporarily unavailable|service unavailable|overloaded|resource exhausted|rate limit|too many requests|quota|is not available/i.test(
+      msg
+    )
+  ) {
+    return true;
+  }
+  if (/timeout|timed out|fetch failed|network|econnreset|econnrefused|socket hang up|abort/i.test(msg)) {
+    return true;
+  }
+  return false;
+}
+
+// Exponential backoff with random jitter
+function getBackoffMs(retryCount: number): number {
+  const base = Math.min(1000, 200 * Math.pow(2, retryCount));
+  const jitter = Math.random() * 200;
+  return Math.round(base + jitter);
+}
 
 // Helper to execute a promise with a timeout
 function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
@@ -101,6 +206,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
 // -----------------------------------------------------------
 export async function POST(req: NextRequest) {
   const overallStartTime = Date.now();
+  const requestId = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
   try {
     let formData: FormData;
@@ -108,7 +214,15 @@ export async function POST(req: NextRequest) {
       formData = await req.formData();
     } catch {
       return NextResponse.json<MathOcrError>(
-        { error: "Invalid form data. Expected multipart/form-data." },
+        {
+          ok: false,
+          error: "ទិន្នន័យមិនត្រឹមត្រូវ (Invalid Form Data)៖ សូមបញ្ចូលទិន្នន័យជា multipart/form-data។",
+          details: "Invalid form data. Expected multipart/form-data.",
+          code: "INVALID_FORM_DATA",
+          retryable: false,
+          requestId,
+          message: "Invalid form data. Expected multipart/form-data.",
+        },
         { status: 400 }
       );
     }
@@ -117,11 +231,74 @@ export async function POST(req: NextRequest) {
     const imageFile = formData.get("image") as File | null;
     const customInstructions = formData.get("customInstructions") as string | null;
 
-    if (!rawText && !imageFile) {
+    const trimmedText = rawText ? rawText.trim() : "";
+
+    if (!imageFile && !trimmedText) {
       return NextResponse.json<MathOcrError>(
-        { error: "Please provide either a math image or raw text to transcribe." },
+        {
+          ok: false,
+          error: "ទិន្នន័យមិនត្រឹមត្រូវ (Invalid Input)៖ សូមបញ្ចូលរូបភាពគណិតវិទ្យា ឬអត្ថបទសមីការគណិតវិទ្យា។",
+          details: "Please provide either a valid math image or non-empty raw text to transcribe.",
+          code: "INVALID_INPUT",
+          retryable: false,
+          requestId,
+          message: "Please provide either a valid math image or non-empty raw text to transcribe.",
+        },
         { status: 400 }
       );
+    }
+
+    // Server-side payload size guard: Vercel serverless limit is 4.5 MB
+    if (imageFile && imageFile.size > 4.5 * 1024 * 1024) {
+      return NextResponse.json<MathOcrError>(
+        {
+          ok: false,
+          error: "ទំហំរូបភាពធំពេក (Payload Too Large)៖ រូបភាពលើសពីដែនកំណត់ 4.5 MB របស់ម៉ាស៊ីនមេ។",
+          details: `Uploaded image size (${(imageFile.size / (1024 * 1024)).toFixed(2)} MB) exceeds 4.5 MB function limit. Please use client-side preprocessing or a smaller image.`,
+          code: "PAYLOAD_TOO_LARGE",
+          retryable: false,
+          requestId,
+          message: "Image payload exceeds 4.5 MB limit.",
+        },
+        { status: 413 }
+      );
+    }
+
+    let verifiedMimeType: "image/png" | "image/jpeg" | "image/webp" = "image/png";
+
+    if (imageFile) {
+      const imageBytes = await imageFile.arrayBuffer();
+      if (imageBytes.byteLength === 0) {
+        return NextResponse.json<MathOcrError>(
+          {
+            ok: false,
+            error: "ឯកសាររូបភាពទទេ (Empty File)៖ ឯកសារ 0 bytes មិនអាចដំណើរការបានទេ។",
+            details: "Uploaded image file is empty (0 bytes).",
+            code: "EMPTY_FILE",
+            retryable: false,
+            requestId,
+            message: "Uploaded image file is empty (0 bytes).",
+          },
+          { status: 400 }
+        );
+      }
+
+      const magicCheck = validateImageMagicBytes(imageBytes);
+      if (!magicCheck.valid || !magicCheck.format) {
+        return NextResponse.json<MathOcrError>(
+          {
+            ok: false,
+            error: "ប្រភេទឯកសារមិនត្រឹមត្រូវ (Unsupported Media Type)៖ សូមបញ្ចូលរូបភាព PNG, JPG, ឬ WEBP ពិតប្រាកដ។",
+            details: "Uploaded file does not have valid PNG, JPEG, or WEBP binary header signatures.",
+            code: "UNSUPPORTED_MEDIA_TYPE",
+            retryable: false,
+            requestId,
+            message: "Unsupported media type. Expected PNG, JPEG, or WEBP.",
+          },
+          { status: 415 }
+        );
+      }
+      verifiedMimeType = magicCheck.format;
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -129,9 +306,13 @@ export async function POST(req: NextRequest) {
     if (!apiKey || apiKey === "your_gemini_api_key_here") {
       return NextResponse.json<MathOcrError>(
         {
-          error: "Google Gemini API key is not configured.",
+          ok: false,
+          error: "មិនទាន់កំណត់ Gemini API Key (API Key Missing)៖ សូមកំណត់ GEMINI_API_KEY ក្នុង Settings ឬ Environment Variables។",
           details: "Please add a valid GEMINI_API_KEY to your environment variables to enable Math OCR transcription.",
           code: "PROVIDER_NOT_CONFIGURED",
+          retryable: false,
+          requestId,
+          message: "Gemini provider is not configured.",
         },
         { status: 503 }
       );
@@ -146,18 +327,19 @@ export async function POST(req: NextRequest) {
       const base64Image = Buffer.from(imageBytes).toString("base64");
       parts.push({
         inlineData: {
-          mimeType: (imageFile.type as "image/png" | "image/jpeg" | "image/webp") || "image/png",
+          mimeType: verifiedMimeType,
           data: base64Image,
         },
       });
       parts.push({
-        text: rawText
-          ? `Transcribe the visible mathematical content from this image. Additional user context: ${rawText}`
+        text: trimmedText
+          ? `Transcribe the visible mathematical content from this image. Additional user context: ${trimmedText}`
           : "Transcribe the visible mathematical content from this image exactly without solving.",
       });
-    } else if (rawText) {
+    } else if (trimmedText) {
+      // Raw text-only requests do not perform any image encoding or vision processing
       parts.push({
-        text: `Transcribe and typeset the following visible mathematical content into LaTeX, Jodit HTML, and MathML without solving: ${rawText}`,
+        text: `Transcribe and typeset the following visible mathematical content into LaTeX, Jodit HTML, and MathML without solving: ${trimmedText}`,
       });
     }
 
@@ -168,63 +350,130 @@ export async function POST(req: NextRequest) {
     }
 
     let responseText = "";
-    let lastError: Error | null = null;
+    let selectedModel = "";
+    let totalAttempts = 0;
+    const attemptedModels: string[] = [];
+    const candidateModels = getCandidateModels();
+    const OVERALL_BUDGET_MS = 38000;
+    const PER_MODEL_TIMEOUT_MS = 10000;
 
-    // Try candidate models with individual timeouts (max 15s per model, max 35s overall)
-    for (const modelName of CANDIDATE_MODELS) {
-      const elapsed = Date.now() - overallStartTime;
-      if (elapsed > 32000) {
-        break; // Approaching total budget
+    for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
+      const modelName = candidateModels[mIdx];
+      const elapsedOverall = Date.now() - overallStartTime;
+      if (elapsedOverall >= OVERALL_BUDGET_MS) {
+        break; // Overall request budget exhausted
       }
 
-      const remainingBudget = Math.max(3000, 35000 - elapsed);
-      const perModelTimeout = Math.min(14000, remainingBudget);
+      attemptedModels.push(modelName);
 
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.1, // Low temperature for deterministic transcription
-          },
-        });
+      // Bounded retry behavior: Maximum 1 retry per model (up to 2 attempts total)
+      let modelSuccess = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        totalAttempts++;
+        const currentElapsed = Date.now() - overallStartTime;
+        const remainingBudget = OVERALL_BUDGET_MS - currentElapsed;
+        if (remainingBudget <= 2500) {
+          break; // Not enough time for an inference attempt
+        }
 
-        const result = await withTimeout(
-          model.generateContent({ contents: [{ role: "user", parts }] }),
-          perModelTimeout,
-          `Model ${modelName} timed out after ${perModelTimeout}ms`
-        );
+        const currentTimeout = Math.min(PER_MODEL_TIMEOUT_MS, remainingBudget);
 
-        const candidateText = result.response.text()?.trim();
-        if (candidateText && candidateText.startsWith("{")) {
-          responseText = candidateText;
-          break;
-        } else if (candidateText) {
-          // Clean possible markdown wrapper if responseMimeType wasn't honored
-          const cleaned = candidateText
-            .replace(/^```(?:json)?\s*/i, "")
-            .replace(/\s*```$/i, "")
-            .trim();
-          if (cleaned.startsWith("{")) {
-            responseText = cleaned;
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.1,
+            },
+          });
+
+          const result = await withTimeout(
+            model.generateContent({ contents: [{ role: "user", parts }] }),
+            currentTimeout,
+            `Model ${modelName} timed out after ${currentTimeout}ms`
+          );
+
+          const candidateText = result.response.text()?.trim();
+          if (candidateText && candidateText.startsWith("{")) {
+            responseText = candidateText;
+            selectedModel = modelName;
+            modelSuccess = true;
+            break;
+          } else if (candidateText) {
+            const cleaned = candidateText
+              .replace(/^```(?:json)?\s*/i, "")
+              .replace(/\s*```$/i, "")
+              .trim();
+            if (cleaned.startsWith("{")) {
+              responseText = cleaned;
+              selectedModel = modelName;
+              modelSuccess = true;
+              break;
+            }
+          }
+        } catch (err: unknown) {
+          const isTransient = isTransientProviderError(err);
+          // Redact secrets in server log
+          const safeErrorMsg = (err instanceof Error ? err.message : String(err)).replace(
+            /key=[A-Za-z0-9_.-]+/gi,
+            "key=[REDACTED]"
+          );
+
+          console.warn(
+            JSON.stringify({
+              requestId,
+              event: "model_attempt_failed",
+              model: modelName,
+              attempt,
+              isTransient,
+              error: safeErrorMsg.slice(0, 200),
+              elapsedMs: Date.now() - overallStartTime,
+            })
+          );
+
+          // If error is fatal (non-transient authentication or invalid input), abort all retries
+          if (!isTransient) {
             break;
           }
+
+          // If transient and first attempt, apply backoff with jitter before the single retry
+          if (attempt === 0) {
+            const backoff = getBackoffMs(attempt);
+            await new Promise((r) => setTimeout(r, backoff));
+          }
         }
-      } catch (err: unknown) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        lastError = err instanceof Error ? err : new Error(errMessage);
-        console.warn(`[math-ocr] Model ${modelName} failed (${Date.now() - overallStartTime}ms): ${errMessage}`);
+      }
+
+      if (modelSuccess && responseText) {
+        break; // Successfully obtained response
       }
     }
 
     if (!responseText) {
       const totalElapsed = Date.now() - overallStartTime;
-      if (totalElapsed >= 32000) {
+      const isTimeout = totalElapsed >= OVERALL_BUDGET_MS - 3000;
+
+      // Server-side audit log (no secrets exposed)
+      console.warn(
+        JSON.stringify({
+          requestId,
+          event: "math_ocr_failed_all_models",
+          totalElapsedMs: totalElapsed,
+          totalAttempts,
+          attemptedModels,
+          isTimeout,
+        })
+      );
+
+      if (isTimeout) {
         return NextResponse.json<MathOcrError>(
           {
-            error: "Transcription timed out.",
-            details: "Upstream AI vision model took too long to process the image. Please try again.",
+            ok: false,
             code: "UPSTREAM_TIMEOUT",
+            retryable: true,
+            requestId,
+            message: "The math AI service timed out while processing. Please try again.",
+            error: "ការដំណើរការលើសកំណត់ពេល (Timeout)៖ ម៉ាស៊ីន AI ដំណើរការយឺតជាងធម្មតា។ សូមចុច 'ព្យាយាមម្តងទៀត'។",
           },
           { status: 504 }
         );
@@ -232,13 +481,27 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json<MathOcrError>(
         {
-          error: "Failed to transcribe mathematical image.",
-          details: lastError?.message || "No response received from any transcription model.",
-          code: "TRANSCRIPTION_FAILED",
+          ok: false,
+          code: "MODEL_UNAVAILABLE",
+          retryable: true,
+          requestId,
+          message: "The math AI service is temporarily busy. Please try again.",
+          error: "ម៉ាស៊ីន AI កំពុងមានសំណើច្រើន (Service Busy)៖ ប្រព័ន្ធកំពុងដំណើរការមមាញឹកបន្តិច។ សូមចុច 'ព្យាយាមម្តងទៀត'។",
         },
-        { status: 502 }
+        { status: 503 }
       );
     }
+
+    // Technical telemetry in server log only (redacted secrets)
+    console.info(
+      JSON.stringify({
+        requestId,
+        event: "math_ocr_success",
+        selectedModel,
+        totalAttempts,
+        durationMs: Date.now() - overallStartTime,
+      })
+    );
 
     try {
       const cleaned = responseText
@@ -252,12 +515,22 @@ export async function POST(req: NextRequest) {
         throw new Error("Model response missing required latex or joditHtml fields");
       }
 
+      // KaTeX normalization and validation
+      const katexValidation = validateLatexWithKatex(parsed.latex);
+      parsed.latex = katexValidation.normalized;
+
+      // HTML and SVG sanitization
+      parsed.joditHtml = sanitizeJoditHtml(parsed.joditHtml);
+
       if (!parsed.transcription) {
         parsed.transcription = parsed.latex;
       }
 
       if (!parsed.mathml) {
         parsed.mathml = `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mtext>${parsed.transcription || "Math Expression"}</mtext></math>`;
+      } else {
+        const mathmlValidation = validateMathML(parsed.mathml);
+        parsed.mathml = mathmlValidation.normalized;
       }
 
       if (!parsed.detectedType) {
@@ -275,21 +548,28 @@ export async function POST(req: NextRequest) {
       console.error("[math-ocr] JSON parse error:", parseErr, "Response text:", responseText);
       return NextResponse.json<MathOcrError>(
         {
-          error: "Failed to parse model transcription output.",
-          details: parseErr instanceof Error ? parseErr.message : "Malformed JSON response.",
+          ok: false,
+          error: "កំហុសទម្រង់ទិន្នន័យ (Parse Error)៖ ម៉ាស៊ីន AI បញ្ចេញទិន្នន័យមិនត្រូវតាមទម្រង់ JSON។",
+          details: "Malformed response format from model.",
           code: "PARSE_ERROR",
+          retryable: true,
+          requestId,
+          message: "Malformed response from AI model. Please retry.",
         },
         { status: 502 }
       );
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "An unexpected server error occurred.";
     console.error("[/api/math-ocr] Unhandled error:", err);
     return NextResponse.json<MathOcrError>(
       {
-        error: "Internal server error.",
-        details: message,
+        ok: false,
+        error: "ម៉ាស៊ីនមេជួបបញ្ហាផ្ទៃក្នុង (Internal Server Error)៖ សូមព្យាយាមម្តងទៀត។",
+        details: "An internal server error occurred while processing the math expression.",
         code: "SERVER_ERROR",
+        retryable: true,
+        requestId,
+        message: "An internal server error occurred. Please try again.",
       },
       { status: 500 }
     );
