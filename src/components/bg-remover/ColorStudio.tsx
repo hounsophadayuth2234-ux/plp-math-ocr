@@ -41,6 +41,11 @@ import {
   applyAreaSafetyCheck,
   MaskDiagnostics,
   SelectionMode,
+  QuadCorners,
+  detectDocumentQuad,
+  generateQuadMask,
+  warpPerspectiveQuad,
+  applyColorDehalo,
 } from "@/lib/bg-compositor";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ProcessingStatusLabel } from "@/lib/types";
@@ -149,6 +154,8 @@ export function ColorStudio({
   );
   const [initialAlphaMaskDataUrl, setInitialAlphaMaskDataUrl] = useState<string>(initialAlphaMaskUrl || "");
   const [maskOverlayDataUrl, setMaskOverlayDataUrl] = useState<string>("");
+  const [documentCorners, setDocumentCorners] = useState<QuadCorners | null>(null);
+  const [isPerspectiveMode, setIsPerspectiveMode] = useState<boolean>(false);
 
   useEffect(() => {
     setIsConfirmed(workflowStep === "ready");
@@ -937,7 +944,7 @@ export function ColorStudio({
     setIsDirty(true);
   }, [saveSnapshotToHistory, recompositeAll, redrawCanvas]);
 
-  // Switch Selection Mode (whole_product, contents_only, custom, box_polygon)
+  // Switch Selection Mode (document_poster, person, whole_product, contents_only, custom, box_polygon)
   const handleSwitchSelectionMode = useCallback(
     async (newMode: SelectionMode) => {
       cyberAudio.playClick();
@@ -947,7 +954,22 @@ export function ColorStudio({
 
       saveSnapshotToHistory();
 
-      if (newMode === "contents_only") {
+      if (newMode === "document_poster") {
+        const docResult = detectDocumentQuad(sourceImageData.data, width, height);
+        const quadMask = generateQuadMask(docResult.corners, width, height);
+        alphaMaskRef.current.set(quadMask);
+        setDocumentCorners(docResult.corners);
+        excludedMaskRef.current = null;
+        setContainerWarning(
+          docResult.isFullImage
+            ? "📄 [POSTER/DOCUMENT] រក្សាទំព័រ និងខ្លឹមសារទាំងស្រុង (Full poster page preserved intact)."
+            : "📄 [POSTER/DOCUMENT] រកឃើញព្រំដែនទំព័រ (Document boundary detected. Outside page is transparent)."
+        );
+      } else if (newMode === "person") {
+        alphaMaskRef.current.set(baseAlphaMaskRef.current);
+        excludedMaskRef.current = null;
+        setContainerWarning("👤 [PERSON MODE] កាត់រូបមនុស្ស និងសម្អាត halo ជុំវិញសក់/សម្លៀកបំពាក់។");
+      } else if (newMode === "contents_only") {
         const res = detectContainerAndContents(
           sourceImageData.data,
           baseAlphaMaskRef.current,
@@ -984,6 +1006,59 @@ export function ColorStudio({
     },
     [sourceImageData, width, height, saveSnapshotToHistory, recompositeAll, redrawCanvas]
   );
+
+  // Document / Poster Handlers
+  const handleDetectPageBoundary = useCallback(async () => {
+    if (!sourceImageData || !alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    const docResult = detectDocumentQuad(sourceImageData.data, width, height);
+    const quadMask = generateQuadMask(docResult.corners, width, height);
+    alphaMaskRef.current.set(quadMask);
+    setDocumentCorners(docResult.corners);
+    setContainerWarning(
+      docResult.isFullImage
+        ? "📄 [POSTER/DOCUMENT] រក្សាទំព័រ និងខ្លឹមសារទាំងស្រុង (Full poster page preserved intact)."
+        : "📄 [POSTER/DOCUMENT] រកឃើញព្រំដែនទំព័រ (Document boundary detected. Outside page is transparent)."
+    );
+    await recompositeAll(alphaMaskRef.current);
+    redrawCanvas();
+  }, [sourceImageData, width, height, saveSnapshotToHistory, recompositeAll, redrawCanvas]);
+
+  const handleKeepOriginalPage = useCallback(async () => {
+    if (!alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    alphaMaskRef.current.fill(255);
+    if (manualKeepMaskRef.current) {
+      manualKeepMaskRef.current.fill(255);
+    }
+    await recompositeAll(alphaMaskRef.current);
+    redrawCanvas();
+    setIsDirty(true);
+  }, [saveSnapshotToHistory, recompositeAll, redrawCanvas]);
+
+  const handleWarpPerspective = useCallback(async () => {
+    if (!sourceImageData) return;
+    cyberAudio.playShutter();
+    const corners = documentCorners || {
+      topLeft: [0, 0],
+      topRight: [width - 1, 0],
+      bottomRight: [width - 1, height - 1],
+      bottomLeft: [0, height - 1],
+    };
+    const warped = warpPerspectiveQuad(sourceImageData.data, width, height, corners);
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) {
+        const imgData = ctx.createImageData(warped.width, warped.height);
+        imgData.data.set(warped.warpedRgba);
+        canvasRef.current.width = warped.width;
+        canvasRef.current.height = warped.height;
+        ctx.putImageData(imgData, 0, 0);
+      }
+    }
+  }, [sourceImageData, width, height, documentCorners]);
 
   // Confirm Mask & Run Alpha Matting Refinement with Automated Safety Check
   const handleConfirmMaskAndExport = useCallback(async () => {
@@ -1575,15 +1650,43 @@ export function ColorStudio({
           </div>
         </div>
 
-        {/* 4 Selection Modes */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        {/* Selection Modes */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+          <button
+            type="button"
+            data-testid="mode-document-poster"
+            onClick={() => handleSwitchSelectionMode("document_poster")}
+            className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
+              selectionMode === "document_poster"
+                ? "border-cyan-400 bg-cyan-950 text-white font-bold ring-1 ring-cyan-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
+            }`}
+          >
+            <span className="text-xs font-bold text-cyan-300">📄 ឯកសារ/Poster</span>
+            <span className="text-[9px] text-cyan-400/80">Preserve Full Page</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="mode-person"
+            onClick={() => handleSwitchSelectionMode("person")}
+            className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
+              selectionMode === "person"
+                ? "border-purple-400 bg-purple-950 text-white font-bold ring-1 ring-purple-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
+            }`}
+          >
+            <span className="text-xs font-bold text-purple-300">👤 មនុស្ស</span>
+            <span className="text-[9px] text-purple-400/80">Person Cutout</span>
+          </button>
+
           <button
             type="button"
             data-testid="mode-whole-product"
             onClick={() => handleSwitchSelectionMode("whole_product")}
             className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
               selectionMode === "whole_product"
-                ? "border-cyan-400 bg-cyan-950 text-white font-bold ring-1 ring-cyan-400"
+                ? "border-emerald-400 bg-emerald-950 text-white font-bold ring-1 ring-emerald-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
             }`}
           >
@@ -1611,12 +1714,12 @@ export function ColorStudio({
             onClick={() => handleSwitchSelectionMode("custom")}
             className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
               selectionMode === "custom"
-                ? "border-emerald-400 bg-emerald-950 text-white font-bold ring-1 ring-emerald-400"
+                ? "border-amber-400 bg-amber-950 text-white font-bold ring-1 ring-amber-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
             }`}
           >
-            <span className="text-xs font-bold text-emerald-300">🎯 ជ្រើសរើសដោយផ្ទាល់</span>
-            <span className="text-[9px] text-emerald-400/80">Custom Point (+/-)</span>
+            <span className="text-xs font-bold text-amber-300">🎯 ជ្រើសរើសដោយផ្ទាល់</span>
+            <span className="text-[9px] text-amber-400/80">Custom Point (+/-)</span>
           </button>
 
           <button
@@ -1625,14 +1728,105 @@ export function ColorStudio({
             onClick={() => handleSwitchSelectionMode("box_polygon")}
             className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
               selectionMode === "box_polygon"
-                ? "border-amber-400 bg-amber-950 text-white font-bold ring-1 ring-amber-400"
+                ? "border-rose-400 bg-rose-950 text-white font-bold ring-1 ring-rose-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
             }`}
           >
-            <span className="text-xs font-bold text-amber-300">📐 ប្រអប់-ពហុកោណ</span>
-            <span className="text-[9px] text-amber-400/80">Rectangle / Polygon</span>
+            <span className="text-xs font-bold text-rose-300">📐 ប្រអប់-ពហុកោណ</span>
+            <span className="text-[9px] text-rose-400/80">Rectangle / Polygon</span>
           </button>
         </div>
+
+        {/* Document / Poster Mode Controls & Tools */}
+        {selectionMode === "document_poster" && (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 border border-cyan-500/40 bg-cyan-950/40 text-xs font-mono">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-cyan-300 uppercase font-bold">DOCUMENT TOOLS:</span>
+              <button
+                type="button"
+                data-testid="detect-page-boundary-btn"
+                onClick={handleDetectPageBoundary}
+                className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-cyan-500/50 bg-slate-900 text-cyan-300 hover:text-white hover:bg-cyan-950 transition-all font-bold"
+              >
+                <span>🔍 រកព្រំដែនទំព័រ (Detect Page Boundary)</span>
+              </button>
+              <button
+                type="button"
+                data-testid="four-corner-crop-btn"
+                onClick={() => {
+                  cyberAudio.playClick();
+                  setIsPerspectiveMode(!isPerspectiveMode);
+                }}
+                className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border transition-all font-bold ${
+                  isPerspectiveMode
+                    ? "border-amber-400 bg-amber-950 text-white ring-1 ring-amber-400"
+                    : "border-slate-800 bg-slate-900 text-slate-300 hover:text-white"
+                }`}
+              >
+                <span>📐 កាត់តម្រង់ ៤ជ្រុង (Four-Corner Crop)</span>
+              </button>
+              {isPerspectiveMode && (
+                <button
+                  type="button"
+                  data-testid="warp-page-btn"
+                  onClick={handleWarpPerspective}
+                  className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-amber-400 bg-amber-900/80 text-white font-bold hover:brightness-110 shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-200" />
+                  <span>តម្រង់ផ្ទៃក្រដាស (Warp &amp; Rectify)</span>
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="keep-original-page-btn"
+                onClick={handleKeepOriginalPage}
+                className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 hover:text-white transition-all font-bold"
+              >
+                <span>📄 រក្សាទំព័រដើមទាំងស្រុង (Keep Full Canvas)</span>
+              </button>
+            </div>
+
+            {/* Preview Tabs for Document/Poster */}
+            <div className="flex items-center gap-1 bg-slate-950 p-1 border border-slate-800">
+              <button
+                type="button"
+                data-testid="tab-original"
+                onClick={() => handleSelectChannel("original")}
+                className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
+                  activeChannel === "original"
+                    ? "bg-cyan-500 text-black shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Original
+              </button>
+              <button
+                type="button"
+                data-testid="tab-page-mask"
+                onClick={() => handleSelectChannel("initial_mask")}
+                className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
+                  activeChannel === "initial_mask"
+                    ? "bg-cyan-500 text-black shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Page Mask
+              </button>
+              <button
+                type="button"
+                data-testid="tab-final"
+                onClick={() => handleSelectChannel("transparent")}
+                className={`min-h-[40px] px-2.5 py-1 text-[10px] uppercase font-bold transition-all ${
+                  activeChannel === "transparent"
+                    ? "bg-cyan-500 text-black shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Final Cutout
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Warning Banner if Container/Box Detected */}
         {containerWarning && (

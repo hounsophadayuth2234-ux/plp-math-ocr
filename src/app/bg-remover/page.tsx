@@ -881,10 +881,136 @@ export default function BgRemoverPage() {
               />
             </div>
 
-            {/* ── ជំហានទី ២ ៖ ជ្រើសរើសប្រភេទរូបភាពដែលចង់បាន (STEP 2: OUTPUT PURPOSE) ── */}
+            {/* ── ជំហានទី ២ ៖ ប្រភេទរូបភាព (STEP 2: CONTENT TYPE) ── */}
             <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
               <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
-                <span>ជំហានទី ២ ៖ ប្រភេទរូបភាព</span>
+                <span>ប្រភេទរូបភាព / Content type</span>
+                <span className="text-cyan-400 font-bold uppercase">{activeSelectionMode}</span>
+              </div>
+
+              <div role="radiogroup" aria-label="ប្រភេទរូបភាព / Content type" className="grid grid-cols-2 gap-2 text-xs font-mono">
+                {/* 1. Document / Poster Mode */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSelectionMode === "document_poster"}
+                  data-testid="content-mode-document"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("document_poster");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                    activeSelectionMode === "document_poster"
+                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                    <span className="h-2 w-2 rounded-none bg-cyan-400" />
+                    <span>📄 ឯកសារ/Poster</span>
+                  </div>
+                  <span className="text-[9px] text-cyan-300/80 mt-0.5">Preserve full page</span>
+                </button>
+
+                {/* 2. Person Mode */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSelectionMode === "person"}
+                  data-testid="content-mode-person"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("person");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                    activeSelectionMode === "person"
+                      ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                    <span className="h-2 w-2 rounded-none bg-purple-400" />
+                    <span>👤 មនុស្ស</span>
+                  </div>
+                  <span className="text-[9px] text-purple-300/80 mt-0.5">Person cutout</span>
+                </button>
+
+                {/* 3. Product Mode */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSelectionMode === "whole_product"}
+                  data-testid="content-mode-product"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("whole_product");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                    activeSelectionMode === "whole_product"
+                      ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                    <span className="h-2 w-2 rounded-none bg-emerald-400" />
+                    <span>📦 ផលិតផល</span>
+                  </div>
+                  <span className="text-[9px] text-emerald-300/80 mt-0.5">Whole product</span>
+                </button>
+
+                {/* 4. Custom Mode */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSelectionMode === "custom"}
+                  data-testid="content-mode-custom"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("custom");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                    activeSelectionMode === "custom"
+                      ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                    <span className="h-2 w-2 rounded-none bg-amber-400" />
+                    <span>🎯 Custom</span>
+                  </div>
+                  <span className="text-[9px] text-amber-300/80 mt-0.5">Draw selection</span>
+                </button>
+              </div>
+
+              {/* Mode Explanation */}
+              <div className="text-[9.5px] text-slate-300 leading-relaxed font-mono bg-slate-950/60 p-2.5 border border-slate-800/80">
+                {activeSelectionMode === "document_poster" && (
+                  <span>
+                    📄 <strong>ឯកសារ/Poster</strong>៖ រក្សាផ្ទៃទំព័រចតុកោណកែងទាំងមូល មិនលុបអក្សរ ឡូហ្គោ ឬរូបមនុស្សដែលបោះពុម្ពខាងក្នុង poster ឡើយ។
+                  </span>
+                )}
+                {activeSelectionMode === "person" && (
+                  <span>
+                    👤 <strong>មនុស្ស (Person)</strong>៖ កាត់យករូបមនុស្សចេញពីរូបថត រក្សាអាវពណ៌ស និងសម្អាត halo ជុំវិញសក់ និងសម្លៀកបំពាក់។
+                  </span>
+                )}
+                {activeSelectionMode === "whole_product" && (
+                  <span>
+                    📦 <strong>ផលិតផល (Whole Product)</strong>៖ រក្សាផលិតផល និងប្រអប់វេចខ្ចប់ទាំងមូល (Conservative default) ការពារមិនឱ្យកាត់ឆកគម្របប្រអប់។
+                  </span>
+                )}
+                {activeSelectionMode === "custom" && (
+                  <span>
+                    🎯 <strong>Custom</strong>៖ ជ្រើសរើសវត្ថុដោយដៃតាមរយៈចំណុច (+) / (-) ឬគូសប្រអប់ និងពហុកោណ (Polygon)។
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* ── ជំហានទី ៣ ៖ ជ្រើសរើសប្រភេទរូបភាពដែលចង់បាន (STEP 3: OUTPUT PURPOSE) ── */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
+              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
+                <span>ជំហានទី ៣ ៖ ពណ៌ផ្ទៃខាងក្រោយ</span>
                 <span className="text-cyan-400 font-bold">PURPOSE</span>
               </div>
               <div className="grid grid-cols-3 gap-1.5 text-xs">

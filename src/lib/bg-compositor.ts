@@ -211,7 +211,30 @@ export function generateExportFilename(
 // Interactive Segmentation, Container Detection & Trimap Generation
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SelectionMode = "whole_product" | "contents_only" | "custom" | "box_polygon";
+export type ContentMode = "document_poster" | "person" | "whole_product" | "custom";
+
+export type SelectionMode =
+  | "document_poster"
+  | "person"
+  | "whole_product"
+  | "contents_only"
+  | "custom"
+  | "box_polygon";
+
+export interface QuadCorners {
+  topLeft: [number, number];
+  topRight: [number, number];
+  bottomRight: [number, number];
+  bottomLeft: [number, number];
+}
+
+export interface DocumentDetectionResult {
+  hasDocumentBoundary: boolean;
+  confidence: number;
+  corners: QuadCorners;
+  isFullImage: boolean;
+  aspectRatio: number;
+}
 
 export interface InteractiveSegmentationOptions {
   mode?: SelectionMode;
@@ -246,6 +269,396 @@ export function pointInPolygon(x: number, y: number, polygon: [number, number][]
 }
 
 /**
+ * Detects page/poster boundary in an image.
+ * If the image is a poster/document with margins on a table or wall, identifies the 4 corners.
+ * If no clear page boundary exists (or the poster fills >= 90% of the canvas), keeps the full canvas.
+ */
+export function detectDocumentQuad(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number
+): DocumentDetectionResult {
+  const fullCorners: QuadCorners = {
+    topLeft: [0, 0],
+    topRight: [width - 1, 0],
+    bottomRight: [width - 1, height - 1],
+    bottomLeft: [0, height - 1],
+  };
+
+  if (width < 20 || height < 20) {
+    return {
+      hasDocumentBoundary: true,
+      confidence: 1.0,
+      corners: fullCorners,
+      isFullImage: true,
+      aspectRatio: width / Math.max(1, height),
+    };
+  }
+
+  // Sample luminosity/contrast along borders to see if there is an outer margin
+  const maxSearchX = Math.floor(width * 0.12);
+  const maxSearchY = Math.floor(height * 0.12);
+
+  const getLum = (x: number, y: number) => {
+    const pIdx = (y * width + x) * 4;
+    return 0.299 * sourceRgba[pIdx] + 0.587 * sourceRgba[pIdx + 1] + 0.114 * sourceRgba[pIdx + 2];
+  };
+
+  // Find left border: scan inward from left margin
+  let bestLeft = 0;
+  for (let x = 1; x < maxSearchX; x++) {
+    let diffSum = 0;
+    const step = Math.max(1, Math.floor(height / 20));
+    let samples = 0;
+    for (let y = step; y < height - step; y += step) {
+      diffSum += Math.abs(getLum(x, y) - getLum(x - 1, y));
+      samples++;
+    }
+    const avgDiff = samples > 0 ? diffSum / samples : 0;
+    if (avgDiff > 20) {
+      let peakX = x;
+      let maxDiff = avgDiff;
+      for (let px = x + 1; px <= Math.min(x + 4, maxSearchX); px++) {
+        let pDiffSum = 0;
+        for (let y = step; y < height - step; y += step) {
+          pDiffSum += Math.abs(getLum(px, y) - getLum(px - 1, y));
+        }
+        const pAvg = samples > 0 ? pDiffSum / samples : 0;
+        if (pAvg > maxDiff) {
+          maxDiff = pAvg;
+          peakX = px;
+        }
+      }
+      bestLeft = peakX;
+      break;
+    }
+  }
+
+  // Find right border: scan inward from right margin
+  let bestRight = width - 1;
+  for (let x = width - 2; x > width - 1 - maxSearchX; x--) {
+    let diffSum = 0;
+    const step = Math.max(1, Math.floor(height / 20));
+    let samples = 0;
+    for (let y = step; y < height - step; y += step) {
+      diffSum += Math.abs(getLum(x, y) - getLum(x + 1, y));
+      samples++;
+    }
+    const avgDiff = samples > 0 ? diffSum / samples : 0;
+    if (avgDiff > 20) {
+      let peakX = x;
+      let maxDiff = avgDiff;
+      for (let px = x - 1; px >= Math.max(x - 4, width - 1 - maxSearchX); px--) {
+        let pDiffSum = 0;
+        for (let y = step; y < height - step; y += step) {
+          pDiffSum += Math.abs(getLum(px, y) - getLum(px + 1, y));
+        }
+        const pAvg = samples > 0 ? pDiffSum / samples : 0;
+        if (pAvg > maxDiff) {
+          maxDiff = pAvg;
+          peakX = px;
+        }
+      }
+      bestRight = peakX;
+      break;
+    }
+  }
+
+  // Find top border: scan inward from top margin
+  let bestTop = 0;
+  for (let y = 1; y < maxSearchY; y++) {
+    let diffSum = 0;
+    const step = Math.max(1, Math.floor(width / 20));
+    let samples = 0;
+    for (let x = step; x < width - step; x += step) {
+      diffSum += Math.abs(getLum(x, y) - getLum(x, y - 1));
+      samples++;
+    }
+    const avgDiff = samples > 0 ? diffSum / samples : 0;
+    if (avgDiff > 20) {
+      let peakY = y;
+      let maxDiff = avgDiff;
+      for (let py = y + 1; py <= Math.min(y + 4, maxSearchY); py++) {
+        let pDiffSum = 0;
+        for (let x = step; x < width - step; x += step) {
+          pDiffSum += Math.abs(getLum(x, py) - getLum(x, py - 1));
+        }
+        const pAvg = samples > 0 ? pDiffSum / samples : 0;
+        if (pAvg > maxDiff) {
+          maxDiff = pAvg;
+          peakY = py;
+        }
+      }
+      bestTop = peakY;
+      break;
+    }
+  }
+
+  // Find bottom border: scan inward from bottom margin
+  let bestBottom = height - 1;
+  for (let y = height - 2; y > height - 1 - maxSearchY; y--) {
+    let diffSum = 0;
+    const step = Math.max(1, Math.floor(width / 20));
+    let samples = 0;
+    for (let x = step; x < width - step; x += step) {
+      diffSum += Math.abs(getLum(x, y) - getLum(x, y + 1));
+      samples++;
+    }
+    const avgDiff = samples > 0 ? diffSum / samples : 0;
+    if (avgDiff > 20) {
+      let peakY = y;
+      let maxDiff = avgDiff;
+      for (let py = y - 1; py >= Math.max(y - 4, height - 1 - maxSearchY); py--) {
+        let pDiffSum = 0;
+        for (let x = step; x < width - step; x += step) {
+          pDiffSum += Math.abs(getLum(x, py) - getLum(x, py + 1));
+        }
+        const pAvg = samples > 0 ? pDiffSum / samples : 0;
+        if (pAvg > maxDiff) {
+          maxDiff = pAvg;
+          peakY = py;
+        }
+      }
+      bestBottom = peakY;
+      break;
+    }
+  }
+
+  // A document surrounded by background margins must have margins on at least 2 sides.
+  // If fewer than 2 margins were found, any single transition is an internal section/graphic, not an outer boundary.
+  const marginsFound =
+    (bestLeft > 3 ? 1 : 0) +
+    (bestRight < width - 4 ? 1 : 0) +
+    (bestTop > 3 ? 1 : 0) +
+    (bestBottom < height - 4 ? 1 : 0);
+
+  if (marginsFound < 2) {
+    bestLeft = 0;
+    bestRight = width - 1;
+    bestTop = 0;
+    bestBottom = height - 1;
+  }
+
+  const quadW = bestRight - bestLeft + 1;
+  const quadH = bestBottom - bestTop + 1;
+  const quadArea = quadW * quadH;
+  const totalArea = width * height;
+
+  const isFullImage =
+    quadArea >= totalArea * 0.90 ||
+    (bestLeft <= 3 && bestRight >= width - 4 && bestTop <= 3 && bestBottom >= height - 4);
+
+  if (isFullImage) {
+    return {
+      hasDocumentBoundary: true,
+      confidence: 1.0,
+      corners: fullCorners,
+      isFullImage: true,
+      aspectRatio: width / Math.max(1, height),
+    };
+  }
+
+  const detectedCorners: QuadCorners = {
+    topLeft: [bestLeft, bestTop],
+    topRight: [bestRight, bestTop],
+    bottomRight: [bestRight, bestBottom],
+    bottomLeft: [bestLeft, bestBottom],
+  };
+
+  return {
+    hasDocumentBoundary: true,
+    confidence: 0.92,
+    corners: detectedCorners,
+    isFullImage: false,
+    aspectRatio: quadW / Math.max(1, quadH),
+  };
+}
+
+/**
+ * Generates a 1-channel binary mask from 4 corner points.
+ * Inside the quadrilateral = 255 (solid foreground).
+ * Outside the quadrilateral = 0 (background).
+ */
+export function generateQuadMask(
+  corners: QuadCorners,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const totalPixels = width * height;
+  const mask = new Uint8ClampedArray(totalPixels);
+
+  const isFull =
+    corners.topLeft[0] <= 1 &&
+    corners.topLeft[1] <= 1 &&
+    corners.topRight[0] >= width - 2 &&
+    corners.topRight[1] <= 1 &&
+    corners.bottomRight[0] >= width - 2 &&
+    corners.bottomRight[1] >= height - 2 &&
+    corners.bottomLeft[0] <= 1 &&
+    corners.bottomLeft[1] >= height - 2;
+
+  if (isFull) {
+    mask.fill(255);
+    return mask;
+  }
+
+  const polygon: [number, number][] = [
+    corners.topLeft,
+    corners.topRight,
+    corners.bottomRight,
+    corners.bottomLeft,
+  ];
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (pointInPolygon(x, y, polygon)) {
+        mask[y * width + x] = 255;
+      } else {
+        mask[y * width + x] = 0;
+      }
+    }
+  }
+
+  return mask;
+}
+
+/**
+ * Rectifies / warps a 4-point quadrilateral document region into an upright rectangle.
+ */
+export function warpPerspectiveQuad(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  srcWidth: number,
+  srcHeight: number,
+  corners: QuadCorners,
+  targetWidth?: number,
+  targetHeight?: number
+): {
+  warpedRgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+} {
+  const [tlX, tlY] = corners.topLeft;
+  const [trX, trY] = corners.topRight;
+  const [brX, brY] = corners.bottomRight;
+  const [blX, blY] = corners.bottomLeft;
+
+  const topW = Math.hypot(trX - tlX, trY - tlY);
+  const bottomW = Math.hypot(brX - blX, brY - blY);
+  const leftH = Math.hypot(blX - tlX, blY - tlY);
+  const rightH = Math.hypot(brX - trX, brY - trY);
+
+  const dstW = Math.max(10, targetWidth || Math.round((topW + bottomW) / 2));
+  const dstH = Math.max(10, targetHeight || Math.round((leftH + rightH) / 2));
+
+  const warped = new Uint8ClampedArray(dstW * dstH * 4);
+
+  for (let dy = 0; dy < dstH; dy++) {
+    const v = dstH > 1 ? dy / (dstH - 1) : 0;
+    for (let dx = 0; dx < dstW; dx++) {
+      const u = dstW > 1 ? dx / (dstW - 1) : 0;
+
+      const sx = (1 - u) * (1 - v) * tlX + u * (1 - v) * trX + u * v * brX + (1 - u) * v * blX;
+      const sy = (1 - u) * (1 - v) * tlY + u * (1 - v) * trY + u * v * brY + (1 - u) * v * blY;
+
+      const dIdx = (dy * dstW + dx) * 4;
+      const cSx = Math.max(0, Math.min(srcWidth - 1, Math.round(sx)));
+      const cSy = Math.max(0, Math.min(srcHeight - 1, Math.round(sy)));
+      const sIdx = (cSy * srcWidth + cSx) * 4;
+
+      warped[dIdx] = sourceRgba[sIdx];
+      warped[dIdx + 1] = sourceRgba[sIdx + 1];
+      warped[dIdx + 2] = sourceRgba[sIdx + 2];
+      warped[dIdx + 3] = sourceRgba[sIdx + 3];
+    }
+  }
+
+  return { warpedRgba: warped, width: dstW, height: dstH };
+}
+
+/**
+ * Controlled Color Decontamination & Dehalo Pass for Person and Product modes.
+ *
+ * Removes background color bleed (e.g. white fringes, pink/light glow) along semi-transparent
+ * boundary edges (alpha in [1, 254]).
+ *
+ * Guarantees:
+ * - Definite foreground interior pixels (alpha === 255) remain 100% UNCHANGED.
+ * - Definite background pixels (alpha === 0) remain 100% UNCHANGED.
+ * - Only modifies the RGB color of edge pixels in the narrow boundary band.
+ * - Alpha mask transparency values are NEVER modified.
+ */
+export function applyColorDehalo(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  alphaMask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  radius: number = 3
+): Uint8ClampedArray {
+  const totalPixels = width * height;
+  const isMask4Ch = alphaMask.length === totalPixels * 4;
+  const decontaminated = new Uint8ClampedArray(sourceRgba);
+
+  const safeRadius = Math.max(1, Math.min(6, Math.round(radius)));
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      const alpha = isMask4Ch ? alphaMask[idx * 4 + 3] : alphaMask[idx];
+
+      // Only process semi-transparent edge pixels
+      if (alpha === 0 || alpha === 255) continue;
+
+      // Search for the nearest solid foreground pixel (alpha === 255)
+      let nearestDistSq = Infinity;
+      let fgR = 0, fgG = 0, fgB = 0;
+      let foundFg = false;
+
+      const minY = Math.max(0, y - safeRadius);
+      const maxY = Math.min(height - 1, y + safeRadius);
+      const minX = Math.max(0, x - safeRadius);
+      const maxX = Math.min(width - 1, x + safeRadius);
+
+      for (let ny = minY; ny <= maxY; ny++) {
+        const dy = ny - y;
+        for (let nx = minX; nx <= maxX; nx++) {
+          const dx = nx - x;
+          const distSq = dx * dx + dy * dy;
+          if (distSq > safeRadius * safeRadius) continue;
+
+          const nIdx = ny * width + nx;
+          const nAlpha = isMask4Ch ? alphaMask[nIdx * 4 + 3] : alphaMask[nIdx];
+          if (nAlpha === 255) {
+            if (distSq < nearestDistSq) {
+              nearestDistSq = distSq;
+              const nPIdx = nIdx * 4;
+              fgR = sourceRgba[nPIdx];
+              fgG = sourceRgba[nPIdx + 1];
+              fgB = sourceRgba[nPIdx + 2];
+              foundFg = true;
+            }
+          }
+        }
+      }
+
+      if (foundFg) {
+        const pIdx = idx * 4;
+        const origR = sourceRgba[pIdx];
+        const origG = sourceRgba[pIdx + 1];
+        const origB = sourceRgba[pIdx + 2];
+
+        // Alpha blend edge color toward nearest solid interior color
+        const weight = alpha / 255;
+        decontaminated[pIdx] = Math.round(origR * weight + fgR * (1 - weight));
+        decontaminated[pIdx + 1] = Math.round(origG * weight + fgG * (1 - weight));
+        decontaminated[pIdx + 2] = Math.round(origB * weight + fgB * (1 - weight));
+      }
+    }
+  }
+
+  return decontaminated;
+}
+
+/**
  * Detects whether the segmented object contains an outer packaging/box container
  * versus inner food/pastry/donut contents.
  *
@@ -269,10 +682,37 @@ export function detectContainerAndContents(
   const mode = options?.mode;
   const isConservative = options?.conservative ?? (mode === "whole_product" || !mode);
 
+  // DOCUMENT / POSTER MODE: Never remove internal white areas, text, logos, or printed person.
+  if (mode === "document_poster") {
+    const fullMask = new Uint8ClampedArray(totalPixels);
+    fullMask.fill(255);
+    return {
+      hasContainer: false,
+      boxConfidence: 0,
+      containerMask: new Uint8ClampedArray(totalPixels),
+      contentsMask: fullMask,
+    };
+  }
+
+  // PERSON MODE: Isolated person portrait does not have a cardboard box / container.
+  if (mode === "person") {
+    const personMask = new Uint8ClampedArray(totalPixels);
+    for (let i = 0; i < totalPixels; i++) {
+      personMask[i] = isMask4Ch ? initialMask[i * 4 + 3] : initialMask[i];
+    }
+    return {
+      hasContainer: false,
+      boxConfidence: 0,
+      containerMask: new Uint8ClampedArray(totalPixels),
+      contentsMask: personMask,
+      warning: undefined,
+    };
+  }
+
   // CONSERVATIVE DEFAULT: When mode is "whole_product" or conservative is requested,
   // NEVER classify bright or low-saturation pixels as background by color alone.
   // The complete connected product, packaging, white lid/shell, and contents are preserved.
-  if (isConservative && mode === "whole_product") {
+  if (isConservative && (mode === "whole_product" || !mode)) {
     const emptyContainer = new Uint8ClampedArray(totalPixels);
     const wholeProductMask = new Uint8ClampedArray(totalPixels);
     for (let i = 0; i < totalPixels; i++) {

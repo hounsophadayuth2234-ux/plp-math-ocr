@@ -4,6 +4,13 @@ import { bgWorkerManager, WorkerProgressEvent } from "./bg-removal-worker-manage
 import {
   compositeRgbaBuffer,
   SelectionMode,
+  ContentMode,
+  QuadCorners,
+  DocumentDetectionResult,
+  detectDocumentQuad,
+  generateQuadMask,
+  warpPerspectiveQuad,
+  applyColorDehalo,
   detectContainerAndContents,
   applyInteractivePromptsToMask,
   generateTrimap,
@@ -13,6 +20,14 @@ import {
   computeMaskDiagnostics,
   applyAreaSafetyCheck,
 } from "./bg-compositor";
+
+export type { ContentMode, QuadCorners, DocumentDetectionResult };
+export {
+  detectDocumentQuad,
+  generateQuadMask,
+  warpPerspectiveQuad,
+  applyColorDehalo,
+};
 
 /**
  * Feature Flags for Rescue & Safety
@@ -1123,6 +1138,94 @@ export async function segmentObjectSelection(
 ): Promise<SegmentSelectionResult> {
   const mode: SelectionMode = options?.mode || "whole_product";
 
+  // DOCUMENT / POSTER MODE: Keep complete page intact, never punch holes in text, logos, or white areas
+  if (mode === "document_poster") {
+    let srcImageData: ImageData;
+    let imgW: number;
+    let imgH: number;
+
+    if (typeof window !== "undefined") {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(imageFile);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = objectUrl;
+        });
+        imgW = img.naturalWidth || img.width;
+        imgH = img.naturalHeight || img.height;
+        const canvas = document.createElement("canvas");
+        canvas.width = imgW;
+        canvas.height = imgH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Could not create canvas context for document segmentation");
+        ctx.drawImage(img, 0, 0);
+        srcImageData = ctx.getImageData(0, 0, imgW, imgH);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    } else {
+      // Node/test fallback
+      imgW = 800;
+      imgH = 1200;
+      srcImageData = new ImageData(imgW, imgH);
+    }
+
+    const docResult = detectDocumentQuad(srcImageData.data, imgW, imgH);
+    const activeMask = generateQuadMask(docResult.corners, imgW, imgH);
+    const excludedMask = new Uint8ClampedArray(imgW * imgH);
+
+    // Apply interactive prompts if any provided
+    if (
+      (options?.positivePoints && options.positivePoints.length > 0) ||
+      (options?.negativePoints && options.negativePoints.length > 0) ||
+      (options?.boxes && options.boxes.length > 0) ||
+      (options?.polygon && options.polygon.length >= 3)
+    ) {
+      const updatedWithPrompts = applyInteractivePromptsToMask(activeMask, imgW, imgH, {
+        mode,
+        positivePoints: options?.positivePoints,
+        negativePoints: options?.negativePoints,
+        boxes: options?.boxes,
+        polygon: options?.polygon,
+        pointRadius: options?.pointRadius || 18,
+      });
+      activeMask.set(updatedWithPrompts);
+    }
+
+    let maskOverlayUrl = "";
+    if (typeof document !== "undefined") {
+      const overlayPixels = generateMaskOverlay(srcImageData.data, activeMask, imgW, imgH);
+      const canvas = document.createElement("canvas");
+      canvas.width = imgW;
+      canvas.height = imgH;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const imgData = ctx.createImageData(imgW, imgH);
+        imgData.data.set(overlayPixels);
+        ctx.putImageData(imgData, 0, 0);
+        maskOverlayUrl = canvas.toDataURL("image/png");
+      }
+    }
+
+    return {
+      sourceImageData: srcImageData,
+      initialMask: activeMask,
+      activeMask,
+      excludedMask,
+      width: imgW,
+      height: imgH,
+      sourceWidth: imgW,
+      sourceHeight: imgH,
+      hasContainer: false,
+      boxConfidence: docResult.confidence,
+      warning: undefined,
+      maskOverlayUrl,
+      selectionMode: "document_poster",
+    };
+  }
+
   let initialOutput: BgRemovalOutput;
   if (options?.remoteWorker) {
     initialOutput = await removeBackgroundRemote(imageFile, {
@@ -1321,6 +1424,15 @@ export async function refineAlphaMattingWithMask(
     options?.maxDropRatio ?? 0.20
   );
 
+  // 3b. Controlled Color Decontamination & Dehalo pass on boundary band
+  const decontaminatedRgb = applyColorDehalo(
+    sourceImageData.data,
+    safeMask,
+    w,
+    h,
+    trimapRadius
+  );
+
   // 4. Composite output RGBA
   const canvas = document.createElement("canvas");
   canvas.width = w;
@@ -1330,14 +1442,13 @@ export async function refineAlphaMattingWithMask(
 
   const outImgData = ctx.createImageData(w, h);
   const outPixels = outImgData.data;
-  const srcPixels = sourceImageData.data;
 
   for (let i = 0; i < totalPixels; i++) {
     const pIdx = i * 4;
     const a = safeMask[i];
-    outPixels[pIdx] = srcPixels[pIdx];
-    outPixels[pIdx + 1] = srcPixels[pIdx + 1];
-    outPixels[pIdx + 2] = srcPixels[pIdx + 2];
+    outPixels[pIdx] = decontaminatedRgb[pIdx];
+    outPixels[pIdx + 1] = decontaminatedRgb[pIdx + 1];
+    outPixels[pIdx + 2] = decontaminatedRgb[pIdx + 2];
     outPixels[pIdx + 3] = a;
   }
   ctx.putImageData(outImgData, 0, 0);
