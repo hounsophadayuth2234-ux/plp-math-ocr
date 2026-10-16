@@ -1,0 +1,95 @@
+{
+  "timestamp": "2026-10-15T15:46:15.470Z",
+  "tests": [
+    {
+      "id": "E01_DEFAULT_ENGINE",
+      "name": "Browser AI is default selected and Remote Worker is locked when unconfigured",
+      "passed": true,
+      "details": {
+        "browserAriaChecked": "true",
+        "workerAriaChecked": "false",
+        "workerAriaDisabled": "true"
+      }
+    },
+    {
+      "id": "E02_UNCONFIGURED_KHMER_EXPLANATION",
+      "name": "Khmer explanation informs user that Remote Worker is not configured and Browser AI is free locally",
+      "passed": true,
+      "details": {
+        "explanationText": "ℹ️ Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។ Browser AI ដំណើរការក្នុងម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ និងមានសុវត្ថិភាពខ្ពស់។"
+      }
+    },
+    {
+      "id": "E03_IMAGE_UPLOAD_STATE",
+      "name": "Uploaded 1200x1200 image is parsed and displayed with telemetry",
+      "passed": true,
+      "details": {
+        "hasDimensions": true
+      }
+    },
+    {
+      "id": "E04_WORKER_ENABLED_WHEN_CONFIGURED",
+      "name": "Remote Worker button is enabled when GET /api/remove-bg reports configured: true",
+      "passed": true,
+      "details": {
+        "workerEnabled": true
+      }
+    },
+    {
+      "id": "E05_SWITCH_TO_WORKER",
+      "name": "Switching to Remote Worker activates worker radio, preserves uploaded image, and displays Remote Worker action button",
+      "passed": true,
+      "details": {
+        "workerRadioChecked": "true",
+        "browserRadioChecked": "false",
+        "imageStillLoaded": true,
+        "hasWorkerRunBtn": true
+      }
+    },
+    {
+      "id": "E06_SWITCH_BACK_TO_BROWSER",
+      "name": "Switching back to Browser AI restores Fast Preview button while preserving image",
+      "passed": true,
+      "details": {
+        "switchedBackBrowser": "true",
+        "hasFastPreviewBtn": true
+      }
+    },
+    {
+      "id": "E07_ERROR_RECOVERY_ACTIONS",
+      "name": "Worker failure triggers complete error recovery suite with Khmer action buttons",
+      "passed": true,
+      "details": {
+        "hasRetryBtn": true,
+        "hasRetryBrowserAiBtn": true,
+        "hasRetry1024Btn": true,
+        "hasCancelBtn": true,
+        "hasResetBtn": true
+      }
+    },
+    {
+      "id": "E08_RETRY_BROWSER_AI_FALLBACK",
+      "name": "Clicking 'Retry using Browser AI' seamlessly switches engine to Browser AI and retries",
+      "passed": true,
+      "details": {
+        "fallbackEngine": "true"
+      }
+    },
+    {
+      "id": "E09_MOBILE_VIEWPORT_AUDIT",
+      "name": "Mobile 375x812 viewport has >= 44px touch targets and zero horizontal scroll overflow",
+      "passed": true,
+      "details": {
+        "touchTargetHeights": {
+          "browserHeight": 60.65625,
+          "workerHeight": 60.65625,
+          "hasHorizontalOverflow": false
+        }
+      }
+    }
+  ],
+  "summary": {
+    "passed": 9,
+    "failed": 0
+  }
+}

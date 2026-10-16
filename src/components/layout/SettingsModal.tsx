@@ -1,16 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   KeyRound,
   X,
   Check,
   Save,
   ExternalLink,
-  Cpu,
-  Server,
   AlertCircle,
-  Sparkles,
+  Info,
 } from "lucide-react";
 
 interface SettingsModalProps {
@@ -28,6 +26,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [imageWorkerUrl, setImageWorkerUrl] = useState("");
 
   const [status, setStatus] = useState<{
+    isProduction?: boolean;
     geminiKeySet: boolean;
     geminiMasked: string | null;
     replicateTokenSet: boolean;
@@ -46,6 +45,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch current status
@@ -56,7 +56,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         const data = await res.json();
         setStatus(data);
         if (data.rembgSpaceUrl) setRembgSpaceUrl(data.rembgSpaceUrl);
-        if (data.upscalerWorkerUrl) setUpscalerWorkerUrl(data.upscalerWorkerUrl);
+        if (data.upscalerWorkerUrl)
+          setUpscalerWorkerUrl(data.upscalerWorkerUrl);
         if (data.imageWorkerUrl) setImageWorkerUrl(data.imageWorkerUrl);
       }
     } catch (e) {
@@ -64,18 +65,81 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   };
 
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (isOpen) {
-      fetchStatus();
-      setSaveSuccess(false);
-      setError(null);
+    if (!isOpen) {
+      if (previousActiveElementRef.current) {
+        previousActiveElementRef.current.focus();
+        previousActiveElementRef.current = null;
+      }
+      return;
     }
-  }, [isOpen]);
+
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      previousActiveElementRef.current = document.activeElement;
+    }
+
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        fetchStatus();
+        setSaveSuccess(false);
+        setNotice(null);
+        setError(null);
+        const focusable = modalRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable && focusable.length > 0) {
+          focusable[0].focus();
+        }
+      }
+    }, 10);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+
+      if (e.key === "Tab") {
+        if (!modalRef.current) return;
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusable || focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setNotice(null);
     setSaveSuccess(false);
 
     try {
@@ -93,17 +157,33 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        throw new Error("Failed to update settings.");
+        throw new Error(data.error || "Failed to update settings.");
       }
 
-      setSaveSuccess(true);
+      if (data.isProduction) {
+        setNotice(data.message);
+      } else {
+        setSaveSuccess(true);
+      }
+
+      // Notify other active pages (e.g. /bg-remover) to instantly re-check worker status
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("app:settings-updated", { detail: data })
+        );
+      }
+
       setGeminiKey("");
       setReplicateToken("");
       setRemoveBgKey("");
       setHuggingFaceKey("");
       await fetchStatus();
-      setTimeout(() => setSaveSuccess(false), 3000);
+      if (!data.isProduction) {
+        setTimeout(() => setSaveSuccess(false), 3500);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error saving settings");
     } finally {
@@ -114,7 +194,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm font-mono">
+    <div
+      ref={modalRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm font-mono"
+    >
       <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-950/60 shrink-0">
@@ -123,7 +209,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <KeyRound className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">SYSTEM CONFIGURATION</h3>
+              <h3 id="settings-modal-title" className="text-sm font-bold text-white">
+                SYSTEM CONFIGURATION
+              </h3>
               <p className="text-[11px] text-slate-400 font-sans">
                 Manage AI endpoints, cloud tokens &amp; local workers
               </p>
@@ -131,6 +219,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
           <button
             onClick={onClose}
+            aria-label="Close settings modal"
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
           >
             <X className="h-4 w-4" />
@@ -138,11 +227,36 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSave} className="space-y-4 p-6 overflow-y-auto text-xs">
+        <form
+          onSubmit={handleSave}
+          className="space-y-4 p-6 overflow-y-auto text-xs"
+        >
+          {status?.isProduction && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">
+              <Info className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-bold text-amber-300">
+                  Production Deployment (Vercel)
+                </div>
+                <div className="text-[11px] text-amber-200/80 leading-relaxed font-sans">
+                  On Vercel, persistent configuration requires adding environment
+                  variables in <strong>Vercel Project Settings &gt; Environment Variables</strong> and triggering a new deployment.
+                </div>
+              </div>
+            </div>
+          )}
+
           {saveSuccess && (
             <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/30 px-3.5 py-2.5 text-xs text-emerald-300">
               <Check className="h-4 w-4 shrink-0 text-emerald-400" />
               <span>Settings saved successfully to .env.local!</span>
+            </div>
+          )}
+
+          {notice && (
+            <div className="flex items-start gap-2 rounded-xl border border-blue-500/30 bg-blue-950/30 px-3.5 py-2.5 text-xs text-blue-200">
+              <Info className="h-4 w-4 shrink-0 text-blue-400 mt-0.5" />
+              <span className="leading-relaxed">{notice}</span>
             </div>
           )}
 
@@ -157,7 +271,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="space-y-1.5 rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-3.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                <span>1. Module 02 Worker / Space URL</span>
+                <span>1. Module 02 Worker URL (BACKGROUND_REMOVAL_WORKER_URL)</span>
                 <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-300">
                   OPTIONAL
                 </span>
@@ -168,14 +282,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               placeholder={
                 status?.rembgSpaceUrlSet
                   ? status.rembgSpaceUrl || "Configured"
-                  : "https://your-rembg.hf.space or http://localhost:7860"
+                  : "https://your-worker.up.railway.app or http://localhost:8000"
               }
               value={rembgSpaceUrl}
               onChange={(e) => setRembgSpaceUrl(e.target.value)}
               className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
             />
             <p className="text-[10px] text-slate-400 font-sans">
-              Module 02 runs Browser AI for free by default. Add a URL here if you wish to use a remote worker or free HF Space.
+              Targets the external Python FastAPI + rembg worker (`/remove` &amp; `/health`). Browser AI runs locally for free without any worker.
             </p>
           </div>
 
@@ -201,7 +315,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
             />
             <p className="text-[10px] text-slate-400 font-sans">
-              Local worker endpoint for Real-ESRGAN super-resolution. Browser 2× mode works without any worker!
+              Local worker endpoint for Real-ESRGAN super-resolution. Browser 2× mode works without any worker.
             </p>
           </div>
 
@@ -289,7 +403,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
             />
             <p className="text-[10px] text-slate-400 font-sans">
-              Powers Module 01 (Math OCR &amp; LaTeX). Free tier: 1,500 req/day.
+              Powers Module 01 (Math OCR &amp; LaTeX). Usage limits and quotas depend on your Google AI Studio plan and tier.
             </p>
           </div>
 
@@ -304,11 +418,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all"
+              disabled={saving || Boolean(status?.isProduction)}
+              title={
+                status?.isProduction
+                  ? "Settings are managed via Vercel Project Settings in production"
+                  : "Save settings to local .env.local"
+              }
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all disabled:cursor-not-allowed"
             >
               <Save className="h-3.5 w-3.5" />
-              {saving ? "Saving…" : "Save Settings to .env.local"}
+              {saving
+                ? "Saving…"
+                : status?.isProduction
+                ? "Managed via Vercel (Read-Only)"
+                : "Save Settings to .env.local"}
             </button>
           </div>
         </form>

@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Cpu, Terminal, Zap, ShieldAlert, Sparkles, Activity } from "lucide-react";
+import { Cpu, Terminal, Zap, Sparkles, Activity } from "lucide-react";
 
 interface RoboticScannerProps {
   active: boolean;
   moduleName?: string;
   steps?: string[];
   subtext?: string;
+  elapsedSeconds?: number;
 }
 
 const DEFAULT_STEPS = [
@@ -23,32 +24,58 @@ export function RoboticScanner({
   moduleName = "PLP NEURAL ENGINE",
   steps = DEFAULT_STEPS,
   subtext = "High-precision AI processing underway",
+  elapsedSeconds,
 }: RoboticScannerProps) {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
+  const [liveElapsed, setLiveElapsed] = useState<number>(0);
 
   useEffect(() => {
     if (!active) {
-      setCurrentStepIdx(0);
-      setLogs([]);
       return;
     }
 
-    setLogs([`[0.00s] >> SYSTEM ONLINE: Connecting to ${moduleName}`]);
+    const start = performance.now();
+    const initTimer = setTimeout(() => {
+      setCurrentStepIdx(0);
+      setLogs([`[0.00s] >> SYSTEM ONLINE: Connecting to ${moduleName}`]);
+      setLiveElapsed(0);
+    }, 0);
 
-    const interval = setInterval(() => {
+    const timerInterval = setInterval(() => {
+      setLiveElapsed((performance.now() - start) / 1000);
+    }, 100);
+
+    const stepInterval = setInterval(() => {
       setCurrentStepIdx((prev) => {
-        const next = prev < steps.length - 1 ? prev + 1 : prev;
-        const timestamp = (0.4 + next * 0.75).toFixed(2);
-        setLogs((l) => [...l.slice(-4), `[${timestamp}s] >> ${steps[next]}`]);
+        if (prev >= steps.length - 1) {
+          // Reached the last step, do NOT keep advancing or appending duplicate steps
+          return prev;
+        }
+        const next = prev + 1;
+        const nowSec = ((performance.now() - start) / 1000).toFixed(2);
+        const nextStep = steps[next];
+        setLogs((prevLogs) => {
+          // Deduplicate consecutive identical messages
+          if (prevLogs.length > 0 && prevLogs[prevLogs.length - 1].includes(nextStep)) {
+            return prevLogs;
+          }
+          return [...prevLogs.slice(-4), `[${nowSec}s] >> ${nextStep}`];
+        });
         return next;
       });
     }, 1200);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(stepInterval);
+      clearInterval(timerInterval);
+    };
   }, [active, moduleName, steps]);
 
   if (!active) return null;
+
+  const displayedElapsed = elapsedSeconds !== undefined ? elapsedSeconds : liveElapsed;
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-cyan-500/40 bg-slate-950/90 p-6 shadow-[0_0_35px_rgba(0,240,255,0.15)] backdrop-blur-xl">
@@ -62,7 +89,7 @@ export function RoboticScanner({
       <div className="relative z-10 flex items-center justify-between border-b border-cyan-500/20 pb-4">
         <div className="flex items-center gap-3">
           <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-950/80 text-cyan-400 ring-1 ring-cyan-500/50">
-            <Cpu className="h-5 w-5 animate-pulse" />
+            <Cpu className="h-5 w-5 animate-pulse" aria-hidden="true" />
             <span className="absolute -top-1 -right-1 flex h-3 w-3">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75"></span>
               <span className="relative inline-flex h-3 w-3 rounded-full bg-cyan-500"></span>
@@ -81,15 +108,15 @@ export function RoboticScanner({
           </div>
         </div>
 
-        {/* Telemetry metrics */}
+        {/* Telemetry metrics with truthful real elapsed time */}
         <div className="hidden sm:flex items-center gap-4 font-mono text-[11px] text-slate-400">
           <div className="flex items-center gap-1.5 text-cyan-300">
-            <Activity className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
+            <Activity className="h-3.5 w-3.5 text-cyan-400 animate-pulse" aria-hidden="true" />
             <span>NEURAL: 100%</span>
           </div>
-          <div className="flex items-center gap-1.5 text-emerald-400">
-            <Zap className="h-3.5 w-3.5" />
-            <span>LATENCY: 8ms</span>
+          <div className="flex items-center gap-1.5 text-emerald-400" data-testid="robotic-scanner-elapsed">
+            <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Elapsed: {displayedElapsed.toFixed(2)}s</span>
           </div>
         </div>
       </div>
@@ -104,7 +131,7 @@ export function RoboticScanner({
           <div className="absolute inset-2 rounded-full border border-cyan-400/30 animate-radar-reverse" />
           {/* Inner pulsating core */}
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-indigo-600 text-white shadow-[0_0_20px_#00f0ff] animate-pulse">
-            <Sparkles className="h-6 w-6 text-cyan-100" />
+            <Sparkles className="h-6 w-6 text-cyan-100" aria-hidden="true" />
           </div>
           {/* Corner target reticles */}
           <div className="absolute -top-1 -left-1 h-2 w-2 border-t-2 border-l-2 border-cyan-400" />
@@ -126,7 +153,7 @@ export function RoboticScanner({
       <div className="relative z-10 rounded-xl border border-slate-800 bg-black/70 p-3.5 font-mono text-[11px] shadow-inner">
         <div className="mb-2 flex items-center justify-between border-b border-slate-800/80 pb-1.5 text-slate-500 text-[10px]">
           <span className="flex items-center gap-1.5 text-slate-400">
-            <Terminal className="h-3 w-3 text-cyan-400" />
+            <Terminal className="h-3 w-3 text-cyan-400" aria-hidden="true" />
             TELEMETRY STREAM
           </span>
           <span className="text-emerald-400">STATUS: ACTIVE</span>

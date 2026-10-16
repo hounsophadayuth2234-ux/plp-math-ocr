@@ -14,7 +14,7 @@ class CyberAudioManager {
   private scanningLfo: OscillatorNode | null = null;
   private scanningGain: GainNode | null = null;
   private isScanning = false;
-  private isMutedState = false;
+  private isMutedState = true;
   private volumeState = 0.7;
   private listeners: Set<AudioListener> = new Set();
 
@@ -22,7 +22,11 @@ class CyberAudioManager {
     if (typeof window !== "undefined") {
       try {
         const savedMute = localStorage.getItem("plp_audio_muted");
-        if (savedMute !== null) this.isMutedState = savedMute === "true";
+        if (savedMute !== null) {
+          this.isMutedState = savedMute === "true";
+        } else {
+          this.isMutedState = true;
+        }
         const savedVol = localStorage.getItem("plp_audio_volume");
         if (savedVol !== null) {
           const parsed = parseFloat(savedVol);

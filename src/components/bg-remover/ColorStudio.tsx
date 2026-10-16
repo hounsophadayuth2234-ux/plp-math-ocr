@@ -29,6 +29,14 @@ import {
   recompositeAlphaMask,
   exportAtFullResolution,
 } from "@/lib/bg-removal-client";
+import {
+  generateExportFilename,
+  detectContainerAndContents,
+  generateTrimap,
+  generateMaskOverlay,
+  refineMaskWithGuidedFilter,
+  SelectionMode,
+} from "@/lib/bg-compositor";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ProcessingStatusLabel } from "@/lib/types";
 import { BeforeAfterSlider } from "@/components/image-upscaler/BeforeAfterSlider";
@@ -38,10 +46,18 @@ export type ViewChannel =
   | "pink"
   | "transparent"
   | "mask"
+  | "overlay"
   | "original"
   | "split";
 
-export type BrushTool = "keep" | "remove" | "soft" | "eraser" | "pan";
+export type BrushTool =
+  | "keep"
+  | "remove"
+  | "soft"
+  | "eraser"
+  | "pan"
+  | "positive_point"
+  | "negative_point";
 
 interface ColorStudioProps {
   originalUrl: string;
@@ -54,7 +70,11 @@ interface ColorStudioProps {
   initialCompositeUrl: string;
   width: number;
   height: number;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  wasDownscaled?: boolean;
   mode: "preview" | "final" | "worker";
+  initialPurpose?: "white" | "pink" | "transparent";
   provider?: string;
   processingLabel?: ProcessingStatusLabel;
   metrics?: {
@@ -64,7 +84,11 @@ interface ColorStudioProps {
     totalMs?: number;
   };
   onReset: () => void;
-  onRerunFinal?: () => void;
+  onRerunFinal?: (targetMaxDim?: number) => void;
+  isProcessingFinal?: boolean;
+  workflowStep?: "detecting" | "edit_mask" | "refining" | "ready" | "failed";
+  onConfirmMask?: (mask: Uint8ClampedArray) => void;
+  initialSelectionMode?: SelectionMode;
 }
 
 const MAX_HISTORY_STATES = 20;
@@ -80,15 +104,32 @@ export function ColorStudio({
   initialCompositeUrl,
   width,
   height,
+  sourceWidth,
+  sourceHeight,
+  wasDownscaled,
   mode,
+  initialPurpose = "white",
   provider = "@imgly/isnet_fp16",
   processingLabel = "Browser AI result",
   metrics,
   onReset,
   onRerunFinal,
+  isProcessingFinal = false,
+  workflowStep = "ready",
+  onConfirmMask,
+  initialSelectionMode = "whole_product",
 }: ColorStudioProps) {
-  // ── Channel & Preview State ──
-  const [activeChannel, setActiveChannel] = useState<ViewChannel>("white");
+  // ── Selection Mode & Confirmation State ──
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>(initialSelectionMode);
+  const [containerWarning, setContainerWarning] = useState<string | null>(null);
+  const [isConfirmed, setIsConfirmed] = useState(workflowStep === "ready");
+
+  useEffect(() => {
+    setIsConfirmed(workflowStep === "ready");
+  }, [workflowStep]);
+
+  // ── Channel & Preview State (Default to user's selected purpose) ──
+  const [activeChannel, setActiveChannel] = useState<ViewChannel>(initialPurpose || "white");
   const [whiteCompositeUrl, setWhiteCompositeUrl] = useState<string>(initialCompositeUrl);
   const [pinkCompositeUrl, setPinkCompositeUrl] = useState<string>("");
   const [currentTransparentUrl, setCurrentTransparentUrl] = useState<string>(transparentUrl);
@@ -96,8 +137,9 @@ export function ColorStudio({
   const [, setCurrentTransparentBlob] = useState<Blob>(transparentBlob);
   const [isCompositing, setIsCompositing] = useState(false);
 
-  // ── Manual Mask Refinement Studio State ──
-  const [isEditMode, setIsEditMode] = useState(true);
+  // ── Manual Mask Refinement Studio State (Collapsed & inactive by default) ──
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [activeTool, setActiveTool] = useState<BrushTool>("keep");
   const [brushSize, setBrushSize] = useState<number>(20);
   const [brushHardness, setBrushHardness] = useState<number>(80); // 0 = ultra soft, 100 = hard edge
@@ -116,6 +158,8 @@ export function ColorStudio({
   const baseAlphaMaskRef = useRef<Uint8ClampedArray | null>(null);
   // Last committed/applied state for "Cancel Changes"
   const committedAlphaMaskRef = useRef<Uint8ClampedArray | null>(null);
+  // Optional excluded mask (e.g. stripped cardboard box) to prevent trimap bleed
+  const excludedMaskRef = useRef<Uint8ClampedArray | null>(null);
 
   // Undo / Redo stacks (Limited to MAX_HISTORY_STATES)
   const [history, setHistory] = useState<Uint8ClampedArray[]>([]);
@@ -312,6 +356,18 @@ export function ColorStudio({
         data[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
         data[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
         data[pIdx + 3] = 255;
+      } else if (activeChannel === "overlay") {
+        if (a > 128) {
+          data[pIdx] = Math.round(r * 0.6 + 34 * 0.4);
+          data[pIdx + 1] = Math.round(g * 0.6 + 197 * 0.4);
+          data[pIdx + 2] = Math.round(b * 0.6 + 94 * 0.4);
+          data[pIdx + 3] = 255;
+        } else {
+          data[pIdx] = Math.round(r * 0.65 + 239 * 0.35);
+          data[pIdx + 1] = Math.round(g * 0.65 + 68 * 0.35);
+          data[pIdx + 2] = Math.round(b * 0.65 + 68 * 0.35);
+          data[pIdx + 3] = 255;
+        }
       } else if (activeChannel === "original") {
         data[pIdx] = r;
         data[pIdx + 1] = g;
@@ -382,6 +438,18 @@ export function ColorStudio({
             data[dIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
             data[dIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
             data[dIdx + 3] = 255;
+          } else if (activeChannel === "overlay") {
+            if (a > 128) {
+              data[dIdx] = Math.round(r * 0.6 + 34 * 0.4);
+              data[dIdx + 1] = Math.round(g * 0.6 + 197 * 0.4);
+              data[dIdx + 2] = Math.round(b * 0.6 + 94 * 0.4);
+              data[dIdx + 3] = 255;
+            } else {
+              data[dIdx] = Math.round(r * 0.65 + 239 * 0.35);
+              data[dIdx + 1] = Math.round(g * 0.65 + 68 * 0.35);
+              data[dIdx + 2] = Math.round(b * 0.65 + 68 * 0.35);
+              data[dIdx + 3] = 255;
+            }
           } else if (activeChannel === "original") {
             data[dIdx] = r;
             data[dIdx + 1] = g;
@@ -493,6 +561,12 @@ export function ColorStudio({
                 const baseVal = baseMask[idx];
                 mask[idx] = Math.round(currentAlpha + (baseVal - currentAlpha) * weight);
               }
+            } else if (tool === "positive_point") {
+              // Positive Click: stamps solid opaque (255) onto mask
+              mask[idx] = 255;
+            } else if (tool === "negative_point") {
+              // Negative Click: stamps solid background (0) onto mask
+              mask[idx] = 0;
             }
           }
         }
@@ -711,62 +785,96 @@ export function ColorStudio({
     await recompositeAll(alphaMaskRef.current);
   }, [saveSnapshotToHistory, redrawCanvas, recompositeAll]);
 
-  // "Export Transparent PNG": Full resolution composite with genuine alpha channel
-  const handleExportTransparentPng = useCallback(async () => {
-    cyberAudio.playClick();
-    const timestamp = Date.now();
-    let downloadUrl = "";
-    const activeMask = alphaMaskRef.current;
+  // Switch Selection Mode (whole_product, contents_only, custom, box_polygon)
+  const handleSwitchSelectionMode = useCallback(
+    async (newMode: SelectionMode) => {
+      cyberAudio.playClick();
+      setSelectionMode(newMode);
+      setIsConfirmed(false);
+      if (!sourceImageData || !alphaMaskRef.current || !baseAlphaMaskRef.current) return;
 
-    if (originalFile && activeMask) {
-      try {
-        const fullRes = await exportAtFullResolution(
-          originalFile,
-          activeMask,
+      saveSnapshotToHistory();
+
+      if (newMode === "contents_only") {
+        const res = detectContainerAndContents(
+          sourceImageData.data,
+          baseAlphaMaskRef.current,
           width,
-          height,
-          "transparent"
+          height
         );
-        downloadUrl = fullRes.dataUrl;
-      } catch (err) {
-        console.warn("Full-resolution export error, falling back to working canvas:", err);
+        if (res.hasContainer) {
+          alphaMaskRef.current.set(res.contentsMask);
+          excludedMaskRef.current = res.containerMask;
+          setContainerWarning(
+            res.warning ||
+              "⚠️ Box/container detected. In 'Keep Contents Only' mode, the packaging is stripped."
+          );
+        } else {
+          excludedMaskRef.current = null;
+          setContainerWarning(
+            "ℹ️ មិនមានប្រអប់ធំត្រូវបានរកឃើញទេ។ (No distinct container detected.)"
+          );
+        }
+      } else if (newMode === "whole_product") {
+        alphaMaskRef.current.set(baseAlphaMaskRef.current);
+        excludedMaskRef.current = null;
+        setContainerWarning(null);
+      } else if (newMode === "custom") {
+        setIsEditMode(true);
+        setActiveTool("positive_point");
+      } else if (newMode === "box_polygon") {
+        setIsEditMode(true);
       }
-    }
 
-    if (!downloadUrl) {
-      downloadUrl = currentTransparentUrl || transparentUrl;
-    }
+      await recompositeAll(alphaMaskRef.current);
+      redrawCanvas();
+    },
+    [sourceImageData, width, height, saveSnapshotToHistory, recompositeAll, redrawCanvas]
+  );
 
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = `PLP-Cutout-Transparent-${mode}-${timestamp}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    cyberAudio.playMetallicDing();
-
-    // Clean up temporary Object URL
-    setTimeout(() => {
-      try {
-        URL.revokeObjectURL(downloadUrl);
-      } catch {
-        // Ignore revocation errors
+  // Confirm Mask & Run Alpha Matting Refinement
+  const handleConfirmMaskAndExport = useCallback(async () => {
+    if (!alphaMaskRef.current || !sourceImageData) return;
+    cyberAudio.playShutter();
+    setIsConfirmed(true);
+    setIsCompositing(true);
+    try {
+      if (onConfirmMask) {
+        onConfirmMask(alphaMaskRef.current);
       }
-    }, 5000);
-  }, [originalFile, width, height, mode, currentTransparentUrl, transparentUrl]);
+      const trimap = generateTrimap(alphaMaskRef.current, width, height, 4, excludedMaskRef.current);
+      const refinedAlpha = refineMaskWithGuidedFilter(
+        sourceImageData.data,
+        trimap,
+        width,
+        height,
+        4
+      );
+      alphaMaskRef.current.set(refinedAlpha);
+      await recompositeAll(refinedAlpha);
+      redrawCanvas();
+      cyberAudio.playMetallicDing();
+    } catch (e) {
+      console.error("Mask confirmation refinement error:", e);
+    } finally {
+      setIsCompositing(false);
+    }
+  }, [sourceImageData, width, height, onConfirmMask, recompositeAll, redrawCanvas]);
 
-  // 1-Click Download for active preview channel
-  const handleDownload = useCallback(async () => {
+  // 1-Click Download for active preview channel or forced specific purpose
+  const handleDownload = useCallback(async (forcedChannel?: ViewChannel) => {
+    const targetChannel: ViewChannel = forcedChannel || activeChannel;
     cyberAudio.playClick();
     const timestamp = Date.now();
     let downloadUrl = "";
     let filename = "";
+    let isTempUrl = false;
     const activeMask = alphaMaskRef.current;
 
     if (
       originalFile &&
       activeMask &&
-      (activeChannel === "transparent" || activeChannel === "white" || activeChannel === "pink")
+      (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink")
     ) {
       try {
         const fullRes = await exportAtFullResolution(
@@ -774,34 +882,37 @@ export function ColorStudio({
           activeMask,
           width,
           height,
-          activeChannel
+          targetChannel
         );
         downloadUrl = fullRes.dataUrl;
+        isTempUrl = true;
       } catch (err) {
         console.warn("Full-resolution export error, falling back to canvas:", err);
       }
     }
 
     if (!downloadUrl) {
-      if (activeChannel === "transparent") {
+      if (targetChannel === "transparent") {
         downloadUrl = currentTransparentUrl || transparentUrl;
-      } else if (activeChannel === "pink") {
+      } else if (targetChannel === "pink") {
         downloadUrl = pinkCompositeUrl || activeDisplayUrl;
-      } else if (activeChannel === "mask") {
+      } else if (targetChannel === "mask") {
         downloadUrl = currentAlphaMaskUrl || initialAlphaMaskUrl || transparentUrl;
       } else {
         downloadUrl = whiteCompositeUrl || activeDisplayUrl;
       }
     }
 
-    if (activeChannel === "transparent") {
-      filename = `PLP-Cutout-Transparent-${mode}-${timestamp}.png`;
-    } else if (activeChannel === "pink") {
-      filename = `PLP-Solution-Pink-FFF0F5-${mode}-${timestamp}.png`;
-    } else if (activeChannel === "mask") {
-      filename = `PLP-AlphaMask-Debug-${mode}-${timestamp}.png`;
+    if (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink") {
+      filename = generateExportFilename(
+        originalFile?.name || "image",
+        targetChannel,
+        width,
+        height,
+        mode
+      );
     } else {
-      filename = `PLP-Product-White-FFFFFF-${mode}-${timestamp}.png`;
+      filename = `PLP-AlphaMask-Debug-${width}x${height}-${mode}-${timestamp}.png`;
     }
 
     const a = document.createElement("a");
@@ -812,13 +923,16 @@ export function ColorStudio({
     document.body.removeChild(a);
     cyberAudio.playMetallicDing();
 
-    setTimeout(() => {
-      try {
-        URL.revokeObjectURL(downloadUrl);
-      } catch {
-        // Ignore
-      }
-    }, 5000);
+    // Clean up temporary Object URL ONLY if created dynamically and not stored in state
+    if (isTempUrl && downloadUrl.startsWith("blob:")) {
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(downloadUrl);
+        } catch {
+          // Ignore revocation errors
+        }
+      }, 5000);
+    }
   }, [
     originalFile,
     activeChannel,
@@ -833,6 +947,11 @@ export function ColorStudio({
     initialAlphaMaskUrl,
     whiteCompositeUrl,
   ]);
+
+  // "Export Transparent PNG": Full resolution composite with genuine alpha channel
+  const handleExportTransparentPng = useCallback(async () => {
+    return handleDownload("transparent");
+  }, [handleDownload]);
 
   const displayProvenance = useMemo(() => {
     if (mode === "worker") {
@@ -853,7 +972,7 @@ export function ColorStudio({
 
   return (
     <div className="flex flex-col gap-4 font-mono">
-      {/* ── Status & Provenance Bar ── */}
+      {/* ── Status & Truthful Telemetry Bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-none border border-slate-800 bg-slate-950/80 px-4 py-2.5 text-xs">
         <div data-testid="provenance-badge" className="flex flex-wrap items-center gap-2">
           <span
@@ -868,46 +987,83 @@ export function ColorStudio({
               className="inline-flex items-center gap-1.5 rounded-none border border-amber-500/40 bg-amber-950/50 text-amber-300 px-2.5 py-1 text-[11px] font-bold tracking-wider shadow-[0_0_12px_rgba(245,158,11,0.2)]"
             >
               <Sparkles className="h-3 w-3 text-amber-400" />
-              <span>Manual mask corrections applied</span>
+              <span>កែគែមដោយដៃរួចរាល់ (Corrections Applied)</span>
             </span>
           )}
-          <span className="hidden sm:inline text-slate-500">·</span>
-          <span className="text-slate-400 text-[11px]">
-            Engine: <strong className="text-white">{provider}</strong>
+          <span className="hidden sm:inline text-slate-600">·</span>
+          <span className="text-slate-300 text-[11px]">
+            ប្រភពដើម: <strong className="text-white">{sourceWidth || width}×{sourceHeight || height}px</strong>
           </span>
+          <span className="hidden sm:inline text-slate-600">·</span>
+          <span className="text-slate-300 text-[11px]">
+            ដំណើរការ: <strong className="text-cyan-300">{width}×{height}px</strong>
+          </span>
+          {metrics?.totalMs ? (
+            <>
+              <span className="hidden sm:inline text-slate-600">·</span>
+              <span className="text-slate-300 text-[11px]">
+                រយៈពេល: <strong className="text-emerald-300">{(metrics.totalMs / 1000).toFixed(2)}s</strong>
+              </span>
+            </>
+          ) : metrics?.inferenceMs ? (
+            <>
+              <span className="hidden sm:inline text-slate-600">·</span>
+              <span className="text-slate-300 text-[11px]">
+                Inference: <strong className="text-emerald-300">{(metrics.inferenceMs / 1000).toFixed(2)}s</strong>
+              </span>
+            </>
+          ) : null}
         </div>
 
         {/* Upgrade / Rerun Final Button */}
         {mode === "preview" && onRerunFinal && (
           <button
             type="button"
+            disabled={isProcessingFinal}
             onClick={() => {
+              if (isProcessingFinal) return;
               cyberAudio.playClick();
               onRerunFinal();
             }}
-            className="flex items-center gap-1.5 rounded-none border border-emerald-500/40 bg-emerald-950/40 px-3 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-900/60 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)] uppercase tracking-wider"
+            className={`min-h-[44px] flex items-center gap-1.5 rounded-none border border-emerald-500/50 bg-emerald-950/40 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-900/60 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)] uppercase tracking-wider ${
+              isProcessingFinal ? "opacity-50 cursor-not-allowed" : ""
+            }`}
           >
-            <Sparkles className="h-3 w-3 text-emerald-400" />
-            <span>RENDER FINAL CLEAN CUT (2048PX)</span>
+            <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+            <span>
+              {isProcessingFinal
+                ? "កំពុងដំណើរការ CLEAN CUT..."
+                : `ដំណើរការកាត់ច្បាស់ (CLEAN CUT · ${Math.min(Math.max(sourceWidth || width, sourceHeight || height), 2048)}PX)`}
+            </span>
           </button>
         )}
       </div>
 
-      {/* ── Channel & Quality View Controls (Instant Switching < 5ms) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 rounded-none border border-cyan-500/30 bg-slate-950 p-1.5 text-xs">
+      {/* Downscale note if image was scaled to fit device memory limits */}
+      {wasDownscaled && (
+        <div className="rounded-none border border-amber-500/30 bg-amber-950/30 px-3 py-1.5 text-[11px] text-amber-300 font-mono">
+          ℹ️ កម្រិតរូបភាពត្រូវបានកំណត់ត្រឹម {Math.max(width, height)}px សម្រាប់ដំណើរការ AI ក្នុង Browser ដើម្បីរក្សាស្ថិរភាព។ ការទាញយកនឹងរក្សាភាពច្បាស់ពេញលេញ។
+        </div>
+      )}
+
+      {/* ── Primary Output Purpose Selector (Khmer-First, accessible min 44px) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-none border border-cyan-500/30 bg-slate-950 p-2 text-xs">
         {/* 1. White Background */}
         <button
           type="button"
           data-channel="white"
           onClick={() => handleSelectChannel("white")}
-          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
+          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "white"
-              ? "bg-slate-900 border border-cyan-400 text-white shadow-[0_0_12px_rgba(0,240,255,0.25)] font-bold"
-              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
+              ? "bg-slate-900 border-2 border-cyan-400 text-white shadow-[0_0_12px_rgba(0,240,255,0.3)] font-bold"
+              : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
           }`}
         >
-          <span className="h-2 w-2 rounded-none border border-slate-300 bg-white" />
-          <span>WHITE</span>
+          <div className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-none border border-slate-300 bg-white shrink-0" />
+            <span className="text-white font-bold">រូបសំណួរ — ផ្ទៃស</span>
+          </div>
+          <span className="text-[10px] text-slate-400 font-mono">#FFFFFF Solid White</span>
         </button>
 
         {/* 2. Pink Background */}
@@ -915,17 +1071,20 @@ export function ColorStudio({
           type="button"
           data-channel="pink"
           onClick={() => handleSelectChannel("pink")}
-          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
+          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "pink"
-              ? "bg-slate-900 border border-pink-400 text-white shadow-[0_0_12px_rgba(255,105,180,0.25)] font-bold"
-              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
+              ? "bg-slate-900 border-2 border-pink-400 text-white shadow-[0_0_12px_rgba(255,105,180,0.3)] font-bold"
+              : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
           }`}
         >
-          <span
-            className="h-2 w-2 rounded-none border border-pink-300"
-            style={{ backgroundColor: "#FFF0F5" }}
-          />
-          <span>PINK</span>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="h-3 w-3 rounded-none border border-pink-300 shrink-0"
+              style={{ backgroundColor: "#FFF0F5" }}
+            />
+            <span className="text-white font-bold">រូបដំណោះស្រាយ — ផ្ទៃផ្កាឈូក</span>
+          </div>
+          <span className="text-[10px] text-pink-300/80 font-mono">#FFF0F5 Solid Pink</span>
         </button>
 
         {/* 3. Transparent Checkerboard */}
@@ -933,61 +1092,480 @@ export function ColorStudio({
           type="button"
           data-channel="transparent"
           onClick={() => handleSelectChannel("transparent")}
-          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
+          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "transparent"
-              ? "bg-slate-900 border border-indigo-400 text-white shadow-[0_0_12px_rgba(99,102,241,0.25)] font-bold"
-              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
+              ? "bg-slate-900 border-2 border-indigo-400 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] font-bold"
+              : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
           }`}
         >
-          <Grid className="h-3 w-3 text-indigo-400" />
-          <span>TRANSPARENT</span>
+          <div className="flex items-center gap-1.5">
+            <Grid className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+            <span className="text-white font-bold">រូបថ្លា — គ្មានផ្ទៃ</span>
+          </div>
+          <span className="text-[10px] text-indigo-300/80 font-mono">Transparent Cutout</span>
         </button>
 
-        {/* 4. Alpha Mask Debug View */}
-        <button
-          type="button"
-          onClick={() => handleSelectChannel("mask")}
-          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
-            activeChannel === "mask"
-              ? "bg-slate-900 border border-amber-400 text-white shadow-[0_0_12px_rgba(245,158,11,0.25)] font-bold"
-              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
-          }`}
-          title="Inspect edge alpha & halo boundary (Black = 0, White = 255)"
-        >
-          <Eye className="h-3 w-3 text-amber-400" />
-          <span>MASK DEBUG</span>
-        </button>
-
-        {/* 5. Original Photo */}
+        {/* 4. Original Photo */}
         <button
           type="button"
           onClick={() => handleSelectChannel("original")}
-          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
+          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "original"
-              ? "bg-slate-900 border border-slate-500 text-white shadow-[0_0_12px_rgba(148,163,184,0.25)] font-bold"
-              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
+              ? "bg-slate-900 border-2 border-slate-400 text-white shadow-[0_0_12px_rgba(148,163,184,0.3)] font-bold"
+              : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
           }`}
         >
-          <span>ORIGINAL</span>
-        </button>
-
-        {/* 6. Before / After Split Slider */}
-        <button
-          type="button"
-          onClick={() => handleSelectChannel("split")}
-          className={`flex items-center justify-center gap-1.5 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
-            activeChannel === "split"
-              ? "bg-slate-900 border border-emerald-400 text-white shadow-[0_0_12px_rgba(16,185,129,0.25)] font-bold"
-              : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/40"
-          }`}
-        >
-          <Sliders className="h-3 w-3 text-emerald-400" />
-          <span>SPLIT SLIDER</span>
+          <div className="flex items-center gap-1.5">
+            <Eye className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <span className="text-white font-bold">រូបដើម (Original)</span>
+          </div>
+          <span className="text-[10px] text-slate-400 font-mono">ប្រៀបធៀបរូបដើម</span>
         </button>
       </div>
 
-      {/* ── Manual Mask Refinement Studio Toolbar ── */}
-      <div className="flex flex-col gap-3 rounded-none border border-slate-800 bg-slate-950 p-3.5 text-xs shadow-inner">
+      {/* ── Holographic Preview Deck with Transparent Checkerboard ── */}
+      <div
+        className={`relative flex items-center justify-center overflow-hidden rounded-none border p-4 transition-all duration-300 font-mono ${
+          activeChannel === "pink"
+            ? "border-pink-500/40 shadow-[0_0_35px_rgba(255,105,180,0.12)] bg-slate-950"
+            : activeChannel === "transparent"
+            ? "border-indigo-500/40 shadow-[0_0_35px_rgba(99,102,241,0.12)] bg-slate-950"
+            : activeChannel === "mask"
+            ? "border-amber-500/40 shadow-[0_0_35px_rgba(245,158,11,0.12)] bg-black"
+            : "border-cyan-500/40 shadow-[0_0_35px_rgba(0,240,255,0.12)] bg-slate-950"
+        }`}
+        style={{ minHeight: 400 }}
+      >
+        {/* Reticles */}
+        <div className="absolute top-1.5 left-1.5 h-3 w-3 border-t-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
+        <div className="absolute top-1.5 right-1.5 h-3 w-3 border-t-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
+        <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
+        <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
+
+        {/* Corner HUD Telemetry Badges */}
+        <div className="pointer-events-none absolute top-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+          <span className="text-slate-500">RES:</span>
+          <span className="text-white font-bold">{width}×{height}PX</span>
+        </div>
+        <div className="pointer-events-none absolute top-2 right-2 z-20 flex items-center gap-1.5 border border-slate-700 bg-slate-950/85 px-2 py-0.5 text-[10px] text-slate-300 font-mono">
+          <span
+            className={`h-1.5 w-1.5 rounded-none ${
+              isCompositing
+                ? "bg-amber-400 animate-ping"
+                : isDirty
+                ? "bg-amber-400"
+                : "bg-emerald-400 animate-pulse"
+            }`}
+          />
+          <span className="text-slate-500">STATUS:</span>
+          <span className="font-bold text-white">
+            {isCompositing ? "COMPOSITING" : isDirty ? "MODIFIED" : "READY"}
+          </span>
+        </div>
+        <div className="pointer-events-none absolute bottom-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+          <span className="text-slate-500">ENGINE:</span>
+          <span className="text-white font-bold">@IMGLY/ISNET_FP16</span>
+        </div>
+        <div className="pointer-events-none absolute bottom-2 right-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+          <span className="text-slate-500">ZOOM:</span>
+          <span className="text-white font-bold">{Math.round(zoom * 100)}%</span>
+        </div>
+
+        {/* View Mode: Split Comparison Slider vs Interactive Canvas vs Image */}
+        {activeChannel === "split" ? (
+          <div className="w-full max-w-2xl">
+            <BeforeAfterSlider
+              beforeSrc={originalUrl}
+              afterSrc={whiteCompositeUrl || currentTransparentUrl}
+              beforeLabel="Original Image"
+              afterLabel="Clean Cutout"
+            />
+          </div>
+        ) : isEditMode ? (
+          /* Interactive Mask Painting Canvas */
+          <div
+            className="relative overflow-hidden flex items-center justify-center"
+            style={{
+              transform: `scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,
+              transformOrigin: "center center",
+              transition: isPanning ? "none" : "transform 0.1s ease-out",
+              cursor: activeTool === "pan" ? "grab" : "crosshair",
+            }}
+          >
+            {activeChannel === "transparent" && (
+              <div
+                className="absolute inset-0 rounded-none opacity-40 pointer-events-none"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(45deg, #334155 25%, transparent 25%), linear-gradient(-45deg, #334155 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #334155 75%), linear-gradient(-45deg, transparent 75%, #334155 75%)",
+                  backgroundSize: "20px 20px",
+                }}
+              />
+            )}
+            <canvas
+              ref={canvasRef}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              className="max-h-[460px] max-w-full object-contain rounded-none shadow-2xl"
+              style={{ touchAction: "none" }}
+            />
+          </div>
+        ) : (
+          /* Standard Re-composited Image Display */
+          <div className="relative z-10 flex items-center justify-center">
+            {activeChannel === "transparent" && (
+              <div
+                className="absolute inset-0 rounded-none opacity-40 pointer-events-none"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(45deg, #334155 25%, transparent 25%), linear-gradient(-45deg, #334155 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #334155 75%), linear-gradient(-45deg, transparent 75%, #334155 75%)",
+                  backgroundSize: "20px 20px",
+                  backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
+                }}
+              />
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={activeDisplayUrl}
+              alt="Composite Render"
+              data-active-channel={activeChannel}
+              className="max-h-[460px] max-w-full object-contain rounded-none shadow-2xl transition-all"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ── Selection Mode, Mask Preview & Confirmation Deck ── */}
+      <div className="rounded-none border border-cyan-500/30 bg-slate-950 p-4 space-y-3 font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+              {"// របៀបជ្រើសរើសវត្ថុ (SELECTION MODE)"}
+            </span>
+            <span className="text-[10px] bg-cyan-950 border border-cyan-500/40 text-cyan-300 px-1.5 py-0.5 font-bold uppercase">
+              {selectionMode}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Mask Overlay View Button */}
+            <button
+              type="button"
+              data-testid="toggle-mask-overlay-btn"
+              onClick={() => {
+                cyberAudio.playClick();
+                handleSelectChannel(activeChannel === "overlay" ? "white" : "overlay");
+              }}
+              className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 text-xs border transition-all ${
+                activeChannel === "overlay"
+                  ? "border-emerald-400 bg-emerald-950 text-white font-bold ring-1 ring-emerald-400"
+                  : "border-slate-800 bg-slate-900/80 text-slate-300 hover:text-white"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-none bg-emerald-400" />
+              <span>ម៉ាស់ (បៃតង/ក្រហម) OVERLAY</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Selection Modes */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <button
+            type="button"
+            data-testid="mode-whole-product"
+            onClick={() => handleSwitchSelectionMode("whole_product")}
+            className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
+              selectionMode === "whole_product"
+                ? "border-cyan-400 bg-cyan-950 text-white font-bold ring-1 ring-cyan-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
+            }`}
+          >
+            <span className="text-xs font-bold">📦 រក្សាផលិតផលទាំងមូល</span>
+            <span className="text-[9px] text-slate-500">Keep Entire Product</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="mode-contents-only"
+            onClick={() => handleSwitchSelectionMode("contents_only")}
+            className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
+              selectionMode === "contents_only"
+                ? "border-purple-400 bg-purple-950 text-white font-bold ring-1 ring-purple-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
+            }`}
+          >
+            <span className="text-xs font-bold text-purple-300">🍩 រក្សាទុកតែរបស់ខាងក្នុង</span>
+            <span className="text-[9px] text-purple-400/80">Keep Contents Only</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="mode-custom"
+            onClick={() => handleSwitchSelectionMode("custom")}
+            className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
+              selectionMode === "custom"
+                ? "border-emerald-400 bg-emerald-950 text-white font-bold ring-1 ring-emerald-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
+            }`}
+          >
+            <span className="text-xs font-bold text-emerald-300">🎯 ជ្រើសរើសដោយផ្ទាល់</span>
+            <span className="text-[9px] text-emerald-400/80">Custom Point (+/-)</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="mode-box-polygon"
+            onClick={() => handleSwitchSelectionMode("box_polygon")}
+            className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
+              selectionMode === "box_polygon"
+                ? "border-amber-400 bg-amber-950 text-white font-bold ring-1 ring-amber-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
+            }`}
+          >
+            <span className="text-xs font-bold text-amber-300">📐 ប្រអប់-ពហុកោណ</span>
+            <span className="text-[9px] text-amber-400/80">Rectangle / Polygon</span>
+          </button>
+        </div>
+
+        {/* Warning Banner if Container/Box Detected */}
+        {containerWarning && (
+          <div className="flex items-start gap-2.5 p-3 border border-amber-500/40 bg-amber-950/40 text-xs text-amber-200">
+            <span className="text-amber-400 text-sm mt-0.5">⚠️</span>
+            <div className="space-y-0.5">
+              <div className="font-bold uppercase tracking-wider text-amber-300">
+                រកឃើញកេស/ប្រអប់ (BOX / CONTAINER DETECTED)
+              </div>
+              <div className="text-[11px] leading-relaxed text-amber-200/90 font-mono">
+                {containerWarning}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Point Prompts Toolbar */}
+        {selectionMode === "custom" && (
+          <div className="flex flex-wrap items-center gap-2 p-2 border border-slate-800 bg-slate-900/90 text-xs">
+            <span className="text-[10px] text-slate-400 uppercase font-mono">POINT PROMPT:</span>
+            <button
+              type="button"
+              data-testid="tool-positive-point"
+              onClick={() => {
+                setIsEditMode(true);
+                setActiveTool("positive_point");
+              }}
+              className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border transition-all ${
+                activeTool === "positive_point"
+                  ? "border-emerald-400 bg-emerald-950 text-white font-bold ring-1 ring-emerald-400"
+                  : "border-slate-800 bg-slate-950 text-slate-400 hover:text-emerald-300"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              <span>(+) ចុចរក្សាទុក (Keep Point)</span>
+            </button>
+            <button
+              type="button"
+              data-testid="tool-negative-point"
+              onClick={() => {
+                setIsEditMode(true);
+                setActiveTool("negative_point");
+              }}
+              className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 border transition-all ${
+                activeTool === "negative_point"
+                  ? "border-rose-400 bg-rose-950 text-white font-bold ring-1 ring-rose-400"
+                  : "border-slate-800 bg-slate-950 text-slate-400 hover:text-rose-300"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-rose-400" />
+              <span>(-) ចុចលុបប្រអប់ (Remove Point)</span>
+            </button>
+          </div>
+        )}
+
+        {/* Confirm Mask and Export CTA Button */}
+        {!isConfirmed && (
+          <button
+            type="button"
+            data-testid="confirm-mask-export-btn"
+            onClick={handleConfirmMaskAndExport}
+            className="min-h-[48px] w-full flex items-center justify-center gap-2 border border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-5 py-3 text-sm font-black text-white shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:brightness-110 active:scale-[0.98] transition-all tracking-wider uppercase font-mono"
+          >
+            <Sparkles className="h-4 w-4 text-emerald-200" />
+            <span>✨ បញ្ជាក់ម៉ាស់ និងកាត់សម្រួលគែម (CONFIRM MASK &amp; REFINE EDGES)</span>
+          </button>
+        )}
+      </div>
+
+      {/* ── Telemetry HUD & Download Deck ── */}
+      <div className="rounded-none border border-slate-800 bg-slate-900/80 p-4 space-y-3 font-mono">
+        <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-300 border-b border-slate-800 pb-2">
+          <span className="flex items-center gap-1.5">
+            <span
+              className={`h-2 w-2 rounded-none ${
+                activeChannel === "pink"
+                  ? "bg-pink-400"
+                  : activeChannel === "mask"
+                  ? "bg-amber-400"
+                  : activeChannel === "transparent"
+                  ? "bg-indigo-400"
+                  : "bg-cyan-400"
+              }`}
+            />
+            <span className="uppercase font-bold text-white">
+              {activeChannel === "white"
+                ? "រូបសំណួរ — ផ្ទៃស (#FFFFFF)"
+                : activeChannel === "pink"
+                ? "រូបដំណោះស្រាយ — ផ្ទៃផ្កាឈូក (#FFF0F5)"
+                : activeChannel === "transparent"
+                ? "រូបថ្លា — គ្មានផ្ទៃ (TRANSPARENT PNG)"
+                : activeChannel === "mask"
+                ? "ALPHA MASK DEBUG"
+                : "ORIGINAL IMAGE"}
+            </span>
+          </span>
+          <div className="flex items-center gap-3 text-slate-300">
+            <span>
+              Export: <strong className="text-white">{originalFile && (sourceWidth || sourceHeight) ? `${sourceWidth || width}×${sourceHeight || height}px` : `${width}×${height}px`}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Primary Download Button for Current View */}
+        <button
+          type="button"
+          data-testid="primary-download"
+          onClick={() => handleDownload()}
+          disabled={isCompositing}
+          className={`min-h-[48px] flex w-full items-center justify-center gap-2 rounded-none px-5 py-3.5 text-xs font-black tracking-wider uppercase text-white shadow-lg transition-all duration-200 active:scale-[0.98] font-mono ${
+            activeChannel === "pink"
+              ? "bg-gradient-to-r from-pink-600 via-rose-600 to-fuchsia-600 shadow-pink-900/40 hover:shadow-pink-500/25 ring-1 ring-pink-400/40"
+              : activeChannel === "transparent"
+              ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 shadow-indigo-900/40 hover:shadow-indigo-500/25 ring-1 ring-indigo-400/40"
+              : "bg-gradient-to-r from-cyan-600 via-indigo-600 to-blue-600 shadow-cyan-900/40 hover:shadow-cyan-500/25 ring-1 ring-cyan-400/40"
+          }`}
+        >
+          <Download className="h-4 w-4" />
+          <span>
+            {activeChannel === "transparent"
+              ? "ទាញយករូបថ្លា — គ្មានផ្ទៃ (EXPORT TRANSPARENT PNG)"
+              : activeChannel === "pink"
+              ? "ទាញយករូបដំណោះស្រាយ — ផ្ទៃផ្កាឈូក (#FFF0F5)"
+              : activeChannel === "mask"
+              ? "ទាញយកម៉ាសអាល់ហ្វា (ALPHA MASK DEBUG)"
+              : "ទាញយករូបសំណួរ — ផ្ទៃស (#FFFFFF)"}
+          </span>
+        </button>
+
+        {/* Direct 3-Button Quick Download Row */}
+        <div className="space-y-1.5 pt-1">
+          <div className="text-[10px] text-slate-400 font-mono tracking-wider">
+            ទាញយកភ្លាមៗតាមតម្រូវការ (1-CLICK QUICK DOWNLOAD):
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono">
+            <button
+              type="button"
+              data-testid="quick-download-white"
+              onClick={() => handleDownload("white")}
+              className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-cyan-400 hover:text-white transition-colors"
+            >
+              <span className="h-2.5 w-2.5 bg-white border border-slate-400" />
+              <span>ទាញយករូបសំណួរ (ស)</span>
+            </button>
+            <button
+              type="button"
+              data-testid="quick-download-pink"
+              onClick={() => handleDownload("pink")}
+              className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-pink-400 hover:text-white transition-colors"
+            >
+              <span className="h-2.5 w-2.5 border border-pink-400" style={{ backgroundColor: "#FFF0F5" }} />
+              <span>ទាញយករូបដំណោះស្រាយ (ផ្កាឈូក)</span>
+            </button>
+            <button
+              type="button"
+              data-testid="quick-download-transparent"
+              onClick={() => handleDownload("transparent")}
+              className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-indigo-400 hover:text-white transition-colors"
+            >
+              <Grid className="h-3.5 w-3.5 text-indigo-400" />
+              <span>ទាញយករូបថ្លា (PNG)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Secondary Download Actions & Reset */}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-2 font-mono border-t border-slate-800">
+          <button
+            type="button"
+            onClick={handleExportTransparentPng}
+            className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-cyan-500/40 bg-cyan-950/60 px-3.5 py-1.5 text-cyan-300 hover:bg-cyan-900/70 hover:text-white transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] font-bold tracking-wider uppercase"
+          >
+            <Layers className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Export Transparent PNG</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onReset}
+            className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-slate-800 bg-slate-950/80 px-3 py-1.5 text-slate-400 hover:text-rose-300 hover:border-rose-500/30 transition-colors tracking-wider uppercase"
+          >
+            <RefreshCw className="h-3 w-3" />
+            <span>កំណត់ឡើងវិញ (RESET HUD)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Collapsible Advanced Disclosure: Manual Mask Studio & Diagnostic Views ── */}
+      <div className="rounded-none border border-slate-800 bg-slate-950 p-3.5 text-xs shadow-inner font-mono">
+        <button
+          type="button"
+          onClick={() => {
+            cyberAudio.playClick();
+            setIsAdvancedOpen(!isAdvancedOpen);
+          }}
+          className="min-h-[44px] w-full flex items-center justify-between text-xs text-slate-300 hover:text-cyan-300 font-bold tracking-wider py-1 font-mono"
+        >
+          <div className="flex items-center gap-2">
+            <Sliders className="h-4 w-4 text-cyan-400" />
+            <span>កែគែមដោយដៃ និងឧបករណ៍កម្រិតខ្ពស់ (MANUAL EDGE CORRECTION &amp; ADVANCED TOOLS)</span>
+          </div>
+          <span className="text-[11px] text-cyan-400">{isAdvancedOpen ? "[-] បិទ (COLLAPSE)" : "[+] បើក (EXPAND)"}</span>
+        </button>
+
+        {isAdvancedOpen && (
+          <div className="flex flex-col gap-3 pt-3 border-t border-slate-800 mt-2">
+            {/* Diagnostic View Toggles */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] text-slate-400 uppercase tracking-wider">របៀបពិនិត្យម៉ាស:</span>
+              <button
+                type="button"
+                onClick={() => handleSelectChannel("mask")}
+                className={`min-h-[44px] flex items-center gap-1.5 rounded-none px-3 py-1.5 text-xs transition-all tracking-wider ${
+                  activeChannel === "mask"
+                    ? "bg-slate-900 border border-amber-400 text-white font-bold"
+                    : "border border-slate-800 bg-slate-900/60 text-slate-300 hover:text-white"
+                }`}
+              >
+                <Eye className="h-3.5 w-3.5 text-amber-400" />
+                <span>ពិនិត្យម៉ាសអាល់ហ្វា (MASK DEBUG)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectChannel("split")}
+                className={`min-h-[44px] flex items-center gap-1.5 rounded-none px-3 py-1.5 text-xs transition-all tracking-wider ${
+                  activeChannel === "split"
+                    ? "bg-slate-900 border border-emerald-400 text-white font-bold"
+                    : "border border-slate-800 bg-slate-900/60 text-slate-300 hover:text-white"
+                }`}
+              >
+                <Sliders className="h-3.5 w-3.5 text-emerald-400" />
+                <span>ស្លាយប្រៀបធៀបរូបដើម (SPLIT SLIDER)</span>
+              </button>
+            </div>
+
+            {/* Manual Mask Refinement Studio Toolbar */}
+<div className="flex flex-col gap-3 rounded-none border border-slate-800 bg-slate-950 p-3.5 text-xs shadow-inner">
         {/* Top Control Bar: Studio Toggle, Undo, Redo, Apply & Cancel */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
           <div className="flex items-center gap-2">
@@ -1036,6 +1614,7 @@ export function ColorStudio({
 
             <button
               type="button"
+              data-testid="mask-reset-button"
               onClick={handleResetMask}
               className="flex items-center gap-1 rounded-none border border-rose-500/30 bg-rose-950/40 px-2.5 py-1 text-[10px] text-rose-300 hover:bg-rose-900/60 transition-colors tracking-wider uppercase"
               title="Reset mask back to initial AI segmentation"
@@ -1267,206 +1846,8 @@ export function ColorStudio({
           </div>
         )}
       </div>
-
-      {/* ── Holographic Preview Deck with Transparent Checkerboard ── */}
-      <div
-        className={`relative flex items-center justify-center overflow-hidden rounded-none border p-4 transition-all duration-300 font-mono ${
-          activeChannel === "pink"
-            ? "border-pink-500/40 shadow-[0_0_35px_rgba(255,105,180,0.12)] bg-slate-950"
-            : activeChannel === "transparent"
-            ? "border-indigo-500/40 shadow-[0_0_35px_rgba(99,102,241,0.12)] bg-slate-950"
-            : activeChannel === "mask"
-            ? "border-amber-500/40 shadow-[0_0_35px_rgba(245,158,11,0.12)] bg-black"
-            : "border-cyan-500/40 shadow-[0_0_35px_rgba(0,240,255,0.12)] bg-slate-950"
-        }`}
-        style={{ minHeight: 400 }}
-      >
-        {/* Reticles */}
-        <div className="absolute top-1.5 left-1.5 h-3 w-3 border-t-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
-        <div className="absolute top-1.5 right-1.5 h-3 w-3 border-t-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
-        <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b-2 border-l-2 border-cyan-400 pointer-events-none z-20" />
-        <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
-
-        {/* Corner HUD Telemetry Badges */}
-        <div className="pointer-events-none absolute top-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
-          <span className="text-slate-500">RES:</span>
-          <span className="text-white font-bold">{width}×{height}PX</span>
-        </div>
-        <div className="pointer-events-none absolute top-2 right-2 z-20 flex items-center gap-1.5 border border-slate-700 bg-slate-950/85 px-2 py-0.5 text-[10px] text-slate-300 font-mono">
-          <span
-            className={`h-1.5 w-1.5 rounded-none ${
-              isCompositing
-                ? "bg-amber-400 animate-ping"
-                : isDirty
-                ? "bg-amber-400"
-                : "bg-emerald-400 animate-pulse"
-            }`}
-          />
-          <span className="text-slate-500">STATUS:</span>
-          <span className="font-bold text-white">
-            {isCompositing ? "COMPOSITING" : isDirty ? "MODIFIED" : "READY"}
-          </span>
-        </div>
-        <div className="pointer-events-none absolute bottom-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
-          <span className="text-slate-500">ENGINE:</span>
-          <span className="text-white font-bold">@IMGLY/ISNET_FP16</span>
-        </div>
-        <div className="pointer-events-none absolute bottom-2 right-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
-          <span className="text-slate-500">ZOOM:</span>
-          <span className="text-white font-bold">{Math.round(zoom * 100)}%</span>
-        </div>
-
-        {/* View Mode: Split Comparison Slider vs Interactive Canvas vs Image */}
-        {activeChannel === "split" ? (
-          <div className="w-full max-w-2xl">
-            <BeforeAfterSlider
-              beforeSrc={originalUrl}
-              afterSrc={whiteCompositeUrl || currentTransparentUrl}
-              beforeLabel="Original Image"
-              afterLabel="Clean Cutout"
-            />
-          </div>
-        ) : isEditMode ? (
-          /* Interactive Mask Painting Canvas */
-          <div
-            className="relative overflow-hidden flex items-center justify-center"
-            style={{
-              transform: `scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,
-              transformOrigin: "center center",
-              transition: isPanning ? "none" : "transform 0.1s ease-out",
-              cursor: activeTool === "pan" ? "grab" : "crosshair",
-            }}
-          >
-            {activeChannel === "transparent" && (
-              <div
-                className="absolute inset-0 rounded-none opacity-40 pointer-events-none"
-                style={{
-                  backgroundImage: `linear-gradient(45deg, #334155 25%, transparent 25%), 
-                                    linear-gradient(-45deg, #334155 25%, transparent 25%), 
-                                    linear-gradient(45deg, transparent 75%, #334155 75%), 
-                                    linear-gradient(-45deg, transparent 75%, #334155 75%)`,
-                  backgroundSize: "20px 20px",
-                }}
-              />
-            )}
-            <canvas
-              ref={canvasRef}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
-              className="max-h-[460px] max-w-full object-contain rounded-none shadow-2xl"
-              style={{ touchAction: "none" }}
-            />
-          </div>
-        ) : (
-          /* Standard Re-composited Image Display */
-          <div className="relative z-10 flex items-center justify-center">
-            {activeChannel === "transparent" && (
-              <div
-                className="absolute inset-0 rounded-none opacity-40 pointer-events-none"
-                style={{
-                  backgroundImage: `linear-gradient(45deg, #334155 25%, transparent 25%), 
-                                    linear-gradient(-45deg, #334155 25%, transparent 25%), 
-                                    linear-gradient(45deg, transparent 75%, #334155 75%), 
-                                    linear-gradient(-45deg, transparent 75%, #334155 75%)`,
-                  backgroundSize: "20px 20px",
-                  backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
-                }}
-              />
-            )}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={activeDisplayUrl}
-              alt="Composite Render"
-              data-active-channel={activeChannel}
-              className="max-h-[460px] max-w-full object-contain rounded-none shadow-2xl transition-all"
-            />
           </div>
         )}
-      </div>
-
-      {/* ── Telemetry HUD & Download Actions ── */}
-      <div className="rounded-none border border-slate-800 bg-slate-900/80 p-4 space-y-3 font-mono">
-        <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-2">
-          <span className="flex items-center gap-1.5">
-            <span
-              className={`h-1.5 w-1.5 rounded-none ${
-                activeChannel === "pink"
-                  ? "bg-pink-400"
-                  : activeChannel === "mask"
-                  ? "bg-amber-400"
-                  : "bg-cyan-400"
-              }`}
-            />
-            <span className="uppercase">
-              VIEW: {activeChannel} (
-              {activeChannel === "white"
-                ? "#FFFFFF"
-                : activeChannel === "pink"
-                ? "#FFF0F5"
-                : activeChannel === "mask"
-                ? "ALPHA CHANNEL"
-                : "COMPOSITE"}
-              )
-            </span>
-          </span>
-          <div className="flex items-center gap-3">
-            {metrics?.inferenceMs ? (
-              <span>Inference: {metrics.inferenceMs}ms</span>
-            ) : null}
-            <span>
-              {width} × {height} PX · {mode === "final" ? "HD BUFFER" : "PREVIEW BUFFER"}
-            </span>
-          </div>
-        </div>
-
-        {/* Primary Download Button for Current View */}
-        <button
-          type="button"
-          data-testid="primary-download"
-          onClick={handleDownload}
-          disabled={isCompositing}
-          className={`flex w-full items-center justify-center gap-2 rounded-none px-5 py-3.5 text-xs font-black tracking-wider uppercase text-white shadow-lg transition-all duration-200 active:scale-[0.98] font-mono ${
-            activeChannel === "pink"
-              ? "bg-gradient-to-r from-pink-600 via-rose-600 to-fuchsia-600 shadow-pink-900/40 hover:shadow-pink-500/25 ring-1 ring-pink-400/40"
-              : activeChannel === "transparent"
-              ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 shadow-indigo-900/40 hover:shadow-indigo-500/25 ring-1 ring-indigo-400/40"
-              : "bg-gradient-to-r from-cyan-600 via-indigo-600 to-blue-600 shadow-cyan-900/40 hover:shadow-cyan-500/25 ring-1 ring-cyan-400/40"
-          }`}
-        >
-          <Download className="h-4 w-4" />
-          <span>
-            {activeChannel === "transparent"
-              ? "Export Transparent PNG (Alpha Channel)"
-              : activeChannel === "pink"
-              ? "DOWNLOAD // SOLID PINK (#FFF0F5)"
-              : activeChannel === "mask"
-              ? "DOWNLOAD // ALPHA MASK (DEBUG)"
-              : "DOWNLOAD // SOLID WHITE (#FFFFFF)"}
-          </span>
-        </button>
-
-        {/* Secondary Download Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 font-mono">
-          <button
-            type="button"
-            onClick={handleExportTransparentPng}
-            className="flex items-center gap-1.5 rounded-none border border-cyan-500/40 bg-cyan-950/60 px-3.5 py-1.5 text-cyan-300 hover:bg-cyan-900/70 hover:text-white transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] font-bold tracking-wider uppercase"
-          >
-            <Layers className="h-3.5 w-3.5 text-cyan-400" />
-            <span>Export Transparent PNG</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onReset}
-            className="flex items-center gap-1.5 rounded-none border border-slate-800 bg-slate-950/80 px-3 py-1.5 text-slate-400 hover:text-rose-300 hover:border-rose-500/30 transition-colors tracking-wider uppercase"
-          >
-            <RefreshCw className="h-3 w-3" />
-            <span>RESET HUD</span>
-          </button>
-        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -19,10 +19,13 @@ import {
   removeBackgroundBrowser,
   removeBackgroundRemote,
   compositeWithSolidColor,
+  segmentObjectSelection,
+  refineAlphaMattingWithMask,
   BgRemovalOutput,
   BgRemovalProgress,
   STAGE_DEADLINES,
 } from "@/lib/bg-removal-client";
+import { SelectionMode } from "@/lib/bg-compositor";
 import { bgWorkerManager } from "@/lib/bg-removal-worker-manager";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ObjectUrlRegistry } from "@/lib/processing-utils";
@@ -35,6 +38,14 @@ export default function BgRemoverPage() {
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [cachedResult, setCachedResult] = useState<BgRemovalOutput | null>(null);
   const [initialCompositeUrl, setInitialCompositeUrl] = useState<string | null>(null);
+  const [selectedPurpose, setSelectedPurpose] = useState<"white" | "pink" | "transparent">("white");
+
+  // Workflow state (4-Stage Pipeline: Detecting -> Edit Mask -> Refining Edges -> Ready)
+  const [workflowStep, setWorkflowStep] = useState<
+    "detecting" | "edit_mask" | "refining" | "ready" | "failed"
+  >("ready");
+  const [activeSelectionMode, setActiveSelectionMode] = useState<SelectionMode>("whole_product");
+  const excludedMaskRef = useRef<Uint8ClampedArray | null>(null);
 
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -44,7 +55,14 @@ export default function BgRemoverPage() {
   const [slowNotice, setSlowNotice] = useState<string | null>(null);
   const [isModelCached, setIsModelCached] = useState(false);
   const [isWorkerConfigured, setIsWorkerConfigured] = useState(false);
-  const [remoteNoticeOpen, setRemoteNoticeOpen] = useState(false);
+  const [workerStatus, setWorkerStatus] = useState<
+    "not_configured" | "checking" | "ready" | "unavailable" | "configured"
+  >("checking");
+  const [workerModel, setWorkerModel] = useState<string | null>(null);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+  const [selectedEngine, setSelectedEngine] = useState<"browser" | "worker">("browser");
+  const [edgeQuality, setEdgeQuality] = useState<"fast" | "balanced" | "quality">("fast");
+  const [directWorkerUrl, setDirectWorkerUrl] = useState<string | null>(null);
 
   // Audio settings state
   const [audioMuted, setAudioMuted] = useState(() => cyberAudio.isMuted());
@@ -64,16 +82,65 @@ export default function BgRemoverPage() {
     });
   }, []);
 
-  // Check settings for remote worker configuration on mount
-  useEffect(() => {
-    fetch("/api/settings")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.rembgSpaceUrlSet) {
-          setIsWorkerConfigured(true);
+  const checkWorkerStatus = async (forceHealthCheck = true) => {
+    try {
+      setWorkerStatus("checking");
+      const url = forceHealthCheck
+        ? "/api/remove-bg?checkHealth=true"
+        : "/api/remove-bg";
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const isConfigured = Boolean(data.configured);
+        setIsWorkerConfigured(isConfigured);
+        if (!isConfigured) {
+          setWorkerStatus("not_configured");
+          setWorkerModel(null);
+          setWorkerError(null);
+        } else if (data.status === "ready") {
+          setWorkerStatus("ready");
+          setWorkerModel(data.model || "rembg / u2net");
+          setDirectWorkerUrl(data.directUrl || null);
+          setWorkerError(null);
+        } else if (data.status === "unavailable") {
+          setWorkerStatus("unavailable");
+          setWorkerModel(null);
+          setWorkerError(data.error || "Worker offline or unreachable");
+        } else {
+          setWorkerStatus("configured");
+          setWorkerModel(data.model || null);
+          setWorkerError(null);
         }
-      })
-      .catch(() => {});
+      } else {
+        setIsWorkerConfigured(false);
+        setWorkerStatus("not_configured");
+      }
+    } catch {
+      setIsWorkerConfigured(false);
+      setWorkerStatus("unavailable");
+    }
+  };
+
+  // Check settings for remote worker configuration on mount and on settings update
+  useEffect(() => {
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        checkWorkerStatus(true);
+      }
+    }, 0);
+
+    const onSettingsUpdated = () => {
+      if (isMounted) {
+        checkWorkerStatus(true);
+      }
+    };
+    window.addEventListener("app:settings-updated", onSettingsUpdated);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      window.removeEventListener("app:settings-updated", onSettingsUpdated);
+    };
   }, []);
 
   // Cleanup object URLs and active abort controller on unmount
@@ -103,6 +170,9 @@ export default function BgRemoverPage() {
     setIsProcessing(false);
     setProgressInfo(null);
     setSlowNotice(null);
+    if (workflowStep === "detecting" || workflowStep === "refining") {
+      setWorkflowStep(cachedResult ? "edit_mask" : "ready");
+    }
   };
 
   const handleOpenManualMode = async () => {
@@ -165,6 +235,7 @@ export default function BgRemoverPage() {
           mode: "preview",
         });
         setInitialCompositeUrl(whiteUrl);
+        setWorkflowStep("edit_mask");
       }, "image/png");
     } catch (e) {
       console.error("Failed to open manual mode:", e);
@@ -175,11 +246,76 @@ export default function BgRemoverPage() {
     }
   };
 
-  const handleRunSegmentation = async (mode: "preview" | "final" | "worker") => {
+  const handleConfirmMask = useCallback(
+    async (confirmedMask: Uint8ClampedArray) => {
+      if (!cachedResult || !cachedResult.sourceImageData) return;
+      cyberAudio.playClick();
+      setWorkflowStep("refining");
+      setIsProcessing(true);
+
+      try {
+        const refinedOutput = await refineAlphaMattingWithMask(
+          cachedResult.sourceImageData,
+          confirmedMask,
+          excludedMaskRef.current,
+          {
+            quality: edgeQuality,
+            remoteWorker: processingMode === "worker",
+            directUrl: directWorkerUrl,
+          }
+        );
+
+        if (cachedResult.transparentUrl) {
+          try {
+            URL.revokeObjectURL(cachedResult.transparentUrl);
+          } catch {}
+        }
+        const transUrl = urlRegistryRef.current.create(refinedOutput.transparentBlob);
+        refinedOutput.transparentUrl = transUrl;
+
+        const { dataUrl: whiteUrl } = await compositeWithSolidColor(
+          refinedOutput.transparentBlob,
+          "#FFFFFF"
+        );
+
+        setCachedResult(refinedOutput);
+        setInitialCompositeUrl(whiteUrl);
+        setWorkflowStep("ready");
+        cyberAudio.playMetallicDing();
+      } catch (err) {
+        console.error("[bg-remover] Mask refinement failed:", err);
+        setWorkflowStep("failed");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "ការសម្រួលគែមជួបបញ្ហា។ អ្នកអាចកែសម្រួលម៉ាស់ម្តងទៀត។"
+        );
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [cachedResult, edgeQuality, processingMode, directWorkerUrl]
+  );
+
+  const handleSwitchEngine = (engine: "browser" | "worker") => {
+    if (isProcessingRef.current) return;
+    if (engine === "worker" && !isWorkerConfigured) return;
+    cyberAudio.playClick();
+    setSelectedEngine(engine);
+  };
+
+  const handleRunSegmentation = async (mode: "preview" | "final" | "worker", targetMaxDim?: number) => {
+    if (!imageFile) return;
+    if (isProcessingRef.current) {
+      console.log("[bg-remover] Ignoring duplicate click during processing");
+      return;
+    }
+    const previousResult = cachedResult;
+    const startTime = performance.now();
     if (!imageFile) return;
 
     if (mode === "worker" && !isWorkerConfigured) {
-      setRemoteNoticeOpen(true);
+      setError("Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។ សូមប្រើ Browser AI ជំនួសវិញ។");
       return;
     }
 
@@ -194,6 +330,7 @@ export default function BgRemoverPage() {
 
     isProcessingRef.current = true;
     setIsProcessing(true);
+    setWorkflowStep("detecting");
     setError(null);
     setSlowNotice(null);
     setProgressInfo(null);
@@ -254,14 +391,23 @@ export default function BgRemoverPage() {
       let output: BgRemovalOutput;
 
       if (mode === "worker") {
-        output = await removeBackgroundRemote(imageFile, abortController.signal);
+        output = await removeBackgroundRemote(imageFile, {
+          refine: edgeQuality !== "fast",
+          quality: edgeQuality,
+          directUrl: directWorkerUrl,
+          signal: abortController.signal,
+          mode: activeSelectionMode,
+        });
+        const elapsedTotal = Math.round(performance.now() - startTime);
+        if (output.metrics) {
+          output.metrics.totalMs = elapsedTotal;
+        } else {
+          output.metrics = { totalMs: elapsedTotal };
+        }
       } else {
-        output = await removeBackgroundBrowser(imageFile, {
-          mode,
-          erosionRadius: 0,
-          featherRadius: 0.75,
-          decontaminationRadius: mode === "preview" ? 1 : 1.5,
-          alphaMatting: true,
+        const segResult = await segmentObjectSelection(imageFile, {
+          mode: activeSelectionMode,
+          targetMaxDimension: targetMaxDim,
           signal: abortController.signal,
           onProgress: (p) => {
             setProgressInfo(p);
@@ -270,6 +416,57 @@ export default function BgRemoverPage() {
             }
           },
         });
+
+        excludedMaskRef.current = segResult.excludedMask;
+
+        const { width, height, sourceImageData, activeMask } = segResult;
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Could not create canvas context for segmentation.");
+
+        const outImgData = ctx.createImageData(width, height);
+        const outData = outImgData.data;
+        const srcData = sourceImageData.data;
+        const total = width * height;
+        for (let i = 0; i < total; i++) {
+          const pIdx = i * 4;
+          outData[pIdx] = srcData[pIdx];
+          outData[pIdx + 1] = srcData[pIdx + 1];
+          outData[pIdx + 2] = srcData[pIdx + 2];
+          outData[pIdx + 3] = activeMask[i];
+        }
+        ctx.putImageData(outImgData, 0, 0);
+
+        const transparentBlob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((b) => {
+            if (b) resolve(b);
+            else reject(new Error("Failed to create blob for selection cutout."));
+          }, "image/png");
+        });
+
+        const transUrl = urlRegistryRef.current.create(transparentBlob);
+        const { createAlphaMaskDataUrl } = await import("@/lib/bg-removal-client");
+        const maskUrl = createAlphaMaskDataUrl(activeMask, width, height);
+
+        const elapsedTotal = Math.round(performance.now() - startTime);
+        output = {
+          transparentBlob,
+          transparentUrl: transUrl,
+          alphaMaskUrl: maskUrl,
+          alphaMaskBuffer: activeMask,
+          sourceImageData,
+          width,
+          height,
+          sourceWidth: segResult.sourceWidth,
+          sourceHeight: segResult.sourceHeight,
+          wasDownscaled: false,
+          label: "Browser AI result",
+          model: "@imgly/isnet_fp16",
+          mode,
+          metrics: { totalMs: elapsedTotal },
+        };
       }
 
       console.log(`[bg-remover] Segmentation finished for ${imageFile.name}`);
@@ -297,6 +494,7 @@ export default function BgRemoverPage() {
       setCachedResult(output);
       setInitialCompositeUrl(dataUrl);
       setIsModelCached(true);
+      setWorkflowStep("edit_mask");
 
       cyberAudio.playShutter();
       cyberAudio.playMetallicDing();
@@ -343,8 +541,15 @@ export default function BgRemoverPage() {
       }
 
       console.error("[bg-remover] Error:", err);
+      setWorkflowStep("failed");
+      // Retain previous valid result if clean cut failed
+      if (previousResult && !cachedResult) {
+        setCachedResult(previousResult);
+      }
       setError(
-        err instanceof Error ? err.message : "Background removal segmentation failed."
+        err instanceof Error
+          ? err.message
+          : "ដំណើរការកាត់រូបភាពជួបបញ្ហា។ អ្នកអាចព្យាយាមម្តងទៀត ឬដំណើរការកម្រិត 1024px។"
       );
     } finally {
       clearTimeout(slowTimer);
@@ -380,6 +585,8 @@ export default function BgRemoverPage() {
     setInitialCompositeUrl(null);
     setError(null);
     setProgressInfo(null);
+    setWorkflowStep("ready");
+    excludedMaskRef.current = null;
 
     if (file) {
       cyberAudio.playHydraulicHiss();
@@ -391,16 +598,26 @@ export default function BgRemoverPage() {
   };
 
   const handleReset = () => {
-    if (isProcessingRef.current) return;
     cyberAudio.playClick();
+    cyberAudio.stopScanningHum();
     ++requestGenerationIdRef.current;
+    bgWorkerManager.terminateActiveWorker();
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+    isProcessingRef.current = false;
+    setIsProcessing(false);
+    setProgressInfo(null);
+    setSlowNotice(null);
+    urlRegistryRef.current.revokeAll();
     setImageFile(null);
     setOriginalUrl(null);
     setCachedResult(null);
     setInitialCompositeUrl(null);
     setError(null);
-    setProgressInfo(null);
-    urlRegistryRef.current.revokeAll();
+    setWorkflowStep("ready");
+    excludedMaskRef.current = null;
   };
 
   const scannerSteps = [
@@ -429,11 +646,11 @@ export default function BgRemoverPage() {
         {/* Audio Effects Control Deck & Engine Status */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Audio Mute/Unmute & Volume Slider */}
-          <div className="flex items-center gap-2 rounded-none border border-cyan-500/30 bg-slate-950/80 px-2.5 py-1 text-xs shadow-[0_0_10px_rgba(0,240,255,0.08)]">
+          <div className="min-h-[44px] flex items-center gap-2 rounded-none border border-cyan-500/30 bg-slate-950/80 px-2.5 py-1 text-xs shadow-[0_0_10px_rgba(0,240,255,0.08)]">
             <button
               type="button"
               onClick={() => cyberAudio.setMuted(!audioMuted)}
-              className="flex items-center gap-1.5 text-cyan-300 hover:text-cyan-100 transition-colors active:scale-[0.98]"
+              className="min-h-[44px] flex items-center gap-1.5 text-cyan-300 hover:text-cyan-100 transition-colors active:scale-[0.98]"
               title={audioMuted ? "Unmute audio effects" : "Mute audio effects"}
             >
               {audioMuted ? (
@@ -497,10 +714,145 @@ export default function BgRemoverPage() {
         </div>
       </div>
 
+      {/* ── 4-Stage Interactive Pipeline Breadcrumb ── */}
+      <div
+        data-testid="workflow-breadcrumb"
+        className="w-full bg-slate-950/80 border border-cyan-500/30 p-2.5 font-mono text-xs shadow-[0_0_15px_rgba(0,240,255,0.06)]"
+      >
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {/* Step 1: Detecting */}
+          <div
+            className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
+              workflowStep === "detecting"
+                ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+                : isProcessing
+                ? "border-slate-800 bg-slate-900/40 text-slate-500"
+                : cachedResult
+                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400"
+            }`}
+          >
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
+                workflowStep === "detecting"
+                  ? "bg-amber-400 text-black animate-pulse"
+                  : cachedResult
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                  : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              1
+            </span>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold leading-tight truncate">
+                1. ស្វែងរកវត្ថុ
+              </div>
+              <div className="text-[9px] text-slate-400 font-sans truncate">
+                (Detecting)
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2: Edit Mask */}
+          <div
+            className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
+              workflowStep === "edit_mask"
+                ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
+                : workflowStep === "ready"
+                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400"
+            }`}
+          >
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
+                workflowStep === "edit_mask"
+                  ? "bg-cyan-400 text-black animate-pulse"
+                  : workflowStep === "ready"
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                  : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              2
+            </span>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold leading-tight truncate">
+                2. កែសម្រួលម៉ាស់
+              </div>
+              <div className="text-[9px] text-slate-400 font-sans truncate">
+                (Edit Mask)
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3: Refining Edges */}
+          <div
+            className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
+              workflowStep === "refining"
+                ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
+                : workflowStep === "ready"
+                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400"
+            }`}
+          >
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
+                workflowStep === "refining"
+                  ? "bg-purple-400 text-black animate-pulse"
+                  : workflowStep === "ready"
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                  : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              3
+            </span>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold leading-tight truncate">
+                3. សម្រួលគែម
+              </div>
+              <div className="text-[9px] text-slate-400 font-sans truncate">
+                (Refining Edges)
+              </div>
+            </div>
+          </div>
+
+          {/* Step 4: Ready */}
+          <div
+            className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
+              workflowStep === "ready" && cachedResult
+                ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+                : "border-slate-800 bg-slate-900/60 text-slate-400"
+            }`}
+          >
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
+                workflowStep === "ready" && cachedResult
+                  ? "bg-emerald-400 text-black"
+                  : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              4
+            </span>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold leading-tight truncate">
+                4. រួចរាល់
+              </div>
+              <div className="text-[9px] text-slate-400 font-sans truncate">
+                (Ready)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Main Control Console ── */}
       <div className="grid gap-6 lg:grid-cols-5">
         {/* ── LEFT: Control Deck & Tactical Switches ── */}
         <div className="flex flex-col gap-5 lg:col-span-2">
+          {/* Accessible Screen Reader Status Announcement */}
+          <div role="status" aria-live="polite" className="sr-only">
+            {isProcessing ? "កំពុងដំណើរការកាត់រូបភាព..." : cachedResult ? "ដំណើរការកាត់រូបភាពរួចរាល់" : error ? `កំហុស: ${error}` : "ត្រៀមរួចរាល់"}
+          </div>
+
           <div className="rounded-none border border-slate-800 bg-slate-900/80 p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-xs font-bold tracking-wider text-slate-200">
@@ -509,149 +861,410 @@ export default function BgRemoverPage() {
               <span className="text-[10px] text-cyan-400 font-semibold font-mono">MODULE 02</span>
             </div>
 
-            {/* Model Selection Layer: Fast Preview vs Clean Cut vs High-Quality Worker */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] uppercase text-slate-400 font-mono tracking-wider">
-                <span>MODEL SELECTION LAYER</span>
-                <span className="text-cyan-400">SELECT_ENGINE</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                {/* 1. Fast Preview Mode (Default Browser AI) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isProcessing) return;
-                    cyberAudio.playClick();
-                    setProcessingMode("preview");
-                  }}
-                  disabled={isProcessing}
-                  className={`flex flex-col gap-0.5 rounded-none border p-2 text-left transition-all ${
-                    processingMode === "preview"
-                      ? "border-cyan-400 bg-cyan-950/50 text-white shadow-[0_0_15px_rgba(0,240,255,0.2)] ring-1 ring-cyan-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700"
-                  }`}
-                >
-                  <span className="flex items-center gap-1 font-bold text-white text-[10.5px] uppercase font-mono">
-                    <Zap className="h-3 w-3 text-cyan-400 shrink-0" />
-                    Fast Preview
-                  </span>
-                  <span className="text-[9.5px] text-cyan-400/80 font-mono">
-                    ISNet FP16 · 1024px
-                  </span>
-                </button>
-
-                {/* 2. Clean Cut Mode (Standard Browser AI) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isProcessing) return;
-                    cyberAudio.playClick();
-                    setProcessingMode("final");
-                  }}
-                  disabled={isProcessing}
-                  className={`flex flex-col gap-0.5 rounded-none border p-2 text-left transition-all ${
-                    processingMode === "final"
-                      ? "border-emerald-400 bg-emerald-950/50 text-white shadow-[0_0_15px_rgba(16,185,129,0.2)] ring-1 ring-emerald-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700"
-                  }`}
-                >
-                  <span className="flex items-center gap-1 font-bold text-white text-[10.5px] uppercase font-mono">
-                    <Sparkles className="h-3 w-3 text-emerald-400 shrink-0" />
-                    Clean Cut
-                  </span>
-                  <span className="text-[9.5px] text-emerald-400/80 font-mono">
-                    ISNet FP16 · 2048px
-                  </span>
-                </button>
-
-                {/* 3. Experimental Worker Mode (Optional) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isProcessing) return;
-                    cyberAudio.playClick();
-                    if (!isWorkerConfigured) {
-                      setRemoteNoticeOpen(true);
-                    }
-                    setProcessingMode("worker");
-                  }}
-                  disabled={isProcessing}
-                  className={`flex flex-col gap-0.5 rounded-none border p-2 text-left transition-all ${
-                    processingMode === "worker"
-                      ? "border-purple-400 bg-purple-950/50 text-white shadow-[0_0_15px_rgba(168,85,247,0.2)] ring-1 ring-purple-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1 font-bold text-white text-[10.5px] uppercase font-mono">
-                      <Server className="h-3 w-3 text-purple-400 shrink-0" />
-                      Remote Worker
-                    </span>
-                    {!isWorkerConfigured && (
-                      <span className="text-[8px] bg-rose-950/80 text-rose-300 border border-rose-500/40 px-1 py-0.5">
-                        NOT CONFIGURED
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[9.5px] text-purple-400/80 font-mono">
-                    {isWorkerConfigured ? "Configured Service" : "Requires Setting"}
-                  </span>
-                </button>
-              </div>
-
-              {/* Informational note: Accurate labeling */}
-              <p className="text-[10px] text-slate-500 pt-0.5 leading-relaxed font-mono">
-                {processingMode === "preview"
-                  ? "FAST PREVIEW (DEFAULT): @IMGLY/ISNET_FP16 (1024PX WORKING MASK). LOCAL CACHED INFERENCE, ZERO EROSION, SUB-PIXEL MATTING."
-                  : processingMode === "final"
-                  ? "CLEAN CUT: @IMGLY/ISNET_FP16 UP TO 2048PX INPUT LIMIT WITH REFINED MATTING."
-                  : isWorkerConfigured
-                  ? "REMOTE WORKER: EXTERNAL MICROSERVICE CONFIGURED (IMAGE WILL BE UPLOADED TO WORKER)."
-                  : "REMOTE WORKER: NOT CONFIGURED IN SETTINGS. PLEASE SWITCH TO BROWSER AI MODE (ZERO COST, LOCAL PRIVACY)."}
-              </p>
-            </div>
-
-            {/* Remote notice banner if clicked when unconfigured */}
-            {remoteNoticeOpen && !isWorkerConfigured && (
-              <div className="rounded-none border border-amber-500/40 bg-amber-950/40 p-3 text-xs text-amber-200 space-y-2">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-1.5 font-bold text-amber-300">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span>REMOTE WORKER NOT CONFIGURED</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setRemoteNoticeOpen(false)}
-                    className="text-amber-400 hover:text-white"
-                  >
-                    <XCircle className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <p className="text-[10.5px] leading-relaxed text-amber-200/90 font-mono">
-                  No remote background removal worker URL is configured. Browser AI mode is active and recommended (runs 100% locally on your machine with zero cloud cost and full privacy). To enable a remote worker, set BACKGROUND_REMOVAL_WORKER_URL in Settings.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProcessingMode("preview");
-                    setRemoteNoticeOpen(false);
-                  }}
-                  className="rounded-none border border-cyan-500/50 bg-cyan-950/60 px-2.5 py-1 text-[10px] font-bold text-cyan-300 hover:bg-cyan-900/60"
-                >
-                  SWITCH TO BROWSER AI (RECOMMENDED)
-                </button>
-              </div>
-            )}
-
-            {/* Input Upload Area */}
+            {/* ── ជំហានទី ១ ៖ ជ្រើសរើសរូបភាព (STEP 1: UPLOAD IMAGE) ── */}
             <div>
+              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider mb-1.5">
+                <span>ជំហានទី ១ ៖ ជ្រើសរើសរូបភាព</span>
+                <span className="text-cyan-400 font-bold">SOURCE_IMAGE</span>
+              </div>
               <BgUploadZone
                 onFileSelect={handleFileSelect}
                 selectedFile={imageFile}
-                disabled={false}
+                disabled={isProcessing}
                 label="SOURCE INPUT"
-                hint="PNG · JPG · WEBP"
+                hint="PNG · JPG · WEBP (MAX 12MB)"
               />
+            </div>
+
+            {/* ── ជំហានទី ២ ៖ ជ្រើសរើសប្រភេទរូបភាពដែលចង់បាន (STEP 2: OUTPUT PURPOSE) ── */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
+              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
+                <span>ជំហានទី ២ ៖ ប្រភេទរូបភាព</span>
+                <span className="text-cyan-400 font-bold">PURPOSE</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setSelectedPurpose("white");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                    selectedPurpose === "white"
+                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                  }`}
+                >
+                  <span className="h-2.5 w-2.5 bg-white border border-slate-400 mb-1" />
+                  <span className="text-[11px] leading-tight font-bold text-white">រូបសំណួរ (ស)</span>
+                  <span className="text-[9px] text-slate-400 font-mono">#FFFFFF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setSelectedPurpose("pink");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                    selectedPurpose === "pink"
+                      ? "border-pink-400 bg-pink-950/60 text-white font-bold ring-1 ring-pink-400/40"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                  }`}
+                >
+                  <span className="h-2.5 w-2.5 border border-pink-400 mb-1" style={{ backgroundColor: "#FFF0F5" }} />
+                  <span className="text-[11px] leading-tight font-bold text-white">ដំណោះស្រាយ</span>
+                  <span className="text-[9px] text-pink-300 font-mono">#FFF0F5</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setSelectedPurpose("transparent");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                    selectedPurpose === "transparent"
+                      ? "border-indigo-400 bg-indigo-950/60 text-white font-bold ring-1 ring-indigo-400/40"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                  }`}
+                >
+                  <span className="text-[11px] mb-0.5">🏁</span>
+                  <span className="text-[11px] leading-tight font-bold text-white">រូបថ្លា</span>
+                  <span className="text-[9px] text-indigo-300 font-mono">PNG Alpha</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ── ជ្រើសរើសម៉ាស៊ីនដំណើរការ (PROCESSING ENGINE SELECTOR) ── */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
+              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
+                <span>ម៉ាស៊ីនដំណើរការ</span>
+                <span className="text-cyan-400 font-bold">
+                  {selectedEngine === "browser" ? "BROWSER AI" : "REMOTE WORKER"}
+                </span>
+              </div>
+
+              <div role="radiogroup" aria-label="ជ្រើសរើសម៉ាស៊ីនដំណើរការ (Processing Engine)" className="grid grid-cols-2 gap-2 text-xs">
+                {/* 1. Browser AI Option */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedEngine === "browser"}
+                  data-testid="engine-select-browser"
+                  onClick={() => handleSwitchEngine("browser")}
+                  disabled={isProcessing}
+                  className={`min-h-[44px] flex items-center justify-between p-2.5 rounded-none border text-left transition-all font-mono focus:ring-2 focus:ring-cyan-400 focus:outline-none ${
+                    selectedEngine === "browser"
+                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-none border ${selectedEngine === "browser" ? "bg-cyan-400 border-cyan-300" : "bg-transparent border-slate-500"}`} />
+                    <div>
+                      <div className="text-[11px] font-bold text-white">Browser AI</div>
+                      <div className="text-[9px] text-cyan-300/80">លំនាំដើម · ក្នុងម៉ាស៊ីន</div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-emerald-400 font-bold">FREE</span>
+                </button>
+
+                {/* 2. Remote Worker Option */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedEngine === "worker"}
+                  aria-disabled={!isWorkerConfigured}
+                  data-testid="engine-select-worker"
+                  onClick={() => handleSwitchEngine("worker")}
+                  disabled={!isWorkerConfigured || isProcessing}
+                  className={`min-h-[44px] flex items-center justify-between p-2.5 rounded-none border text-left transition-all font-mono focus:ring-2 focus:ring-purple-400 focus:outline-none ${
+                    !isWorkerConfigured
+                      ? "border-slate-800 bg-slate-900/40 text-slate-500 opacity-50 cursor-not-allowed"
+                      : selectedEngine === "worker"
+                      ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                  title={
+                    !isWorkerConfigured
+                      ? "Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។"
+                      : workerStatus === "unavailable"
+                      ? `Remote Worker មិនអាចភ្ជាប់បាន (${workerError || "Offline"})`
+                      : `Remote Worker Microservice (${workerModel || "Online"})`
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2.5 w-2.5 rounded-none border ${
+                        selectedEngine === "worker"
+                          ? "bg-purple-400 border-purple-300"
+                          : "bg-transparent border-slate-500"
+                      }`}
+                    />
+                    <div>
+                      <div className="text-[11px] font-bold text-slate-200">
+                        Remote Worker
+                      </div>
+                      <div className="text-[9px]">
+                        {!isWorkerConfigured ? (
+                          <span className="text-slate-400">🔒 មិនទាន់កំណត់</span>
+                        ) : workerStatus === "checking" ? (
+                          <span className="text-amber-400 animate-pulse">⏳ កំពុងពិនិត្យ...</span>
+                        ) : workerStatus === "ready" ? (
+                          <span className="text-emerald-400">🟢 ត្រៀមរួចរាល់</span>
+                        ) : workerStatus === "unavailable" ? (
+                          <span className="text-rose-400">🔴 មិនអាចភ្ជាប់បាន</span>
+                        ) : (
+                          <span className="text-cyan-400">⚙️ បានកំណត់</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Server className="h-3.5 w-3.5 text-slate-400" />
+                </button>
+              </div>
+
+              {/* Accessible live status for engine selection */}
+              <div aria-live="polite" className="sr-only">
+                {selectedEngine === "browser"
+                  ? "ម៉ាស៊ីនដំណើរការបច្ចុប្បន្នគឺ Browser AI (ដំណើរការក្នុងម៉ាស៊ីន)"
+                  : "ម៉ាស៊ីនដំណើរការបច្ចុប្បន្នគឺ Remote Worker (ដំណើរការលើម៉ាស៊ីនមេ)"}
+              </div>
+
+              {/* Remote Worker Privacy Notice & Re-check */}
+              {selectedEngine === "worker" && isWorkerConfigured && (
+                <div className="text-[10px] text-purple-200/90 leading-relaxed font-mono bg-purple-950/30 p-2.5 border border-purple-500/30 space-y-1">
+                  <div className="font-bold flex items-center justify-between text-purple-300">
+                    <span>ℹ️ សេចក្តីជូនដំណឹងអំពីឯកជនភាព</span>
+                    {workerStatus === "unavailable" && (
+                      <button
+                        type="button"
+                        data-testid="recheck-worker-btn"
+                        onClick={() => checkWorkerStatus(true)}
+                        className="text-[9px] text-purple-300 hover:text-white underline font-mono cursor-pointer"
+                      >
+                        [ពិនិត្យឡើងវិញ]
+                      </button>
+                    )}
+                  </div>
+                  <p>
+                    មុខងារ Remote Worker នឹងបញ្ជូនរូបភាពរបស់អ្នកទៅកាន់ម៉ាស៊ីនមេ Remote Worker ដែលបានកំណត់តាមរយៈ Server Proxy ដើម្បីដំណើរការកាត់ផ្ទៃខាងក្រោយ។
+                  </p>
+                </div>
+              )}
+
+              {!isWorkerConfigured && (
+                <p className="text-[9.5px] text-slate-400 leading-relaxed font-mono bg-slate-950/40 p-2 border border-slate-800/80">
+                  ℹ️ Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។ Browser AI ដំណើរការក្នុងម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ និងមានសុវត្ថិភាពខ្ពស់។
+                </p>
+              )}
+            </div>
+
+            {/* ── គុណភាពគែម / ALPHA MATTING REFINEMENT ── */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
+              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
+                <span>គុណភាពគែម (Edge Quality)</span>
+                <span className="text-cyan-400 font-bold">
+                  {edgeQuality === "fast"
+                    ? "FAST"
+                    : edgeQuality === "balanced"
+                    ? "BALANCED"
+                    : "FINE EDGES"}
+                </span>
+              </div>
+              <div role="radiogroup" aria-label="Edge Quality & Alpha Matting" className="grid grid-cols-3 gap-1.5 text-xs font-mono">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={edgeQuality === "fast"}
+                  data-testid="edge-quality-fast"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setEdgeQuality("fast");
+                  }}
+                  disabled={isProcessing}
+                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                    edgeQuality === "fast"
+                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40"
+                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <span className="text-[11px] font-bold">Fast</span>
+                  <span className="text-[9px] text-slate-500">លំនាំដើម</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={edgeQuality === "balanced"}
+                  data-testid="edge-quality-balanced"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setEdgeQuality("balanced");
+                  }}
+                  disabled={isProcessing}
+                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                    edgeQuality === "balanced"
+                      ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40"
+                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <span className="text-[11px] font-bold text-purple-300">Balanced</span>
+                  <span className="text-[9px] text-purple-400/80">Alpha Matting</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={edgeQuality === "quality"}
+                  data-testid="edge-quality-quality"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setEdgeQuality("quality");
+                  }}
+                  disabled={isProcessing}
+                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                    edgeQuality === "quality"
+                      ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40"
+                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <span className="text-[11px] font-bold text-emerald-300">Fine Edges</span>
+                  <span className="text-[9px] text-emerald-400/80">Guided Filter</span>
+                </button>
+              </div>
+
+              {/* Limitation Notice */}
+              <p className="text-[9.5px] text-slate-400 leading-relaxed font-mono bg-slate-950/40 p-2 border border-slate-800/80">
+                ℹ️ <strong>ចំណាំ (Limitation)</strong>៖ មុខងារ Alpha Matting ជួយសម្រួលគែមសក់ និងអក្សរស្ដើងៗក្នុងតំបន់ដែល AI បានរកឃើញ ប៉ុន្តែមិនអាចបង្កើតសរសៃសក់ដែលម៉ូដែលកាត់បាត់ទាំងស្រុងនោះទេ។
+                <span className="block mt-0.5 text-slate-500 font-sans">
+                  (Alpha matting refines boundaries and fine hair/text where detected; it cannot reconstruct strokes completely missed by the coarse model.)
+                </span>
+              </p>
+            </div>
+
+            {/* ── ជំហានទី ៣ ៖ ដំណើរការកាត់រូបភាព (STEP 3: PROCESS EXECUTION) ── */}
+            <div className="space-y-2 pt-1 border-t border-slate-800/80">
+              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
+                <span>ជំហានទី ៣ ៖ ដំណើរការ AI</span>
+                <span className="text-cyan-400 font-bold">EXECUTION</span>
+              </div>
+
+              {selectedEngine === "worker" ? (
+                <button
+                  type="button"
+                  data-testid="run-remote-worker-btn"
+                  onClick={() => handleRunSegmentation("worker")}
+                  disabled={!imageFile || isProcessing || !isWorkerConfigured}
+                  className={`min-h-[48px] group relative w-full overflow-hidden rounded-none border p-3 text-left transition-all duration-200 active:scale-[0.98] font-mono ${
+                    isProcessing && processingMode === "worker"
+                      ? "pointer-events-none opacity-80 border-purple-400 bg-purple-950/50"
+                      : !imageFile || !isWorkerConfigured
+                      ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50"
+                      : "border-purple-400 bg-gradient-to-r from-slate-900 via-slate-900/90 to-purple-950/40 shadow-[0_0_20px_rgba(168,85,247,0.2)] hover:border-purple-300 ring-1 ring-purple-400/40"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-none border border-purple-400 bg-slate-950 text-purple-400">
+                        <Server className="h-4 w-4 text-purple-400" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black uppercase tracking-wider text-white font-mono flex items-center gap-2">
+                          <span>ដំណើរការ REMOTE WORKER</span>
+                          <span className="text-[9px] rounded-none bg-purple-950 border border-purple-500/40 text-purple-300 px-1 py-0.2">
+                            SERVER
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-purple-300/80 font-mono">
+                          បញ្ជូនទៅកាន់ Remote AI Server តាមរយៈសុវត្ថិភាព Proxy
+                        </span>
+                      </div>
+                    </div>
+                    {isProcessing && processingMode === "worker" ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                    ) : (
+                      <span className="text-[10px] font-bold text-purple-400 font-mono">[START]</span>
+                    )}
+                  </div>
+                </button>
+              ) : (
+                <>
+                  {/* Primary: Fast Preview (Highlighted Default) */}
+                  <button
+                    type="button"
+                    onClick={() => handleRunSegmentation("preview")}
+                    disabled={!imageFile || isProcessing}
+                    className={`min-h-[48px] group relative w-full overflow-hidden rounded-none border p-3 text-left transition-all duration-200 active:scale-[0.98] font-mono ${
+                      isProcessing && processingMode === "preview"
+                        ? "pointer-events-none opacity-80 border-cyan-400 bg-cyan-950/50"
+                        : !imageFile
+                        ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50"
+                        : "border-cyan-400 bg-gradient-to-r from-slate-900 via-slate-900/90 to-cyan-950/40 shadow-[0_0_20px_rgba(0,240,255,0.2)] hover:border-cyan-300 ring-1 ring-cyan-400/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-none border border-cyan-400 bg-slate-950 text-cyan-400">
+                          <Zap className="h-4 w-4 text-cyan-400" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase tracking-wider text-white font-mono flex items-center gap-2">
+                            <span>ដំណើរការលឿន (FAST PREVIEW)</span>
+                            <span className="text-[9px] rounded-none bg-cyan-950 border border-cyan-500/40 text-cyan-300 px-1 py-0.2">
+                              លំនាំដើម
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-cyan-300/80 font-mono">
+                            ដំណើរការក្នុង Browser ភ្លាមៗ · ឥតគិតថ្លៃ · រក្សាភាពឯកជន
+                          </span>
+                        </div>
+                      </div>
+                      {isProcessing && processingMode === "preview" ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+                      ) : (
+                        <span className="text-[10px] font-bold text-cyan-400 font-mono">[START]</span>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Secondary: Clean Cut (Optional High-Quality Enhancement) */}
+                  <button
+                    type="button"
+                    onClick={() => handleRunSegmentation("final")}
+                    disabled={!imageFile || isProcessing}
+                    className={`min-h-[44px] group relative w-full overflow-hidden rounded-none border p-3 text-left transition-all duration-200 active:scale-[0.98] font-mono ${
+                      isProcessing && processingMode === "final"
+                        ? "pointer-events-none opacity-80 border-emerald-400 bg-emerald-950/50"
+                        : !imageFile
+                        ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50"
+                        : "border-emerald-500/40 bg-slate-900/70 hover:border-emerald-400 text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-none border border-emerald-500/40 bg-slate-950 text-emerald-400">
+                          <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold uppercase tracking-wider text-white font-mono">
+                            កាត់ច្បាស់គុណភាពខ្ពស់ (CLEAN CUT)
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            សម្រាប់រូបភាពធំ ឬត្រូវការគែមច្បាស់ល្អិតល្អន់
+                          </span>
+                        </div>
+                      </div>
+                      {isProcessing && processingMode === "final" ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                      ) : (
+                        <span className="text-[10px] font-bold text-emerald-400 font-mono">[HD]</span>
+                      )}
+                    </div>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Multi-Stage Loading Telemetry Banner */}
@@ -664,14 +1277,26 @@ export default function BgRemoverPage() {
                       {progressInfo?.stage || "SEGMENTING FOREGROUND..."}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="flex items-center gap-1 rounded-none border border-rose-500/40 bg-rose-950/60 px-2.5 py-1 text-[10px] font-mono text-rose-300 hover:bg-rose-900/60 transition-colors uppercase"
-                  >
-                    <XCircle className="h-3 w-3" />
-                    CANCEL
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      data-testid="processing-cancel-btn"
+                      onClick={handleCancel}
+                      className="min-h-[44px] flex items-center gap-1 rounded-none border border-rose-500/40 bg-rose-950/60 px-2.5 py-1 text-[10px] font-mono text-rose-300 hover:bg-rose-900/60 transition-colors uppercase"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      CANCEL
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="processing-reset-btn"
+                      onClick={handleReset}
+                      className="min-h-[44px] flex items-center gap-1 rounded-none border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-mono text-slate-300 hover:text-white transition-colors uppercase"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      RESET
+                    </button>
+                  </div>
                 </div>
 
                 {progressInfo && (
@@ -732,69 +1357,70 @@ export default function BgRemoverPage() {
               </div>
             )}
 
-            {/* Execution Button */}
-            <div className="space-y-2.5 pt-1">
-              <button
-                type="button"
-                onClick={() => handleRunSegmentation(processingMode)}
-                disabled={!imageFile || isProcessing}
-                className={`group relative w-full overflow-hidden rounded-none border p-4 text-left transition-all duration-200 active:scale-[0.98] font-mono ${
-                  isProcessing
-                    ? "pointer-events-none opacity-60 cursor-not-allowed border-slate-800 bg-slate-900/50"
-                    : !imageFile
-                    ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50"
-                    : processingMode === "worker"
-                    ? "border-purple-400 bg-gradient-to-r from-slate-900 via-slate-900/90 to-purple-950/40 shadow-[0_0_25px_rgba(168,85,247,0.25)] ring-1 ring-purple-400/40"
-                    : processingMode === "final"
-                    ? "border-emerald-400 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 shadow-[0_0_25px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400/40"
-                    : "border-cyan-400 bg-gradient-to-r from-slate-900 via-slate-900/90 to-cyan-950/40 shadow-[0_0_25px_rgba(0,240,255,0.25)] ring-1 ring-cyan-400/40"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-none border ${
-                        processingMode === "worker"
-                          ? "border-purple-400 bg-slate-950 text-purple-400"
-                          : processingMode === "final"
-                          ? "border-emerald-400 bg-slate-950 text-emerald-400"
-                          : "border-cyan-400 bg-slate-950 text-cyan-400"
-                      }`}
-                    >
-                      {processingMode === "worker" ? (
-                        <Server className="h-5 w-5" />
-                      ) : processingMode === "final" ? (
-                        <Sparkles className="h-5 w-5" />
-                      ) : (
-                        <Zap className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-xs font-black uppercase tracking-wider text-white font-mono">
-                        {processingMode === "worker"
-                          ? "RUN HIGH QUALITY WORKER (2048PX)"
-                          : processingMode === "final"
-                          ? "RUN FINAL CLEAN CUT (2048PX)"
-                          : "AUTOMATIC CUT // RUN FAST PREVIEW (1024PX)"}
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {processingMode === "worker"
-                          ? "Remote microservice · optional"
-                          : processingMode === "final"
-                          ? "Zero erosion · sub-pixel matting · hair preserved"
-                          : "High-speed preview · browser model caching"}
-                      </span>
-                    </div>
-                  </div>
+            {/* ── ការកំណត់កម្រិតខ្ពស់ & Remote Worker (ADVANCED COLLAPSIBLE SECTION) ── */}
+            <details className="group rounded-none border border-slate-800 bg-slate-950/60 p-3 font-mono">
+              <summary className="min-h-[44px] flex items-center justify-between cursor-pointer text-xs font-bold text-slate-400 hover:text-cyan-300 select-none">
+                <span className="flex items-center gap-1.5">
+                  <Server className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>ការកំណត់កម្រិតខ្ពស់ (ADVANCED SETTINGS)</span>
+                </span>
+                <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
 
-                  {isProcessing ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
-                  ) : (
-                    <span className="text-[10px] font-bold text-cyan-400 font-mono">[ENGAGE]</span>
-                  )}
+              <div className="space-y-3 pt-3 border-t border-slate-800/80 mt-2 text-xs">
+                {/* Remote Worker Status */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] uppercase text-slate-400 font-mono">
+                    <span>REMOTE WORKER SERVICE</span>
+                    {isWorkerConfigured ? (
+                      <span className="text-emerald-400">ONLINE</span>
+                    ) : (
+                      <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5 border border-slate-700">
+                        🔒 NOT CONFIGURED
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!isWorkerConfigured || isProcessing}
+                    onClick={() => {
+                      if (!isWorkerConfigured) {
+                        setError("Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។");
+                        return;
+                      }
+                      handleRunSegmentation("worker");
+                    }}
+                    className={`min-h-[44px] w-full flex items-center justify-between border p-2 text-left transition-all ${
+                      !isWorkerConfigured
+                        ? "opacity-50 cursor-not-allowed border-slate-800 bg-slate-900/40 text-slate-500"
+                        : "border-purple-400/60 bg-purple-950/30 text-purple-200 hover:bg-purple-950/60"
+                    }`}
+                  >
+                    <span className="text-[11px] font-mono">
+                      {isWorkerConfigured ? "RUN REMOTE WORKER" : "Remote Worker (មិនទាន់កំណត់)"}
+                    </span>
+                    <Server className="h-3.5 w-3.5 text-slate-500" />
+                  </button>
+                  <p className="text-[9.5px] text-slate-500 leading-relaxed font-mono">
+                    {!isWorkerConfigured
+                      ? "Remote Worker មិនទាន់កំណត់ក្នុង Settings។ Browser AI ដំណើរការក្នុងម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ និងមានសុវត្ថិភាពខ្ពស់។"
+                      : "សេវាកម្ម Remote Worker ត្រូវបានកំណត់ក្នុង Settings។"}
+                  </p>
                 </div>
-              </button>
-            </div>
+
+                {/* Manual Mask Mode Launcher */}
+                <div className="pt-2 border-t border-slate-800/60">
+                  <button
+                    type="button"
+                    onClick={handleOpenManualMode}
+                    disabled={!imageFile || isProcessing}
+                    className="min-h-[44px] w-full flex items-center justify-center gap-1.5 rounded-none border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:text-white hover:border-cyan-400 transition-colors uppercase font-mono"
+                  >
+                    <span>OPEN MANUAL MASK MODE (គូរម៉ាសដោយដៃ)</span>
+                  </button>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -815,18 +1441,57 @@ export default function BgRemoverPage() {
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <button
                   type="button"
+                  data-testid="error-retry-btn"
                   onClick={() => handleRunSegmentation(processingMode)}
-                  className="flex items-center gap-1.5 rounded-none border border-rose-500/50 bg-rose-900/40 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-900/70 transition-colors uppercase"
+                  className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-rose-500/50 bg-rose-900/60 px-3 py-2 text-xs font-bold text-white hover:bg-rose-900/90 transition-colors uppercase font-mono"
                 >
-                  <RefreshCw className="h-3 w-3" />
-                  RETRY
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>ព្យាយាមម្តងទៀត (RETRY)</span>
                 </button>
                 <button
                   type="button"
-                  onClick={handleOpenManualMode}
-                  className="flex items-center gap-1.5 rounded-none border border-cyan-500/50 bg-cyan-950/60 px-3 py-1.5 text-xs text-cyan-300 hover:bg-cyan-900/60 transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] uppercase"
+                  data-testid="retry-browser-ai-btn"
+                  onClick={() => {
+                    setSelectedEngine("browser");
+                    handleRunSegmentation("preview");
+                  }}
+                  className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-emerald-500/50 bg-emerald-950/60 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-900/70 transition-colors uppercase font-mono"
                 >
-                  <span>OPEN MANUAL MASK MODE</span>
+                  <Zap className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>ប្តូរទៅ BROWSER AI (RETRY USING BROWSER AI)</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="retry-1024-btn"
+                  onClick={() => handleRunSegmentation("preview", 1024)}
+                  className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-cyan-500/50 bg-cyan-950/60 px-3 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-900/70 transition-colors uppercase font-mono"
+                >
+                  <Zap className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>កម្រិត 1024PX (RETRY AT 1024PX)</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="error-cancel-btn"
+                  onClick={handleCancel}
+                  className="min-h-[44px] flex items-center gap-1 rounded-none border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:text-white transition-colors uppercase font-mono"
+                >
+                  <XCircle className="h-3.5 w-3.5 text-slate-400" />
+                  <span>បោះបង់ (CANCEL)</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="error-reset-btn"
+                  onClick={handleReset}
+                  className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:text-white transition-colors uppercase font-mono"
+                >
+                  <span>កំណត់ឡើងវិញ (RESET)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="min-h-[44px] flex items-center gap-1 rounded-none border border-slate-800 bg-slate-950 px-2.5 py-2 text-xs text-slate-400 hover:text-white transition-colors uppercase font-mono"
+                >
+                  <span>បិទសារ (DISMISS)</span>
                 </button>
               </div>
             </div>
@@ -834,7 +1499,7 @@ export default function BgRemoverPage() {
 
           {/* High-Tech Robotic Scanner Telemetry with Scanning Animation & Corner HUD */}
           {isProcessing && (
-            <div className="relative overflow-hidden rounded-none border border-cyan-500/40 bg-slate-950/95 shadow-[0_0_35px_rgba(0,240,255,0.15)] font-mono">
+            <div data-testid="processing-scanner" className="relative overflow-hidden rounded-none border border-cyan-500/40 bg-slate-950/95 shadow-[0_0_35px_rgba(0,240,255,0.15)] font-mono">
               {/* Corner target reticles */}
               <div className="pointer-events-none absolute top-1.5 left-1.5 h-3 w-3 border-t-2 border-l-2 border-cyan-400 z-30" />
               <div className="pointer-events-none absolute top-1.5 right-1.5 h-3 w-3 border-t-2 border-r-2 border-cyan-400 z-30" />
@@ -909,12 +1574,20 @@ export default function BgRemoverPage() {
                 initialCompositeUrl={initialCompositeUrl}
                 width={cachedResult.width}
                 height={cachedResult.height}
+                sourceWidth={cachedResult.sourceWidth}
+                sourceHeight={cachedResult.sourceHeight}
+                wasDownscaled={cachedResult.wasDownscaled}
                 mode={cachedResult.mode}
+                initialPurpose={selectedPurpose}
                 provider={cachedResult.model}
                 processingLabel={cachedResult.label}
                 metrics={cachedResult.metrics}
+                isProcessingFinal={isProcessing && processingMode === "final"}
+                workflowStep={workflowStep}
+                onConfirmMask={handleConfirmMask}
+                initialSelectionMode={activeSelectionMode}
                 onReset={handleReset}
-                onRerunFinal={() => handleRunSegmentation("final")}
+                onRerunFinal={(dim?: number) => { handleRunSegmentation("final", dim); }}
               />
             </div>
           )}

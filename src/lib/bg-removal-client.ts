@@ -1,6 +1,15 @@
 import { ProcessingStatusLabel } from "./types";
-import { downscaleImageIfExceeds } from "./processing-utils";
+import { downscaleImageIfExceeds, getImageDimensions } from "./processing-utils";
 import { bgWorkerManager, WorkerProgressEvent } from "./bg-removal-worker-manager";
+import {
+  compositeRgbaBuffer,
+  SelectionMode,
+  detectContainerAndContents,
+  applyInteractivePromptsToMask,
+  generateTrimap,
+  generateMaskOverlay,
+  refineMaskWithGuidedFilter,
+} from "./bg-compositor";
 
 export interface BgRemovalProgress {
   key: string;
@@ -25,6 +34,9 @@ export interface BgRemovalOutput {
   sourceImageData: ImageData;         // Clean source RGBA pixels (w x h)
   width: number;
   height: number;
+  sourceWidth?: number;               // Truthful source original width
+  sourceHeight?: number;              // Truthful source original height
+  wasDownscaled?: boolean;            // Flag indicating if resolution was scaled for safety
   label: ProcessingStatusLabel;
   model: string;
   mode: "preview" | "final" | "worker";
@@ -38,6 +50,7 @@ export interface BgRemovalOutput {
 
 export interface BgRemovalOptions {
   mode?: "preview" | "final" | "worker";
+  targetMaxDimension?: number;        // Explicit dimension limit (e.g. 1024 on retry)
   erosionRadius?: number; // 0 (default, non-destructive)
   featherRadius?: number; // 0.75 (sub-pixel boundary)
   decontaminationRadius?: number; // 1 to 2 pixels (0 to disable)
@@ -386,7 +399,8 @@ export async function removeBackgroundBrowser(
   }
 
   const mode = options?.mode || "preview";
-  const maxDim = mode === "preview" ? 1024 : 2048;
+  const defaultMaxDim = mode === "preview" ? 1024 : 2048;
+  const targetCap = options?.targetMaxDimension ? Math.min(options.targetMaxDimension, defaultMaxDim) : defaultMaxDim;
   const modelName = "isnet_fp16" as const;
 
   const tStart = Date.now();
@@ -402,9 +416,17 @@ export async function removeBackgroundBrowser(
     stage: "Preparing image",
   });
 
-  const { blob: scaledBlob, width, height } = await downscaleImageIfExceeds(
+  const { width: origW, height: origH } = await getImageDimensions(imageSource).catch(() => ({
+    width: 1024,
+    height: 1024,
+  }));
+
+  // Never upscale an image merely to claim 2048px; Clean Cut is capped by source dimension
+  const boundedMaxDim = Math.min(Math.max(origW, origH), targetCap);
+
+  const { blob: scaledBlob, width, height, wasScaled } = await downscaleImageIfExceeds(
     imageSource,
-    maxDim
+    boundedMaxDim
   );
 
   if (options?.signal?.aborted) {
@@ -568,6 +590,9 @@ export async function removeBackgroundBrowser(
       sourceImageData,
       width,
       height,
+      sourceWidth: origW,
+      sourceHeight: origH,
+      wasDownscaled: wasScaled,
       label: "Browser AI result",
       model: "@imgly/isnet_fp16",
       mode,
@@ -598,7 +623,8 @@ export async function exportAtFullResolution(
   alphaMask: Uint8ClampedArray,
   maskWidth: number,
   maskHeight: number,
-  targetBg: "white" | "pink" | "transparent"
+  targetBg: "white" | "pink" | "transparent",
+  options?: { autoCrop?: boolean }
 ): Promise<{ blob: Blob; dataUrl: string; width: number; height: number; wasClamped?: boolean }> {
   const origBitmap = await createImageBitmap(originalFileOrBlob);
   try {
@@ -657,49 +683,58 @@ export async function exportAtFullResolution(
 
     outCtx.drawImage(origBitmap, 0, 0, targetW, targetH);
     const outImageData = outCtx.getImageData(0, 0, targetW, targetH);
-    const outPixels = outImageData.data;
+    const compositedPixels = compositeRgbaBuffer(
+      outImageData.data,
+      scaledMaskData,
+      targetW,
+      targetH,
+      targetBg
+    );
+    outImageData.data.set(compositedPixels);
+    outCtx.putImageData(outImageData, 0, 0);
 
-    const total = targetW * targetH;
-    for (let i = 0; i < total; i++) {
-      const pIdx = i * 4;
-      const maskA = scaledMaskData[pIdx];
-      const origA = outPixels[pIdx + 3]; // Preserve original source alpha!
-      const finalA = Math.round((maskA * origA) / 255);
+    let finalCanvas = outCanvas;
+    let finalW = targetW;
+    let finalH = targetH;
 
-      const r = outPixels[pIdx];
-      const g = outPixels[pIdx + 1];
-      const b = outPixels[pIdx + 2];
-
-      if (targetBg === "transparent") {
-        outPixels[pIdx + 3] = finalA;
-        if (finalA === 0) {
-          outPixels[pIdx] = 0;
-          outPixels[pIdx + 1] = 0;
-          outPixels[pIdx + 2] = 0;
+    // Auto-crop is opt-in only. Preserves original dimensions by default.
+    if (options?.autoCrop) {
+      let minX = targetW, maxX = 0, minY = targetH, maxY = 0;
+      let hasFg = false;
+      for (let y = 0; y < targetH; y++) {
+        for (let x = 0; x < targetW; x++) {
+          const a = compositedPixels[(y * targetW + x) * 4 + 3];
+          if (a > 15) {
+            hasFg = true;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
         }
-      } else if (targetBg === "white") {
-        const aNorm = finalA / 255;
-        outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-        outPixels[pIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
-        outPixels[pIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
-        outPixels[pIdx + 3] = 255;
-      } else if (targetBg === "pink") {
-        const aNorm = finalA / 255;
-        outPixels[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-        outPixels[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
-        outPixels[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
-        outPixels[pIdx + 3] = 255;
+      }
+      if (hasFg && minX <= maxX && minY <= maxY) {
+        const cropW = maxX - minX + 1;
+        const cropH = maxY - minY + 1;
+        const cropCanvas = document.createElement("canvas");
+        cropCanvas.width = cropW;
+        cropCanvas.height = cropH;
+        const cropCtx = cropCanvas.getContext("2d");
+        if (cropCtx) {
+          cropCtx.drawImage(outCanvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+          finalCanvas = cropCanvas;
+          finalW = cropW;
+          finalH = cropH;
+        }
       }
     }
 
-    outCtx.putImageData(outImageData, 0, 0);
-
     return new Promise((resolve, reject) => {
-      outCanvas.toBlob(
+      finalCanvas.toBlob(
         (blob) => {
           if (!blob) return reject(new Error("Failed to create full resolution blob"));
           const dataUrl = URL.createObjectURL(blob);
-          resolve({ blob, dataUrl, width: targetW, height: targetH, wasClamped });
+          resolve({ blob, dataUrl, width: finalW, height: finalH, wasClamped });
         },
         "image/png",
         1.0
@@ -831,41 +866,126 @@ export async function compositeWithSolidColor(
   });
 }
 
+export interface RemoteWorkerOptions {
+  refine?: boolean;
+  quality?: "fast" | "balanced" | "quality";
+  directUrl?: string | null;
+  signal?: AbortSignal;
+  mode?: SelectionMode;
+  positivePoints?: [number, number][];
+  negativePoints?: [number, number][];
+  boxes?: [number, number, number, number][];
+  polygon?: [number, number][];
+}
+
 /**
  * Remote Worker / Server Background Removal Gateway
+ * Supports direct client upload when directUrl is provided (bypassing Vercel 4.5MB limit),
+ * with transparent fallback to /api/remove-bg proxy, plus opt-in Alpha Matting query params.
  */
 export async function removeBackgroundRemote(
   imageFile: File | Blob,
-  signal?: AbortSignal
+  options?: RemoteWorkerOptions | AbortSignal
 ): Promise<BgRemovalOutput> {
-  const { blob: safeBlob, width, height } = await downscaleImageIfExceeds(
+  const opts: RemoteWorkerOptions =
+    options instanceof AbortSignal ? { signal: options } : options || {};
+
+  const { width: origW, height: origH } = await getImageDimensions(imageFile).catch(() => ({
+    width: 2048,
+    height: 2048,
+  }));
+  const { blob: safeBlob, width, height, wasScaled } = await downscaleImageIfExceeds(
     imageFile,
     2048
   );
 
   const tStart = Date.now();
   const formData = new FormData();
-  formData.append("image", safeBlob);
+  formData.append("image", safeBlob, (imageFile as File).name || "image.png");
+  if (opts.mode) {
+    formData.append("mode", opts.mode);
+  }
+  if (opts.positivePoints && opts.positivePoints.length > 0) {
+    formData.append("positivePoints", JSON.stringify(opts.positivePoints));
+  }
+  if (opts.negativePoints && opts.negativePoints.length > 0) {
+    formData.append("negativePoints", JSON.stringify(opts.negativePoints));
+  }
+  if (opts.boxes && opts.boxes.length > 0) {
+    formData.append("boxes", JSON.stringify(opts.boxes));
+  }
+  if (opts.polygon && opts.polygon.length > 0) {
+    formData.append("polygon", JSON.stringify(opts.polygon));
+  }
 
-  const res = await fetch("/api/remove-bg", {
-    method: "POST",
-    body: formData,
-    signal,
-  });
+  const queryParams = new URLSearchParams();
+  if (opts.refine) {
+    queryParams.set("refine", "true");
+    queryParams.set("quality", opts.quality || "balanced");
+  }
+  if (opts.mode) {
+    queryParams.set("mode", opts.mode);
+  }
+  const qStr = queryParams.toString() ? `?${queryParams.toString()}` : "";
+
+  let res: Response | null = null;
+  let usedDirect = false;
+
+  // Try direct worker upload if directUrl is configured (avoids Vercel 4.5MB Serverless function limit)
+  if (opts.directUrl && opts.directUrl.startsWith("http")) {
+    try {
+      const cleanDirect = opts.directUrl.replace(/\/+$/, "");
+      const directTarget = `${cleanDirect}/remove${qStr}`;
+      res = await fetch(directTarget, {
+        method: "POST",
+        body: formData,
+        signal: opts.signal,
+      });
+      usedDirect = true;
+    } catch (directErr) {
+      if (opts.signal?.aborted) throw directErr;
+      console.warn("Direct worker upload failed, falling back to server gateway proxy:", directErr);
+      res = null; // Fall back to /api/remove-bg
+    }
+  }
+
+  // Fallback to Next.js API route gateway
+  if (!res) {
+    const proxyUrl = `/api/remove-bg${qStr}`;
+    res = await fetch(proxyUrl, {
+      method: "POST",
+      body: formData,
+      signal: opts.signal,
+    });
+  }
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    if (res.status === 422 && errorData?.code === "NOT_CONFIGURED") {
-      const err = new Error(
-        errorData?.error ||
-          "Remote Worker is not configured. Please switch to Browser AI mode (runs 100% locally with zero cost and privacy), or configure BACKGROUND_REMOVAL_WORKER_URL in Settings."
-      );
-      err.name = "NOT_CONFIGURED";
-      throw err;
+    const contentType = res.headers.get("content-type") || "";
+    let code = `HTTP_${res.status}`;
+    let message = `Remote Worker returned status ${res.status}.`;
+
+    if (contentType.includes("application/json")) {
+      const errorData = await res.json().catch(() => null);
+      if (errorData?.code) code = errorData.code;
+      if (errorData?.error || errorData?.detail) {
+        message = errorData.error || errorData.detail;
+      }
+    } else {
+      const textData = await res.text().catch(() => "");
+      if (res.status === 413 || /payload_too_large|too large/i.test(textData)) {
+        code = "IMAGE_TOO_LARGE";
+        message = "Image size exceeds the remote worker upload limit (MAX_UPLOAD_BYTES).";
+      } else if (res.status === 429 || /rate limit|quota/i.test(textData)) {
+        code = "RATE_LIMITED";
+        message = "Remote worker rate limit exceeded. Please try again shortly.";
+      } else if (textData) {
+        message = textData.slice(0, 200);
+      }
     }
-    throw new Error(
-      errorData?.error || `Remote Worker returned status ${res.status}.`
-    );
+
+    const err = new Error(message);
+    err.name = code;
+    throw err;
   }
 
   const headerSource = res.headers.get("X-Processing-Source");
@@ -926,6 +1046,9 @@ export async function removeBackgroundRemote(
     sourceImageData,
     width,
     height,
+    sourceWidth: origW,
+    sourceHeight: origH,
+    wasDownscaled: wasScaled,
     label,
     model: modelHeader,
     mode: "worker",
@@ -935,3 +1058,266 @@ export async function removeBackgroundRemote(
     },
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Two-Stage Pipeline: Semantic/Interactive Selection & Alpha Matting
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SegmentSelectionOptions {
+  mode?: SelectionMode;
+  positivePoints?: [number, number][];
+  negativePoints?: [number, number][];
+  boxes?: [number, number, number, number][];
+  polygon?: [number, number][];
+  pointRadius?: number;
+  targetMaxDimension?: number;
+  signal?: AbortSignal;
+  onProgress?: (progress: BgRemovalProgress) => void;
+  remoteWorker?: boolean;
+  directUrl?: string | null;
+  quality?: "fast" | "balanced" | "quality";
+}
+
+export interface SegmentSelectionResult {
+  sourceImageData: ImageData;
+  initialMask: Uint8ClampedArray;
+  activeMask: Uint8ClampedArray;
+  excludedMask: Uint8ClampedArray;
+  width: number;
+  height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  hasContainer: boolean;
+  boxConfidence: number;
+  warning?: string;
+  maskOverlayUrl: string;
+  selectionMode: SelectionMode;
+}
+
+/**
+ * Stage A: Semantic & Interactive Object Selection
+ * Obtains the initial segmentation, classifies outer packaging vs inner contents,
+ * applies interactive prompts (points, boxes, polygons), and produces a mask preview overlay.
+ */
+export async function segmentObjectSelection(
+  imageFile: File | Blob,
+  options?: SegmentSelectionOptions
+): Promise<SegmentSelectionResult> {
+  const mode: SelectionMode = options?.mode || "whole_product";
+
+  let initialOutput: BgRemovalOutput;
+  if (options?.remoteWorker) {
+    initialOutput = await removeBackgroundRemote(imageFile, {
+      refine: false,
+      directUrl: options.directUrl,
+      signal: options.signal,
+      mode,
+      positivePoints: options.positivePoints,
+      negativePoints: options.negativePoints,
+      boxes: options.boxes,
+      polygon: options.polygon,
+    });
+  } else {
+    initialOutput = await removeBackgroundBrowser(imageFile, {
+      mode: "preview",
+      targetMaxDimension: options?.targetMaxDimension,
+      alphaMatting: false,
+      signal: options?.signal,
+      onProgress: options?.onProgress,
+    });
+  }
+
+  const { width, height, sourceImageData, alphaMaskBuffer } = initialOutput;
+  const totalPixels = width * height;
+
+  // 1. Detect cardboard packaging / box vs inner contents
+  const containerResult = detectContainerAndContents(
+    sourceImageData.data,
+    alphaMaskBuffer,
+    width,
+    height
+  );
+
+  let activeMask = new Uint8ClampedArray(totalPixels);
+  let excludedMask = new Uint8ClampedArray(totalPixels);
+
+  if (mode === "contents_only" && containerResult.hasContainer) {
+    // Strip packaging/box; keep only contents
+    for (let i = 0; i < totalPixels; i++) {
+      activeMask[i] = containerResult.contentsMask[i];
+      excludedMask[i] = containerResult.containerMask[i];
+    }
+  } else {
+    // Keep entire product (both packaging and contents)
+    for (let i = 0; i < totalPixels; i++) {
+      activeMask[i] = alphaMaskBuffer[i];
+    }
+  }
+
+  // 2. Apply interactive prompts if provided
+  if (
+    (options?.positivePoints && options.positivePoints.length > 0) ||
+    (options?.negativePoints && options.negativePoints.length > 0) ||
+    (options?.boxes && options.boxes.length > 0) ||
+    (options?.polygon && options.polygon.length >= 3)
+  ) {
+    const updatedWithPrompts = applyInteractivePromptsToMask(activeMask, width, height, {
+      mode,
+      positivePoints: options?.positivePoints,
+      negativePoints: options?.negativePoints,
+      boxes: options?.boxes,
+      polygon: options?.polygon,
+      pointRadius: options?.pointRadius || 18,
+    });
+    activeMask.set(updatedWithPrompts);
+
+    // Mark explicit negative points into excludedMask so trimap never expands there
+    if (options?.negativePoints) {
+      const radius = options?.pointRadius || 18;
+      const rSq = radius * radius;
+      for (const [nx, ny] of options.negativePoints) {
+        const cx = Math.round(nx);
+        const cy = Math.round(ny);
+        const minY = Math.max(0, cy - radius);
+        const maxY = Math.min(height - 1, cy + radius);
+        const minX = Math.max(0, cx - radius);
+        const maxX = Math.min(width - 1, cx + radius);
+        for (let y = minY; y <= maxY; y++) {
+          const dy = y - cy;
+          for (let x = minX; x <= maxX; x++) {
+            const dx = x - cx;
+            if (dx * dx + dy * dy <= rSq) {
+              excludedMask[y * width + x] = 255;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Generate green/red mask preview overlay
+  let maskOverlayUrl = "";
+  if (typeof document !== "undefined") {
+    const overlayPixels = generateMaskOverlay(
+      sourceImageData.data,
+      activeMask,
+      width,
+      height
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const imgData = ctx.createImageData(width, height);
+      imgData.data.set(overlayPixels);
+      ctx.putImageData(imgData, 0, 0);
+      maskOverlayUrl = canvas.toDataURL("image/png");
+    }
+  }
+
+  return {
+    sourceImageData,
+    initialMask: new Uint8ClampedArray(alphaMaskBuffer),
+    activeMask,
+    excludedMask,
+    width,
+    height,
+    sourceWidth: initialOutput.sourceWidth || width,
+    sourceHeight: initialOutput.sourceHeight || height,
+    hasContainer: containerResult.hasContainer,
+    boxConfidence: containerResult.boxConfidence,
+    warning: containerResult.warning,
+    maskOverlayUrl,
+    selectionMode: mode,
+  };
+}
+
+export interface RefineAlphaMattingOptions {
+  quality?: "fast" | "balanced" | "quality";
+  edgeQuality?: "fast" | "balanced" | "fine";
+  remoteWorker?: boolean;
+  directUrl?: string | null;
+  signal?: AbortSignal;
+  onProgress?: (progress: BgRemovalProgress) => void;
+}
+
+/**
+ * Stage B: Alpha Matting Refinement
+ * Runs trimap generation bounded by the user-approved selection mask,
+ * performs edge-aware guided filtering, and exports the transparent PNG.
+ */
+export async function refineAlphaMattingWithMask(
+  sourceImageData: ImageData,
+  activeMask: Uint8ClampedArray,
+  excludedMask: Uint8ClampedArray | null,
+  options?: RefineAlphaMattingOptions
+): Promise<BgRemovalOutput> {
+  const w = sourceImageData.width;
+  const h = sourceImageData.height;
+  const totalPixels = w * h;
+
+  const quality = options?.quality || (options?.edgeQuality === "fine" ? "quality" : "balanced");
+  const trimapRadius = quality === "fast" ? 3 : quality === "quality" ? 6 : 4;
+
+  // 1. Generate conservative 3-class trimap (excludedMask strictly preserved as 0)
+  const trimap = generateTrimap(activeMask, w, h, trimapRadius, excludedMask);
+
+  // 2. Refine alpha transitions using edge-aware guided filter
+  const refinedAlpha = refineMaskWithGuidedFilter(
+    sourceImageData.data,
+    trimap,
+    w,
+    h,
+    trimapRadius,
+    1e-4
+  );
+
+  // 3. Composite output RGBA
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not create canvas context for alpha matting refinement.");
+
+  const outImgData = ctx.createImageData(w, h);
+  const outPixels = outImgData.data;
+  const srcPixels = sourceImageData.data;
+
+  for (let i = 0; i < totalPixels; i++) {
+    const pIdx = i * 4;
+    const a = refinedAlpha[i];
+    outPixels[pIdx] = srcPixels[pIdx];
+    outPixels[pIdx + 1] = srcPixels[pIdx + 1];
+    outPixels[pIdx + 2] = srcPixels[pIdx + 2];
+    outPixels[pIdx + 3] = a;
+  }
+  ctx.putImageData(outImgData, 0, 0);
+
+  const transparentBlob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((b) => {
+      if (b) resolve(b);
+      else reject(new Error("Failed to create blob for refined cutout."));
+    }, "image/png");
+  });
+
+  const transparentUrl = URL.createObjectURL(transparentBlob);
+  const alphaMaskUrl = createAlphaMaskDataUrl(refinedAlpha, w, h);
+
+  return {
+    transparentBlob,
+    transparentUrl,
+    alphaMaskUrl,
+    alphaMaskBuffer: refinedAlpha,
+    sourceImageData,
+    width: w,
+    height: h,
+    sourceWidth: w,
+    sourceHeight: h,
+    wasDownscaled: false,
+    label: "Browser AI result",
+    model: "@imgly/isnet_fp16 + GuidedFilter",
+    mode: "preview",
+  };
+}
+

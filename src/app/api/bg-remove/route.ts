@@ -1,1 +1,1 @@
-export { POST, maxDuration } from "../remove-bg/route";
+export { GET, POST, maxDuration } from "../remove-bg/route";

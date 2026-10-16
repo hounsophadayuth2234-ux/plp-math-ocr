@@ -33,6 +33,17 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   return (
     <>
       {/* Mobile backdrop overlay */}
@@ -60,7 +71,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-base font-bold tracking-tight text-white">
-                  PLP math content
+                  PLP Math Content
                 </span>
                 <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold tracking-wider text-cyan-400 uppercase ring-1 ring-cyan-500/40 shadow-[0_0_6px_rgba(0,240,255,0.2)]">
                   PLP
@@ -75,10 +86,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden focus:ring-2 focus:ring-cyan-400 focus:outline-none"
             aria-label="Close navigation sidebar"
+            title="Close navigation sidebar"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 

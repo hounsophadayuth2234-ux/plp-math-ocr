@@ -1,0 +1,73 @@
+{
+  "redirectCheck": {
+    "status": 308,
+    "location": "/plp-math-content",
+    "passed": true
+  },
+  "metadataCheck": {
+    "title": "PLP Math Content",
+    "canonical": "https://ai-toolkit-hub-nu.vercel.app/plp-math-content",
+    "ogTitle": "PLP Math Content",
+    "ogUrl": "https://ai-toolkit-hub-nu.vercel.app/plp-math-content",
+    "titlePassed": true,
+    "canonicalPassed": true
+  },
+  "viewports": [
+    {
+      "name": "320px (iPhone SE narrow)",
+      "width": 320,
+      "height": 667,
+      "clientWidth": 320,
+      "scrollWidth": 320,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    },
+    {
+      "name": "360px (Standard Android)",
+      "width": 360,
+      "height": 740,
+      "clientWidth": 360,
+      "scrollWidth": 360,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    },
+    {
+      "name": "390px (iPhone 14/15/16)",
+      "width": 390,
+      "height": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    },
+    {
+      "name": "768px (iPad Mini / Tablet)",
+      "width": 768,
+      "height": 1024,
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    },
+    {
+      "name": "1280px (Desktop)",
+      "width": 1280,
+      "height": 900,
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "hasHorizontalScrollbar": false,
+      "passed": true
+    }
+  ],
+  "keyboardAndModal": {
+    "modalInfo": {
+      "exists": true,
+      "isModal": true,
+      "hasLabel": true,
+      "focusedInside": true
+    },
+    "modalClosed": true,
+    "passed": true
+  },
+  "success": true
+}

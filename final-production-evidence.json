@@ -1,0 +1,412 @@
+{
+  "stepResults": {
+    "step1_upload": true,
+    "step2_fastPreview": true,
+    "step3_modelConfirmed": true,
+    "step4_timingsRecorded": true,
+    "step5_resultProduced": true,
+    "step6_notOriginal": true,
+    "step7_realAlpha": true,
+    "step8_transparentPreview": true,
+    "step9_sameMaskComposites": true,
+    "step10_zeroRerun": true,
+    "step11_keepBrushAppears": true,
+    "step12_removeBrushAppears": true,
+    "step13_keepBrushTested": true,
+    "step14_removeBrushTested": true,
+    "step15_undoRedoTested": true,
+    "step16_resetMaskTested": true,
+    "step17_exportPng": true,
+    "step18_alphaAudit": true,
+    "step19_cancelTested": true,
+    "step20_retryTested": true,
+    "step21_concurrencyTested": true
+  },
+  "screenshots": {
+    "afterUpload": "C:\\Users\\User\\.gemini\\antigravity\\scratch\\ai-toolkit-hub\\evidence-screenshots\\screenshot-01-after-upload.png",
+    "duringLoading": "C:\\Users\\User\\.gemini\\antigravity\\scratch\\ai-toolkit-hub\\evidence-screenshots\\screenshot-02-during-model-loading.png",
+    "afterSegmentation": "C:\\Users\\User\\.gemini\\antigravity\\scratch\\ai-toolkit-hub\\evidence-screenshots\\screenshot-03-after-segmentation.png",
+    "brushControls": "C:\\Users\\User\\.gemini\\antigravity\\scratch\\ai-toolkit-hub\\evidence-screenshots\\screenshot-04-brush-controls.png",
+    "afterCorrection": "C:\\Users\\User\\.gemini\\antigravity\\scratch\\ai-toolkit-hub\\evidence-screenshots\\screenshot-05-after-brush-correction.png"
+  },
+  "downloads": {
+    "filename": "PLP-Cutout-Transparent-preview-1792052052289.png",
+    "fileSize": "111.71 KB (114389 bytes)",
+    "pngHeader": {
+      "validPng": true,
+      "width": 400,
+      "height": 500,
+      "bitDepth": 8,
+      "colorType": 6,
+      "hasAlphaChannel": true
+    }
+  },
+  "modelInfo": {
+    "badge": "Browser AI result — @imgly/isnet_fp16\n·\nEngine: @imgly/isnet_fp16",
+    "actualModel": "@imgly/isnet_fp16"
+  },
+  "timings": {
+    "totalMs": 28793,
+    "modelLoadMs": 500,
+    "inferenceMs": 27593
+  },
+  "consoleErrors": [],
+  "networkRequests": [
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/bg-remover",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/media/797e433ab948586e-s.p.1v5bejj26fx9h.woff2",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/media/caa3a2e1cccd8315-s.p.0zr6hhvz-h9nw.woff2",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/1bbqs9fijoipz.css",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/43dxf2f2zaxzt.css",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/2c_2b2prcozy6.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/0lotqaap2y791.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/0u7kd248jvmt0.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/0yy10oza7t2y7.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/turbopack-1cvbnb3nlabgn.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/1431h84mknoy7.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/04t2d_rzdwwhv.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/1tmzg4hy5-_iz.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/0nykwurepzuxi.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/2o8a_vut1f54m.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/?_rsc=8ni34pPRz10AN3K5",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/math-ocr?_rsc=8ni34pPRz10AN3K5",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/bg-remover?_rsc=8ni34pPRz10AN3K5",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/api/settings",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/?_rsc=gN6yp2ccqoR6sPuS",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/math-ocr?_rsc=Twb7AmzPro8JNdO8",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/416_jncm85pvh.js",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f337acf1-5192-4e3f-be31-1e6de9efba3c",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/favicon.ico?favicon.38folom4sz_yx.ico",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/3a42e77c-4566-48c2-af47-db588cd6d1ea",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/074pz11pkbvv8.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/1i8mvpix3b_3e.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/resources.json",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/a2a1f2d68cd58b5a6262755e434dee496fc0f27c0ba8fcbb5d57c56ffa1bb15f",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/26a663c5a768f39155009f52e0f66815f36983ae275eec676365f7d09ef97edd",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/a984abd436e7a8119dc170730260a37436ce0d0542984b71c5a1a386777ab7fd",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/90741e8ae8b47de7666ae4163ba26087500d534973a853bbd02cea715f24b5ee",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/cad6b95099faeba3ea1299d717990453208cc075b53332db9123a4e2bdaf160c",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/c9f954707cb992edf62319d9aed365b4fc9ec3f08693a020db30040c0f953198",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/f6e7e01556358ed875f260bdfb22fb6f7213ac6fd4098ed72c0e7af081f0c23c",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/7b64520a3747dd5dcf6ac48f612504bb3b1e273a08b42b5a7efd614b9e4a397c",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/bbf8e366b8f11bb64e60c8532fc2ffed21535fa1cf981464ac45485972107855",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/12086412521285f855c2921ae13d3370ab243c9a250ebe340430075780f4624b",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/ea46f83f60203065638f183fc8a5446dfc28a163d7ba1922fc3bc6cf40347fa2",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/417316220b16ddd1c2a4730a315206ec0405aac7b64a878bdbe514e687b07b6f",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/c1eba9d5d2ee58ba832bf98b50624ea8813f2279505643401c23674c6b326d0b",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/378cd0ab154b324c0b1fe3136a605a8618865d4ce38824a30c938cc1e6312ce4",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/f69890cf74d0a687904dd088c0aaadce598c8bc217366ebee6993eadd4d56208",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/ef7fb517ae63534f48efa657702b3821fb5d59e4fd372016793edc0389341cc0",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/dd4fad06953738263bc4d5f94974376467fc74081cba665cef18af8223894ed4",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/fa3e4102c796fb6d1dab5417c5c0b4b5d219e6b9624d045d7361a033e7db183f",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/9f0512f9be98be0f44ad2f9ec9fe706ae626f2037aca910df6d1396a06a30d41",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/391ce9664d3a506e4333adb82581fc2dc6fbef0354f497ab417c050cb6eba6c4",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/7b95dd2733643f999b985105afb755122ca36de12decadc7855ebfbdab6920e6",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/af8fb2b72ffb03ed999778c4de73fd4ade196890be6e0253230b198dd11e9db0",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/2mux2--y3hqp0.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://ai-toolkit-hub-nu.vercel.app/_next/static/immutable/chunks/1t7cr3st4sv7o.js",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/resources.json",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/3dae4038fc722ce4ce041fbc9c63fd5c2d9864bc732a01994518f96e9ec2f357",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/ff8e86f29887739d249494309ca84dff33bef456c0346c2bbfcd21e3b388d87a",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/84addde9e759e397be2ee00d49a52dbf1b1a98863df325dc1c080252cbfe5fd9",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/resources.json",
+      "method": "GET"
+    },
+    {
+      "url": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/aa485cf3fa61ca007b3e1ca7b65068328270f072b61cdda490b732211e1da5d9",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f45a7cf5-88c0-40f2-91ee-6b268b3c9621",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f45a7cf5-88c0-40f2-91ee-6b268b3c9621",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f45a7cf5-88c0-40f2-91ee-6b268b3c9621",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f45a7cf5-88c0-40f2-91ee-6b268b3c9621",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f45a7cf5-88c0-40f2-91ee-6b268b3c9621",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f45a7cf5-88c0-40f2-91ee-6b268b3c9621",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f45a7cf5-88c0-40f2-91ee-6b268b3c9621",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f45a7cf5-88c0-40f2-91ee-6b268b3c9621",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/4630eb97-d16f-49e9-b8e4-6e3ae4190ade",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/9e64c6f4-9a09-48f3-8a07-54b9c42c3b6c",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/44c3642d-afc7-4462-a13d-fd9616e83fee",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/45b11a64-5bcc-40d4-b345-87cf0c7f09ce",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/2b5afb25-c052-4184-9074-36d73c4df88f",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/84585990-d7bc-44b7-b30e-d696027e6c9a",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/e9535ef7-2ed8-4245-a0f1-d6b9408e1403",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/8c532850-2303-44db-9f28-57fe17e4c001",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f4b3c988-492c-4775-9ee4-a07f3e3a59a0",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/ba0cf2ef-3bba-4141-80e5-bc0a4054f44a",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/db28fbb8-9a06-4420-bcd6-f99940e6ab6d",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/82f5ab63-82f8-4d8d-8be0-c6b8941e775f",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f9096006-0d12-4a7d-b508-4e3251ca4b23",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/e5a4f98b-0b94-4da4-983a-89ccfabd6374",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/c8f7d2c1-2583-4b96-a20f-dbec2be05e5f",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/a3ac21e7-930b-4a14-83fb-2f26830eb4f0",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/d40879d6-a7dc-46ae-bf2b-ce5d18a008d1",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/8c7dd117-0f4e-41d6-a26e-d3dcb90b1635",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/72cf668c-6e59-42bf-8306-2eae04dcf25e",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/f1964ca4-1b59-4797-a5cd-84da7e585855",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/ebed4430-2ddd-4341-a4ce-b8fd0b11b8ce",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/c5c16c57-f052-434b-b6f1-8b722fd9384f",
+      "method": "GET"
+    },
+    {
+      "url": "blob:https://ai-toolkit-hub-nu.vercel.app/1b61c57b-6e9b-4e3b-85a5-2bc4085c8af5",
+      "method": "GET"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "timestamp": "2026-10-15T11:42:00.606Z",
+  "tests": [
+    {
+      "id": "EXP_01_FAST_PREVIEW_WHITE",
+      "name": "Fast Preview then White download delivers valid PNG filename and URL",
+      "passed": true,
+      "details": {
+        "download": "PLP-fixture-1200x1200-Question-White-FFFFFF-1024x1024-preview.png",
+        "href": "blob:http://localhost:3005/d9375c9d-5e91-4edd-8f2a-db9bff8b8c49",
+        "timestamp": 1792064555837
+      }
+    },
+    {
+      "id": "EXP_02_FAST_PREVIEW_PINK",
+      "name": "Fast Preview then Pink download delivers valid #FFF0F5 filename and URL",
+      "passed": true,
+      "details": {
+        "download": "PLP-fixture-1200x1200-Solution-Pink-FFF0F5-1024x1024-preview.png",
+        "href": "blob:http://localhost:3005/62ff9952-0475-4c0d-ae9c-88ab228973b3",
+        "timestamp": 1792064556408
+      }
+    },
+    {
+      "id": "EXP_03_CLEAN_CUT_WHITE",
+      "name": "Clean Cut then White download exports full-resolution PNG successfully",
+      "passed": true,
+      "details": {
+        "download": "PLP-fixture-1200x1200-Question-White-FFFFFF-1200x1200-final.png",
+        "href": "blob:http://localhost:3005/59bfba72-dd21-4bcf-8490-8de413025e77",
+        "timestamp": 1792064576143
+      }
+    },
+    {
+      "id": "EXP_04_CLEAN_CUT_PINK",
+      "name": "Clean Cut then Pink download exports full-resolution #FFF0F5 PNG successfully",
+      "passed": true,
+      "details": {
+        "download": "PLP-fixture-1200x1200-Solution-Pink-FFF0F5-1200x1200-final.png",
+        "href": "blob:http://localhost:3005/9289173a-bdc1-4ed5-934d-6824f7ee3159",
+        "timestamp": 1792064576550
+      }
+    },
+    {
+      "id": "EXP_05_MANUAL_CORRECTION_EXPORT",
+      "name": "Manual mask brush stroke updates working mask and exports correctly",
+      "passed": true,
+      "details": {
+        "download": "PLP-fixture-1200x1200-Question-White-FFFFFF-1200x1200-final.png",
+        "href": "blob:http://localhost:3005/8167a430-3f3e-4406-b597-d8ed74270071",
+        "timestamp": 1792064577840
+      }
+    },
+    {
+      "id": "EXP_06_RESET_THEN_EXPORT",
+      "name": "Reset mask reverts to baseline AI segmentation and exports cleanly",
+      "passed": true,
+      "details": {
+        "download": "PLP-fixture-1200x1200-Question-White-FFFFFF-1200x1200-final.png",
+        "href": "blob:http://localhost:3005/ed9c5c05-7cdf-4063-a792-f1e6aad209c9",
+        "timestamp": 1792064578677
+      }
+    },
+    {
+      "id": "EXP_07_REPEATED_EXPORT",
+      "name": "Repeated exports succeed without state corruption or URL premature revocation",
+      "passed": true,
+      "details": {
+        "white": "PLP-fixture-1200x1200-Question-White-FFFFFF-1200x1200-final.png",
+        "pink": "PLP-fixture-1200x1200-Solution-Pink-FFF0F5-1200x1200-final.png",
+        "transparent": "PLP-fixture-1200x1200-Cutout-Transparent-1200x1200-final.png"
+      }
+    },
+    {
+      "id": "EXP_08_MOBILE_EXPORT_375X812",
+      "name": "Mobile viewport at 375x812 renders without overflow and exports successfully",
+      "passed": true,
+      "details": {
+        "mobileCheck": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasOverflow": false,
+          "isVisible": true
+        },
+        "mobileDl": {
+          "download": "PLP-fixture-1200x1200-Question-White-FFFFFF-1200x1200-final.png",
+          "href": "blob:http://localhost:3005/03f4cca8-9399-49fd-b3a7-a7b7c62bc369",
+          "timestamp": 1792064581231
+        }
+      }
+    }
+  ],
+  "summary": {
+    "passed": 8,
+    "failed": 0
+  }
+}

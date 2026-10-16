@@ -1,0 +1,17 @@
+services:
+  rembg-worker:
+    build: .
+    container_name: rembg-worker
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - REMBG_MODEL=u2net
+      - WORKER_AUTH_TOKEN=${BACKGROUND_REMOVAL_WORKER_TOKEN:-}
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 1G

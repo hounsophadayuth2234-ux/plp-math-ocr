@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-10-15T14:14:08.679Z",
+  "tests": [
+    {
+      "id": "T01_INITIAL_STATE",
+      "name": "Page loads with dark HUD, Standby, and Audio muted by default",
+      "passed": true,
+      "details": {
+        "hasHeader": true,
+        "isStandby": true,
+        "isMutedDefault": true
+      }
+    },
+    {
+      "id": "T02_VALIDATE_0BYTE",
+      "name": "0-byte file rejected with clear Khmer message",
+      "passed": true,
+      "details": {
+        "error": "ឯកសារទទេ (0 bytes) មិនអាចដំណើរការបានទេ (Empty image file)"
+      }
+    },
+    {
+      "id": "T03_VALIDATE_CORRUPT",
+      "name": "Corrupt file detected and rejected with clear Khmer message",
+      "passed": true,
+      "details": {
+        "error": "ឯកសាររូបភាពខូច ឬមិនអាចអានបាន សូមជ្រើសរើសរូបភាពផ្សេង (Corrupted or undecodable image file)"
+      }
+    },
+    {
+      "id": "T04_VALIDATE_OVERSIZED",
+      "name": "Oversized file (>12MB) rejected with clear Khmer limit message",
+      "passed": true,
+      "details": {
+        "error": "ទំហំឯកសារធំជាង ១២ MB សូមជ្រើសរើសរូបភាពតូចជាងនេះ (Payload exceeds 12 MB limit)"
+      }
+    },
+    {
+      "id": "T05_VALIDATE_WEBP",
+      "name": "WebP image decoded and accepted successfully",
+      "passed": true,
+      "details": {
+        "webpAccepted": true
+      }
+    },
+    {
+      "id": "T06_PURPOSE_SELECTION",
+      "name": "Step 2 presents clear Khmer question/solution/transparent choices",
+      "passed": true,
+      "details": {
+        "hasWhitePurpose": true,
+        "hasPinkPurpose": true,
+        "hasTransparentPurpose": true
+      }
+    },
+    {
+      "id": "SUITE_FATAL",
+      "name": "Execution aborted with error",
+      "passed": false,
+      "details": "Waiting for selector `[data-testid=\"primary-download\"]` failed"
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 1
+  }
+}

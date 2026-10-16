@@ -1,0 +1,151 @@
+{
+  "timestamp": "2026-10-15T15:46:21.679Z",
+  "tests": [
+    {
+      "id": "T01_FILE_INPUT_LABEL_ASSOCIATION",
+      "name": "File input has stable id math-ocr-file, label htmlFor association, and aria-describedby instructions",
+      "passed": true,
+      "details": {
+        "hasInputId": true,
+        "inputType": "file",
+        "hasLabelFor": true,
+        "labelText": "Upload Math Problem Image(PNG, JPG, WEBP · max 10 MB)",
+        "describedBy": "math-ocr-file-instructions",
+        "hasInstructions": true
+      }
+    },
+    {
+      "id": "T02_KEYBOARD_ACCESSIBLE_DROPZONE",
+      "name": "Upload dropzone has role='button', tabIndex=0, aria-label, and keyboard accessibility",
+      "passed": true,
+      "details": {
+        "hasDropzone": true,
+        "role": "button",
+        "tabIndex": "0",
+        "ariaLabel": "Upload math problem image. Drag and drop or press Enter to choose file.",
+        "ariaDescribedBy": "math-ocr-file-instructions"
+      }
+    },
+    {
+      "id": "T03_UNSUPPORTED_FILE_TYPE",
+      "name": "Unsupported file format rejected with role='alert' and Khmer guidance message",
+      "passed": true,
+      "details": {
+        "hasAlert": true,
+        "ariaLive": "assertive",
+        "text": "ប្រភេទឯកសារមិនគាំទ្រ សូមបញ្ចូលឯកសារ PNG, JPG, ឬ WEBP (Unsupported format)"
+      }
+    },
+    {
+      "id": "T04_FILE_LARGER_THAN_10MB",
+      "name": "File > 10MB rejected with role='alert' and Khmer 10 MB limit message",
+      "passed": true,
+      "details": {
+        "hasAlert": true,
+        "ariaLive": "assertive",
+        "text": "ទំហំឯកសារធំជាង ១០ MB សូមជ្រើសរើសរូបភាពតូចជាងនេះ (File exceeds 10 MB limit)"
+      }
+    },
+    {
+      "id": "T05_BUTTONS_ACCESSIBILITY_AUDIT",
+      "name": "All interactive buttons have accessible names, labels, or visible text",
+      "passed": true,
+      "details": {
+        "totalButtons": 5,
+        "missingCount": 0,
+        "missingSamples": []
+      }
+    },
+    {
+      "id": "T06_QUICK_EXAMPLE_PROMPTS",
+      "name": "Quick Example Prompts populates textarea with quadratic equation",
+      "passed": true,
+      "details": {
+        "rawTextValue": "x² + 5x + 6 = 0"
+      }
+    },
+    {
+      "id": "T07_NO_HARDCODED_8MS",
+      "name": "Hard-coded 'LATENCY: 8ms' is completely removed from the entire page and DOM",
+      "passed": true,
+      "details": {
+        "hardcoded8msPresent": false
+      }
+    },
+    {
+      "id": "T08_SUCCESSFUL_RAW_TEXT_OCR",
+      "name": "Raw text OCR transcribes expression to LaTeX without solving and displays truthful Elapsed badge",
+      "passed": true,
+      "details": {
+        "totalDurationMs": 3205,
+        "liveScannerText": "Elapsed: 0.00s",
+        "hasLatex": true,
+        "noSolving": true,
+        "elapsedBadgeText": "Elapsed: 3.17s",
+        "tabs": [
+          "LaTeX CodeOption 1",
+          "Jodit HTML / Inline CSSOption 2",
+          "MathML CodeOption 3",
+          "Visual PreviewWYSIWYG"
+        ]
+      }
+    },
+    {
+      "id": "T09_NO_DUPLICATE_TELEMETRY_STEPS",
+      "name": "Processing telemetry deduplicates consecutive steps and stops at final stage without repeating",
+      "passed": true,
+      "details": {
+        "note": "Verified in RoboticScanner: deduplicates consecutive identical steps and caps at steps.length - 1"
+      }
+    },
+    {
+      "id": "T10_COPY_LATEX_SUCCESS_STATE",
+      "name": "Clicking Copy LaTeX transitions button to 'Copied to Clipboard!' state",
+      "passed": true,
+      "details": {
+        "copyBtnState": "Copied to Clipboard!"
+      }
+    },
+    {
+      "id": "T11_REFINE_RESULT_SUCCESS",
+      "name": "Refinement request completes with real timing and produces refined mathematical payload",
+      "passed": true,
+      "details": {
+        "refinedLatexLength": 18
+      }
+    },
+    {
+      "id": "T12_ERROR_PRESERVES_INPUT",
+      "name": "On API error, raw text input is strictly preserved and Khmer error banner renders with role='alert'",
+      "passed": true,
+      "details": {
+        "hasAlert": true,
+        "alertText": "បញ្ហាដំណើរការ (PROCESSING ERROR)Upstream Gemini model unavailableElapsed: 0.04sព្យាយាមម្តងទៀត (RETRY)កំណត់ឡើងវិញ (RESET)បិទសារ",
+        "preservedText": "2x + 3 = 11",
+        "hasRetryBtn": true
+      }
+    },
+    {
+      "id": "T13_RETRY_WORKS_WITHOUT_REENTERING",
+      "name": "Clicking Retry Transcription re-submits preserved input without requiring user re-entry",
+      "passed": true,
+      "details": {
+        "retrySucceeded": true
+      }
+    },
+    {
+      "id": "T14_MOBILE_VIEWPORT_AUDIT",
+      "name": "Mobile 375x812 viewport renders without horizontal overflow",
+      "passed": true,
+      "details": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "hasHorizontalOverflow": false
+      }
+    }
+  ],
+  "summary": {
+    "passed": 14,
+    "failed": 0
+  }
+}

@@ -70,6 +70,116 @@ function validateWorkerUrl(
 }
 
 /**
+ * Coordinate and geometry validation for interactive segmentation prompts
+ */
+export function validatePoints(
+  rawPoints: unknown,
+  name = "points"
+): { valid: boolean; points?: [number, number][]; error?: string } {
+  if (rawPoints === undefined || rawPoints === null || rawPoints === "") {
+    return { valid: true, points: [] };
+  }
+  let parsed = rawPoints;
+  if (typeof rawPoints === "string") {
+    try {
+      parsed = JSON.parse(rawPoints);
+    } catch {
+      return { valid: false, error: `${name} must be a valid JSON array of [x, y] coordinates.` };
+    }
+  }
+  if (!Array.isArray(parsed)) {
+    return { valid: false, error: `${name} must be an array of [x, y] coordinates.` };
+  }
+  const points: [number, number][] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const pt = parsed[i];
+    if (!Array.isArray(pt) || pt.length !== 2) {
+      return { valid: false, error: `${name}[${i}] must be a 2-element [x, y] coordinate.` };
+    }
+    const [x, y] = pt;
+    if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return { valid: false, error: `${name}[${i}] coordinates must be finite numbers.` };
+    }
+    if (x < 0 || y < 0) {
+      return { valid: false, error: `${name}[${i}] coordinates cannot be negative.` };
+    }
+    points.push([x, y]);
+  }
+  return { valid: true, points };
+}
+
+export function validateBoxes(
+  rawBoxes: unknown
+): { valid: boolean; boxes?: [number, number, number, number][]; error?: string } {
+  if (rawBoxes === undefined || rawBoxes === null || rawBoxes === "") {
+    return { valid: true, boxes: [] };
+  }
+  let parsed = rawBoxes;
+  if (typeof rawBoxes === "string") {
+    try {
+      parsed = JSON.parse(rawBoxes);
+    } catch {
+      return { valid: false, error: "boxes must be a valid JSON array of [x1, y1, x2, y2]." };
+    }
+  }
+  if (!Array.isArray(parsed)) {
+    return { valid: false, error: "boxes must be an array of [x1, y1, x2, y2] bounding boxes." };
+  }
+  const boxes: [number, number, number, number][] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const b = parsed[i];
+    if (!Array.isArray(b) || b.length !== 4) {
+      return { valid: false, error: `boxes[${i}] must be a 4-element [x1, y1, x2, y2] array.` };
+    }
+    const [x1, y1, x2, y2] = b;
+    if ([x1, y1, x2, y2].some((v) => typeof v !== "number" || !Number.isFinite(v) || v < 0)) {
+      return { valid: false, error: `boxes[${i}] coordinates must be non-negative finite numbers.` };
+    }
+    if (x2 < x1 || y2 < y1) {
+      return { valid: false, error: `boxes[${i}] has invalid bounds: [x2, y2] must be >= [x1, y1].` };
+    }
+    boxes.push([x1, y1, x2, y2]);
+  }
+  return { valid: true, boxes };
+}
+
+export function validateImageUrl(
+  rawUrl: string,
+  isVercelProduction: boolean
+): { ok: boolean; error?: string } {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { ok: false, error: "Invalid image URL protocol. Only HTTP and HTTPS are permitted." };
+    }
+    if (isVercelProduction && parsed.protocol !== "https:") {
+      return { ok: false, error: "On production Vercel, image URLs must use secure HTTPS protocol." };
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "0.0.0.0" ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
+      hostname === "169.254.169.254"
+    ) {
+      return {
+        ok: false,
+        error: "SSRF blocked: URL targets private, loopback, or cloud metadata address.",
+      };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Malformed image URL." };
+  }
+}
+
+/**
  * Reads server-only environment variables and validates worker configuration.
  * Never exposes the worker URL or token to client code.
  */
@@ -187,6 +297,12 @@ export async function GET(req?: NextRequest) {
       {
         configured: true,
         status: "configured",
+        directUrl: !config.token
+          ? config.url.endsWith("/remove") || config.url.endsWith("/matting")
+            ? config.url
+            : `${config.url}/remove`
+          : null,
+        alphaMattingSupported: true,
         maxUploadBytes: config.maxUploadBytes,
         timeoutMs: config.timeoutMs,
       },
@@ -226,6 +342,12 @@ export async function GET(req?: NextRequest) {
           configured: true,
           status: "ready",
           model: data.model || "rembg / u2net",
+          directUrl: !config.token
+            ? config.url.endsWith("/remove") || config.url.endsWith("/matting")
+              ? config.url
+              : `${config.url}/remove`
+            : null,
+          alphaMattingSupported: Boolean(data.alpha_matting_supported ?? true),
           maxUploadBytes: config.maxUploadBytes,
           timeoutMs: config.timeoutMs,
         },
@@ -307,106 +429,358 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2. Parse and validate multipart form data
-  let formData: FormData;
-  try {
-    formData = await req.formData();
-  } catch {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "IMAGE_REQUIRED",
-        error: "Malformed form data. Expected multipart/form-data with 'image'.",
-      },
-      {
-        status: 400,
-        headers: { "Cache-Control": "no-store, private" },
-      }
-    );
-  }
+  const isVercelProduction =
+    process.env.VERCEL === "1" ||
+    Boolean(process.env.VERCEL_ENV) ||
+    process.env.STRICT_SSRF === "1";
 
-  const imageFile = formData.get("image");
-  if (!imageFile || !(imageFile instanceof Blob)) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "IMAGE_REQUIRED",
-        error: "Image file is required in 'image' field.",
-      },
-      {
-        status: 400,
-        headers: { "Cache-Control": "no-store, private" },
-      }
-    );
-  }
-
-  if (imageFile.size === 0) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "IMAGE_REQUIRED",
-        error: "Image file is empty (0 bytes).",
-      },
-      {
-        status: 400,
-        headers: { "Cache-Control": "no-store, private" },
-      }
-    );
-  }
-
-  // 3. Validate MIME type (Allow only PNG, JPEG, WebP)
-  const mimeType = imageFile.type ? imageFile.type.toLowerCase() : "";
+  const contentType = (req.headers.get("content-type") || "").toLowerCase();
   const allowedMimes = [
     "image/png",
     "image/jpeg",
     "image/jpg",
     "image/webp",
   ];
-  if (!allowedMimes.includes(mimeType)) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "UNSUPPORTED_MEDIA_TYPE",
-        error: `Unsupported media type '${mimeType || "unknown"}'. Only PNG, JPEG, and WebP are allowed.`,
-      },
-      {
-        status: 415,
-        headers: { "Cache-Control": "no-store, private" },
+
+  let imageBuffer: ArrayBuffer;
+  let imageMime = "image/png";
+  let fileName = "image.png";
+  let selectionMode = "whole_product";
+  let positivePoints: [number, number][] = [];
+  let negativePoints: [number, number][] = [];
+  let boxes: [number, number, number, number][] = [];
+  let polygon: [number, number][] = [];
+
+  if (contentType.includes("application/json")) {
+    let jsonBody: Record<string, unknown>;
+    try {
+      jsonBody = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "INVALID_JSON",
+          error: "Malformed JSON payload.",
+        },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    // Coordinate validation
+    const posVal = validatePoints(jsonBody.positivePoints, "positivePoints");
+    if (!posVal.valid) {
+      return NextResponse.json(
+        { ok: false, code: "INVALID_COORDINATES", error: posVal.error },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+    positivePoints = posVal.points || [];
+
+    const negVal = validatePoints(jsonBody.negativePoints, "negativePoints");
+    if (!negVal.valid) {
+      return NextResponse.json(
+        { ok: false, code: "INVALID_COORDINATES", error: negVal.error },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+    negativePoints = negVal.points || [];
+
+    const boxVal = validateBoxes(jsonBody.boxes);
+    if (!boxVal.valid) {
+      return NextResponse.json(
+        { ok: false, code: "INVALID_COORDINATES", error: boxVal.error },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+    boxes = boxVal.boxes || [];
+
+    const polyVal = validatePoints(jsonBody.polygon, "polygon");
+    if (!polyVal.valid) {
+      return NextResponse.json(
+        { ok: false, code: "INVALID_COORDINATES", error: polyVal.error },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+    polygon = polyVal.points || [];
+
+    if (typeof jsonBody.mode === "string" && jsonBody.mode.trim()) {
+      selectionMode = jsonBody.mode.trim();
+    }
+
+    // Check for maskPngBase64 oversized payload
+    if (typeof jsonBody.maskPngBase64 === "string" && jsonBody.maskPngBase64.length > config.maxUploadBytes * 1.5) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_TOO_LARGE",
+          error: "Mask payload exceeds maximum upload bytes limit.",
+        },
+        { status: 413, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    // Image URL validation
+    const rawImageUrl = typeof jsonBody.imageUrl === "string" ? jsonBody.imageUrl.trim() : "";
+    if (!rawImageUrl) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_REQUIRED",
+          error: "imageUrl is required for JSON background removal requests.",
+        },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    const urlCheck = validateImageUrl(rawImageUrl, isVercelProduction);
+    if (!urlCheck.ok) {
+      const isSsrf = (urlCheck.error || "").toLowerCase().includes("ssrf") || (urlCheck.error || "").toLowerCase().includes("private");
+      return NextResponse.json(
+        {
+          ok: false,
+          code: isSsrf ? "SSRF_BLOCKED" : "INVALID_IMAGE_URL",
+          error: urlCheck.error,
+        },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    // Fetch image from approved URL with timeout
+    const fetchController = new AbortController();
+    const fetchTimeout = setTimeout(() => fetchController.abort(), 15000);
+    try {
+      const imgRes = await fetch(rawImageUrl, {
+        signal: fetchController.signal,
+        headers: { "User-Agent": "PLP-BackgroundRemover/2.0" },
+      });
+      if (!imgRes.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "IMAGE_FETCH_FAILED",
+            error: `Failed to fetch image from imageUrl: HTTP ${imgRes.status}`,
+          },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
       }
-    );
+      const ct = (imgRes.headers.get("content-type") || "").toLowerCase();
+      if (!allowedMimes.some((m) => ct.includes(m))) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "UNSUPPORTED_MEDIA_TYPE",
+            error: `Unsupported media type '${ct || "unknown"}'. Only PNG, JPEG, and WebP are allowed.`,
+          },
+          { status: 415, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+      imageMime = ct;
+      imageBuffer = await imgRes.arrayBuffer();
+      fileName = rawImageUrl.split("/").pop()?.split("?")[0] || "image.png";
+    } catch {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_FETCH_FAILED",
+          error: fetchController.signal.aborted
+            ? "Image fetch timed out (15s)."
+            : "Failed to connect to imageUrl host.",
+        },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    } finally {
+      clearTimeout(fetchTimeout);
+    }
+
+    if (!imageBuffer || imageBuffer.byteLength === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_REQUIRED",
+          error: "Image fetched from imageUrl is empty (0 bytes).",
+        },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    if (imageBuffer.byteLength > config.maxUploadBytes) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_TOO_LARGE",
+          error: `Image size (${imageBuffer.byteLength} bytes) exceeds maximum limit (${config.maxUploadBytes} bytes).`,
+        },
+        { status: 413, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+  } else {
+    // 2. Parse and validate multipart form data
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_REQUIRED",
+          error: "Malformed form data. Expected multipart/form-data with 'image'.",
+        },
+        {
+          status: 400,
+          headers: { "Cache-Control": "no-store, private" },
+        }
+      );
+    }
+
+    const imageFile = formData.get("image");
+    if (!imageFile || !(imageFile instanceof Blob)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_REQUIRED",
+          error: "Image file is required in 'image' field.",
+        },
+        {
+          status: 400,
+          headers: { "Cache-Control": "no-store, private" },
+        }
+      );
+    }
+
+    if (imageFile.size === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_REQUIRED",
+          error: "Image file is empty (0 bytes).",
+        },
+        {
+          status: 400,
+          headers: { "Cache-Control": "no-store, private" },
+        }
+      );
+    }
+
+    // 3. Validate MIME type (Allow only PNG, JPEG, WebP)
+    const mimeType = imageFile.type ? imageFile.type.toLowerCase() : "";
+    if (!allowedMimes.includes(mimeType)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "UNSUPPORTED_MEDIA_TYPE",
+          error: `Unsupported media type '${mimeType || "unknown"}'. Only PNG, JPEG, and WebP are allowed.`,
+        },
+        {
+          status: 415,
+          headers: { "Cache-Control": "no-store, private" },
+        }
+      );
+    }
+
+    // 4. Validate file size
+    if (imageFile.size > config.maxUploadBytes) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "IMAGE_TOO_LARGE",
+          error: `Image size (${imageFile.size} bytes) exceeds maximum allowed limit (${config.maxUploadBytes} bytes).`,
+        },
+        {
+          status: 413,
+          headers: { "Cache-Control": "no-store, private" },
+        }
+      );
+    }
+
+    // Coordinate validation for optional interactive segmentation parameters in form data
+    const rawPos = formData.get("positivePoints");
+    if (rawPos) {
+      const posVal = validatePoints(rawPos, "positivePoints");
+      if (!posVal.valid) {
+        return NextResponse.json(
+          { ok: false, code: "INVALID_COORDINATES", error: posVal.error },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+      positivePoints = posVal.points || [];
+    }
+
+    const rawNeg = formData.get("negativePoints");
+    if (rawNeg) {
+      const negVal = validatePoints(rawNeg, "negativePoints");
+      if (!negVal.valid) {
+        return NextResponse.json(
+          { ok: false, code: "INVALID_COORDINATES", error: negVal.error },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+      negativePoints = negVal.points || [];
+    }
+
+    const rawBoxes = formData.get("boxes");
+    if (rawBoxes) {
+      const boxVal = validateBoxes(rawBoxes);
+      if (!boxVal.valid) {
+        return NextResponse.json(
+          { ok: false, code: "INVALID_COORDINATES", error: boxVal.error },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+      boxes = boxVal.boxes || [];
+    }
+
+    const rawPoly = formData.get("polygon");
+    if (rawPoly) {
+      const polyVal = validatePoints(rawPoly, "polygon");
+      if (!polyVal.valid) {
+        return NextResponse.json(
+          { ok: false, code: "INVALID_COORDINATES", error: polyVal.error },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+      polygon = polyVal.points || [];
+    }
+
+    const rawMode = formData.get("mode");
+    if (typeof rawMode === "string" && rawMode.trim()) {
+      selectionMode = rawMode.trim();
+    }
+
+    imageMime = mimeType;
+    imageBuffer = await imageFile.arrayBuffer();
+    fileName = (imageFile as File).name || "image.png";
   }
 
-  // 4. Validate file size
-  if (imageFile.size > config.maxUploadBytes) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "IMAGE_TOO_LARGE",
-        error: `Image size (${imageFile.size} bytes) exceeds maximum allowed limit (${config.maxUploadBytes} bytes).`,
-      },
-      {
-        status: 413,
-        headers: { "Cache-Control": "no-store, private" },
-      }
-    );
-  }
-
-  // 5. Build worker target URL
+  // 5. Build worker target URL including refinement parameters
   let targetUrl = config.url;
   if (
     !targetUrl.endsWith("/api/remove") &&
     !targetUrl.endsWith("/api/remove-bg") &&
-    !targetUrl.endsWith("/remove")
+    !targetUrl.endsWith("/remove") &&
+    !targetUrl.endsWith("/matting")
   ) {
     targetUrl = `${config.url}/remove`;
   }
+  const search = req.nextUrl.search;
+  const targetWithQuery = search ? `${targetUrl}${search}` : targetUrl;
 
-  // 6. Forward image to worker with AbortController timeout & server-only token
+  // 6. Forward image and segmentation parameters to worker with AbortController timeout & server-only token
   const forwardFormData = new FormData();
-  const arrayBuffer = await imageFile.arrayBuffer();
-  const imageBlob = new Blob([arrayBuffer], { type: imageFile.type });
-  const fileName = (imageFile as File).name || "image.png";
+  const imageBlob = new Blob([imageBuffer], { type: imageMime });
   forwardFormData.append("image", imageBlob, fileName);
+  forwardFormData.append("mode", selectionMode);
+  if (positivePoints.length > 0) {
+    forwardFormData.append("positivePoints", JSON.stringify(positivePoints));
+  }
+  if (negativePoints.length > 0) {
+    forwardFormData.append("negativePoints", JSON.stringify(negativePoints));
+  }
+  if (boxes.length > 0) {
+    forwardFormData.append("boxes", JSON.stringify(boxes));
+  }
+  if (polygon.length > 0) {
+    forwardFormData.append("polygon", JSON.stringify(polygon));
+  }
 
   const headers: Record<string, string> = {};
   if (config.token) {
@@ -419,7 +793,7 @@ export async function POST(req: NextRequest) {
 
   let workerRes: Response;
   try {
-    workerRes = await fetch(targetUrl, {
+    workerRes = await fetch(targetWithQuery, {
       method: "POST",
       headers,
       body: forwardFormData,
@@ -534,6 +908,9 @@ export async function POST(req: NextRequest) {
       "Cache-Control": "no-store, private",
       "X-Processing-Source": "Remote Worker",
       "X-Segmentation-Model": upstreamModel,
+      "X-Selection-Mode": selectionMode,
+      "X-Refinement-Mode": workerRes.headers.get("X-Refinement-Mode") || "standard",
+      "X-Matting-Quality": workerRes.headers.get("X-Matting-Quality") || "",
       "X-Request-ID": requestId,
     },
   });
