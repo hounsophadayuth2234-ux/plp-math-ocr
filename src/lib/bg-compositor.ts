@@ -257,10 +257,35 @@ export function detectContainerAndContents(
   sourceRgba: Uint8ClampedArray | Uint8Array,
   initialMask: Uint8ClampedArray | Uint8Array,
   width: number,
-  height: number
+  height: number,
+  options?: {
+    mode?: SelectionMode;
+    conservative?: boolean;
+  }
 ): ContainerDetectionResult {
   const totalPixels = width * height;
   const isMask4Ch = initialMask.length === totalPixels * 4;
+
+  const mode = options?.mode;
+  const isConservative = options?.conservative ?? (mode === "whole_product" || !mode);
+
+  // CONSERVATIVE DEFAULT: When mode is "whole_product" or conservative is requested,
+  // NEVER classify bright or low-saturation pixels as background by color alone.
+  // The complete connected product, packaging, white lid/shell, and contents are preserved.
+  if (isConservative && mode === "whole_product") {
+    const emptyContainer = new Uint8ClampedArray(totalPixels);
+    const wholeProductMask = new Uint8ClampedArray(totalPixels);
+    for (let i = 0; i < totalPixels; i++) {
+      wholeProductMask[i] = isMask4Ch ? initialMask[i * 4 + 3] : initialMask[i];
+    }
+    return {
+      hasContainer: false,
+      boxConfidence: 0,
+      containerMask: emptyContainer,
+      contentsMask: wholeProductMask,
+      warning: undefined,
+    };
+  }
 
   let minX = width, maxX = 0, minY = height, maxY = 0;
   let fgCount = 0;
@@ -460,22 +485,24 @@ export function applyInteractivePromptsToMask(
 }
 
 /**
- * Generates a 3-class trimap from the user-confirmed selection mask.
+ * Generates a conservative 3-class trimap from the selection mask.
  * Values:
  *   0: Definite background
- *   128: Unknown boundary band (for alpha matting)
+ *   128: Unknown boundary band (for alpha matting, strictly bounded to narrow 2-8px band)
  *   255: Definite foreground
  *
- * CRITICAL CONSTRAINT:
- * Any pixel in `excludedMask` (e.g. regions removed by negative points or stripped packaging)
- * is strictly protected and NEVER assigned 128 (unknown). It remains 0 (definite background).
+ * CRITICAL SAFETY CONSTRAINTS:
+ * 1. Any pixel in `excludedMask` (e.g. regions removed by negative points) is strictly locked to 0.
+ * 2. Any pixel in `manualKeepMask` (e.g. manual Keep brush strokes) is strictly locked to 255.
+ * 3. Interior foreground pixels > radius away from background are strictly locked to 255 and NEVER assigned 128.
  */
 export function generateTrimap(
   mask: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
-  radius: number = 4,
-  excludedMask?: Uint8ClampedArray | Uint8Array | null
+  radius: number = 3,
+  excludedMask?: Uint8ClampedArray | Uint8Array | null,
+  manualKeepMask?: Uint8ClampedArray | Uint8Array | null
 ): Uint8ClampedArray {
   const totalPixels = width * height;
   const isMask4Ch = mask.length === totalPixels * 4;
@@ -483,15 +510,25 @@ export function generateTrimap(
 
   const getMaskVal = (idx: number) => (isMask4Ch ? mask[idx * 4 + 3] : mask[idx]);
   const isExcluded = (idx: number) => (excludedMask ? excludedMask[idx] > 128 : false);
+  const isManualKeep = (idx: number) => (manualKeepMask ? manualKeepMask[idx] > 128 : false);
+
+  // Safe bounded radius: 2 to 8 px
+  const safeRadius = Math.max(2, Math.min(8, Math.round(radius)));
 
   for (let y = 0; y < height; y++) {
-    const minY = Math.max(0, y - radius);
-    const maxY = Math.min(height - 1, y + radius);
+    const minY = Math.max(0, y - safeRadius);
+    const maxY = Math.min(height - 1, y + safeRadius);
 
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
 
-      // If explicitly excluded by user prompt, it remains 100% background
+      // Manual keep stroke strictly preserved as definite foreground (255)
+      if (isManualKeep(idx)) {
+        trimap[idx] = 255;
+        continue;
+      }
+
+      // Explicitly excluded pixel strictly preserved as definite background (0)
       if (isExcluded(idx)) {
         trimap[idx] = 0;
         continue;
@@ -499,11 +536,11 @@ export function generateTrimap(
 
       const centerVal = getMaskVal(idx);
 
+      const minX = Math.max(0, x - safeRadius);
+      const maxX = Math.min(width - 1, x + safeRadius);
+
       let hasFgNeighbor = false;
       let hasBgNeighbor = false;
-
-      const minX = Math.max(0, x - radius);
-      const maxX = Math.min(width - 1, x + radius);
 
       for (let ny = minY; ny <= maxY; ny++) {
         for (let nx = minX; nx <= maxX; nx++) {
@@ -517,13 +554,14 @@ export function generateTrimap(
       }
 
       if (hasFgNeighbor && hasBgNeighbor) {
-        // Unknown transition boundary
-        // But if center was completely 0 and near excluded region, keep 0
+        // Unknown transition boundary band (strictly narrow)
         trimap[idx] = 128;
       } else if (centerVal > 128) {
-        trimap[idx] = 255; // Definite foreground
+        // Definite interior foreground: NEVER eroded
+        trimap[idx] = 255;
       } else {
-        trimap[idx] = 0;   // Definite background
+        // Definite exterior background
+        trimap[idx] = 0;
       }
     }
   }
@@ -532,9 +570,10 @@ export function generateTrimap(
 }
 
 /**
- * Generates an RGBA visualizer overlay for the mask preview before export.
- * Green overlay = Kept region (mask > 128).
- * Red overlay = Removed region (mask <= 128).
+ * Generates an RGBA visualizer overlay for mask diagnostics and preview before export:
+ * • Green overlay = Definite foreground (mask > 200)
+ * • Yellow overlay = Uncertain transition edge (55 <= mask <= 200)
+ * • Red overlay = Removed background (mask < 55)
  */
 export function generateMaskOverlay(
   sourceRgba: Uint8ClampedArray | Uint8Array,
@@ -542,9 +581,11 @@ export function generateMaskOverlay(
   width: number,
   height: number,
   options?: {
-    keptColor?: [number, number, number];    // Default: [34, 197, 94] (Emerald 500)
-    removedColor?: [number, number, number]; // Default: [239, 68, 68] (Rose 500)
-    keptOpacity?: number;                    // Default: 0.4
+    keptColor?: [number, number, number];    // Default: [34, 197, 94] (Green)
+    edgeColor?: [number, number, number];    // Default: [234, 179, 8] (Yellow)
+    removedColor?: [number, number, number]; // Default: [239, 68, 68] (Red)
+    keptOpacity?: number;                    // Default: 0.45
+    edgeOpacity?: number;                    // Default: 0.50
     removedOpacity?: number;                 // Default: 0.35
   }
 ): Uint8ClampedArray {
@@ -552,9 +593,11 @@ export function generateMaskOverlay(
   const overlay = new Uint8ClampedArray(totalPixels * 4);
   const isMask4Ch = maskAlpha.length === totalPixels * 4;
 
-  const keptRgb = options?.keptColor || [34, 197, 94];
-  const removedRgb = options?.removedColor || [239, 68, 68];
-  const keptA = options?.keptOpacity ?? 0.4;
+  const keptRgb = options?.keptColor || [34, 197, 94];      // Green
+  const edgeRgb = options?.edgeColor || [234, 179, 8];      // Yellow
+  const removedRgb = options?.removedColor || [239, 68, 68];// Red
+  const keptA = options?.keptOpacity ?? 0.45;
+  const edgeA = options?.edgeOpacity ?? 0.50;
   const removedA = options?.removedOpacity ?? 0.35;
 
   for (let i = 0; i < totalPixels; i++) {
@@ -564,14 +607,20 @@ export function generateMaskOverlay(
     const b = sourceRgba[pIdx + 2];
     const a = maskAlpha ? (isMask4Ch ? maskAlpha[pIdx + 3] : maskAlpha[i]) : 255;
 
-    if (a > 128) {
-      // Kept region: blend with green
+    if (a > 200) {
+      // Definite Foreground: Green
       overlay[pIdx] = Math.round(r * (1 - keptA) + keptRgb[0] * keptA);
       overlay[pIdx + 1] = Math.round(g * (1 - keptA) + keptRgb[1] * keptA);
       overlay[pIdx + 2] = Math.round(b * (1 - keptA) + keptRgb[2] * keptA);
       overlay[pIdx + 3] = 255;
+    } else if (a >= 55) {
+      // Uncertain Edge: Yellow
+      overlay[pIdx] = Math.round(r * (1 - edgeA) + edgeRgb[0] * edgeA);
+      overlay[pIdx + 1] = Math.round(g * (1 - edgeA) + edgeRgb[1] * edgeA);
+      overlay[pIdx + 2] = Math.round(b * (1 - edgeA) + edgeRgb[2] * edgeA);
+      overlay[pIdx + 3] = 255;
     } else {
-      // Removed region: blend with red / checkerboard
+      // Removed Background: Red
       overlay[pIdx] = Math.round(r * (1 - removedA) + removedRgb[0] * removedA);
       overlay[pIdx + 1] = Math.round(g * (1 - removedA) + removedRgb[1] * removedA);
       overlay[pIdx + 2] = Math.round(b * (1 - removedA) + removedRgb[2] * removedA);
@@ -584,18 +633,36 @@ export function generateMaskOverlay(
 
 /**
  * Fast client-side Edge-Aware Guided Filter for Browser AI local fallback mode.
- * Refines boundary transitions in the unknown trimap zone (128) using source RGB edges.
+ * Refines boundary transitions ONLY in the unknown trimap zone (128).
+ *
+ * Guarantees:
+ * - Never modifies definite foreground (255) or definite background (0).
+ * - Enforces an alpha floor (default >= 0.95) for initial foreground pixels touching the edge.
+ * - Respects manual keep strokes unconditionally.
  */
 export function refineMaskWithGuidedFilter(
   sourceRgba: Uint8ClampedArray | Uint8Array,
   trimap: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
-  radius: number = 4,
-  eps: number = 1e-4
+  radius: number = 3,
+  eps: number = 1e-4,
+  options?: {
+    initialMask?: Uint8ClampedArray | Uint8Array | null;
+    manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
+    alphaFloor?: number; // default 0.95 (242) for interior definite foreground
+  }
 ): Uint8ClampedArray {
   const totalPixels = width * height;
   const refinedAlpha = new Uint8ClampedArray(totalPixels);
+  const safeRadius = Math.max(2, Math.min(8, Math.round(radius)));
+  const minAlphaFloor = Math.round(255 * (options?.alphaFloor ?? 0.95));
+
+  const isInit4Ch = options?.initialMask ? options.initialMask.length === totalPixels * 4 : false;
+  const getInitVal = (idx: number) => {
+    if (!options?.initialMask) return 0;
+    return isInit4Ch ? options.initialMask[idx * 4 + 3] : options.initialMask[idx];
+  };
 
   // Convert RGB to grayscale guide [0..1]
   const guide = new Float32Array(totalPixels);
@@ -604,13 +671,20 @@ export function refineMaskWithGuidedFilter(
     guide[i] = (0.299 * sourceRgba[pIdx] + 0.587 * sourceRgba[pIdx + 1] + 0.114 * sourceRgba[pIdx + 2]) / 255.0;
   }
 
-  // Pure mathematical guided filter over unknown band
+  // Refine ONLY pixels in unknown band (128). Never touch 255 or 0!
   for (let y = 0; y < height; y++) {
-    const minY = Math.max(0, y - radius);
-    const maxY = Math.min(height - 1, y + radius);
+    const minY = Math.max(0, y - safeRadius);
+    const maxY = Math.min(height - 1, y + safeRadius);
 
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
+
+      // Manual keep is strictly locked to 255
+      if (options?.manualKeepMask && options.manualKeepMask[idx] > 128) {
+        refinedAlpha[idx] = 255;
+        continue;
+      }
+
       const tVal = trimap[idx];
 
       if (tVal === 255) {
@@ -623,8 +697,8 @@ export function refineMaskWithGuidedFilter(
       }
 
       // Inside unknown band (128): compute local guided statistics
-      const minX = Math.max(0, x - radius);
-      const maxX = Math.min(width - 1, x + radius);
+      const minX = Math.max(0, x - safeRadius);
+      const maxX = Math.min(width - 1, x + safeRadius);
 
       let sumGuide = 0;
       let sumGuideSq = 0;
@@ -654,10 +728,370 @@ export function refineMaskWithGuidedFilter(
       const aCoeff = covGA / (varG + eps);
       const bCoeff = meanA - aCoeff * meanG;
 
-      const outA = Math.max(0, Math.min(1, aCoeff * guide[idx] + bCoeff));
-      refinedAlpha[idx] = Math.round(outA * 255);
+      let outA = Math.max(0, Math.min(1, aCoeff * guide[idx] + bCoeff));
+      let outByte = Math.round(outA * 255);
+
+      // If this pixel was strong foreground (> 200) in initial mask, enforce alpha floor
+      if (getInitVal(idx) > 200) {
+        outByte = Math.max(minAlphaFloor, outByte);
+      }
+
+      refinedAlpha[idx] = outByte;
     }
   }
 
   return refinedAlpha;
+}
+
+export interface MaskDiagnostics {
+  initialForegroundArea: number;
+  refinedForegroundArea: number;
+  areaRetentionRatio: number;
+  removedAreaPercentage: number;
+  connectedComponentCount: number;
+  largestComponentArea: number;
+  boundingBox: {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+    width: number;
+    height: number;
+  };
+  boundingBoxArea: number;
+  interiorHoleCount: number;
+  isAreaDropExcessive: boolean;
+  warning?: string;
+  rollbackTriggered: boolean;
+}
+
+/**
+ * Computes deep mask diagnostics before export:
+ * - Foreground area before and after refinement
+ * - Percentage of alpha pixels removed by refinement
+ * - Connected-component count (components > 20px)
+ * - Bounding box area and dimensions
+ * - Largest component area
+ * - Number of large interior holes (> 50px)
+ * - Automated safety threshold: triggers rollback when refined area < 80% of initial area
+ */
+export function computeMaskDiagnostics(
+  initialMask: Uint8ClampedArray | Uint8Array,
+  refinedMask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  maxDropRatio: number = 0.20
+): MaskDiagnostics {
+  const totalPixels = width * height;
+  const isInit4Ch = initialMask.length === totalPixels * 4;
+  const isRef4Ch = refinedMask.length === totalPixels * 4;
+
+  let initialArea = 0;
+  let refinedArea = 0;
+  let minX = width;
+  let maxX = 0;
+  let minY = height;
+  let maxY = 0;
+
+  for (let y = 0; y < height; y++) {
+    const yOff = y * width;
+    for (let x = 0; x < width; x++) {
+      const idx = yOff + x;
+      const initA = isInit4Ch ? initialMask[idx * 4 + 3] : initialMask[idx];
+      const refA = isRef4Ch ? refinedMask[idx * 4 + 3] : refinedMask[idx];
+
+      if (initA > 128) {
+        initialArea++;
+      }
+      if (refA > 128) {
+        refinedArea++;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // If refined is empty but initial had pixels, use initial bounding box
+  if (minX > maxX || minY > maxY) {
+    minX = 0;
+    maxX = 0;
+    minY = 0;
+    maxY = 0;
+  }
+  const bbW = maxX >= minX ? maxX - minX + 1 : 0;
+  const bbH = maxY >= minY ? maxY - minY + 1 : 0;
+  const boundingBoxArea = bbW * bbH;
+
+  const areaRetentionRatio = initialArea > 0 ? refinedArea / initialArea : 1.0;
+  const removedAreaPercentage =
+    initialArea > 0 ? Math.round(Math.max(0, (1 - areaRetentionRatio) * 100) * 100) / 100 : 0;
+
+  // 1. Connected Components of refined foreground (> 128) using flood fill
+  const visited = new Uint8Array(totalPixels);
+  let connectedComponentCount = 0;
+  let largestComponentArea = 0;
+
+  const queue = new Int32Array(totalPixels);
+
+  for (let i = 0; i < totalPixels; i++) {
+    const a = isRef4Ch ? refinedMask[i * 4 + 3] : refinedMask[i];
+    if (a > 128 && visited[i] === 0) {
+      let head = 0;
+      let tail = 0;
+      queue[tail++] = i;
+      visited[i] = 1;
+      let compSize = 0;
+
+      while (head < tail) {
+        const cur = queue[head++];
+        compSize++;
+        const cy = Math.floor(cur / width);
+        const cx = cur % width;
+
+        // 4 neighbors
+        if (cx > 0) {
+          const left = cur - 1;
+          const leftA = isRef4Ch ? refinedMask[left * 4 + 3] : refinedMask[left];
+          if (leftA > 128 && visited[left] === 0) {
+            visited[left] = 1;
+            queue[tail++] = left;
+          }
+        }
+        if (cx < width - 1) {
+          const right = cur + 1;
+          const rightA = isRef4Ch ? refinedMask[right * 4 + 3] : refinedMask[right];
+          if (rightA > 128 && visited[right] === 0) {
+            visited[right] = 1;
+            queue[tail++] = right;
+          }
+        }
+        if (cy > 0) {
+          const top = cur - width;
+          const topA = isRef4Ch ? refinedMask[top * 4 + 3] : refinedMask[top];
+          if (topA > 128 && visited[top] === 0) {
+            visited[top] = 1;
+            queue[tail++] = top;
+          }
+        }
+        if (cy < height - 1) {
+          const bottom = cur + width;
+          const bottomA = isRef4Ch ? refinedMask[bottom * 4 + 3] : refinedMask[bottom];
+          if (bottomA > 128 && visited[bottom] === 0) {
+            visited[bottom] = 1;
+            queue[tail++] = bottom;
+          }
+        }
+      }
+
+      if (compSize > 20) {
+        connectedComponentCount++;
+        if (compSize > largestComponentArea) {
+          largestComponentArea = compSize;
+        }
+      }
+    }
+  }
+
+  // 2. Interior holes: Background pixels (<= 128) that are NOT reachable from outer image borders
+  const exteriorBg = new Uint8Array(totalPixels);
+  let head = 0;
+  let tail = 0;
+
+  // Enqueue all outer border background pixels
+  for (let x = 0; x < width; x++) {
+    const topIdx = x;
+    const botIdx = (height - 1) * width + x;
+    const topA = isRef4Ch ? refinedMask[topIdx * 4 + 3] : refinedMask[topIdx];
+    const botA = isRef4Ch ? refinedMask[botIdx * 4 + 3] : refinedMask[botIdx];
+    if (topA <= 128 && exteriorBg[topIdx] === 0) {
+      exteriorBg[topIdx] = 1;
+      queue[tail++] = topIdx;
+    }
+    if (botA <= 128 && exteriorBg[botIdx] === 0) {
+      exteriorBg[botIdx] = 1;
+      queue[tail++] = botIdx;
+    }
+  }
+  for (let y = 0; y < height; y++) {
+    const leftIdx = y * width;
+    const rightIdx = y * width + (width - 1);
+    const leftA = isRef4Ch ? refinedMask[leftIdx * 4 + 3] : refinedMask[leftIdx];
+    const rightA = isRef4Ch ? refinedMask[rightIdx * 4 + 3] : refinedMask[rightIdx];
+    if (leftA <= 128 && exteriorBg[leftIdx] === 0) {
+      exteriorBg[leftIdx] = 1;
+      queue[tail++] = leftIdx;
+    }
+    if (rightA <= 128 && exteriorBg[rightIdx] === 0) {
+      exteriorBg[rightIdx] = 1;
+      queue[tail++] = rightIdx;
+    }
+  }
+
+  while (head < tail) {
+    const cur = queue[head++];
+    const cy = Math.floor(cur / width);
+    const cx = cur % width;
+
+    if (cx > 0) {
+      const left = cur - 1;
+      const leftA = isRef4Ch ? refinedMask[left * 4 + 3] : refinedMask[left];
+      if (leftA <= 128 && exteriorBg[left] === 0) {
+        exteriorBg[left] = 1;
+        queue[tail++] = left;
+      }
+    }
+    if (cx < width - 1) {
+      const right = cur + 1;
+      const rightA = isRef4Ch ? refinedMask[right * 4 + 3] : refinedMask[right];
+      if (rightA <= 128 && exteriorBg[right] === 0) {
+        exteriorBg[right] = 1;
+        queue[tail++] = right;
+      }
+    }
+    if (cy > 0) {
+      const top = cur - width;
+      const topA = isRef4Ch ? refinedMask[top * 4 + 3] : refinedMask[top];
+      if (topA <= 128 && exteriorBg[top] === 0) {
+        exteriorBg[top] = 1;
+        queue[tail++] = top;
+      }
+    }
+    if (cy < height - 1) {
+      const bottom = cur + width;
+      const bottomA = isRef4Ch ? refinedMask[bottom * 4 + 3] : refinedMask[bottom];
+      if (bottomA <= 128 && exteriorBg[bottom] === 0) {
+        exteriorBg[bottom] = 1;
+        queue[tail++] = bottom;
+      }
+    }
+  }
+
+  // Any background pixel (<= 128) where exteriorBg[i] === 0 is an interior hole!
+  const holeVisited = new Uint8Array(totalPixels);
+  let interiorHoleCount = 0;
+
+  for (let i = 0; i < totalPixels; i++) {
+    const a = isRef4Ch ? refinedMask[i * 4 + 3] : refinedMask[i];
+    if (a <= 128 && exteriorBg[i] === 0 && holeVisited[i] === 0) {
+      head = 0;
+      tail = 0;
+      queue[tail++] = i;
+      holeVisited[i] = 1;
+      let holeSize = 0;
+
+      while (head < tail) {
+        const cur = queue[head++];
+        holeSize++;
+        const cy = Math.floor(cur / width);
+        const cx = cur % width;
+
+        if (cx > 0) {
+          const left = cur - 1;
+          const leftA = isRef4Ch ? refinedMask[left * 4 + 3] : refinedMask[left];
+          if (leftA <= 128 && exteriorBg[left] === 0 && holeVisited[left] === 0) {
+            holeVisited[left] = 1;
+            queue[tail++] = left;
+          }
+        }
+        if (cx < width - 1) {
+          const right = cur + 1;
+          const rightA = isRef4Ch ? refinedMask[right * 4 + 3] : refinedMask[right];
+          if (rightA <= 128 && exteriorBg[right] === 0 && holeVisited[right] === 0) {
+            holeVisited[right] = 1;
+            queue[tail++] = right;
+          }
+        }
+        if (cy > 0) {
+          const top = cur - width;
+          const topA = isRef4Ch ? refinedMask[top * 4 + 3] : refinedMask[top];
+          if (topA <= 128 && exteriorBg[top] === 0 && holeVisited[top] === 0) {
+            holeVisited[top] = 1;
+            queue[tail++] = top;
+          }
+        }
+        if (cy < height - 1) {
+          const bottom = cur + width;
+          const bottomA = isRef4Ch ? refinedMask[bottom * 4 + 3] : refinedMask[bottom];
+          if (bottomA <= 128 && exteriorBg[bottom] === 0 && holeVisited[bottom] === 0) {
+            holeVisited[bottom] = 1;
+            queue[tail++] = bottom;
+          }
+        }
+      }
+
+      if (holeSize > 50) {
+        interiorHoleCount++;
+      }
+    }
+  }
+
+  // 3. Excessive drop check: If refined area dropped by more than maxDropRatio (e.g. 20%)
+  const isAreaDropExcessive = initialArea > 100 && areaRetentionRatio < (1 - maxDropRatio);
+  const rollbackTriggered = isAreaDropExcessive;
+  let warning: string | undefined = undefined;
+
+  if (rollbackTriggered) {
+    warning = `⚠️ Refinement removed ${removedAreaPercentage.toFixed(1)}% of foreground (> 20%). Automatic safety rollback engaged to prevent over-cutting white lids/boxes.`;
+  }
+
+  return {
+    initialForegroundArea: initialArea,
+    refinedForegroundArea: refinedArea,
+    areaRetentionRatio,
+    removedAreaPercentage,
+    connectedComponentCount,
+    largestComponentArea,
+    boundingBox: {
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: bbW,
+      height: bbH,
+    },
+    boundingBoxArea,
+    interiorHoleCount,
+    isAreaDropExcessive,
+    warning,
+    rollbackTriggered,
+  };
+}
+
+/**
+ * Validates refined mask against initial mask. If area drop exceeds maxDropRatio (20%),
+ * automatically reverts to initial mask to ensure white lids/shells are never lost.
+ */
+export function applyAreaSafetyCheck(
+  initialMask: Uint8ClampedArray | Uint8Array,
+  refinedMask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  maxDropRatio: number = 0.20
+): {
+  safeMask: Uint8ClampedArray;
+  diagnostics: MaskDiagnostics;
+  rollbackTriggered: boolean;
+} {
+  const diagnostics = computeMaskDiagnostics(
+    initialMask,
+    refinedMask,
+    width,
+    height,
+    maxDropRatio
+  );
+
+  let safeMask: Uint8ClampedArray;
+  if (diagnostics.rollbackTriggered) {
+    safeMask = new Uint8ClampedArray(initialMask);
+  } else {
+    safeMask = new Uint8ClampedArray(refinedMask);
+  }
+
+  return {
+    safeMask,
+    diagnostics,
+    rollbackTriggered: Boolean(diagnostics.rollbackTriggered),
+  };
 }

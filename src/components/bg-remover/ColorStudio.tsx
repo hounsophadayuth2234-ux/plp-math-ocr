@@ -28,6 +28,8 @@ import {
   createAlphaMaskDataUrl,
   recompositeAlphaMask,
   exportAtFullResolution,
+  refineAlphaMattingWithMask,
+  BgRemovalOutput,
 } from "@/lib/bg-removal-client";
 import {
   generateExportFilename,
@@ -35,6 +37,9 @@ import {
   generateTrimap,
   generateMaskOverlay,
   refineMaskWithGuidedFilter,
+  computeMaskDiagnostics,
+  applyAreaSafetyCheck,
+  MaskDiagnostics,
   SelectionMode,
 } from "@/lib/bg-compositor";
 import { cyberAudio } from "@/lib/cyber-audio";
@@ -45,6 +50,8 @@ export type ViewChannel =
   | "white"
   | "pink"
   | "transparent"
+  | "initial_mask"
+  | "refined_mask"
   | "mask"
   | "overlay"
   | "original"
@@ -83,6 +90,10 @@ interface ColorStudioProps {
     refineMs?: number;
     totalMs?: number;
   };
+  diagnostics?: MaskDiagnostics;
+  rollbackTriggered?: boolean;
+  previousResult?: BgRemovalOutput | null;
+  onRestorePreviousResult?: () => void;
   onReset: () => void;
   onRerunFinal?: (targetMaxDim?: number) => void;
   isProcessingFinal?: boolean;
@@ -112,6 +123,10 @@ export function ColorStudio({
   provider = "@imgly/isnet_fp16",
   processingLabel = "Browser AI result",
   metrics,
+  diagnostics,
+  rollbackTriggered,
+  previousResult,
+  onRestorePreviousResult,
   onReset,
   onRerunFinal,
   isProcessingFinal = false,
@@ -124,9 +139,32 @@ export function ColorStudio({
   const [containerWarning, setContainerWarning] = useState<string | null>(null);
   const [isConfirmed, setIsConfirmed] = useState(workflowStep === "ready");
 
+  // ── Safety & Diagnostics State ──
+  const [localDiagnostics, setLocalDiagnostics] = useState<MaskDiagnostics | null>(diagnostics || null);
+  const [rollbackBanner, setRollbackBanner] = useState<string | null>(
+    rollbackTriggered
+      ? diagnostics?.warning ||
+        "⚠️ Refinement removed > 20% of foreground. Automatic safety rollback engaged to prevent over-cutting white lids/boxes."
+      : null
+  );
+  const [initialAlphaMaskDataUrl, setInitialAlphaMaskDataUrl] = useState<string>(initialAlphaMaskUrl || "");
+  const [maskOverlayDataUrl, setMaskOverlayDataUrl] = useState<string>("");
+
   useEffect(() => {
     setIsConfirmed(workflowStep === "ready");
   }, [workflowStep]);
+
+  useEffect(() => {
+    if (diagnostics) {
+      setLocalDiagnostics(diagnostics);
+      if (diagnostics.rollbackTriggered) {
+        setRollbackBanner(
+          diagnostics.warning ||
+            `⚠️ Refinement removed ${diagnostics.removedAreaPercentage.toFixed(1)}% of foreground (> 20%). Automatic safety rollback engaged to prevent over-cutting white lids/boxes.`
+        );
+      }
+    }
+  }, [diagnostics]);
 
   // ── Channel & Preview State (Default to user's selected purpose) ──
   const [activeChannel, setActiveChannel] = useState<ViewChannel>(initialPurpose || "white");
@@ -160,6 +198,8 @@ export function ColorStudio({
   const committedAlphaMaskRef = useRef<Uint8ClampedArray | null>(null);
   // Optional excluded mask (e.g. stripped cardboard box) to prevent trimap bleed
   const excludedMaskRef = useRef<Uint8ClampedArray | null>(null);
+  // User's manual keep strokes strictly preserved
+  const manualKeepMaskRef = useRef<Uint8ClampedArray | null>(null);
 
   // Undo / Redo stacks (Limited to MAX_HISTORY_STATES)
   const [history, setHistory] = useState<Uint8ClampedArray[]>([]);
@@ -175,10 +215,29 @@ export function ColorStudio({
   // Initialize in-memory grayscale alpha mask buffers
   useEffect(() => {
     const totalPixels = width * height;
+    manualKeepMaskRef.current = new Uint8ClampedArray(totalPixels);
+
     if (initialAlphaBuffer && initialAlphaBuffer.length === totalPixels) {
       alphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
       baseAlphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
       committedAlphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
+
+      const initMaskUrl = createAlphaMaskDataUrl(initialAlphaBuffer, width, height);
+      setInitialAlphaMaskDataUrl(initMaskUrl);
+
+      if (sourceImageData) {
+        const overlayPixels = generateMaskOverlay(sourceImageData.data, initialAlphaBuffer, width, height);
+        const c = document.createElement("canvas");
+        c.width = width;
+        c.height = height;
+        const cCtx = c.getContext("2d");
+        if (cCtx) {
+          const id = cCtx.createImageData(width, height);
+          id.data.set(overlayPixels);
+          cCtx.putImageData(id, 0, 0);
+          setMaskOverlayDataUrl(c.toDataURL("image/png"));
+        }
+      }
     } else {
       // Fallback: extract alpha from transparentBlob
       const canvas = document.createElement("canvas");
@@ -197,6 +256,8 @@ export function ColorStudio({
           alphaMaskRef.current = buf;
           baseAlphaMaskRef.current = new Uint8ClampedArray(buf);
           committedAlphaMaskRef.current = new Uint8ClampedArray(buf);
+          const initMaskUrl = createAlphaMaskDataUrl(buf, width, height);
+          setInitialAlphaMaskDataUrl(initMaskUrl);
         }
       };
       img.src = transparentUrl;
@@ -233,8 +294,9 @@ export function ColorStudio({
       alphaMaskRef.current = null;
       baseAlphaMaskRef.current = null;
       committedAlphaMaskRef.current = null;
+      manualKeepMaskRef.current = null;
     };
-  }, [initialAlphaBuffer, transparentUrl, width, height]);
+  }, [initialAlphaBuffer, transparentUrl, width, height, sourceImageData]);
 
   // Pre-generate initial pink composite
   useEffect(() => {
@@ -256,8 +318,13 @@ export function ColorStudio({
         return pinkCompositeUrl || initialCompositeUrl;
       case "transparent":
         return currentTransparentUrl || transparentUrl;
+      case "initial_mask":
+        return initialAlphaMaskDataUrl || currentAlphaMaskUrl || transparentUrl;
+      case "refined_mask":
       case "mask":
         return currentAlphaMaskUrl || initialAlphaMaskUrl || transparentUrl;
+      case "overlay":
+        return maskOverlayDataUrl || currentTransparentUrl || transparentUrl;
       case "original":
         return originalUrl;
       default:
@@ -269,8 +336,10 @@ export function ColorStudio({
     pinkCompositeUrl,
     currentTransparentUrl,
     transparentUrl,
+    initialAlphaMaskDataUrl,
     currentAlphaMaskUrl,
     initialAlphaMaskUrl,
+    maskOverlayDataUrl,
     initialCompositeUrl,
     originalUrl,
   ]);
@@ -303,6 +372,30 @@ export function ColorStudio({
         // Alpha Mask Debug visualizer (pure 8-bit black-and-white)
         const maskDebugUrl = createAlphaMaskDataUrl(mask, width, height);
         setCurrentAlphaMaskUrl(maskDebugUrl);
+
+        // 3-Color Mask Diagnostics Overlay (Green=Foreground, Yellow=Edge, Red=Background)
+        const overlayPixels = generateMaskOverlay(sourceImageData.data, mask, width, height);
+        const overlayCanvas = document.createElement("canvas");
+        overlayCanvas.width = width;
+        overlayCanvas.height = height;
+        const oCtx = overlayCanvas.getContext("2d");
+        if (oCtx) {
+          const oImg = oCtx.createImageData(width, height);
+          oImg.data.set(overlayPixels);
+          oCtx.putImageData(oImg, 0, 0);
+          setMaskOverlayDataUrl(overlayCanvas.toDataURL("image/png"));
+        }
+
+        // Live mask diagnostics update
+        if (baseAlphaMaskRef.current) {
+          const diag = computeMaskDiagnostics(baseAlphaMaskRef.current, mask, width, height, 0.20);
+          setLocalDiagnostics(diag);
+          if (diag.rollbackTriggered) {
+            setRollbackBanner(diag.warning || "Automatic safety rollback engaged to prevent over-cutting white lids/boxes.");
+          } else {
+            setRollbackBanner(null);
+          }
+        }
       } catch (err) {
         console.error("Recompositing error:", err);
       } finally {
@@ -327,6 +420,7 @@ export function ColorStudio({
     }
 
     const mask = alphaMaskRef.current;
+    const baseMask = baseAlphaMaskRef.current;
     const sPixels = sourceImageData.data;
     const imgData = ctx.createImageData(w, h);
     const data = imgData.data;
@@ -339,7 +433,13 @@ export function ColorStudio({
       const g = sPixels[pIdx + 1];
       const b = sPixels[pIdx + 2];
 
-      if (activeChannel === "mask") {
+      if (activeChannel === "initial_mask") {
+        const initA = baseMask ? baseMask[i] : a;
+        data[pIdx] = initA;
+        data[pIdx + 1] = initA;
+        data[pIdx + 2] = initA;
+        data[pIdx + 3] = 255;
+      } else if (activeChannel === "mask" || activeChannel === "refined_mask") {
         // Pure grayscale mask visualizer: Black = 0 (background), White = 255 (foreground), Gray = boundary
         data[pIdx] = a;
         data[pIdx + 1] = a;
@@ -357,10 +457,19 @@ export function ColorStudio({
         data[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
         data[pIdx + 3] = 255;
       } else if (activeChannel === "overlay") {
-        if (a > 128) {
-          data[pIdx] = Math.round(r * 0.6 + 34 * 0.4);
-          data[pIdx + 1] = Math.round(g * 0.6 + 197 * 0.4);
-          data[pIdx + 2] = Math.round(b * 0.6 + 94 * 0.4);
+        // 3-color diagnostic overlay:
+        // Green: Definite Foreground (a > 200)
+        // Yellow: Uncertain Boundary Edge (55 <= a <= 200)
+        // Red: Removed Background (a < 55)
+        if (a > 200) {
+          data[pIdx] = Math.round(r * 0.55 + 34 * 0.45);
+          data[pIdx + 1] = Math.round(g * 0.55 + 197 * 0.45);
+          data[pIdx + 2] = Math.round(b * 0.55 + 94 * 0.45);
+          data[pIdx + 3] = 255;
+        } else if (a >= 55) {
+          data[pIdx] = Math.round(r * 0.50 + 234 * 0.50);
+          data[pIdx + 1] = Math.round(g * 0.50 + 179 * 0.50);
+          data[pIdx + 2] = Math.round(b * 0.50 + 8 * 0.50);
           data[pIdx + 3] = 255;
         } else {
           data[pIdx] = Math.round(r * 0.65 + 239 * 0.35);
@@ -422,7 +531,13 @@ export function ColorStudio({
           const g = sPixels[pIdx + 1];
           const b = sPixels[pIdx + 2];
 
-          if (activeChannel === "mask") {
+          if (activeChannel === "initial_mask") {
+            const initA = baseAlphaMaskRef.current ? baseAlphaMaskRef.current[i] : a;
+            data[dIdx] = initA;
+            data[dIdx + 1] = initA;
+            data[dIdx + 2] = initA;
+            data[dIdx + 3] = 255;
+          } else if (activeChannel === "mask" || activeChannel === "refined_mask") {
             data[dIdx] = a;
             data[dIdx + 1] = a;
             data[dIdx + 2] = a;
@@ -439,10 +554,15 @@ export function ColorStudio({
             data[dIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
             data[dIdx + 3] = 255;
           } else if (activeChannel === "overlay") {
-            if (a > 128) {
-              data[dIdx] = Math.round(r * 0.6 + 34 * 0.4);
-              data[dIdx + 1] = Math.round(g * 0.6 + 197 * 0.4);
-              data[dIdx + 2] = Math.round(b * 0.6 + 94 * 0.4);
+            if (a > 200) {
+              data[dIdx] = Math.round(r * 0.55 + 34 * 0.45);
+              data[dIdx + 1] = Math.round(g * 0.55 + 197 * 0.45);
+              data[dIdx + 2] = Math.round(b * 0.55 + 94 * 0.45);
+              data[dIdx + 3] = 255;
+            } else if (a >= 55) {
+              data[dIdx] = Math.round(r * 0.50 + 234 * 0.50);
+              data[dIdx + 1] = Math.round(g * 0.50 + 179 * 0.50);
+              data[dIdx + 2] = Math.round(b * 0.50 + 8 * 0.50);
               data[dIdx + 3] = 255;
             } else {
               data[dIdx] = Math.round(r * 0.65 + 239 * 0.35);
@@ -548,9 +668,15 @@ export function ColorStudio({
             if (tool === "keep") {
               // Keep Brush: Paints white (255) onto the mask, restoring foreground areas
               mask[idx] = Math.round(currentAlpha + (255 - currentAlpha) * weight);
+              if (manualKeepMaskRef.current && weight > 0.5) {
+                manualKeepMaskRef.current[idx] = 255;
+              }
             } else if (tool === "remove") {
               // Remove Brush: Paints black (0) onto the mask, removing unwanted background
               mask[idx] = Math.round(currentAlpha * (1 - weight));
+              if (manualKeepMaskRef.current && weight > 0.5) {
+                manualKeepMaskRef.current[idx] = 0;
+              }
             } else if (tool === "soft") {
               // Soft Edge Brush: Paints semi-transparent feathering (~128) with smooth radial gradient
               const targetVal = 128;
@@ -561,12 +687,21 @@ export function ColorStudio({
                 const baseVal = baseMask[idx];
                 mask[idx] = Math.round(currentAlpha + (baseVal - currentAlpha) * weight);
               }
+              if (manualKeepMaskRef.current) {
+                manualKeepMaskRef.current[idx] = 0;
+              }
             } else if (tool === "positive_point") {
               // Positive Click: stamps solid opaque (255) onto mask
               mask[idx] = 255;
+              if (manualKeepMaskRef.current) {
+                manualKeepMaskRef.current[idx] = 255;
+              }
             } else if (tool === "negative_point") {
               // Negative Click: stamps solid background (0) onto mask
               mask[idx] = 0;
+              if (manualKeepMaskRef.current) {
+                manualKeepMaskRef.current[idx] = 0;
+              }
             }
           }
         }
@@ -781,9 +916,26 @@ export function ColorStudio({
     setIsDirty(false);
     alphaMaskRef.current.set(baseAlphaMaskRef.current);
     committedAlphaMaskRef.current = new Uint8ClampedArray(baseAlphaMaskRef.current);
+    if (manualKeepMaskRef.current) {
+      manualKeepMaskRef.current.fill(0);
+    }
     redrawCanvas();
     await recompositeAll(alphaMaskRef.current);
   }, [saveSnapshotToHistory, redrawCanvas, recompositeAll]);
+
+  // "Use Original Image": Completely keeps original image (mask filled with 255)
+  const handleUseOriginalImage = useCallback(async () => {
+    if (!alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    alphaMaskRef.current.fill(255);
+    if (manualKeepMaskRef.current) {
+      manualKeepMaskRef.current.fill(255);
+    }
+    await recompositeAll(alphaMaskRef.current);
+    redrawCanvas();
+    setIsDirty(true);
+  }, [saveSnapshotToHistory, recompositeAll, redrawCanvas]);
 
   // Switch Selection Mode (whole_product, contents_only, custom, box_polygon)
   const handleSwitchSelectionMode = useCallback(
@@ -800,14 +952,15 @@ export function ColorStudio({
           sourceImageData.data,
           baseAlphaMaskRef.current,
           width,
-          height
+          height,
+          { mode: "contents_only", conservative: false }
         );
         if (res.hasContainer) {
           alphaMaskRef.current.set(res.contentsMask);
           excludedMaskRef.current = res.containerMask;
           setContainerWarning(
             res.warning ||
-              "⚠️ Box/container detected. In 'Keep Contents Only' mode, the packaging is stripped."
+              "⚠️ [BETA - EXPERIMENTAL] Cardboard box detected. In 'Keep Contents Only' mode, outer packaging is stripped."
           );
         } else {
           excludedMaskRef.current = null;
@@ -832,7 +985,7 @@ export function ColorStudio({
     [sourceImageData, width, height, saveSnapshotToHistory, recompositeAll, redrawCanvas]
   );
 
-  // Confirm Mask & Run Alpha Matting Refinement
+  // Confirm Mask & Run Alpha Matting Refinement with Automated Safety Check
   const handleConfirmMaskAndExport = useCallback(async () => {
     if (!alphaMaskRef.current || !sourceImageData) return;
     cyberAudio.playShutter();
@@ -842,16 +995,28 @@ export function ColorStudio({
       if (onConfirmMask) {
         onConfirmMask(alphaMaskRef.current);
       }
-      const trimap = generateTrimap(alphaMaskRef.current, width, height, 4, excludedMaskRef.current);
-      const refinedAlpha = refineMaskWithGuidedFilter(
-        sourceImageData.data,
-        trimap,
-        width,
-        height,
-        4
+      const initialMask = baseAlphaMaskRef.current || alphaMaskRef.current;
+      const refinedOutput = await refineAlphaMattingWithMask(
+        sourceImageData,
+        alphaMaskRef.current,
+        excludedMaskRef.current,
+        {
+          initialMask,
+          manualKeepMask: manualKeepMaskRef.current,
+          maxDropRatio: 0.20,
+        }
       );
-      alphaMaskRef.current.set(refinedAlpha);
-      await recompositeAll(refinedAlpha);
+      alphaMaskRef.current.set(refinedOutput.alphaMaskBuffer);
+      setLocalDiagnostics(refinedOutput.diagnostics || null);
+      if (refinedOutput.rollbackTriggered) {
+        setRollbackBanner(
+          refinedOutput.diagnostics?.warning ||
+            `⚠️ Refinement removed ${refinedOutput.diagnostics?.removedAreaPercentage.toFixed(1)}% of foreground (> 20%). Automatic safety rollback engaged to prevent over-cutting white lids/boxes.`
+        );
+      } else {
+        setRollbackBanner(null);
+      }
+      await recompositeAll(refinedOutput.alphaMaskBuffer);
       redrawCanvas();
       cyberAudio.playMetallicDing();
     } catch (e) {
@@ -859,7 +1024,7 @@ export function ColorStudio({
     } finally {
       setIsCompositing(false);
     }
-  }, [sourceImageData, width, height, onConfirmMask, recompositeAll, redrawCanvas]);
+  }, [sourceImageData, onConfirmMask, recompositeAll, redrawCanvas]);
 
   // 1-Click Download for active preview channel or forced specific purpose
   const handleDownload = useCallback(async (forcedChannel?: ViewChannel) => {
@@ -1045,6 +1210,146 @@ export function ColorStudio({
           ℹ️ កម្រិតរូបភាពត្រូវបានកំណត់ត្រឹម {Math.max(width, height)}px សម្រាប់ដំណើរការ AI ក្នុង Browser ដើម្បីរក្សាស្ថិរភាព។ ការទាញយកនឹងរក្សាភាពច្បាស់ពេញលេញ។
         </div>
       )}
+
+      {/* ── Rollback Warning Banner if Foreground Area Drop > 20% ── */}
+      {rollbackBanner && (
+        <div
+          data-testid="rollback-banner"
+          className="flex items-start gap-3 p-3.5 border-2 border-amber-500 bg-amber-950/80 text-amber-200 font-mono shadow-[0_0_20px_rgba(245,158,11,0.3)] animate-pulse"
+        >
+          <span className="text-amber-400 text-lg">⚠️</span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-amber-300 uppercase tracking-wider text-xs">
+                [ROLLBACK ENGAGED - CONSERVATIVE RESTORED]
+              </span>
+              <span className="text-[10px] bg-amber-900/90 text-amber-200 px-1.5 py-0.5 border border-amber-400 font-bold">
+                SAFETY THRESHOLD EXCEEDED (&gt;20% DROP)
+              </span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-amber-100 font-mono">
+              {rollbackBanner}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mask Diagnostics HUD Panel ── */}
+      {localDiagnostics && (
+        <div
+          data-testid="mask-diagnostics-panel"
+          className="rounded-none border border-slate-800 bg-slate-950/90 p-3 space-y-2 text-xs font-mono"
+        >
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+            <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px]">
+              {"// MASK DIAGNOSTICS & SAFETY TELEMETRY"}
+            </span>
+            <span
+              className={`text-[9px] px-2 py-0.5 font-bold uppercase ${
+                localDiagnostics.rollbackTriggered
+                  ? "bg-amber-950 border border-amber-500 text-amber-300"
+                  : "bg-emerald-950 border border-emerald-500 text-emerald-300"
+              }`}
+            >
+              {localDiagnostics.rollbackTriggered ? "ROLLBACK ENGAGED" : "SAFETY PASS"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px]">
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">INITIAL AREA</div>
+              <div className="font-bold text-slate-200">{localDiagnostics.initialForegroundArea.toLocaleString()} px</div>
+            </div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">REFINED AREA</div>
+              <div className="font-bold text-slate-200">{localDiagnostics.refinedForegroundArea.toLocaleString()} px</div>
+            </div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">AREA RETENTION</div>
+              <div className={`font-bold ${(localDiagnostics.areaRetentionRatio < 0.8) ? "text-amber-400" : "text-emerald-400"}`}>
+                {(localDiagnostics.areaRetentionRatio * 100).toFixed(1)}%
+              </div>
+            </div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">REMOVED RATIO</div>
+              <div className="font-bold text-slate-200">{localDiagnostics.removedAreaPercentage.toFixed(1)}%</div>
+            </div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">COMPONENTS (&gt;20px)</div>
+              <div className="font-bold text-cyan-300">{localDiagnostics.connectedComponentCount}</div>
+            </div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">HOLES (&gt;50px)</div>
+              <div className="font-bold text-cyan-300">{localDiagnostics.interiorHoleCount}</div>
+            </div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800 col-span-2">
+              <div className="text-slate-500 text-[9px]">BOUNDING BOX</div>
+              <div className="font-bold text-slate-200">
+                {localDiagnostics.boundingBox.width}×{localDiagnostics.boundingBox.height} px ({localDiagnostics.boundingBoxArea.toLocaleString()} px²)
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 4-Channel Mask & Cutout Previews ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-none border border-slate-800 bg-slate-950 p-2 text-xs">
+        <button
+          type="button"
+          data-testid="channel-initial-mask"
+          onClick={() => handleSelectChannel("initial_mask")}
+          className={`min-h-[44px] flex flex-col items-center justify-center p-2 transition-all font-mono ${
+            activeChannel === "initial_mask"
+              ? "bg-slate-900 border-2 border-slate-300 text-white font-bold shadow-[0_0_12px_rgba(255,255,255,0.2)]"
+              : "border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-900/40"
+          }`}
+        >
+          <span className="text-xs font-bold">1. ម៉ាស់ដំបូង</span>
+          <span className="text-[9px] text-slate-500">Initial AI Mask</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="channel-refined-mask"
+          onClick={() => handleSelectChannel("mask")}
+          className={`min-h-[44px] flex flex-col items-center justify-center p-2 transition-all font-mono ${
+            activeChannel === "mask" || activeChannel === "refined_mask"
+              ? "bg-slate-900 border-2 border-amber-400 text-white font-bold shadow-[0_0_12px_rgba(245,158,11,0.3)]"
+              : "border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-900/40"
+          }`}
+        >
+          <span className="text-xs font-bold text-amber-300">2. ម៉ាស់សម្រួល</span>
+          <span className="text-[9px] text-amber-400/80">Refined Alpha Mask</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="channel-overlay"
+          onClick={() => handleSelectChannel("overlay")}
+          className={`min-h-[44px] flex flex-col items-center justify-center p-2 transition-all font-mono ${
+            activeChannel === "overlay"
+              ? "bg-slate-900 border-2 border-emerald-400 text-white font-bold shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+              : "border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-900/40"
+          }`}
+        >
+          <span className="text-xs font-bold text-emerald-300">3. ម៉ាស់វិភាគ OVERLAY</span>
+          <span className="text-[9px] text-emerald-400/80">បៃតង/លឿង/ក្រហម</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="channel-cutout"
+          onClick={() => handleSelectChannel(initialPurpose || "white")}
+          className={`min-h-[44px] flex flex-col items-center justify-center p-2 transition-all font-mono ${
+            activeChannel === "white" || activeChannel === "pink" || activeChannel === "transparent"
+              ? "bg-slate-900 border-2 border-cyan-400 text-white font-bold shadow-[0_0_12px_rgba(0,240,255,0.3)]"
+              : "border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-900/40"
+          }`}
+        >
+          <span className="text-xs font-bold text-cyan-300">4. រូបកាត់ចុងក្រោយ</span>
+          <span className="text-[9px] text-cyan-400/80">Final Cutout</span>
+        </button>
+      </div>
 
       {/* ── Primary Output Purpose Selector (Khmer-First, accessible min 44px) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-none border border-cyan-500/30 bg-slate-950 p-2 text-xs">
@@ -1282,7 +1587,7 @@ export function ColorStudio({
                 : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
             }`}
           >
-            <span className="text-xs font-bold">📦 រក្សាផលិតផលទាំងមូល</span>
+            <span className="text-xs font-bold">★ រក្សាផលិតផលទាំងមូល [CONSERVATIVE - DEFAULT]</span>
             <span className="text-[9px] text-slate-500">Keep Entire Product</span>
           </button>
 
@@ -1296,7 +1601,7 @@ export function ColorStudio({
                 : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
             }`}
           >
-            <span className="text-xs font-bold text-purple-300">🍩 រក្សាទុកតែរបស់ខាងក្នុង</span>
+            <span className="text-xs font-bold text-purple-300">🍩 រក្សាទុកតែរបស់ខាងក្នុង [BETA - EXPERIMENTAL]</span>
             <span className="text-[9px] text-purple-400/80">Keep Contents Only</span>
           </button>
 
@@ -1495,14 +1800,40 @@ export function ColorStudio({
 
         {/* Secondary Download Actions & Reset */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-2 font-mono border-t border-slate-800">
-          <button
-            type="button"
-            onClick={handleExportTransparentPng}
-            className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-cyan-500/40 bg-cyan-950/60 px-3.5 py-1.5 text-cyan-300 hover:bg-cyan-900/70 hover:text-white transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] font-bold tracking-wider uppercase"
-          >
-            <Layers className="h-3.5 w-3.5 text-cyan-400" />
-            <span>Export Transparent PNG</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportTransparentPng}
+              className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-cyan-500/40 bg-cyan-950/60 px-3.5 py-1.5 text-cyan-300 hover:bg-cyan-900/70 hover:text-white transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] font-bold tracking-wider uppercase"
+            >
+              <Layers className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Export Transparent PNG</span>
+            </button>
+
+            {previousResult && onRestorePreviousResult && (
+              <button
+                type="button"
+                data-testid="restore-previous-btn"
+                onClick={onRestorePreviousResult}
+                className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-amber-500/40 bg-amber-950/60 px-3.5 py-1.5 text-amber-300 hover:bg-amber-900/70 hover:text-white transition-colors font-bold tracking-wider uppercase"
+                title="Restore previous good background removal result"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-amber-400" />
+                <span>Restore Previous Result</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              data-testid="use-original-btn"
+              onClick={handleUseOriginalImage}
+              className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-slate-700 bg-slate-800/80 px-3.5 py-1.5 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors font-bold tracking-wider uppercase"
+              title="Use original image uncropped (recovers 100% foreground)"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-400" />
+              <span>Use Original Image</span>
+            </button>
+          </div>
 
           <button
             type="button"
@@ -1593,6 +1924,7 @@ export function ColorStudio({
           <div className="flex flex-wrap items-center gap-1.5 font-mono">
             <button
               type="button"
+              data-testid="tool-undo"
               onClick={handleUndo}
               disabled={history.length === 0}
               className="flex items-center gap-1 rounded-none border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors tracking-wider uppercase"
@@ -1603,6 +1935,7 @@ export function ColorStudio({
             </button>
             <button
               type="button"
+              data-testid="tool-redo"
               onClick={handleRedo}
               disabled={redoStack.length === 0}
               className="flex items-center gap-1 rounded-none border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors tracking-wider uppercase"
@@ -1661,6 +1994,7 @@ export function ColorStudio({
                 {/* 1. Keep Brush */}
                 <button
                   type="button"
+                  data-testid="tool-keep-brush"
                   onClick={() => setActiveTool("keep")}
                   className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "keep"
@@ -1676,6 +2010,7 @@ export function ColorStudio({
                 {/* 2. Remove Brush */}
                 <button
                   type="button"
+                  data-testid="tool-remove-brush"
                   onClick={() => setActiveTool("remove")}
                   className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "remove"
@@ -1691,6 +2026,7 @@ export function ColorStudio({
                 {/* 3. Soft Edge Brush */}
                 <button
                   type="button"
+                  data-testid="tool-soft-brush"
                   onClick={() => setActiveTool("soft")}
                   className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "soft"
@@ -1706,6 +2042,7 @@ export function ColorStudio({
                 {/* 4. Eraser */}
                 <button
                   type="button"
+                  data-testid="tool-eraser"
                   onClick={() => setActiveTool("eraser")}
                   className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "eraser"
@@ -1721,6 +2058,7 @@ export function ColorStudio({
                 {/* 5. Pan Tool */}
                 <button
                   type="button"
+                  data-testid="tool-pan"
                   onClick={() => setActiveTool("pan")}
                   className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "pan"

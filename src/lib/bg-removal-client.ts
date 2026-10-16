@@ -9,7 +9,23 @@ import {
   generateTrimap,
   generateMaskOverlay,
   refineMaskWithGuidedFilter,
+  MaskDiagnostics,
+  computeMaskDiagnostics,
+  applyAreaSafetyCheck,
 } from "./bg-compositor";
+
+/**
+ * Feature Flags for Rescue & Safety
+ */
+export const BACKGROUND_REMOVAL_CONSERVATIVE =
+  typeof process !== "undefined" && process.env.BACKGROUND_REMOVAL_CONSERVATIVE !== undefined
+    ? process.env.BACKGROUND_REMOVAL_CONSERVATIVE !== "false"
+    : true;
+
+export const BACKGROUND_REMOVAL_SEGMENTATION_V2 =
+  typeof process !== "undefined" && process.env.BACKGROUND_REMOVAL_SEGMENTATION_V2 !== undefined
+    ? process.env.BACKGROUND_REMOVAL_SEGMENTATION_V2 === "true"
+    : false;
 
 export interface BgRemovalProgress {
   key: string;
@@ -46,6 +62,8 @@ export interface BgRemovalOutput {
     refineMs?: number;
     totalMs?: number;
   };
+  diagnostics?: MaskDiagnostics;
+  rollbackTriggered?: boolean;
 }
 
 export interface BgRemovalOptions {
@@ -1135,7 +1153,11 @@ export async function segmentObjectSelection(
     sourceImageData.data,
     alphaMaskBuffer,
     width,
-    height
+    height,
+    {
+      mode,
+      conservative: BACKGROUND_REMOVAL_CONSERVATIVE,
+    }
   );
 
   let activeMask = new Uint8ClampedArray(totalPixels);
@@ -1240,12 +1262,16 @@ export interface RefineAlphaMattingOptions {
   directUrl?: string | null;
   signal?: AbortSignal;
   onProgress?: (progress: BgRemovalProgress) => void;
+  initialMask?: Uint8ClampedArray | Uint8Array | null;
+  manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
+  maxDropRatio?: number;
 }
 
 /**
  * Stage B: Alpha Matting Refinement
  * Runs trimap generation bounded by the user-approved selection mask,
- * performs edge-aware guided filtering, and exports the transparent PNG.
+ * performs edge-aware guided filtering, enforces automated safety check,
+ * and exports the transparent PNG.
  */
 export async function refineAlphaMattingWithMask(
   sourceImageData: ImageData,
@@ -1259,21 +1285,43 @@ export async function refineAlphaMattingWithMask(
 
   const quality = options?.quality || (options?.edgeQuality === "fine" ? "quality" : "balanced");
   const trimapRadius = quality === "fast" ? 3 : quality === "quality" ? 6 : 4;
+  const initialMask = options?.initialMask || activeMask;
 
-  // 1. Generate conservative 3-class trimap (excludedMask strictly preserved as 0)
-  const trimap = generateTrimap(activeMask, w, h, trimapRadius, excludedMask);
+  // 1. Generate conservative 3-class trimap (excludedMask strictly preserved as 0, manualKeep strictly 255)
+  const trimap = generateTrimap(
+    activeMask,
+    w,
+    h,
+    trimapRadius,
+    excludedMask,
+    options?.manualKeepMask
+  );
 
   // 2. Refine alpha transitions using edge-aware guided filter
-  const refinedAlpha = refineMaskWithGuidedFilter(
+  const rawRefinedAlpha = refineMaskWithGuidedFilter(
     sourceImageData.data,
     trimap,
     w,
     h,
     trimapRadius,
-    1e-4
+    1e-4,
+    {
+      initialMask,
+      manualKeepMask: options?.manualKeepMask,
+      alphaFloor: 0.95,
+    }
   );
 
-  // 3. Composite output RGBA
+  // 3. Automated Area Safety Check: Rollback to initial mask if > 20% area was dropped
+  const { safeMask, diagnostics } = applyAreaSafetyCheck(
+    initialMask,
+    rawRefinedAlpha,
+    w,
+    h,
+    options?.maxDropRatio ?? 0.20
+  );
+
+  // 4. Composite output RGBA
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -1286,7 +1334,7 @@ export async function refineAlphaMattingWithMask(
 
   for (let i = 0; i < totalPixels; i++) {
     const pIdx = i * 4;
-    const a = refinedAlpha[i];
+    const a = safeMask[i];
     outPixels[pIdx] = srcPixels[pIdx];
     outPixels[pIdx + 1] = srcPixels[pIdx + 1];
     outPixels[pIdx + 2] = srcPixels[pIdx + 2];
@@ -1302,13 +1350,13 @@ export async function refineAlphaMattingWithMask(
   });
 
   const transparentUrl = URL.createObjectURL(transparentBlob);
-  const alphaMaskUrl = createAlphaMaskDataUrl(refinedAlpha, w, h);
+  const alphaMaskUrl = createAlphaMaskDataUrl(safeMask, w, h);
 
   return {
     transparentBlob,
     transparentUrl,
     alphaMaskUrl,
-    alphaMaskBuffer: refinedAlpha,
+    alphaMaskBuffer: safeMask,
     sourceImageData,
     width: w,
     height: h,
@@ -1316,8 +1364,12 @@ export async function refineAlphaMattingWithMask(
     sourceHeight: h,
     wasDownscaled: false,
     label: "Browser AI result",
-    model: "@imgly/isnet_fp16 + GuidedFilter",
+    model: diagnostics.rollbackTriggered
+      ? "@imgly/isnet_fp16 (Safety Rollback Applied)"
+      : "@imgly/isnet_fp16 + GuidedFilter",
     mode: "preview",
+    diagnostics,
+    rollbackTriggered: diagnostics.rollbackTriggered,
   };
 }
 

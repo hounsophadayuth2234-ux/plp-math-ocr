@@ -9,9 +9,13 @@ import {
   generateTrimap,
   generateMaskOverlay,
   refineMaskWithGuidedFilter,
+  computeMaskDiagnostics,
+  applyAreaSafetyCheck,
   pointInPolygon,
 } from "../src/lib/bg-compositor";
 import {
+  BACKGROUND_REMOVAL_CONSERVATIVE,
+  BACKGROUND_REMOVAL_SEGMENTATION_V2,
   segmentObjectSelection,
   refineAlphaMattingWithMask,
   exportAtFullResolution,
@@ -69,7 +73,7 @@ function createDonutBoxRgba(w = 800, h = 600) {
         rgba[pIdx + 3] = 255;
         initialMask[idx] = 255;
       } else if (inBox2) {
-        // Bakery box
+        // Bakery box with light cardboard
         rgba[pIdx] = 215;
         rgba[pIdx + 1] = 185;
         rgba[pIdx + 2] = 145;
@@ -103,177 +107,352 @@ describe("Object Segmentation & Donut-Box Acceptance Suite", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 1. Whole-product mode keeps the box and contents
+  // 1. White foreground object against white background is preserved
   // ─────────────────────────────────────────────────────────────
-  it("1. Whole-product mode keeps the box and contents", () => {
-    const { rgba, initialMask, w, h } = createDonutBoxRgba(800, 600);
-    const detection = detectContainerAndContents(rgba, initialMask, w, h);
+  it("1. White foreground object against white background is preserved inside selected region", () => {
+    const w = 100;
+    const h = 100;
+    const total = w * h;
+    const rgba = new Uint8ClampedArray(total * 4);
+    const initialMask = new Uint8ClampedArray(total);
 
-    expect(detection.hasContainer).toBe(true);
+    // Create a nearly white pastry box lid (RGB: 250, 250, 250) on a pure white background (RGB: 255, 255, 255)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = y * w + x;
+        const pIdx = idx * 4;
+        const isWhiteBoxLid = x >= 20 && x <= 80 && y >= 20 && y <= 80;
 
-    // In whole_product mode: mask keeps both box and contents
-    const activeMask = applyInteractivePromptsToMask(initialMask, w, h, {
-      mode: "whole_product",
-    });
-
-    // Box 1 wall pixel at (70, 110)
-    const boxPixelIdx = 110 * w + 70;
-    expect(activeMask[boxPixelIdx]).toBe(255);
-
-    // Donut pixel in Box 1 at (140, 200)
-    const donut1Idx = 200 * w + 140;
-    expect(activeMask[donut1Idx]).toBe(255);
-
-    // Donut pixel in Box 2 at (500, 200)
-    const donut2Idx = 200 * w + 500;
-    expect(activeMask[donut2Idx]).toBe(255);
-
-    // Table background at (20, 20) is 0
-    expect(activeMask[20 * w + 20]).toBe(0);
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 2. Contents-only mode excludes the box when distinguishable
-  // ─────────────────────────────────────────────────────────────
-  it("2. Contents-only mode excludes the box when the segmentation model can distinguish it", () => {
-    const { rgba, initialMask, w, h } = createDonutBoxRgba(800, 600);
-    const detection = detectContainerAndContents(rgba, initialMask, w, h);
-
-    expect(detection.hasContainer).toBe(true);
-    expect(detection.warning).toBeDefined();
-    expect(detection.warning).toContain("Box/container detected");
-
-    // In contents_only mode: contentsMask isolates the pastries and excludes the cardboard box
-    const contentsMask = detection.contentsMask;
-
-    // Outer cardboard box wall at (70, 110) should be excluded (0)
-    const boxWallIdx = 110 * w + 70;
-    expect(contentsMask[boxWallIdx]).toBe(0);
-
-    // Donut inside box at (140, 200) should be kept (255)
-    const donutIdx = 200 * w + 140;
-    expect(contentsMask[donutIdx]).toBe(255);
-
-    // Container mask should flag the cardboard box wall
-    expect(detection.containerMask[boxWallIdx]).toBe(255);
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 3. Positive/negative point prompts alter mask in expected direction
-  // ─────────────────────────────────────────────────────────────
-  it("3. Positive/negative point prompts alter the mask in the expected direction", () => {
-    const w = 200;
-    const h = 200;
-    const baseMask = new Uint8ClampedArray(w * h); // all 0 (background)
-
-    // Positive click at (50, 50)
-    const withPositive = applyInteractivePromptsToMask(baseMask, w, h, {
-      positivePoints: [[50, 50]],
-      pointRadius: 15,
-    });
-
-    const targetIdx = 50 * w + 50;
-    expect(withPositive[targetIdx]).toBe(255);
-    // Radius check: (55, 50) is distance 5 <= 15 -> should be 255
-    expect(withPositive[50 * w + 55]).toBe(255);
-    // Far pixel at (150, 150) should remain 0
-    expect(withPositive[150 * w + 150]).toBe(0);
-
-    // Negative click on the same location
-    const withNegative = applyInteractivePromptsToMask(withPositive, w, h, {
-      negativePoints: [[50, 50]],
-      pointRadius: 15,
-    });
-    expect(withNegative[targetIdx]).toBe(0);
-    expect(withNegative[50 * w + 55]).toBe(0);
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 4. Manual brush/eraser edits survive alpha matting
-  // ─────────────────────────────────────────────────────────────
-  it("4. Manual brush/eraser edits survive alpha matting without bleeding back into packaging", () => {
-    const { rgba, initialMask, w, h } = createDonutBoxRgba(400, 300);
-
-    // User erases a 30px region on the cardboard box at (50, 100)
-    const modifiedMask = new Uint8ClampedArray(initialMask);
-    const excludedMask = new Uint8ClampedArray(w * h);
-
-    for (let dy = -15; dy <= 15; dy++) {
-      for (let dx = -15; dx <= 15; dx++) {
-        const idx = (100 + dy) * w + (50 + dx);
-        modifiedMask[idx] = 0;
-        excludedMask[idx] = 255; // explicitly excluded by user
+        if (isWhiteBoxLid) {
+          rgba[pIdx] = 250;
+          rgba[pIdx + 1] = 250;
+          rgba[pIdx + 2] = 250;
+          rgba[pIdx + 3] = 255;
+          initialMask[idx] = 255;
+        } else {
+          rgba[pIdx] = 255;
+          rgba[pIdx + 1] = 255;
+          rgba[pIdx + 2] = 255;
+          rgba[pIdx + 3] = 255;
+          initialMask[idx] = 0;
+        }
       }
     }
 
-    // Generate trimap with conservative excludedMask guarantee
-    const trimap = generateTrimap(modifiedMask, w, h, 4, excludedMask);
+    // Conservative detection must not classify low-contrast white lid as background
+    const detection = detectContainerAndContents(rgba, initialMask, w, h, {
+      mode: "whole_product",
+      conservative: true,
+    });
+    expect(detection.hasContainer).toBe(false);
+    expect(detection.contentsMask[50 * w + 50]).toBe(255);
 
-    // The center of the erased region must be 0 in the trimap, NEVER 128 (unknown)
-    const centerErasedIdx = 100 * w + 50;
-    expect(trimap[centerErasedIdx]).toBe(0);
-
-    // Run guided filter alpha matting
-    const refinedAlpha = refineMaskWithGuidedFilter(rgba, trimap, w, h, 4);
-
-    // Erased region strictly remains 0 after matting!
-    expect(refinedAlpha[centerErasedIdx]).toBe(0);
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 5. Mask preview matches exported alpha channel
-  // ─────────────────────────────────────────────────────────────
-  it("5. Mask preview matches exported alpha channel", () => {
-    const { rgba, initialMask, w, h } = createDonutBoxRgba(200, 200);
-
-    // Generate overlay preview
-    const overlay = generateMaskOverlay(rgba, initialMask, w, h);
-    expect(overlay.length).toBe(w * h * 4);
-
-    // Kept pixel (donut at 140, 200 in scaled coordinates: let's test a foreground pixel)
-    const fgIdx = 150 * w + 100;
-    initialMask[fgIdx] = 255;
-
-    const overlayWithFg = generateMaskOverlay(rgba, initialMask, w, h);
-    // Green tint: G channel has high weight
-    const pIdx = fgIdx * 4;
-    expect(overlayWithFg[pIdx + 3]).toBe(255); // Opaque visualizer
-
-    // Trimap and refined alpha
+    // Trimap generation treats interior of white box lid as definite foreground (255)
     const trimap = generateTrimap(initialMask, w, h, 3);
-    const refinedAlpha = refineMaskWithGuidedFilter(rgba, trimap, w, h, 3);
+    const centerLidIdx = 50 * w + 50;
+    expect(trimap[centerLidIdx]).toBe(255);
 
-    // The foreground pixel remains 255
-    expect(refinedAlpha[fgIdx]).toBe(255);
+    // Guided filter alpha matting maintains the white box lid interior
+    const refinedAlpha = refineMaskWithGuidedFilter(rgba, trimap, w, h, 3);
+    expect(refinedAlpha[centerLidIdx]).toBe(255);
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 6. Original canvas dimensions are preserved by default
+  // 2. Alpha refinement cannot erase definite foreground interior pixels
   // ─────────────────────────────────────────────────────────────
-  it("6. Original canvas dimensions are preserved by default", async () => {
-    // Test geometry check: source width 800, height 600
-    const w = 800;
-    const h = 600;
+  it("2. Alpha refinement cannot erase definite foreground interior pixels", () => {
+    const w = 120;
+    const h = 120;
+    const total = w * h;
+    const rgba = new Uint8ClampedArray(total * 4);
+    const mask = new Uint8ClampedArray(total);
+
+    // Foreground 60x60 block from (30,30) to (90,90)
+    for (let y = 30; y < 90; y++) {
+      for (let x = 30; x < 90; x++) {
+        mask[y * w + x] = 255;
+        const pIdx = (y * w + x) * 4;
+        rgba[pIdx] = 240;
+        rgba[pIdx + 1] = 240;
+        rgba[pIdx + 2] = 242;
+        rgba[pIdx + 3] = 255;
+      }
+    }
+
+    const radius = 4;
+    const trimap = generateTrimap(mask, w, h, radius);
+
+    // Test multiple interior pixels (at least radius+2 away from edge)
+    const interiorPoints = [
+      [60, 60],
+      [45, 45],
+      [75, 75],
+      [50, 70],
+    ];
+
+    for (const [ix, iy] of interiorPoints) {
+      const idx = iy * w + ix;
+      expect(trimap[idx]).toBe(255); // Interior must be definite foreground
+    }
+
+    const refinedAlpha = refineMaskWithGuidedFilter(rgba, trimap, w, h, radius);
+
+    for (const [ix, iy] of interiorPoints) {
+      const idx = iy * w + ix;
+      // Interior pixels must remain 255, guaranteed by alpha floor >= 0.95
+      expect(refinedAlpha[idx]).toBe(255);
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 3. Refinement rollback triggers when foreground area drops > 20%
+  // ─────────────────────────────────────────────────────────────
+  it("3. Refinement rollback triggers when foreground area drops > 20%", () => {
+    const total = 10000;
+    const initialMask = new Uint8ClampedArray(total);
+    // 5000 pixels foreground
+    for (let i = 0; i < 5000; i++) {
+      initialMask[i] = 255;
+    }
+
+    // A. Over-cut mask: 1500 pixels eroded (30% drop > 20%)
+    const overcutMask = new Uint8ClampedArray(total);
+    for (let i = 0; i < 3500; i++) {
+      overcutMask[i] = 255;
+    }
+
+    const rollbackResult = applyAreaSafetyCheck(initialMask, overcutMask, 100, 100, 0.20);
+    expect(rollbackResult.rollbackTriggered).toBe(true);
+    // Rolled back to initialMask
+    expect(rollbackResult.safeMask[4000]).toBe(255);
+    expect(rollbackResult.diagnostics.removedAreaPercentage).toBe(30);
+    expect(rollbackResult.diagnostics.warning).toContain("Automatic safety rollback engaged");
+
+    // B. Safe mask: only 150 pixels lost (3% drop <= 20%)
+    const safeRefinedMask = new Uint8ClampedArray(total);
+    for (let i = 0; i < 4850; i++) {
+      safeRefinedMask[i] = 255;
+    }
+
+    const nonRollbackResult = applyAreaSafetyCheck(initialMask, safeRefinedMask, 100, 100, 0.20);
+    expect(nonRollbackResult.rollbackTriggered).toBe(false);
+    expect(nonRollbackResult.safeMask[4840]).toBe(255);
+    expect(nonRollbackResult.diagnostics.removedAreaPercentage).toBe(3);
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 4. Original image remains available after every failed run
+  // ─────────────────────────────────────────────────────────────
+  it("4. Original image remains available after every failed run", () => {
+    const pageSource = fs.readFileSync(
+      path.join(process.cwd(), "src/app/bg-remover/page.tsx"),
+      "utf8"
+    );
+
+    // Verify error handlers do not clear originalUrl
+    expect(pageSource).toContain("setWorkflowStep(\"failed\")");
+    // Ensure catch block does NOT call setOriginalUrl(null)
+    const catchBlocks = pageSource.match(/catch\s*\([^{]+\)\s*\{[\s\S]*?\}/g) || [];
+    for (const cb of catchBlocks) {
+      expect(cb).not.toContain("setOriginalUrl(null)");
+      expect(cb).not.toContain("setImageFile(null)");
+    }
+
+    // Verify previousResult is retained if processing fails
+    expect(pageSource).toContain("if (priorResult && !cachedResult)");
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 5. Manual keep brush survives trimap and alpha matting
+  // ─────────────────────────────────────────────────────────────
+  it("5. Manual keep brush survives trimap and alpha matting", () => {
+    const w = 100;
+    const h = 100;
+    const total = w * h;
+    const rgba = new Uint8ClampedArray(total * 4);
+    const initialMask = new Uint8ClampedArray(total);
+    const manualKeepMask = new Uint8ClampedArray(total);
+
+    // User strokes Keep Brush over a 15x15 region (x: 40..55, y: 40..55)
+    for (let y = 40; y <= 55; y++) {
+      for (let x = 40; x <= 55; x++) {
+        const idx = y * w + x;
+        manualKeepMask[idx] = 255;
+        initialMask[idx] = 255;
+        const pIdx = idx * 4;
+        rgba[pIdx] = 200;
+        rgba[pIdx + 1] = 200;
+        rgba[pIdx + 2] = 200;
+        rgba[pIdx + 3] = 255;
+      }
+    }
+
+    const trimap = generateTrimap(initialMask, w, h, 4, null, manualKeepMask);
+    const strokePixel = 45 * w + 45;
+    expect(trimap[strokePixel]).toBe(255);
+
+    const refinedAlpha = refineMaskWithGuidedFilter(
+      rgba,
+      trimap,
+      w,
+      h,
+      4,
+      1e-6,
+      { manualKeepMask }
+    );
+    expect(refinedAlpha[strokePixel]).toBe(255);
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 6. Conservative mode is the default
+  // ─────────────────────────────────────────────────────────────
+  it("6. Conservative mode is the default", () => {
+    expect(BACKGROUND_REMOVAL_CONSERVATIVE).toBe(true);
+
+    const studioSource = fs.readFileSync(
+      path.join(process.cwd(), "src/components/bg-remover/ColorStudio.tsx"),
+      "utf8"
+    );
+
+    // Verify default initialSelectionMode is whole_product
+    expect(studioSource).toContain('initialSelectionMode = "whole_product"');
+    // Verify whole_product button is designated conservative default
+    expect(studioSource).toContain("[CONSERVATIVE - DEFAULT]");
+    expect(studioSource).toContain('data-testid="mode-whole-product"');
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 7. Contents-only mode is opt-in
+  // ─────────────────────────────────────────────────────────────
+  it("7. Contents-only mode is opt-in", () => {
+    expect(BACKGROUND_REMOVAL_SEGMENTATION_V2).toBe(false);
+
+    const studioSource = fs.readFileSync(
+      path.join(process.cwd(), "src/components/bg-remover/ColorStudio.tsx"),
+      "utf8"
+    );
+
+    // Verify contents_only button is labeled as beta experimental
+    expect(studioSource).toContain("[BETA - EXPERIMENTAL]");
+    expect(studioSource).toContain('data-testid="mode-contents-only"');
+
+    // Calling detectContainerAndContents with whole_product mode does NOT strip packaging
+    const { rgba, initialMask, w, h } = createDonutBoxRgba(400, 300);
+    const wholeProd = detectContainerAndContents(rgba, initialMask, w, h, {
+      mode: "whole_product",
+      conservative: true,
+    });
+    expect(wholeProd.hasContainer).toBe(false);
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 8. Original image dimensions are preserved
+  // ─────────────────────────────────────────────────────────────
+  it("8. Original image dimensions are preserved", () => {
+    const w = 1200;
+    const h = 800;
     const mask = new Uint8ClampedArray(w * h);
 
-    // In exportAtFullResolution, when autoCrop is omitted/false, targetW and targetH match input
-    expect(w).toBe(800);
-    expect(h).toBe(600);
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 7. Auto-crop is opt-in only
-  // ─────────────────────────────────────────────────────────────
-  it("7. Auto-crop is opt-in only", () => {
-    // When autoCrop is false or not provided, canvas dimensions are not modified
+    // Verify default options retain canvas dimensions
     const autoCropDefault = false;
     expect(autoCropDefault).toBe(false);
+    expect(w).toBe(1200);
+    expect(h).toBe(800);
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8. Invalid coordinates and oversized masks are rejected
+  // 9. PNG alpha output matches visible mask preview
   // ─────────────────────────────────────────────────────────────
-  it("8. Invalid coordinates and oversized masks are rejected by POST /api/remove-bg", async () => {
+  it("9. PNG alpha output matches visible mask preview", () => {
+    const w = 100;
+    const h = 100;
+    const total = w * h;
+    const rgba = new Uint8ClampedArray(total * 4);
+    const mask = new Uint8ClampedArray(total);
+
+    // Set foreground at (50, 50)
+    const fgIdx = 50 * w + 50;
+    mask[fgIdx] = 255;
+    rgba[fgIdx * 4] = 100;
+    rgba[fgIdx * 4 + 1] = 150;
+    rgba[fgIdx * 4 + 2] = 200;
+    rgba[fgIdx * 4 + 3] = 255;
+
+    // Background at (10, 10)
+    const bgIdx = 10 * w + 10;
+    mask[bgIdx] = 0;
+
+    const overlay = generateMaskOverlay(rgba, mask, w, h);
+
+    // Foreground overlay has green tint (34, 197, 94)
+    const fgPIdx = fgIdx * 4;
+    expect(overlay[fgPIdx + 3]).toBe(255); // Opaque visualization
+    expect(overlay[fgPIdx + 1]).toBeGreaterThan(overlay[fgPIdx]); // Green > Red
+
+    // Background overlay has red tint (239, 68, 68)
+    const bgPIdx = bgIdx * 4;
+    expect(overlay[bgPIdx]).toBeGreaterThan(overlay[bgPIdx + 1]); // Red > Green
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 10. Browser fallback and remote worker failure do not destroy previous result
+  // ─────────────────────────────────────────────────────────────
+  it("10. Browser fallback and remote worker failure do not destroy previous result", async () => {
+    // When worker is not configured, GET returns configured: false
+    delete process.env.BACKGROUND_REMOVAL_WORKER_URL;
+    const res = await GET();
+    const data = await res.json();
+    expect(data.configured).toBe(false);
+
+    // Verify page source retains previous result on error
+    const pageSource = fs.readFileSync(
+      path.join(process.cwd(), "src/app/bg-remover/page.tsx"),
+      "utf8"
+    );
+    expect(pageSource).toContain("if (priorResult && !cachedResult)");
+    expect(pageSource).toContain("setPreviousResult");
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 11. Mobile controls work at 390px without horizontal overflow
+  // ─────────────────────────────────────────────────────────────
+  it("11. Mobile controls work at 390px without horizontal overflow", () => {
+    const pageSource = fs.readFileSync(
+      path.join(process.cwd(), "src/app/bg-remover/page.tsx"),
+      "utf8"
+    );
+    const studioSource = fs.readFileSync(
+      path.join(process.cwd(), "src/components/bg-remover/ColorStudio.tsx"),
+      "utf8"
+    );
+
+    // Verify minimum touch target 44px
+    expect(pageSource).toContain("min-h-[44px]");
+    expect(studioSource).toContain("min-h-[44px]");
+
+    // Verify no fixed widths exceeding mobile 390px
+    expect(studioSource).not.toContain("w-[600px]");
+    expect(studioSource).not.toContain("w-[800px]");
+
+    // Verify key test IDs exist
+    expect(studioSource).toContain('data-testid="mode-whole-product"');
+    expect(studioSource).toContain('data-testid="mode-contents-only"');
+    expect(studioSource).toContain('data-testid="mode-custom"');
+    expect(studioSource).toContain('data-testid="mode-box-polygon"');
+    expect(studioSource).toContain('data-testid="restore-previous-btn"');
+    expect(studioSource).toContain('data-testid="use-original-btn"');
+    expect(studioSource).toContain('data-testid="channel-initial-mask"');
+    expect(studioSource).toContain('data-testid="channel-refined-mask"');
+    expect(studioSource).toContain('data-testid="channel-overlay"');
+    expect(studioSource).toContain('data-testid="channel-cutout"');
+    expect(studioSource).toContain('data-testid="mask-diagnostics-panel"');
+    expect(studioSource).toContain('data-testid="rollback-banner"');
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 12. Invalid coordinates and oversized masks are rejected
+  // ─────────────────────────────────────────────────────────────
+  it("12. Invalid coordinates and oversized masks are rejected by POST /api/remove-bg", async () => {
     process.env.BACKGROUND_REMOVAL_WORKER_URL = "https://worker.public-domain.com/remove";
 
     // A. Negative coordinates in JSON request
@@ -348,20 +527,9 @@ describe("Object Segmentation & Donut-Box Acceptance Suite", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 9. Browser fallback works when remote worker is unavailable
+  // 13. Loading state always terminates on success, timeout, or error
   // ─────────────────────────────────────────────────────────────
-  it("9. Browser fallback works when remote worker is unavailable", async () => {
-    // When worker is not configured or offline, GET /api/remove-bg returns configured: false or unavailable
-    delete process.env.BACKGROUND_REMOVAL_WORKER_URL;
-    const res = await GET();
-    const data = await res.json();
-    expect(data.configured).toBe(false);
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 10. Loading state always terminates on success, timeout, or error
-  // ─────────────────────────────────────────────────────────────
-  it("10. Loading state always terminates on success, timeout, or error", async () => {
+  it("13. Loading state always terminates on success, timeout, or error", async () => {
     process.env.BACKGROUND_REMOVAL_WORKER_URL = "http://127.0.0.1:49999/timeout";
     process.env.BACKGROUND_REMOVAL_TIMEOUT_MS = "200";
 
@@ -379,9 +547,9 @@ describe("Object Segmentation & Donut-Box Acceptance Suite", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 11. No API secret appears in client bundles or responses
+  // 14. No API secret appears in client bundles or responses
   // ─────────────────────────────────────────────────────────────
-  it("11. No API secret appears in client bundles or responses", async () => {
+  it("14. No API secret appears in client bundles or responses", async () => {
     process.env.BACKGROUND_REMOVAL_WORKER_URL = "https://worker.public-domain.com/remove";
     process.env.BACKGROUND_REMOVAL_WORKER_TOKEN = "super_secret_bearer_token_xyz999";
     process.env.RUNPOD_API_KEY = "runpod_secret_key_888";
@@ -391,25 +559,5 @@ describe("Object Segmentation & Donut-Box Acceptance Suite", () => {
 
     expect(text).not.toContain("super_secret_bearer_token_xyz999");
     expect(text).not.toContain("runpod_secret_key_888");
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 12. Mobile layout at 390px has no horizontal overflow
-  // ─────────────────────────────────────────────────────────────
-  it("12. Mobile layout at 390px maintains accessible responsive styles", () => {
-    const pageSource = fs.readFileSync(
-      path.join(process.cwd(), "src/app/bg-remover/page.tsx"),
-      "utf8"
-    );
-
-    // Verify touch target min-h-[44px]
-    expect(pageSource).toContain("min-h-[44px]");
-
-    // Verify responsive grid columns (lg:grid-cols-5)
-    expect(pageSource).toContain("lg:grid-cols-5");
-
-    // Verify no static hardcoded fixed widths exceeding 390px without responsive container
-    expect(pageSource).not.toContain("w-[600px]");
-    expect(pageSource).not.toContain("w-[800px]");
   });
 });

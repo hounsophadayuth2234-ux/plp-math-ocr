@@ -37,6 +37,7 @@ export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [cachedResult, setCachedResult] = useState<BgRemovalOutput | null>(null);
+  const [previousResult, setPreviousResult] = useState<BgRemovalOutput | null>(null);
   const [initialCompositeUrl, setInitialCompositeUrl] = useState<string | null>(null);
   const [selectedPurpose, setSelectedPurpose] = useState<"white" | "pink" | "transparent">("white");
 
@@ -278,6 +279,7 @@ export default function BgRemoverPage() {
           "#FFFFFF"
         );
 
+        setPreviousResult(cachedResult);
         setCachedResult(refinedOutput);
         setInitialCompositeUrl(whiteUrl);
         setWorkflowStep("ready");
@@ -310,7 +312,10 @@ export default function BgRemoverPage() {
       console.log("[bg-remover] Ignoring duplicate click during processing");
       return;
     }
-    const previousResult = cachedResult;
+    const priorResult = cachedResult;
+    if (cachedResult) {
+      setPreviousResult(cachedResult);
+    }
     const startTime = performance.now();
     if (!imageFile) return;
 
@@ -543,8 +548,8 @@ export default function BgRemoverPage() {
       console.error("[bg-remover] Error:", err);
       setWorkflowStep("failed");
       // Retain previous valid result if clean cut failed
-      if (previousResult && !cachedResult) {
-        setCachedResult(previousResult);
+      if (priorResult && !cachedResult) {
+        setCachedResult(priorResult);
       }
       setError(
         err instanceof Error
@@ -1582,6 +1587,19 @@ export default function BgRemoverPage() {
                 provider={cachedResult.model}
                 processingLabel={cachedResult.label}
                 metrics={cachedResult.metrics}
+                diagnostics={cachedResult.diagnostics}
+                rollbackTriggered={cachedResult.rollbackTriggered}
+                previousResult={previousResult}
+                onRestorePreviousResult={() => {
+                  if (previousResult) {
+                    setCachedResult(previousResult);
+                    if (previousResult.transparentBlob) {
+                      compositeWithSolidColor(previousResult.transparentBlob, "#FFFFFF")
+                        .then(({ dataUrl }) => setInitialCompositeUrl(dataUrl))
+                        .catch(() => {});
+                    }
+                  }
+                }}
                 isProcessingFinal={isProcessing && processingMode === "final"}
                 workflowStep={workflowStep}
                 onConfirmMask={handleConfirmMask}
