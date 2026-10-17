@@ -139,3 +139,184 @@ body {
   background: #00f0ff;
   box-shadow: 0 0 8px #00f0ff;
 }
+
+/* -------------------------------------------------------------
+ * Mechanical Cyber Technology Workstation Styles & Animations
+ * ----------------------------------------------------------- */
+
+/* 1. Animated Blueprint / Precision Grid Drift */
+@keyframes gridDrift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 40px 40px;
+  }
+}
+
+.animate-grid-drift {
+  animation: gridDrift 20s linear infinite;
+}
+
+/* 2. Mechanical Industrial Scanning Beam */
+@keyframes industrialScanBeam {
+  0% {
+    top: -8%;
+    opacity: 0.1;
+  }
+  12% {
+    opacity: 0.8;
+  }
+  88% {
+    opacity: 0.8;
+  }
+  100% {
+    top: 108%;
+    opacity: 0.1;
+  }
+}
+
+.animate-industrial-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 240, 255, 0.3) 15%, #00f0ff 50%, rgba(0, 240, 255, 0.3) 85%, transparent 100%);
+  box-shadow: 0 0 20px #00f0ff, 0 0 40px rgba(0, 240, 255, 0.6);
+  animation: industrialScanBeam 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.animate-industrial-scan-intense {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, transparent 0%, rgba(245, 158, 11, 0.3) 15%, #00f0ff 50%, rgba(0, 240, 255, 0.3) 85%, transparent 100%);
+  box-shadow: 0 0 25px #00f0ff, 0 0 50px rgba(0, 240, 255, 0.8), 0 0 10px #ffffff;
+  animation: industrialScanBeam 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 3. Rotating Mechanical Radar Rings */
+@keyframes radarSpinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes radarSpinReverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-radar-slow {
+  animation: radarSpinSlow 45s linear infinite;
+  transform-origin: center center;
+}
+
+.animate-radar-reverse-slow {
+  animation: radarSpinReverse 32s linear infinite;
+  transform-origin: center center;
+}
+
+/* 4. Particle Float & Status Blink */
+@keyframes particleFloatA {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translateY(-20px) translateX(12px);
+    opacity: 0.75;
+  }
+}
+
+@keyframes particleFloatB {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-30px) translateX(-15px);
+    opacity: 0.9;
+  }
+}
+
+.animate-particle-a {
+  animation: particleFloatA 8s ease-in-out infinite;
+}
+
+.animate-particle-b {
+  animation: particleFloatB 12s ease-in-out infinite;
+}
+
+/* 5. Circuit Energy Pulse */
+@keyframes circuitTracePulse {
+  0%, 100% {
+    stroke-dashoffset: 400;
+    opacity: 0.15;
+  }
+  50% {
+    stroke-dashoffset: 0;
+    opacity: 0.65;
+  }
+}
+
+.animate-circuit-pulse {
+  stroke-dasharray: 200 200;
+  animation: circuitTracePulse 10s ease-in-out infinite;
+}
+
+/* 6. Ambient Machine Glow */
+@keyframes ambientGlowPulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.06);
+  }
+}
+
+.animate-ambient-glow {
+  animation: ambientGlowPulse 6s ease-in-out infinite;
+}
+
+/* 7. Mechanical Machine Panel Surface */
+.machine-module {
+  background: radial-gradient(circle at top left, #0d1527 0%, #070a13 70%, #04060c 100%);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 0 20px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.machine-module:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 25px rgba(0, 240, 255, 0.05);
+}
+
+/* Accessible reduced motion override */
+@media (prefers-reduced-motion: reduce) {
+  .animate-grid-drift,
+  .animate-industrial-scan,
+  .animate-industrial-scan-intense,
+  .animate-radar-slow,
+  .animate-radar-reverse-slow,
+  .animate-particle-a,
+  .animate-particle-b,
+  .animate-circuit-pulse,
+  .animate-ambient-glow {
+    animation: none !important;
+  }
+}

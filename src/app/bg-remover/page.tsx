@@ -38,6 +38,7 @@ import { BgStudioNav } from "@/components/bg-remover/BgStudioNav";
 import { BgStudioHero } from "@/components/bg-remover/BgStudioHero";
 import { BgStudioSettingsModal } from "@/components/bg-remover/BgStudioSettingsModal";
 import { BgStudioHelpModal } from "@/components/bg-remover/BgStudioHelpModal";
+import { MechanicalCyberBackground } from "@/components/bg-remover/MechanicalCyberBackground";
 
 export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -793,45 +794,58 @@ export default function BgRemoverPage() {
   ];
 
   return (
-    <div className="space-y-6 font-sans text-slate-100" data-app-state={manualState}>
-      {/* ── Polished Studio Top Navigation Bar ── */}
-      <BgStudioNav
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        audioMuted={audioMuted}
-        onToggleAudio={handleToggleAudio}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenHelp={() => setIsHelpOpen(true)}
-        isProcessing={isProcessing}
-      />
+    <div className="relative space-y-5 font-mono text-slate-100" data-app-state={manualState}>
+      {/* ── Mechanical Cyber Technology Animated Background ── */}
+      <MechanicalCyberBackground isProcessing={isProcessing} hasResult={Boolean(cachedResult)} />
 
-      {/* ── AI Background Studio Hero Banner ── */}
-      <BgStudioHero />
+      {/* ── Workstation Command Deck Instrument Header ── */}
+      <div className="relative z-10">
+        <BgStudioNav
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+          audioMuted={audioMuted}
+          onToggleAudio={handleToggleAudio}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenHelp={() => setIsHelpOpen(true)}
+          isProcessing={isProcessing}
+        />
+      </div>
 
-      {/* ── Manual-Assisted Background Remover Workflow Tracker Bar ── */}
+      {/* ── Workstation Engineering Specification Header Plate ── */}
+      <div className="relative z-10">
+        <BgStudioHero />
+      </div>
+
+      {/* ── Calibration & Pipeline Workflow Rail ── */}
       <div
         data-testid="workflow-breadcrumb"
-        className="w-full rounded-2xl border border-slate-800/80 bg-slate-900/50 backdrop-blur-md p-3.5 font-mono text-xs shadow-lg"
+        className="relative z-10 w-full border border-slate-800/90 bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-950 p-3.5 font-mono text-xs shadow-xl"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5 mb-2.5 text-[11px]">
+        {/* Corner mechanical brackets */}
+        <div className="pointer-events-none absolute top-0 left-0 h-2.5 w-2.5 border-t-2 border-l-2 border-cyan-400" />
+        <div className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 border-t-2 border-r-2 border-cyan-400" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-2.5 w-2.5 border-b-2 border-l-2 border-cyan-400" />
+        <div className="pointer-events-none absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-cyan-400" />
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2.5 text-[11px]">
           <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="font-bold text-slate-300 uppercase tracking-wider font-sans">
-              Workflow: AI Initial Mask → Keep/Erase Edit → Mask Previews → Edge Matting → Color Composite → Export
+            <span className="h-2 w-2 bg-cyan-400 animate-pulse" />
+            <span className="font-bold text-slate-300 uppercase tracking-wider font-mono">
+              // PIPELINE: 01.AI MASK → 02.USER CORRECTION → 03.PREVIEWS → 04.EDGE MATTING → 05.COLOR COMPOSITE → 06.EXPORT
             </span>
           </div>
           <span
-            className="rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 px-3 py-0.5 font-bold uppercase text-[10px] tracking-wider"
+            className="bg-cyan-950/90 border border-cyan-500/50 text-cyan-300 px-2.5 py-0.5 font-bold uppercase text-[10px] tracking-wider"
             data-testid="current-state-badge"
           >
-            STATE: {manualState}
+            CALIBRATION STATE: {manualState.toUpperCase()}
           </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" data-testid="state-tracker-bar">
           {/* Step 1: AI Initial Mask */}
           <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-xl border transition-all ${
+            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
               manualState === "generating_initial_mask"
                 ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
                 : cachedResult
@@ -840,7 +854,7 @@ export default function BgRemoverPage() {
             }`}
           >
             <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-bold text-xs ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
                 manualState === "generating_initial_mask"
                   ? "bg-amber-400 text-black animate-pulse"
                   : cachedResult
@@ -854,7 +868,7 @@ export default function BgRemoverPage() {
               <div className="text-[11px] font-bold leading-tight truncate">
                 AI Initial Mask
               </div>
-              <div className="text-[9px] text-slate-400 font-sans truncate">
+              <div className="text-[9px] text-slate-400 truncate">
                 ម៉ាស់ដំបូងពី AI
               </div>
             </div>
@@ -862,7 +876,7 @@ export default function BgRemoverPage() {
 
           {/* Step 2: Keep/Erase Correction */}
           <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-xl border transition-all ${
+            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
               manualState === "mask_editing"
                 ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
                 : cachedResult
@@ -871,7 +885,7 @@ export default function BgRemoverPage() {
             }`}
           >
             <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-bold text-xs ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
                 manualState === "mask_editing"
                   ? "bg-cyan-400 text-black animate-pulse"
                   : cachedResult
@@ -885,7 +899,7 @@ export default function BgRemoverPage() {
               <div className="text-[11px] font-bold leading-tight truncate">
                 Keep/Erase Edit
               </div>
-              <div className="text-[9px] text-slate-400 font-sans truncate">
+              <div className="text-[9px] text-slate-400 truncate">
                 កែសម្រួលដោយដៃ
               </div>
             </div>
@@ -893,14 +907,14 @@ export default function BgRemoverPage() {
 
           {/* Step 3: Mask Preview */}
           <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-xl border transition-all ${
+            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
               cachedResult
                 ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400"
             }`}
           >
             <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-bold text-xs ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
                 cachedResult
                   ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
                   : "bg-slate-800 text-slate-400"
@@ -912,7 +926,7 @@ export default function BgRemoverPage() {
               <div className="text-[11px] font-bold leading-tight truncate">
                 Mask Preview
               </div>
-              <div className="text-[9px] text-slate-400 font-sans truncate">
+              <div className="text-[9px] text-slate-400 truncate">
                 មើលម៉ាស់ 7 របៀប
               </div>
             </div>
@@ -920,7 +934,7 @@ export default function BgRemoverPage() {
 
           {/* Step 4: Optional Edge Matting */}
           <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-xl border transition-all ${
+            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
               manualState === "refining_edges"
                 ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
                 : cachedResult
@@ -929,7 +943,7 @@ export default function BgRemoverPage() {
             }`}
           >
             <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-bold text-xs ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
                 manualState === "refining_edges"
                   ? "bg-purple-400 text-black animate-pulse"
                   : cachedResult
@@ -943,7 +957,7 @@ export default function BgRemoverPage() {
               <div className="text-[11px] font-bold leading-tight truncate">
                 Optional Matting
               </div>
-              <div className="text-[9px] text-slate-400 font-sans truncate">
+              <div className="text-[9px] text-slate-400 truncate">
                 សម្រួលគែម (Off ស្រេច)
               </div>
             </div>
@@ -951,14 +965,14 @@ export default function BgRemoverPage() {
 
           {/* Step 5: Color Composite */}
           <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-xl border transition-all ${
+            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
               cachedResult
                 ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400"
             }`}
           >
             <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-bold text-xs ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
                 cachedResult
                   ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
                   : "bg-slate-800 text-slate-400"
@@ -970,7 +984,7 @@ export default function BgRemoverPage() {
               <div className="text-[11px] font-bold leading-tight truncate">
                 Color Composite
               </div>
-              <div className="text-[9px] text-slate-400 font-sans truncate">
+              <div className="text-[9px] text-slate-400 truncate">
                 ផ្គុំពណ៌ផ្ទៃខាងក្រោយ
               </div>
             </div>
@@ -978,14 +992,14 @@ export default function BgRemoverPage() {
 
           {/* Step 6: Export */}
           <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-xl border transition-all ${
+            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
               manualState === "ready_to_export"
                 ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
                 : "border-slate-800 bg-slate-900/60 text-slate-400"
             }`}
           >
             <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-bold text-xs ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
                 manualState === "ready_to_export"
                   ? "bg-emerald-400 text-black"
                   : "bg-slate-800 text-slate-400"
@@ -997,7 +1011,7 @@ export default function BgRemoverPage() {
               <div className="text-[11px] font-bold leading-tight truncate">
                 Export PNG
               </div>
-              <div className="text-[9px] text-slate-400 font-sans truncate">
+              <div className="text-[9px] text-slate-400 truncate">
                 ទាញយករូបថ្លា/ពណ៌
               </div>
             </div>
@@ -1014,12 +1028,29 @@ export default function BgRemoverPage() {
             {isProcessing ? "កំពុងដំណើរការកាត់រូបភាព..." : cachedResult ? "ដំណើរការកាត់រូបភាពរួចរាល់" : error ? `កំហុស: ${error}` : "ត្រៀមរួចរាល់"}
           </div>
 
-          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-md p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-xs font-bold tracking-wider text-slate-200">
-                {"// SEGMENTATION_CONFIG"}
-              </h2>
-              <span className="text-[10px] text-cyan-400 font-semibold font-mono">MODULE 02</span>
+          <div className="machine-module relative border border-slate-800/90 bg-slate-950/85 backdrop-blur-md p-5 space-y-4 shadow-2xl font-mono">
+            {/* Corner brackets */}
+            <div className="pointer-events-none absolute top-0 left-0 h-2.5 w-2.5 border-t-2 border-l-2 border-cyan-400/70" />
+            <div className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 border-t-2 border-r-2 border-cyan-400/70" />
+            <div className="pointer-events-none absolute bottom-0 left-0 h-2.5 w-2.5 border-b-2 border-l-2 border-cyan-400/70" />
+            <div className="pointer-events-none absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-cyan-400/70" />
+
+            {/* Corner rivets */}
+            <div className="pointer-events-none absolute top-1.5 left-1.5 h-1 w-1 bg-slate-700/80" />
+            <div className="pointer-events-none absolute top-1.5 right-1.5 h-1 w-1 bg-slate-700/80" />
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 h-1 w-1 bg-slate-700/80" />
+            <div className="pointer-events-none absolute bottom-1.5 right-1.5 h-1 w-1 bg-slate-700/80" />
+
+            <div className="flex items-center justify-between border-b border-slate-800/90 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 bg-cyan-400 animate-pulse" />
+                <h2 className="text-xs font-bold tracking-wider text-slate-200 uppercase font-mono">
+                  {"// SEGMENTATION_CONFIG"}
+                </h2>
+              </div>
+              <span className="text-[10px] bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 px-2 py-0.5 font-bold font-mono">
+                MODULE 02
+              </span>
             </div>
 
             {/* ── ជំហានទី ១ ៖ ជ្រើសរើសរូបភាព (STEP 1: UPLOAD IMAGE) ── */}
@@ -2024,33 +2055,65 @@ export default function BgRemoverPage() {
             </div>
           )}
 
-          {/* Standby Empty State */}
+          {/* Standby Empty State: Precision Inspection Chamber */}
           {!cachedResult && !isProcessing && !error && (
-            <div className="relative flex flex-1 min-h-[420px] flex-col items-center justify-center rounded-2xl border border-slate-800/80 bg-slate-900/40 p-8 sm:p-12 text-center backdrop-blur-md shadow-2xl">
-              {/* Corner reticles */}
-              <div className="pointer-events-none absolute top-2 left-2 h-3.5 w-3.5 border-t border-l border-cyan-400/50" />
-              <div className="pointer-events-none absolute top-2 right-2 h-3.5 w-3.5 border-t border-r border-cyan-400/50" />
-              <div className="pointer-events-none absolute bottom-2 left-2 h-3.5 w-3.5 border-b border-l border-cyan-400/50" />
-              <div className="pointer-events-none absolute bottom-2 right-2 h-3.5 w-3.5 border-b border-r border-cyan-400/50" />
+            <div className="machine-module relative flex flex-1 min-h-[460px] flex-col items-center justify-center border border-slate-800/90 bg-slate-950/85 p-8 sm:p-12 text-center backdrop-blur-md shadow-2xl font-mono overflow-hidden">
+              {/* Corner industrial brackets */}
+              <div className="pointer-events-none absolute top-0 left-0 h-4 w-4 border-t-2 border-l-2 border-cyan-400/70" />
+              <div className="pointer-events-none absolute top-0 right-0 h-4 w-4 border-t-2 border-r-2 border-cyan-400/70" />
+              <div className="pointer-events-none absolute bottom-0 left-0 h-4 w-4 border-b-2 border-l-2 border-cyan-400/70" />
+              <div className="pointer-events-none absolute bottom-0 right-0 h-4 w-4 border-b-2 border-r-2 border-cyan-400/70" />
 
-              <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-950/60 border border-cyan-500/40 text-cyan-400 shadow-[0_0_25px_rgba(0,240,255,0.2)]">
-                <Sparkles className="h-8 w-8 animate-pulse text-cyan-300" />
+              {/* Corner rivets */}
+              <div className="pointer-events-none absolute top-2 left-2 h-1.5 w-1.5 bg-slate-700/80" />
+              <div className="pointer-events-none absolute top-2 right-2 h-1.5 w-1.5 bg-slate-700/80" />
+              <div className="pointer-events-none absolute bottom-2 left-2 h-1.5 w-1.5 bg-slate-700/80" />
+              <div className="pointer-events-none absolute bottom-2 right-2 h-1.5 w-1.5 bg-slate-700/80" />
+
+              {/* Chamber HUD Telemetry Badges */}
+              <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/90 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+                <span className="text-slate-500">CHAMBER:</span>
+                <span className="font-bold">INSPECTION // UNIT-02</span>
               </div>
-              <h3 className="mt-4 text-base font-bold tracking-tight text-white font-sans">
-                AI Background Studio Ready
+              <div className="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 border border-emerald-500/40 bg-slate-950/90 px-2 py-0.5 text-[10px] text-emerald-400 font-mono">
+                <span className="h-1.5 w-1.5 bg-emerald-400 animate-pulse" />
+                <span className="text-slate-500">STATUS:</span>
+                <span className="font-bold">STANDBY // READY</span>
+              </div>
+              <div className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/90 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+                <span className="text-slate-500">SENSOR:</span>
+                <span className="font-bold">APERTURE OPTICS ONLINE</span>
+              </div>
+              <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/90 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+                <span className="text-slate-500">CALIBRATION:</span>
+                <span className="font-bold">KHMER LIGATURE SAFE</span>
+              </div>
+
+              {/* Center Radar Scanner Reticle */}
+              <div className="relative mb-5 flex h-24 w-24 items-center justify-center border border-cyan-500/40 bg-cyan-950/40 shadow-[0_0_35px_rgba(0,240,255,0.2)]">
+                {/* Rotating scanner ring */}
+                <div className="pointer-events-none absolute inset-1 border border-dashed border-cyan-400/50 animate-[spin_20s_linear_infinite]" />
+                {/* Crosshairs */}
+                <div className="pointer-events-none absolute top-0 bottom-0 left-1/2 w-[1px] bg-cyan-500/30 -translate-x-1/2" />
+                <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[1px] bg-cyan-500/30 -translate-y-1/2" />
+                <Sparkles className="h-8 w-8 text-cyan-300 animate-pulse" />
+              </div>
+
+              <h3 className="text-sm font-bold tracking-wider uppercase text-white font-mono flex items-center gap-2">
+                <span>PRECISION INSPECTION CHAMBER // STANDBY</span>
               </h3>
-              <p className="mt-1 text-xs text-slate-400 font-sans max-w-sm">
-                Upload a poster, flyer, or photo in Step 1 to isolate people and preserve Khmer typography automatically.
+              <p className="mt-2 text-xs text-slate-400 font-mono max-w-md leading-relaxed">
+                រង់ចាំបញ្ចូលរូបភាពពីម៉ូឌុលទី ១ (Intake Chamber)។ ប្រព័ន្ធ AI នឹងធ្វើកាត់ផ្ទៃខាងក្រោយដោយស្វ័យប្រវត្តិ និងរក្សាអក្សរខ្មែរយ៉ាងច្បាស់ល្អិតល្អន់។
               </p>
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-[10px] text-slate-300 font-sans">
-                <span className="rounded-full bg-slate-800/80 px-2.5 py-1 border border-slate-700/80">
-                  PNG / JPG / WEBP
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-[10px] text-slate-300 font-mono">
+                <span className="border border-slate-700 bg-slate-900/90 px-2.5 py-1 text-cyan-300">
+                  FORMATS: PNG · JPG · WEBP
                 </span>
-                <span className="rounded-full bg-slate-800/80 px-2.5 py-1 border border-slate-700/80">
-                  Khmer Ligatures
+                <span className="border border-slate-700 bg-slate-900/90 px-2.5 py-1 text-emerald-300">
+                  TYPOGRAPHY: KHMER + EN SAFE
                 </span>
-                <span className="rounded-full bg-slate-800/80 px-2.5 py-1 border border-slate-700/80">
-                  100% On-Device WASM
+                <span className="border border-slate-700 bg-slate-900/90 px-2.5 py-1 text-purple-300">
+                  ENGINE: ON-DEVICE WASM
                 </span>
               </div>
             </div>

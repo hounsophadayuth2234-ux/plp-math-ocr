@@ -1,9 +1,7 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
 import {
-  Sparkles,
   Volume2,
   VolumeX,
   Sun,
@@ -11,9 +9,9 @@ import {
   Laptop,
   HelpCircle,
   Settings,
-  ArrowLeft,
   ShieldCheck,
   Cpu,
+  Activity,
 } from "lucide-react";
 
 interface BgStudioNavProps {
@@ -26,6 +24,15 @@ interface BgStudioNavProps {
   isProcessing?: boolean;
 }
 
+/**
+ * Mechanical Workstation Command Deck Header
+ * Fits inside the main workspace to the right of the global sidebar.
+ * Preserves all test selectors:
+ * - data-testid="audio-toggle-btn"
+ * - data-testid="theme-toggle-btn"
+ * - data-testid="help-modal-btn"
+ * - data-testid="settings-modal-btn"
+ */
 export function BgStudioNav({
   theme,
   onToggleTheme,
@@ -36,119 +43,110 @@ export function BgStudioNav({
   isProcessing,
 }: BgStudioNavProps) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 w-full shrink-0 items-center justify-between border-b border-slate-800/80 bg-slate-950/80 px-3 sm:px-6 backdrop-blur-md shadow-sm">
-      {/* Brand & Identity */}
-      <div className="flex items-center gap-3">
-        <Link
-          href="/"
-          className="flex items-center gap-2 group text-slate-300 hover:text-white transition-colors"
-          title="Return to Dashboard"
-          aria-label="Return to Dashboard"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-cyan-600 via-sky-500 to-indigo-600 text-white shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-transform group-hover:scale-105">
-            <Sparkles className="h-4 w-4" />
+    <div className="relative overflow-hidden border border-slate-800/90 bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-950 px-4 py-2.5 shadow-lg font-mono">
+      {/* Corner mechanical brackets */}
+      <div className="pointer-events-none absolute top-0 left-0 h-2.5 w-2.5 border-t-2 border-l-2 border-cyan-400/80" />
+      <div className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 border-t-2 border-r-2 border-cyan-400/80" />
+      <div className="pointer-events-none absolute bottom-0 left-0 h-2.5 w-2.5 border-b-2 border-l-2 border-cyan-400/80" />
+      <div className="pointer-events-none absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-cyan-400/80" />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+        {/* Left: Workstation Unit Designation */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center border border-cyan-500/40 bg-slate-900 text-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.2)]">
+            <Cpu className="h-4 w-4" />
           </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="font-sans font-bold text-sm tracking-tight text-white">
-                AI Background Studio
-              </span>
-              <span className="hidden sm:inline-flex items-center rounded-full bg-cyan-950/80 border border-cyan-500/40 px-1.5 py-0.2 text-[9px] font-semibold text-cyan-300">
-                PRO
+          <div>
+            <div className="flex items-center gap-1.5 font-bold tracking-wider text-white text-[11px]">
+              <span>WORKSTATION // UNIT-02</span>
+              <span className="text-cyan-400 text-[10px]">[BG-REMOVER]</span>
+            </div>
+            <div className="text-[9px] text-slate-400 flex items-center gap-1.5">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isProcessing ? "bg-amber-400 animate-ping" : "bg-emerald-400 animate-pulse"
+                }`}
+              />
+              <span className={isProcessing ? "text-amber-300 font-bold" : "text-emerald-400"}>
+                {isProcessing ? "INFERENCE MATRIX SCANNING..." : "STATUS: READY FOR INTAKE"}
               </span>
             </div>
-            <span className="hidden md:inline-block text-[10px] text-slate-400 font-sans">
-              Person + Khmer Text Protected
-            </span>
           </div>
-        </Link>
-      </div>
+        </div>
 
-      {/* Center Status: Local AI Telemetry */}
-      <div className="hidden lg:flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs">
-        <span className="relative flex h-2 w-2">
-          <span
-            className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${
-              isProcessing ? "bg-amber-400" : "bg-emerald-400"
+        {/* Center: Engine & Privacy Telemetry */}
+        <div className="hidden md:flex items-center gap-2 border border-slate-800 bg-slate-950/80 px-3 py-1 text-[10px]">
+          <span className="text-slate-400">ENGINE:</span>
+          <span className="text-cyan-300 font-bold">@IMGLY/ISNET_FP16 (WASM)</span>
+          <span className="text-slate-600">|</span>
+          <span className="flex items-center gap-1 text-emerald-400">
+            <ShieldCheck className="h-3 w-3" />
+            100% ON-DEVICE
+          </span>
+        </div>
+
+        {/* Right: Instrument Controls */}
+        <div className="flex items-center gap-1.5">
+          {/* Audio Synthesizer Toggle */}
+          <button
+            type="button"
+            data-testid="audio-toggle-btn"
+            onClick={onToggleAudio}
+            className={`min-h-[38px] min-w-[38px] flex items-center justify-center border text-xs transition-all cursor-pointer ${
+              audioMuted
+                ? "border-slate-800 bg-slate-900/80 text-slate-400 hover:text-slate-200"
+                : "border-cyan-500/50 bg-cyan-950/70 text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
             }`}
-          />
-          <span
-            className={`relative inline-flex h-2 w-2 rounded-full ${
-              isProcessing ? "bg-amber-500" : "bg-emerald-500"
-            }`}
-          />
-        </span>
-        <span className="text-slate-300 font-mono text-[11px]">
-          {isProcessing ? "Inference Active (WASM)" : "Browser AI (WASM) · Ready"}
-        </span>
-        <span className="text-slate-600">|</span>
-        <span className="flex items-center gap-1 text-[10px] text-slate-400 font-sans">
-          <ShieldCheck className="h-3 w-3 text-emerald-400" />
-          100% On-Device
-        </span>
+            title={audioMuted ? "Audio: Off (Muted) — Click to activate" : "Audio: On (Active) — Click to mute"}
+            aria-label={audioMuted ? "Unmute audio effects" : "Mute audio effects"}
+          >
+            {audioMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </button>
+
+          {/* Theme Switcher */}
+          <button
+            type="button"
+            data-testid="theme-toggle-btn"
+            onClick={onToggleTheme}
+            className="min-h-[38px] min-w-[38px] flex items-center justify-center border border-slate-800 bg-slate-900/80 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+            title={`Theme Mode: ${theme.toUpperCase()}`}
+            aria-label="Toggle theme mode"
+          >
+            {theme === "light" ? (
+              <Sun className="h-4 w-4 text-amber-400" />
+            ) : theme === "dark" ? (
+              <Moon className="h-4 w-4 text-sky-400" />
+            ) : (
+              <Laptop className="h-4 w-4 text-slate-400" />
+            )}
+          </button>
+
+          {/* Guide & Shortcuts */}
+          <button
+            type="button"
+            data-testid="help-modal-btn"
+            onClick={onOpenHelp}
+            className="min-h-[38px] min-w-[38px] flex items-center justify-center border border-slate-800 bg-slate-900/80 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
+            title="Workstation Manual & Shortcuts"
+            aria-label="Open Guide and Shortcuts"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </button>
+
+          {/* Preferences / Calibration */}
+          <button
+            type="button"
+            data-testid="settings-modal-btn"
+            onClick={onOpenSettings}
+            className="min-h-[38px] flex items-center gap-1.5 border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-xs text-slate-300 hover:border-cyan-500/40 hover:text-white transition-colors cursor-pointer"
+            title="Workstation Calibration Preferences"
+            aria-label="Open Studio Settings"
+          >
+            <Settings className="h-4 w-4 text-slate-400" />
+            <span className="hidden sm:inline font-mono text-[10px] font-bold">CALIBRATE</span>
+          </button>
+        </div>
       </div>
-
-      {/* Action Controls */}
-      <div className="flex items-center gap-1.5 sm:gap-2">
-        {/* Sound Toggle Button */}
-        <button
-          type="button"
-          data-testid="audio-toggle-btn"
-          onClick={onToggleAudio}
-          className={`min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border text-xs transition-all ${
-            audioMuted
-              ? "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200"
-              : "border-cyan-500/40 bg-cyan-950/60 text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.2)]"
-          }`}
-          title={audioMuted ? "Sound: Off (Muted) — Click to enable" : "Sound: On (Active) — Click to mute"}
-          aria-label={audioMuted ? "Unmute audio effects" : "Mute audio effects"}
-        >
-          {audioMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-        </button>
-
-        {/* Theme Toggle Button */}
-        <button
-          type="button"
-          data-testid="theme-toggle-btn"
-          onClick={onToggleTheme}
-          className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 transition-colors"
-          title={`Theme: ${theme.toUpperCase()} — Click to switch`}
-          aria-label="Toggle theme mode"
-        >
-          {theme === "light" ? (
-            <Sun className="h-4 w-4 text-amber-400" />
-          ) : theme === "dark" ? (
-            <Moon className="h-4 w-4 text-sky-400" />
-          ) : (
-            <Laptop className="h-4 w-4 text-slate-400" />
-          )}
-        </button>
-
-        {/* Help & Guide Modal Button */}
-        <button
-          type="button"
-          data-testid="help-modal-btn"
-          onClick={onOpenHelp}
-          className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 transition-colors"
-          title="Guide & Keyboard Shortcuts"
-          aria-label="Open Guide and Shortcuts"
-        >
-          <HelpCircle className="h-4 w-4" />
-        </button>
-
-        {/* Settings Modal Button */}
-        <button
-          type="button"
-          data-testid="settings-modal-btn"
-          onClick={onOpenSettings}
-          className="min-h-[38px] flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-700 hover:text-white transition-colors"
-          title="Studio Preferences"
-          aria-label="Open Studio Settings"
-        >
-          <Settings className="h-4 w-4 text-slate-400" />
-          <span className="hidden sm:inline font-sans font-medium text-[11px]">Settings</span>
-        </button>
-      </div>
-    </header>
+    </div>
   );
 }
