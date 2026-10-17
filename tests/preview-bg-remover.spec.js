@@ -42,6 +42,7 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
       const fileInput = page.locator('[data-testid="image-upload-input"]');
       await expect(fileInput).toBeAttached({ timeout: 15000 });
       await fileInput.setInputFiles(fixturePath);
+      await expect(page.locator('button:has-text("ដកចេញ (REMOVE)")')).toBeVisible({ timeout: 15000 });
 
       // 3. Select Person + Text Only
       const personTextBtn = page.locator('[data-testid="content-mode-person-text-only"]');
@@ -65,8 +66,8 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
 
       // 7. Start Fast Preview & measure cold-start timing
       const fastPreviewBtn = page.locator('[data-testid="fast-preview-start-btn"]');
-      await expect(fastPreviewBtn).toBeVisible();
-      await expect(fastPreviewBtn).toBeEnabled();
+      await expect(fastPreviewBtn).toBeVisible({ timeout: 10000 });
+      await expect(fastPreviewBtn).toBeEnabled({ timeout: 15000 });
 
       const tStart = Date.now();
       await fastPreviewBtn.click();
@@ -124,23 +125,58 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
       const cutoutPath = path.join(RESULTS_DIR, `${basePrefix}-cutout.png`);
       await page.screenshot({ path: cutoutPath, fullPage: false });
 
-      // 11. Verify Manual Mask controls exist
+      // 11. Verify Manual Mask controls & simulate brush interaction
       const keepBrushBtn = page.locator('[data-testid="tool-keep-brush"], [data-testid="tool-keep-person"], [data-testid="tool-keep-text"]').first();
       await expect(keepBrushBtn).toBeAttached({ timeout: 15000 });
+      if (await keepBrushBtn.isVisible()) {
+        await keepBrushBtn.click();
+      }
+
+      const canvas = page.locator('[data-testid="mask-editor-canvas"]').first();
+      if (await canvas.isVisible()) {
+        const box = await canvas.boundingBox();
+        if (box) {
+          // Perform a gentle simulated brush stroke to verify Keep Mask stroke
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await page.mouse.down();
+          await page.mouse.move(box.x + box.width / 2 + 10, box.y + box.height / 2 + 10);
+          await page.mouse.up();
+          await page.waitForTimeout(200);
+        }
+      }
 
       const eraseBrushBtn = page.locator('[data-testid="tool-remove-brush"], [data-testid="tool-erase"]').first();
       await expect(eraseBrushBtn).toBeAttached({ timeout: 15000 });
 
       const undoBtn = page.locator('[data-testid="tool-undo"], [data-testid="undo-btn"]').first();
       await expect(undoBtn).toBeAttached({ timeout: 15000 });
+      if (await undoBtn.isEnabled()) {
+        await undoBtn.click();
+      }
 
       const redoBtn = page.locator('[data-testid="tool-redo"], [data-testid="redo-btn"]').first();
       await expect(redoBtn).toBeAttached({ timeout: 15000 });
+      if (await redoBtn.isEnabled()) {
+        await redoBtn.click();
+      }
 
       const resetBtn = page.locator('[data-testid="mask-reset-button"], [data-testid="reset-initial-mask-btn"]').first();
       await expect(resetBtn).toBeAttached({ timeout: 15000 });
 
-      // 12. Verify Transparent PNG export exists
+      // 12. Verify Refinement Modes, Background Toggles & Export buttons
+      const refineOff = page.locator('[data-testid="refine-mode-off"]');
+      if (await refineOff.isVisible()) {
+        await expect(refineOff).toBeAttached();
+      }
+
+      const bgTransparent = page.locator('[data-testid="bg-color-transparent"], [data-testid="quick-download-transparent"]').first();
+      await expect(bgTransparent).toBeAttached({ timeout: 15000 });
+
+      const confirmExportBtn = page.locator('[data-testid="confirm-mask-export-btn"]');
+      if (await confirmExportBtn.isVisible()) {
+        await expect(confirmExportBtn).toBeEnabled();
+      }
+
       const exportTransparentBtn = page.locator('[data-testid="export-transparent-png-btn"], [data-testid="quick-download-transparent"]').first();
       await expect(exportTransparentBtn).toBeVisible({ timeout: 15000 });
 

@@ -2086,6 +2086,7 @@ export function ColorStudio({
         <button
           type="button"
           data-channel="white"
+          data-testid="bg-color-white"
           onClick={() => handleSelectChannel("white")}
           className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "white"
@@ -2104,6 +2105,7 @@ export function ColorStudio({
         <button
           type="button"
           data-channel="pink"
+          data-testid="bg-color-pink"
           onClick={() => handleSelectChannel("pink")}
           className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "pink"
@@ -2124,6 +2126,7 @@ export function ColorStudio({
         {/* 3. Custom Color */}
         <div
           data-channel="custom"
+          data-testid="bg-color-custom"
           onClick={() => handleSelectChannel("custom")}
           className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider cursor-pointer ${
             activeChannel === "custom"
@@ -2152,6 +2155,7 @@ export function ColorStudio({
         <button
           type="button"
           data-channel="transparent"
+          data-testid="bg-color-transparent"
           onClick={() => handleSelectChannel("transparent")}
           className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
             activeChannel === "transparent"
@@ -2283,6 +2287,7 @@ export function ColorStudio({
             )}
             <canvas
               ref={canvasRef}
+              data-testid="mask-editor-canvas"
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
@@ -3159,6 +3164,7 @@ export function ColorStudio({
 
             <button
               type="button"
+              data-testid="tool-apply"
               onClick={handleApplyCorrections}
               disabled={!isDirty && hasAppliedCorrections}
               className={`flex items-center gap-1 rounded-none px-3 py-1 text-[10px] font-bold transition-all tracking-wider uppercase ${
