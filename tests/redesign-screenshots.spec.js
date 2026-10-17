@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 const PREVIEW_URL =
   process.env.PREVIEW_URL ||
-  'https://ai-toolkit-ce49lrxrh-hounsophadayuth2234-6445s-projects.vercel.app/bg-remover';
+  'https://ai-toolkit-mn5mgzsgz-hounsophadayuth2234-6445s-projects.vercel.app/bg-remover';
 const FIXTURES_DIR = path.resolve('tests/fixtures');
 const SCREENSHOTS_DIR = path.resolve('test-results/redesign-screenshots');
 

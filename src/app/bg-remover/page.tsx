@@ -38,7 +38,6 @@ import { BgStudioNav } from "@/components/bg-remover/BgStudioNav";
 import { BgStudioHero } from "@/components/bg-remover/BgStudioHero";
 import { BgStudioSettingsModal } from "@/components/bg-remover/BgStudioSettingsModal";
 import { BgStudioHelpModal } from "@/components/bg-remover/BgStudioHelpModal";
-import { MechanicalCyberBackground } from "@/components/bg-remover/MechanicalCyberBackground";
 
 export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -222,6 +221,15 @@ export default function BgRemoverPage() {
       }
     };
   }, []);
+
+  // Broadcast AI processing changes to the global application shell background
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("ai-processing-change", {
+        detail: { isProcessing },
+      })
+    );
+  }, [isProcessing]);
 
   const handleCancel = () => {
     bgWorkerManager.terminateActiveWorker();
@@ -795,9 +803,6 @@ export default function BgRemoverPage() {
 
   return (
     <div className="relative space-y-5 font-mono text-slate-100" data-app-state={manualState}>
-      {/* ── Mechanical Cyber Technology Animated Background ── */}
-      <MechanicalCyberBackground isProcessing={isProcessing} hasResult={Boolean(cachedResult)} />
-
       {/* ── Workstation Command Deck Instrument Header ── */}
       <div className="relative z-10">
         <BgStudioNav
@@ -1075,144 +1080,163 @@ export default function BgRemoverPage() {
                 <span className="text-cyan-400 font-bold uppercase">{activeSelectionMode}</span>
               </div>
 
-              <div role="radiogroup" aria-label="What do you want to keep?" className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-                {/* 1. Preserve all foreground (Default) */}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={activeSelectionMode === "preserve_all_foreground"}
-                  data-testid="content-mode-preserve-all"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("preserve_all_foreground");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "preserve_all_foreground"
-                      ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-emerald-400" />
-                    <span>1. Preserve all foreground (Default)</span>
-                  </div>
-                  <span className="text-[9px] text-emerald-300/80 mt-0.5">Keep all people, animals, plants, products, text &amp; details</span>
-                </button>
+              <div role="radiogroup" aria-label="What do you want to keep?" className="space-y-2 text-xs font-mono">
+                {/* Primary Modes Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* 1. Preserve all foreground (Default) */}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={activeSelectionMode === "preserve_all_foreground"}
+                    data-testid="content-mode-preserve-all"
+                    onClick={() => {
+                      cyberAudio.playClick();
+                      setActiveSelectionMode("preserve_all_foreground");
+                    }}
+                    className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                      activeSelectionMode === "preserve_all_foreground"
+                        ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                        : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                      <span className="h-2 w-2 rounded-none bg-emerald-400" />
+                      <span>1. Preserve all foreground (Default)</span>
+                    </div>
+                    <span className="text-[9px] text-emerald-300/80 mt-0.5">Keep all people, animals, plants, products, text &amp; details</span>
+                  </button>
 
-                {/* 2. Person + Text Only */}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"}
-                  data-testid="content-mode-person-text-only"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("person_text_only");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"
-                      ? "border-sky-400 bg-sky-950/60 text-white font-bold ring-1 ring-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-sky-400" />
-                    <span>2. Person + Text Only / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ</span>
-                  </div>
-                  <span className="text-[9px] text-sky-300/80 mt-0.5">This mode keeps the selected person and text, and removes the poster/background. Use Keep Brush if OCR misses any letters.</span>
-                </button>
+                  {/* 2. Person + Text Only */}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"}
+                    data-testid="content-mode-person-text-only"
+                    onClick={() => {
+                      cyberAudio.playClick();
+                      setActiveSelectionMode("person_text_only");
+                    }}
+                    className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                      activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"
+                        ? "border-sky-400 bg-sky-950/60 text-white font-bold ring-1 ring-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]"
+                        : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                      <span className="h-2 w-2 rounded-none bg-sky-400" />
+                      <span>2. Person + Text Only / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ</span>
+                    </div>
+                    <span className="text-[9px] text-sky-300/80 mt-0.5">This mode keeps the selected person and text, and removes the poster/background. Use Keep Brush if OCR misses any letters.</span>
+                  </button>
+                </div>
 
-                {/* 3. Person only */}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={activeSelectionMode === "person" || activeSelectionMode === "person_only"}
-                  data-testid="content-mode-person"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("person");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "person" || activeSelectionMode === "person_only"
-                      ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
+                {/* Secondary Modes Collapsible Accordion */}
+                <details
+                  className="group rounded-none border border-slate-800/90 bg-slate-950/40 p-2.5 font-mono"
+                  open={["person", "person_only", "whole_product", "product_only", "document_poster", "whole_poster", "document_text", "custom", "custom_mask"].includes(activeSelectionMode) || undefined}
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-purple-400" />
-                    <span>3. Person only</span>
-                  </div>
-                  <span className="text-[9px] text-purple-300/80 mt-0.5">Keep real person; remove printed poster text</span>
-                </button>
+                  <summary className="min-h-[36px] flex items-center justify-between cursor-pointer text-[11px] font-bold text-slate-400 hover:text-cyan-300 select-none">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 bg-cyan-400" />
+                      <span>MORE SELECTION MODES (PERSON, PRODUCT, DOCUMENT, CUSTOM) / ជម្រើសបន្ថែម</span>
+                    </span>
+                    <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
 
-                {/* 4. Product only */}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"}
-                  data-testid="content-mode-product"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("whole_product");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"
-                      ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-amber-400" />
-                    <span>4. Product only</span>
-                  </div>
-                  <span className="text-[9px] text-amber-300/80 mt-0.5">Keep whole product, white boxes, packages</span>
-                </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2.5 mt-1 border-t border-slate-800/80">
+                    {/* 3. Person only */}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={activeSelectionMode === "person" || activeSelectionMode === "person_only"}
+                      data-testid="content-mode-person"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setActiveSelectionMode("person");
+                      }}
+                      className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                        activeSelectionMode === "person" || activeSelectionMode === "person_only"
+                          ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                        <span className="h-2 w-2 rounded-none bg-purple-400" />
+                        <span>3. Person only</span>
+                      </div>
+                      <span className="text-[9px] text-purple-300/80 mt-0.5">Keep real person; remove printed poster text</span>
+                    </button>
 
-                {/* 5. Document / text preserve */}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster" || activeSelectionMode === "document_text"}
-                  data-testid="content-mode-document"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("document_poster");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster" || activeSelectionMode === "document_text"
-                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-cyan-400" />
-                    <span>5. Document/text preserve</span>
-                  </div>
-                  <span className="text-[9px] text-cyan-300/80 mt-0.5">Byte-perfect page, Khmer text, logos, graphics</span>
-                </button>
+                    {/* 4. Product only */}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"}
+                      data-testid="content-mode-product"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setActiveSelectionMode("whole_product");
+                      }}
+                      className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                        activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"
+                          ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                        <span className="h-2 w-2 rounded-none bg-amber-400" />
+                        <span>4. Product only</span>
+                      </div>
+                      <span className="text-[9px] text-amber-300/80 mt-0.5">Keep whole product, white boxes, packages</span>
+                    </button>
 
-                {/* 6. Custom mask */}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"}
-                  data-testid="content-mode-custom"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("custom");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"
-                      ? "border-rose-400 bg-rose-950/60 text-white font-bold ring-1 ring-rose-400/40 shadow-[0_0_12px_rgba(244,63,94,0.2)]"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-rose-400" />
-                    <span>6. Custom mask</span>
+                    {/* 5. Document / text preserve */}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster" || activeSelectionMode === "document_text"}
+                      data-testid="content-mode-document"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setActiveSelectionMode("document_poster");
+                      }}
+                      className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                        activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster" || activeSelectionMode === "document_text"
+                          ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                        <span className="h-2 w-2 rounded-none bg-cyan-400" />
+                        <span>5. Document/text preserve</span>
+                      </div>
+                      <span className="text-[9px] text-cyan-300/80 mt-0.5">Byte-perfect page, Khmer text, logos, graphics</span>
+                    </button>
+
+                    {/* 6. Custom mask */}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"}
+                      data-testid="content-mode-custom"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setActiveSelectionMode("custom");
+                      }}
+                      className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                        activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"
+                          ? "border-rose-400 bg-rose-950/60 text-white font-bold ring-1 ring-rose-400/40 shadow-[0_0_12px_rgba(244,63,94,0.2)]"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                        <span className="h-2 w-2 rounded-none bg-rose-400" />
+                        <span>6. Custom mask</span>
+                      </div>
+                      <span className="text-[9px] text-rose-300/80 mt-0.5">User paints/clicks exactly what to keep with brush &amp; points</span>
+                    </button>
                   </div>
-                  <span className="text-[9px] text-rose-300/80 mt-0.5">User paints/clicks exactly what to keep with brush &amp; points</span>
-                </button>
+                </details>
               </div>
 
               {/* Document Safe Mode Badge */}
@@ -1229,7 +1253,7 @@ export default function BgRemoverPage() {
                 </div>
               )}
 
-              {/* Mode Explanation */}
+              {/* Mode Explanation & Person + Text Only Options */}
               <div className="text-[9.5px] text-slate-300 leading-relaxed font-mono bg-slate-950/60 p-2.5 border border-slate-800/80">
                 {(activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text") && (
                   <div className="space-y-2">
@@ -1296,274 +1320,6 @@ export default function BgRemoverPage() {
                   </span>
                 )}
               </div>
-            </div>
-
-            {/* ── ជំហានទី ៣ ៖ ជ្រើសរើសប្រភេទរូបភាពដែលចង់បាន (STEP 3: OUTPUT PURPOSE) ── */}
-            <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
-              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
-                <span>ជំហានទី ៣ ៖ ពណ៌ផ្ទៃខាងក្រោយ</span>
-                <span className="text-cyan-400 font-bold">PURPOSE</span>
-              </div>
-              <div className="grid grid-cols-3 gap-1.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setSelectedPurpose("white");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
-                    selectedPurpose === "white"
-                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
-                  }`}
-                >
-                  <span className="h-2.5 w-2.5 bg-white border border-slate-400 mb-1" />
-                  <span className="text-[11px] leading-tight font-bold text-white">រូបសំណួរ (ស)</span>
-                  <span className="text-[9px] text-slate-400 font-mono">#FFFFFF</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setSelectedPurpose("pink");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
-                    selectedPurpose === "pink"
-                      ? "border-pink-400 bg-pink-950/60 text-white font-bold ring-1 ring-pink-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
-                  }`}
-                >
-                  <span className="h-2.5 w-2.5 border border-pink-400 mb-1" style={{ backgroundColor: "#FFF0F5" }} />
-                  <span className="text-[11px] leading-tight font-bold text-white">ដំណោះស្រាយ</span>
-                  <span className="text-[9px] text-pink-300 font-mono">#FFF0F5</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setSelectedPurpose("transparent");
-                  }}
-                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
-                    selectedPurpose === "transparent"
-                      ? "border-indigo-400 bg-indigo-950/60 text-white font-bold ring-1 ring-indigo-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
-                  }`}
-                >
-                  <span className="text-[11px] mb-0.5">🏁</span>
-                  <span className="text-[11px] leading-tight font-bold text-white">រូបថ្លា</span>
-                  <span className="text-[9px] text-indigo-300 font-mono">PNG Alpha</span>
-                </button>
-              </div>
-            </div>
-
-            {/* ── ជ្រើសរើសម៉ាស៊ីនដំណើរការ (PROCESSING ENGINE SELECTOR) ── */}
-            <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
-              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
-                <span>ម៉ាស៊ីនដំណើរការ</span>
-                <span className="text-cyan-400 font-bold">
-                  {selectedEngine === "browser" ? "BROWSER AI" : "REMOTE WORKER"}
-                </span>
-              </div>
-
-              <div role="radiogroup" aria-label="ជ្រើសរើសម៉ាស៊ីនដំណើរការ (Processing Engine)" className="grid grid-cols-2 gap-2 text-xs">
-                {/* 1. Browser AI Option */}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selectedEngine === "browser"}
-                  data-testid="engine-select-browser"
-                  onClick={() => handleSwitchEngine("browser")}
-                  disabled={isProcessing}
-                  className={`min-h-[44px] flex items-center justify-between p-2.5 rounded-none border text-left transition-all font-mono focus:ring-2 focus:ring-cyan-400 focus:outline-none ${
-                    selectedEngine === "browser"
-                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 rounded-none border ${selectedEngine === "browser" ? "bg-cyan-400 border-cyan-300" : "bg-transparent border-slate-500"}`} />
-                    <div>
-                      <div className="text-[11px] font-bold text-white">Browser AI</div>
-                      <div className="text-[9px] text-cyan-300/80">លំនាំដើម · ក្នុងម៉ាស៊ីន</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-emerald-400 font-bold">FREE</span>
-                </button>
-
-                {/* 2. Remote Worker Option */}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selectedEngine === "worker"}
-                  aria-disabled={!isWorkerConfigured}
-                  data-testid="engine-select-worker"
-                  onClick={() => handleSwitchEngine("worker")}
-                  disabled={!isWorkerConfigured || isProcessing}
-                  className={`min-h-[44px] flex items-center justify-between p-2.5 rounded-none border text-left transition-all font-mono focus:ring-2 focus:ring-purple-400 focus:outline-none ${
-                    !isWorkerConfigured
-                      ? "border-slate-800 bg-slate-900/40 text-slate-500 opacity-50 cursor-not-allowed"
-                      : selectedEngine === "worker"
-                      ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                  title={
-                    !isWorkerConfigured
-                      ? "Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។"
-                      : workerStatus === "unavailable"
-                      ? `Remote Worker មិនអាចភ្ជាប់បានទេ (OFFLINE / UNAVAILABLE): ${workerError || "Offline"}`
-                      : `Remote Worker Microservice (${workerModel || "Online"})`
-                  }
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-2.5 w-2.5 rounded-none border ${
-                        selectedEngine === "worker"
-                          ? "bg-purple-400 border-purple-300"
-                          : "bg-transparent border-slate-500"
-                      }`}
-                    />
-                    <div>
-                      <div className="text-[11px] font-bold text-slate-200">
-                        Remote Worker
-                      </div>
-                      <div className="text-[9px]">
-                        {!isWorkerConfigured ? (
-                          <span className="text-slate-400">🔒 មិនទាន់កំណត់</span>
-                        ) : workerStatus === "checking" ? (
-                          <span className="text-amber-400 animate-pulse">⏳ កំពុងពិនិត្យ...</span>
-                        ) : workerStatus === "ready" ? (
-                          <span className="text-emerald-400">🟢 ត្រៀមរួចរាល់ (ONLINE)</span>
-                        ) : workerStatus === "unavailable" ? (
-                          <span className="text-rose-400 font-bold">🔴 OFFLINE / UNAVAILABLE</span>
-                        ) : (
-                          <span className="text-cyan-400">⚙️ បានកំណត់</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <Server className="h-3.5 w-3.5 text-slate-400" />
-                </button>
-              </div>
-
-              {/* Accessible live status for engine selection */}
-              <div aria-live="polite" className="sr-only">
-                {selectedEngine === "browser"
-                  ? "ម៉ាស៊ីនដំណើរការបច្ចុប្បន្នគឺ Browser AI (ដំណើរការក្នុងម៉ាស៊ីន)"
-                  : "ម៉ាស៊ីនដំណើរការបច្ចុប្បន្នគឺ Remote Worker (ដំណើរការលើម៉ាស៊ីនមេ)"}
-              </div>
-
-              {/* Remote Worker Privacy Notice & Re-check */}
-              {selectedEngine === "worker" && isWorkerConfigured && (
-                <div className="text-[10px] text-purple-200/90 leading-relaxed font-mono bg-purple-950/30 p-2.5 border border-purple-500/30 space-y-1">
-                  <div className="font-bold flex items-center justify-between text-purple-300">
-                    <span>ℹ️ សេចក្តីជូនដំណឹងអំពីឯកជនភាព</span>
-                    {workerStatus === "unavailable" && (
-                      <button
-                        type="button"
-                        data-testid="recheck-worker-btn"
-                        onClick={() => checkWorkerStatus(true)}
-                        className="text-[9px] text-purple-300 hover:text-white underline font-mono cursor-pointer"
-                      >
-                        [ពិនិត្យឡើងវិញ]
-                      </button>
-                    )}
-                  </div>
-                  <p>
-                    មុខងារ Remote Worker នឹងបញ្ជូនរូបភាពរបស់អ្នកទៅកាន់ម៉ាស៊ីនមេ Remote Worker ដែលបានកំណត់តាមរយៈ Server Proxy ដើម្បីដំណើរការកាត់ផ្ទៃខាងក្រោយ។
-                  </p>
-                </div>
-              )}
-
-              {!isWorkerConfigured && (
-                <p className="text-[9.5px] text-slate-400 leading-relaxed font-mono bg-slate-950/40 p-2 border border-slate-800/80">
-                  ℹ️ Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។ Browser AI ដំណើរការក្នុងម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ និងមានសុវត្ថិភាពខ្ពស់។
-                </p>
-              )}
-            </div>
-
-            {/* ── គុណភាពគែម / ALPHA MATTING REFINEMENT ── */}
-            <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
-              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
-                <span>គុណភាពគែម (Edge Quality)</span>
-                <span className="text-cyan-400 font-bold">
-                  {edgeQuality === "fast"
-                    ? "FAST PREVIEW"
-                    : edgeQuality === "balanced"
-                    ? "BALANCED"
-                    : "FINE HAIR & DETAILS"}
-                </span>
-              </div>
-              <div role="radiogroup" aria-label="Edge Quality & Alpha Matting" className="grid grid-cols-3 gap-1.5 text-xs font-mono">
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={edgeQuality === "fast"}
-                  data-testid="edge-quality-fast"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setEdgeQuality("fast");
-                  }}
-                  disabled={isProcessing}
-                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
-                    edgeQuality === "fast"
-                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className="text-[11px] font-bold">Fast Preview</span>
-                  <span className="text-[9px] text-slate-500">Preview / Low-res</span>
-                </button>
-
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={edgeQuality === "balanced"}
-                  data-testid="edge-quality-balanced"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setEdgeQuality("balanced");
-                  }}
-                  disabled={isProcessing}
-                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
-                    edgeQuality === "balanced"
-                      ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className="text-[11px] font-bold text-purple-300">Balanced</span>
-                  <span className="text-[9px] text-purple-400/80">Alpha Matting</span>
-                </button>
-
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={edgeQuality === "quality" || edgeQuality === "fine_details"}
-                  data-testid="edge-quality-quality"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setEdgeQuality("fine_details");
-                  }}
-                  disabled={isProcessing}
-                  className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
-                    edgeQuality === "quality" || edgeQuality === "fine_details"
-                      ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40"
-                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className="text-[11px] font-bold text-emerald-300">Fine Hair &amp; Details</span>
-                  <span className="text-[9px] text-emerald-400/80">Hair, Fur, Plants</span>
-                </button>
-              </div>
-
-              {/* Limitation Notice */}
-              <p className="text-[9.5px] text-slate-400 leading-relaxed font-mono bg-slate-950/40 p-2 border border-slate-800/80">
-                ℹ️ <strong>ចំណាំ (Limitation)</strong>៖ មុខងារ Alpha Matting ជួយសម្រួលគែមសក់ និងអក្សរស្ដើងៗក្នុងតំបន់ដែល AI បានរកឃើញ ប៉ុន្តែមិនអាចបង្កើតសរសៃសក់ដែលម៉ូដែលកាត់បាត់ទាំងស្រុងនោះទេ។
-                <span className="block mt-0.5 text-slate-500 font-sans">
-                  (Alpha matting refines boundaries and fine hair/text where detected; it cannot reconstruct strokes completely missed by the coarse model.)
-                </span>
-              </p>
             </div>
 
             {/* ── ជំហានទី ៣ ៖ ដំណើរការកាត់រូបភាព (STEP 3: PROCESS EXECUTION) ── */}
@@ -1790,75 +1546,286 @@ export default function BgRemoverPage() {
               </div>
             )}
 
-            {/* ── ការកំណត់កម្រិតខ្ពស់ & Remote Worker (ADVANCED COLLAPSIBLE SECTION) ── */}
+            {/* ── Advanced Settings & Engine Configuration (ADVANCED COLLAPSIBLE PANEL) ── */}
             <details className="group rounded-none border border-slate-800 bg-slate-950/60 p-3 font-mono">
               <summary className="min-h-[44px] flex items-center justify-between cursor-pointer text-xs font-bold text-slate-400 hover:text-cyan-300 select-none">
                 <span className="flex items-center gap-1.5">
                   <Server className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>ការកំណត់កម្រិតខ្ពស់ (ADVANCED SETTINGS)</span>
+                  <span>ADVANCED SETTINGS &amp; ENGINE CONFIGURATION (ការកំណត់កម្រិតខ្ពស់)</span>
                 </span>
                 <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">▼</span>
               </summary>
 
-              <div className="space-y-3 pt-3 border-t border-slate-800/80 mt-2 text-xs">
-                {/* Remote Worker Status */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] uppercase text-slate-400 font-mono">
-                    <span>REMOTE WORKER SERVICE</span>
-                    {!isWorkerConfigured ? (
-                      <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5 border border-slate-700">
-                        🔒 NOT CONFIGURED
-                      </span>
-                    ) : workerStatus === "checking" ? (
-                      <span className="text-amber-400 animate-pulse text-[10px]">⏳ CHECKING...</span>
-                    ) : workerStatus === "ready" ? (
-                      <span className="text-emerald-400 text-[10px]">🟢 ONLINE / READY</span>
-                    ) : workerStatus === "unavailable" ? (
-                      <span className="text-rose-400 text-[10px] font-bold">🔴 OFFLINE / UNAVAILABLE</span>
-                    ) : (
-                      <span className="text-cyan-400 text-[10px]">⚙️ CONFIGURED</span>
-                    )}
+              <div className="space-y-3.5 pt-3 border-t border-slate-800/80 mt-2 text-xs">
+                {/* 1. Background Color / Purpose */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
+                    <span>ពណ៌ផ្ទៃខាងក្រោយ (Output Background)</span>
+                    <span className="text-cyan-400 font-bold">PURPOSE</span>
                   </div>
-                  <button
-                    type="button"
-                    disabled={!isWorkerConfigured || isProcessing || workerStatus === "unavailable"}
-                    onClick={() => {
-                      if (!isWorkerConfigured) {
-                        setError("Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។");
-                        return;
-                      }
-                      if (workerStatus === "unavailable") {
-                        setError(`Remote Worker មិនអាចភ្ជាប់បានទេ (OFFLINE / UNAVAILABLE): ${workerError || "Connection timed out"}។ សូមប្រើ Browser AI ជំនួសវិញ។`);
-                        return;
-                      }
-                      handleRunSegmentation("worker");
-                    }}
-                    className={`min-h-[44px] w-full flex items-center justify-between border p-2 text-left transition-all ${
-                      !isWorkerConfigured || workerStatus === "unavailable"
-                        ? "opacity-50 cursor-not-allowed border-slate-800 bg-slate-900/40 text-slate-500"
-                        : "border-purple-400/60 bg-purple-950/30 text-purple-200 hover:bg-purple-950/60"
-                    }`}
-                  >
-                    <span className="text-[11px] font-mono">
-                      {!isWorkerConfigured
-                        ? "Remote Worker (មិនទាន់កំណត់)"
-                        : workerStatus === "unavailable"
-                        ? "Remote Worker (OFFLINE / UNAVAILABLE)"
-                        : "RUN REMOTE WORKER"}
+                  <div className="grid grid-cols-3 gap-1.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setSelectedPurpose("white");
+                      }}
+                      className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                        selectedPurpose === "white"
+                          ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                      }`}
+                    >
+                      <span className="h-2.5 w-2.5 bg-white border border-slate-400 mb-1" />
+                      <span className="text-[11px] leading-tight font-bold text-white">រូបសំណួរ (ស)</span>
+                      <span className="text-[9px] text-slate-400 font-mono">#FFFFFF</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setSelectedPurpose("pink");
+                      }}
+                      className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                        selectedPurpose === "pink"
+                          ? "border-pink-400 bg-pink-950/60 text-white font-bold ring-1 ring-pink-400/40"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                      }`}
+                    >
+                      <span className="h-2.5 w-2.5 border border-pink-400 mb-1" style={{ backgroundColor: "#FFF0F5" }} />
+                      <span className="text-[11px] leading-tight font-bold text-white">ដំណោះស្រាយ</span>
+                      <span className="text-[9px] text-pink-300 font-mono">#FFF0F5</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setSelectedPurpose("transparent");
+                      }}
+                      className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                        selectedPurpose === "transparent"
+                          ? "border-indigo-400 bg-indigo-950/60 text-white font-bold ring-1 ring-indigo-400/40"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                      }`}
+                    >
+                      <span className="text-[11px] mb-0.5">🏁</span>
+                      <span className="text-[11px] leading-tight font-bold text-white">រូបថ្លា</span>
+                      <span className="text-[9px] text-indigo-300 font-mono">PNG Alpha</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Processing Engine Selector */}
+                <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
+                    <span>ម៉ាស៊ីនដំណើរការ (Engine)</span>
+                    <span className="text-cyan-400 font-bold">
+                      {selectedEngine === "browser" ? "BROWSER AI" : "REMOTE WORKER"}
                     </span>
-                    <Server className="h-3.5 w-3.5 text-slate-500" />
-                  </button>
-                  <p className="text-[9.5px] text-slate-500 leading-relaxed font-mono">
-                    {!isWorkerConfigured
-                      ? "Remote Worker មិនទាន់កំណត់ក្នុង Settings។ Browser AI ដំណើរការក្នុងម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ និងមានសុវត្ថិភាពខ្ពស់។"
-                      : workerStatus === "unavailable"
-                      ? `Remote Worker មិនអាចភ្ជាប់បានទេ (OFFLINE / UNAVAILABLE): ${workerError || "Connection timed out"}។ សូមប្រើ Browser AI ជំនួសវិញ។`
-                      : "សេវាកម្ម Remote Worker ត្រូវបានកំណត់ក្នុង Settings និងត្រៀមរួចរាល់។"}
+                  </div>
+
+                  <div role="radiogroup" aria-label="ជ្រើសរើសម៉ាស៊ីនដំណើរការ (Processing Engine)" className="grid grid-cols-2 gap-2 text-xs">
+                    {/* 1. Browser AI Option */}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={selectedEngine === "browser"}
+                      data-testid="engine-select-browser"
+                      onClick={() => handleSwitchEngine("browser")}
+                      disabled={isProcessing}
+                      className={`min-h-[44px] flex items-center justify-between p-2.5 rounded-none border text-left transition-all font-mono focus:ring-2 focus:ring-cyan-400 focus:outline-none ${
+                        selectedEngine === "browser"
+                          ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2.5 w-2.5 rounded-none border ${selectedEngine === "browser" ? "bg-cyan-400 border-cyan-300" : "bg-transparent border-slate-500"}`} />
+                        <div>
+                          <div className="text-[11px] font-bold text-white">Browser AI</div>
+                          <div className="text-[9px] text-cyan-300/80">លំនាំដើម · ក្នុងម៉ាស៊ីន</div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-bold">FREE</span>
+                    </button>
+
+                    {/* 2. Remote Worker Option */}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={selectedEngine === "worker"}
+                      aria-disabled={!isWorkerConfigured}
+                      data-testid="engine-select-worker"
+                      onClick={() => handleSwitchEngine("worker")}
+                      disabled={!isWorkerConfigured || isProcessing}
+                      className={`min-h-[44px] flex items-center justify-between p-2.5 rounded-none border text-left transition-all font-mono focus:ring-2 focus:ring-purple-400 focus:outline-none ${
+                        !isWorkerConfigured
+                          ? "border-slate-800 bg-slate-900/40 text-slate-500 opacity-50 cursor-not-allowed"
+                          : selectedEngine === "worker"
+                          ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]"
+                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                      }`}
+                      title={
+                        !isWorkerConfigured
+                          ? "Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។"
+                          : workerStatus === "unavailable"
+                          ? `Remote Worker មិនអាចភ្ជាប់បានទេ (OFFLINE / UNAVAILABLE): ${workerError || "Offline"}`
+                          : `Remote Worker Microservice (${workerModel || "Online"})`
+                      }
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`h-2.5 w-2.5 rounded-none border ${
+                            selectedEngine === "worker"
+                              ? "bg-purple-400 border-purple-300"
+                              : "bg-transparent border-slate-500"
+                          }`}
+                        />
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-200">
+                            Remote Worker
+                          </div>
+                          <div className="text-[9px]">
+                            {!isWorkerConfigured ? (
+                              <span className="text-slate-400">🔒 មិនទាន់កំណត់</span>
+                            ) : workerStatus === "checking" ? (
+                              <span className="text-amber-400 animate-pulse">⏳ កំពុងពិនិត្យ...</span>
+                            ) : workerStatus === "ready" ? (
+                              <span className="text-emerald-400">🟢 ត្រៀមរួចរាល់ (ONLINE)</span>
+                            ) : workerStatus === "unavailable" ? (
+                              <span className="text-rose-400 font-bold">🔴 OFFLINE / UNAVAILABLE</span>
+                            ) : (
+                              <span className="text-cyan-400">⚙️ បានកំណត់</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <Server className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
+                  </div>
+
+                  {/* Accessible live status for engine selection */}
+                  <div aria-live="polite" className="sr-only">
+                    {selectedEngine === "browser"
+                      ? "ម៉ាស៊ីនដំណើរការបច្ចុប្បន្នគឺ Browser AI (ដំណើរការក្នុងម៉ាស៊ីន)"
+                      : "ម៉ាស៊ីនដំណើរការបច្ចុប្បន្នគឺ Remote Worker (ដំណើរការលើម៉ាស៊ីនមេ)"}
+                  </div>
+
+                  {/* Remote Worker Privacy Notice & Re-check */}
+                  {selectedEngine === "worker" && isWorkerConfigured && (
+                    <div className="text-[10px] text-purple-200/90 leading-relaxed font-mono bg-purple-950/30 p-2.5 border border-purple-500/30 space-y-1">
+                      <div className="font-bold flex items-center justify-between text-purple-300">
+                        <span>ℹ️ សេចក្តីជូនដំណឹងអំពីឯកជនភាព</span>
+                        {workerStatus === "unavailable" && (
+                          <button
+                            type="button"
+                            data-testid="recheck-worker-btn"
+                            onClick={() => checkWorkerStatus(true)}
+                            className="text-[9px] text-purple-300 hover:text-white underline font-mono cursor-pointer"
+                          >
+                            [ពិនិត្យឡើងវិញ]
+                          </button>
+                        )}
+                      </div>
+                      <p>
+                        មុខងារ Remote Worker នឹងបញ្ជូនរូបភាពរបស់អ្នកទៅកាន់ម៉ាស៊ីនមេ Remote Worker ដែលបានកំណត់តាមរយៈ Server Proxy ដើម្បីដំណើរការកាត់ផ្ទៃខាងក្រោយ។
+                      </p>
+                    </div>
+                  )}
+
+                  {!isWorkerConfigured && (
+                    <p className="text-[9.5px] text-slate-400 leading-relaxed font-mono bg-slate-950/40 p-2 border border-slate-800/80">
+                      ℹ️ Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។ Browser AI ដំណើរការក្នុងម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ និងមានសុវត្ថិភាពខ្ពស់។
+                    </p>
+                  )}
+                </div>
+
+                {/* 3. Edge Quality / Alpha Matting Refinement */}
+                <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
+                    <span>គុណភាពគែម (Edge Quality)</span>
+                    <span className="text-cyan-400 font-bold">
+                      {edgeQuality === "fast"
+                        ? "FAST PREVIEW"
+                        : edgeQuality === "balanced"
+                        ? "BALANCED"
+                        : "FINE HAIR & DETAILS"}
+                    </span>
+                  </div>
+                  <div role="radiogroup" aria-label="Edge Quality & Alpha Matting" className="grid grid-cols-3 gap-1.5 text-xs font-mono">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={edgeQuality === "fast"}
+                      data-testid="edge-quality-fast"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setEdgeQuality("fast");
+                      }}
+                      disabled={isProcessing}
+                      className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                        edgeQuality === "fast"
+                          ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40"
+                          : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold">Fast Preview</span>
+                      <span className="text-[9px] text-slate-500">Preview / Low-res</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={edgeQuality === "balanced"}
+                      data-testid="edge-quality-balanced"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setEdgeQuality("balanced");
+                      }}
+                      disabled={isProcessing}
+                      className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                        edgeQuality === "balanced"
+                          ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40"
+                          : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold text-purple-300">Balanced</span>
+                      <span className="text-[9px] text-purple-400/80">Alpha Matting</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={edgeQuality === "quality" || edgeQuality === "fine_details"}
+                      data-testid="edge-quality-quality"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        setEdgeQuality("fine_details");
+                      }}
+                      disabled={isProcessing}
+                      className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
+                        edgeQuality === "quality" || edgeQuality === "fine_details"
+                          ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40"
+                          : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold text-emerald-300">Fine Hair &amp; Details</span>
+                      <span className="text-[9px] text-emerald-400/80">Hair, Fur, Plants</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[9.5px] text-slate-400 leading-relaxed font-mono bg-slate-950/40 p-2 border border-slate-800/80">
+                    ℹ️ <strong>ចំណាំ (Limitation)</strong>៖ មុខងារ Alpha Matting ជួយសម្រួលគែមសក់ និងអក្សរស្ដើងៗក្នុងតំបន់ដែល AI បានរកឃើញ ប៉ុន្តែមិនអាចបង្កើតសរសៃសក់ដែលម៉ូដែលកាត់បាត់ទាំងស្រុងនោះទេ។
+                    <span className="block mt-0.5 text-slate-500 font-sans">
+                      (Alpha matting refines boundaries and fine hair/text where detected; it cannot reconstruct strokes completely missed by the coarse model.)
+                    </span>
                   </p>
                 </div>
 
-                {/* Manual Mask Mode Launcher */}
-                <div className="pt-2 border-t border-slate-800/60">
+                {/* 4. Manual Mask Mode Launcher */}
+                <div className="pt-2 border-t border-slate-800/80">
                   <button
                     type="button"
                     data-testid="manual-mask-btn"
@@ -2057,7 +2024,19 @@ export default function BgRemoverPage() {
 
           {/* Standby Empty State: Precision Inspection Chamber */}
           {!cachedResult && !isProcessing && !error && (
-            <div className="machine-module relative flex flex-1 min-h-[460px] flex-col items-center justify-center border border-slate-800/90 bg-slate-950/85 p-8 sm:p-12 text-center backdrop-blur-md shadow-2xl font-mono overflow-hidden">
+            <div
+              className="machine-module relative flex flex-1 min-h-[460px] flex-col items-center justify-center border border-slate-800/90 bg-slate-950/90 p-8 sm:p-12 text-center backdrop-blur-md shadow-2xl font-mono overflow-hidden"
+              style={{
+                backgroundImage: `
+                  linear-gradient(45deg, rgba(30, 41, 59, 0.3) 25%, transparent 25%),
+                  linear-gradient(-45deg, rgba(30, 41, 59, 0.3) 25%, transparent 25%),
+                  linear-gradient(45deg, transparent 75%, rgba(30, 41, 59, 0.3) 75%),
+                  linear-gradient(-45deg, transparent 75%, rgba(30, 41, 59, 0.3) 75%)
+                `,
+                backgroundSize: "24px 24px",
+                backgroundPosition: "0 0, 0 12px, 12px -12px, -12px 0px",
+              }}
+            >
               {/* Corner industrial brackets */}
               <div className="pointer-events-none absolute top-0 left-0 h-4 w-4 border-t-2 border-l-2 border-cyan-400/70" />
               <div className="pointer-events-none absolute top-0 right-0 h-4 w-4 border-t-2 border-r-2 border-cyan-400/70" />
@@ -2114,6 +2093,9 @@ export default function BgRemoverPage() {
                 </span>
                 <span className="border border-slate-700 bg-slate-900/90 px-2.5 py-1 text-purple-300">
                   ENGINE: ON-DEVICE WASM
+                </span>
+                <span className="border border-slate-700 bg-slate-900/90 px-2.5 py-1 text-slate-400">
+                  CANVAS: ALPHA MATRIX READY
                 </span>
               </div>
             </div>

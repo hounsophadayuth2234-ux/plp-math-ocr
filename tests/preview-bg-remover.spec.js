@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const PREVIEW_URL = process.env.PREVIEW_URL || 'https://ai-toolkit-csfxqbe3s-hounsophadayuth2234-6445s-projects.vercel.app/bg-remover';
+const PREVIEW_URL = process.env.PREVIEW_URL || 'https://ai-toolkit-mn5mgzsgz-hounsophadayuth2234-6445s-projects.vercel.app/bg-remover';
 const FIXTURES_DIR = process.env.FIXTURES_DIR || path.resolve('tests/fixtures');
 const RESULTS_DIR = path.resolve('test-results/bg-remover');
 

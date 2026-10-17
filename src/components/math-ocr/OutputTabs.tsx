@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Copy, Check, Eye, Code2, FileCode, Binary, AlertTriangle } from "lucide-react";
+import { Copy, Check, Eye, Code2, FileCode, Binary, AlertTriangle, Download } from "lucide-react";
 import { sanitizeJoditHtml } from "@/lib/math-ocr-utils";
 
 interface OutputTabsProps {
@@ -19,13 +19,6 @@ interface OutputTabsProps {
 
 export type TabId = "latex" | "joditHtml" | "mathml" | "preview";
 
-/**
- * 4-Tab Output Panel:
- *  1. LaTeX Code (copyable, syntax formatted, KaTeX 0.19.0 verified)
- *  2. Jodit HTML / Inline CSS (copyable, sanitized, strict inline CSS)
- *  3. MathML Code (copyable, standard W3C MathML markup)
- *  4. Sandboxed Visual Preview (rendering sanitized Jodit HTML/CSS + SVG in real time)
- */
 export function OutputTabs({
   latex,
   joditHtml,
@@ -59,6 +52,22 @@ export function OutputTabs({
       const msg = e instanceof Error ? e.message : "Failed to copy to clipboard";
       setCopyFailed(msg);
       setTimeout(() => setCopyFailed(null), 3000);
+    }
+  };
+
+  const downloadFile = (content: string, filename: string, mimeType: string) => {
+    try {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Download failed:", e);
     }
   };
 
@@ -242,26 +251,38 @@ export function OutputTabs({
               <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider truncate">
                 Output 1 · LaTeX Math Syntax (KaTeX 0.19.0 Verified)
               </span>
-              <button
-                type="button"
-                data-testid="copy-latex-btn"
-                onClick={() => copyText(latex, "latex")}
-                aria-label="Copy LaTeX code to clipboard"
-                title="Copy LaTeX code to clipboard"
-                className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 transition-colors focus:ring-2 focus:ring-emerald-400 focus:outline-none shrink-0"
-              >
-                {copied === "latex" ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Copy LaTeX</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-testid="copy-latex-btn"
+                  onClick={() => copyText(latex, "latex")}
+                  aria-label="Copy LaTeX code to clipboard"
+                  title="Copy LaTeX code to clipboard"
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 transition-colors focus:ring-2 focus:ring-emerald-400 focus:outline-none shrink-0"
+                >
+                  {copied === "latex" ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Copy LaTeX</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(latex, "equation.tex", "text/plain")}
+                  aria-label="Download LaTeX file"
+                  title="Download equation.tex"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-emerald-400 focus:outline-none shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
+              </div>
             </div>
             <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-emerald-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
               {latex}
@@ -315,6 +336,16 @@ export function OutputTabs({
                     </>
                   )}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(sanitizedHtml, "equation.html", "text/html")}
+                  aria-label="Download Jodit HTML file"
+                  title="Download equation.html"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-amber-400 focus:outline-none shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
               </div>
             </div>
             <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-amber-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
@@ -338,26 +369,38 @@ export function OutputTabs({
               <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider truncate">
                 Output 3 · W3C Standard MathML Markup
               </span>
-              <button
-                type="button"
-                data-testid="copy-mathml-btn"
-                onClick={() => copyText(mathml, "mathml")}
-                aria-label="Copy MathML code to clipboard"
-                title="Copy MathML code to clipboard"
-                className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0"
-              >
-                {copied === "mathml" ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Copy MathML</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-testid="copy-mathml-btn"
+                  onClick={() => copyText(mathml, "mathml")}
+                  aria-label="Copy MathML code to clipboard"
+                  title="Copy MathML code to clipboard"
+                  className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0"
+                >
+                  {copied === "mathml" ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Copy MathML</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(mathml, "equation.xml", "application/xml")}
+                  aria-label="Download MathML file"
+                  title="Download equation.xml"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
+              </div>
             </div>
             <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-cyan-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
               {mathml}

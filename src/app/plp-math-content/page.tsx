@@ -91,6 +91,17 @@ export default function PlpMathContentPage() {
     };
   }, [isLoading, isRefining]);
 
+  // Broadcast processing state to global MechanicalCyberBackground
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("ai-processing-change", {
+          detail: { isProcessing: isLoading || isRefining },
+        })
+      );
+    }
+  }, [isLoading, isRefining]);
+
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
@@ -313,18 +324,33 @@ export default function PlpMathContentPage() {
       </Link>
 
       {/* ── 1. Page Heading and One-Sentence Explanation ── */}
-      <div className="relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(0,240,255,0.1)] min-w-0 max-w-full w-full">
-        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-25" />
+      <div className="relative overflow-hidden border border-slate-800/90 bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-950 p-6 sm:p-7 shadow-2xl min-w-0 max-w-full w-full">
+        {/* Corner mechanical brackets */}
+        <div className="pointer-events-none absolute top-0 left-0 h-3 w-3 border-t-2 border-l-2 border-cyan-400" />
+        <div className="pointer-events-none absolute top-0 right-0 h-3 w-3 border-t-2 border-r-2 border-cyan-400" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-3 w-3 border-b-2 border-l-2 border-cyan-400" />
+        <div className="pointer-events-none absolute bottom-0 right-0 h-3 w-3 border-b-2 border-r-2 border-cyan-400" />
+
+        {/* Decorative rivets */}
+        <div className="pointer-events-none absolute top-2 left-6 h-1 w-1 rounded-full bg-slate-600 border border-slate-500" />
+        <div className="pointer-events-none absolute top-2 right-6 h-1 w-1 rounded-full bg-slate-600 border border-slate-500" />
+        <div className="pointer-events-none absolute bottom-2 left-6 h-1 w-1 rounded-full bg-slate-600 border border-slate-500" />
+        <div className="pointer-events-none absolute bottom-2 right-6 h-1 w-1 rounded-full bg-slate-600 border border-slate-500" />
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between relative z-10 min-w-0 max-w-full">
-          <div className="space-y-2 max-w-2xl min-w-0">
-            <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl break-words">
+          <div className="space-y-1.5 max-w-2xl min-w-0 font-mono">
+            <div className="inline-flex items-center gap-2 border border-cyan-500/40 bg-cyan-950/70 px-2.5 py-0.5 text-[10px] text-cyan-300 tracking-wider">
+              <span className="h-1.5 w-1.5 bg-cyan-400 animate-pulse" />
+              <span>MODULE 01 // MATHEMATICAL OCR MATRIX</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white font-sans uppercase">
               PLP Math Content
             </h1>
-            <p className="text-sm leading-relaxed text-slate-300">
-              Convert math images and text into LaTeX, Jodit HTML, and MathML for the PLP ecosystem.
+            <p className="text-xs sm:text-sm leading-relaxed text-slate-300 font-sans">
+              Convert mathematical images, handwritten formulas, and multi-line equations into LaTeX, strict Jodit HTML, and MathML for the PLP ecosystem.
             </p>
           </div>
-          <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-indigo-600 text-white shadow-lg shadow-cyan-500/20">
+          <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center border border-cyan-400/60 bg-cyan-950/80 text-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.2)]">
             <Calculator className="h-6 w-6 sm:h-7 sm:w-7" aria-hidden="true" />
           </div>
         </div>
@@ -337,13 +363,22 @@ export default function PlpMathContentPage() {
           onSubmit={handleSubmit}
           className="flex flex-col gap-5 lg:col-span-2 min-w-0 max-w-full w-full"
         >
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 space-y-5 min-w-0 max-w-full">
-            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-bold text-cyan-400">
-                1
+          <div className="machine-module relative border border-slate-800/90 bg-slate-950/85 p-5 space-y-5 min-w-0 max-w-full shadow-2xl">
+            {/* Corner brackets */}
+            <div className="pointer-events-none absolute top-0 left-0 h-2.5 w-2.5 border-t-2 border-l-2 border-cyan-400" />
+            <div className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 border-t-2 border-r-2 border-cyan-400" />
+            <div className="pointer-events-none absolute bottom-0 left-0 h-2.5 w-2.5 border-b-2 border-l-2 border-cyan-400" />
+            <div className="pointer-events-none absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-cyan-400" />
+
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200 font-mono flex items-center gap-2">
+                <span className="h-2 w-2 bg-cyan-400" />
+                <span>Input Source // ប្រភពទិន្នន័យ</span>
+              </h2>
+              <span className="text-[10px] bg-cyan-950 border border-cyan-500/40 text-cyan-300 px-2 py-0.5 font-bold font-mono">
+                STAGE 01
               </span>
-              <span>Input Source</span>
-            </h2>
+            </div>
 
             {/* ── 3. Upload Area with Supported Formats and Size Limit ── */}
             <ImageUploadZone
@@ -604,32 +639,49 @@ export default function PlpMathContentPage() {
 
           {/* Empty Results Standby State */}
           {!result && !isLoading && !error && (
-            <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-12 text-center min-w-0 max-w-full">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800">
-                <Calculator className="h-7 w-7 text-indigo-400" aria-hidden="true" />
+            <div className="machine-module relative flex flex-1 flex-col items-center justify-center border border-slate-800/90 bg-slate-950/85 p-8 sm:p-12 text-center min-w-0 max-w-full shadow-2xl overflow-hidden">
+              {/* Corner brackets */}
+              <div className="pointer-events-none absolute top-0 left-0 h-3.5 w-3.5 border-t-2 border-l-2 border-cyan-400" />
+              <div className="pointer-events-none absolute top-0 right-0 h-3.5 w-3.5 border-t-2 border-r-2 border-cyan-400" />
+              <div className="pointer-events-none absolute bottom-0 left-0 h-3.5 w-3.5 border-b-2 border-l-2 border-cyan-400" />
+              <div className="pointer-events-none absolute bottom-0 right-0 h-3.5 w-3.5 border-b-2 border-r-2 border-cyan-400" />
+
+              {/* Status Header Badges */}
+              <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/90 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+                <span className="text-slate-500">CHAMBER:</span>
+                <span className="font-bold">MATH SYNTHESIZER // OUTPUT</span>
               </div>
-              <h3 className="mt-4 text-sm font-semibold text-white">
-                Results
+              <div className="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 border border-emerald-500/40 bg-slate-950/90 px-2 py-0.5 text-[10px] text-emerald-400 font-mono">
+                <span className="h-1.5 w-1.5 bg-emerald-400 animate-pulse" />
+                <span className="text-slate-500">STATUS:</span>
+                <span className="font-bold">STANDBY</span>
+              </div>
+
+              <div className="relative mb-4 flex h-16 w-16 items-center justify-center border border-cyan-500/40 bg-cyan-950/40 shadow-[0_0_25px_rgba(0,240,255,0.2)]">
+                <Calculator className="h-8 w-8 text-cyan-300 animate-pulse" aria-hidden="true" />
+              </div>
+              <h3 className="text-sm font-bold tracking-wider uppercase text-white font-mono">
+                MATHEMATICAL RECOGNITION STANDBY
               </h3>
-              <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-slate-400">
-                Upload a math image or type a math problem on the left, then click &quot;Generate formats&quot;.
+              <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-slate-300 font-sans">
+                Upload a math problem or enter formula text on the left, then click &quot;Generate formats&quot; to inspect LaTeX, Jodit HTML, and MathML.
               </p>
-              <div className="mt-5 space-y-1.5 text-left w-full max-w-sm font-mono text-xs text-slate-400">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" aria-hidden="true" />
-                  <span>Option 1: Standard LaTeX Code</span>
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left w-full max-w-md font-mono text-[11px] text-slate-300">
+                <div className="flex items-center gap-2 border border-slate-800 bg-slate-900/80 px-2.5 py-1.5">
+                  <span className="h-1.5 w-1.5 bg-emerald-400 shrink-0" />
+                  <span className="truncate">Option 1: Standard LaTeX</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" />
-                  <span>Option 2: Jodit HTML (Strict Inline CSS)</span>
+                <div className="flex items-center gap-2 border border-slate-800 bg-slate-900/80 px-2.5 py-1.5">
+                  <span className="h-1.5 w-1.5 bg-amber-400 shrink-0" />
+                  <span className="truncate">Option 2: Jodit HTML (CSS)</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" aria-hidden="true" />
-                  <span>Option 3: Standard W3C MathML</span>
+                <div className="flex items-center gap-2 border border-slate-800 bg-slate-900/80 px-2.5 py-1.5">
+                  <span className="h-1.5 w-1.5 bg-cyan-400 shrink-0" />
+                  <span className="truncate">Option 3: W3C MathML</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
-                  <span>Sandboxed WYSIWYG Visual Preview</span>
+                <div className="flex items-center gap-2 border border-slate-800 bg-slate-900/80 px-2.5 py-1.5">
+                  <span className="h-1.5 w-1.5 bg-indigo-400 shrink-0" />
+                  <span className="truncate">WYSIWYG Visual Render</span>
                 </div>
               </div>
             </div>
