@@ -30,16 +30,24 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (strict: exclude all secrets, keep safe template)
 .env*
+!.env.example
 
-# vercel
+# vercel & puppeteer
 .vercel
 .puppeteer-cache/
+
+# test artifacts & generated evidence
+test-results/
+evidence-downloads/
+evidence-screenshots/
 test-portrait-downloads/
+.downloads-test/
+*.png
+!public/**
+!tests/fixtures/**
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-.vercel
