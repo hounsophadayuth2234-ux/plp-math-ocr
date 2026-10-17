@@ -22,6 +22,8 @@ import {
   Check,
   X,
   Feather,
+  Square,
+  Trash2,
 } from "lucide-react";
 import {
   compositeWithSolidColor,
@@ -49,6 +51,10 @@ import {
   applyColorDehalo,
   isolatePersonMask,
   combinePersonWithSelectedRegions,
+  extractTextStrokeMask,
+  extractPersonMask,
+  combinePersonAndTextMasks,
+  generatePersonTextLayerOverlay,
 } from "@/lib/bg-compositor";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ProcessingStatusLabel } from "@/lib/types";
@@ -59,6 +65,10 @@ export type ViewChannel =
   | "pink"
   | "custom"
   | "transparent"
+  | "cutout"
+  | "person_mask"
+  | "text_mask"
+  | "combined_mask"
   | "initial_mask"
   | "refined_mask"
   | "mask"
@@ -68,7 +78,11 @@ export type ViewChannel =
 
 export type BrushTool =
   | "keep"
+  | "keep_person"
+  | "keep_text"
   | "remove"
+  | "keep_rect"
+  | "erase_rect"
   | "soft"
   | "eraser"
   | "pan"
@@ -196,6 +210,19 @@ export function ColorStudio({
   const [isDirty, setIsDirty] = useState(false);
   const [hasAppliedCorrections, setHasAppliedCorrections] = useState(false);
 
+  // ── Edge Refinement Mode (Default: "off") & Auto-Crop Option ──
+  const [edgeRefinementMode, setEdgeRefinementMode] = useState<"off" | "balanced" | "fine">("off");
+  const [autoCropExport, setAutoCropExport] = useState<boolean>(false);
+  const [foregroundAreaPercent, setForegroundAreaPercent] = useState<number>(0);
+
+  // ── Rectangle Selection Box & Cursor State ──
+  const [rectBox, setRectBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const rectStartRef = useRef<{ x: number; y: number } | null>(null);
+  const rectClientStartRef = useRef<{ x: number; y: number } | null>(null);
+  const isDrawingRectRef = useRef<boolean>(false);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+
   // ── In-Memory Grayscale Alpha Mask Buffers (Length = width * height) ──
   // Working alpha mask currently being painted
   const alphaMaskRef = useRef<Uint8ClampedArray | null>(null);
@@ -207,6 +234,24 @@ export function ColorStudio({
   const excludedMaskRef = useRef<Uint8ClampedArray | null>(null);
   // User's manual keep strokes strictly preserved
   const manualKeepMaskRef = useRef<Uint8ClampedArray | null>(null);
+
+  // ── Person + Text Only Sub-options & State ──
+  const [subOptionPerson, setSubOptionPerson] = useState<boolean>(true);
+  const [subOptionText, setSubOptionText] = useState<boolean>(true);
+  const [subOptionGraphics, setSubOptionGraphics] = useState<boolean>(false);
+  const personMaskRef = useRef<Uint8ClampedArray | null>(null);
+  const textMaskRef = useRef<Uint8ClampedArray | null>(null);
+  const graphicsMaskRef = useRef<Uint8ClampedArray | null>(null);
+  const [personTextDiagnostics, setPersonTextDiagnostics] = useState<{
+    personArea: number;
+    textArea: number;
+    graphicsArea: number;
+    combinedArea: number;
+    textComponentCount: number;
+    smallComponentCount: number;
+    keptPixelPercentage: number;
+    warning?: string;
+  } | null>(null);
 
   // Undo / Redo stacks (Limited to MAX_HISTORY_STATES)
   const [history, setHistory] = useState<Uint8ClampedArray[]>([]);
@@ -228,6 +273,12 @@ export function ColorStudio({
       alphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
       baseAlphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
       committedAlphaMaskRef.current = new Uint8ClampedArray(initialAlphaBuffer);
+
+      let fg = 0;
+      for (let i = 0; i < totalPixels; i++) {
+        if (initialAlphaBuffer[i] > 128) fg++;
+      }
+      setForegroundAreaPercent(totalPixels > 0 ? (fg / totalPixels) * 100 : 0);
 
       const initMaskUrl = createAlphaMaskDataUrl(initialAlphaBuffer, width, height);
       setInitialAlphaMaskDataUrl(initMaskUrl);
@@ -257,9 +308,13 @@ export function ColorStudio({
           ctx.drawImage(img, 0, 0, width, height);
           const data = ctx.getImageData(0, 0, width, height).data;
           const buf = new Uint8ClampedArray(totalPixels);
+          let fg = 0;
           for (let i = 0; i < totalPixels; i++) {
-            buf[i] = data[i * 4 + 3];
+            const a = data[i * 4 + 3];
+            buf[i] = a;
+            if (a > 128) fg++;
           }
+          setForegroundAreaPercent(totalPixels > 0 ? (fg / totalPixels) * 100 : 0);
           alphaMaskRef.current = buf;
           baseAlphaMaskRef.current = new Uint8ClampedArray(buf);
           committedAlphaMaskRef.current = new Uint8ClampedArray(buf);
@@ -275,6 +330,36 @@ export function ColorStudio({
       const ctx = canvasRef.current.getContext("2d");
       if (ctx) {
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
+
+    // If initial mode is person + text only, extract person and text masks immediately
+    if (
+      sourceImageData &&
+      (initialSelectionMode === "person_text_only" || initialSelectionMode === "person_plus_text")
+    ) {
+      try {
+        const pRes = extractPersonMask(sourceImageData.data, baseAlphaMaskRef.current, width, height);
+        const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+        personMaskRef.current = pRes.personMask;
+        textMaskRef.current = tRes.textStrokeMask;
+        graphicsMaskRef.current = tRes.graphicsMask;
+
+        const combined = combinePersonAndTextMasks(
+          pRes.personMask,
+          tRes.textStrokeMask,
+          width,
+          height,
+          {
+            keepPerson: true,
+            keepText: true,
+            keepGraphics: false,
+            graphicsMask: tRes.graphicsMask,
+          }
+        );
+        setPersonTextDiagnostics(combined.diagnostics);
+      } catch (err) {
+        console.warn("Failed to extract initial person/text masks:", err);
       }
     }
 
@@ -324,6 +409,7 @@ export function ColorStudio({
       case "pink":
         return pinkCompositeUrl || initialCompositeUrl;
       case "transparent":
+      case "cutout":
         return currentTransparentUrl || transparentUrl;
       case "initial_mask":
         return initialAlphaMaskDataUrl || currentAlphaMaskUrl || transparentUrl;
@@ -446,13 +532,54 @@ export function ColorStudio({
         data[pIdx + 1] = initA;
         data[pIdx + 2] = initA;
         data[pIdx + 3] = 255;
+      } else if (activeChannel === "person_mask") {
+        // Blue overlay for person mask (#3b82f6)
+        const pVal = personMaskRef.current ? personMaskRef.current[i] : a;
+        if (pVal > 128) {
+          data[pIdx] = Math.round(r * 0.35 + 59 * 0.65);
+          data[pIdx + 1] = Math.round(g * 0.35 + 130 * 0.65);
+          data[pIdx + 2] = Math.round(b * 0.35 + 246 * 0.65);
+          data[pIdx + 3] = 255;
+        } else {
+          data[pIdx] = Math.round(r * 0.6 + 60);
+          data[pIdx + 1] = Math.round(g * 0.3);
+          data[pIdx + 2] = Math.round(b * 0.3);
+          data[pIdx + 3] = 255;
+        }
+      } else if (activeChannel === "text_mask") {
+        // Yellow overlay for text mask (#eab308)
+        const tVal = textMaskRef.current ? textMaskRef.current[i] : a;
+        if (tVal > 128) {
+          data[pIdx] = Math.round(r * 0.2 + 234 * 0.8);
+          data[pIdx + 1] = Math.round(g * 0.2 + 179 * 0.8);
+          data[pIdx + 2] = Math.round(b * 0.2 + 8 * 0.8);
+          data[pIdx + 3] = 255;
+        } else {
+          data[pIdx] = Math.round(r * 0.4);
+          data[pIdx + 1] = Math.round(g * 0.4);
+          data[pIdx + 2] = Math.round(b * 0.4);
+          data[pIdx + 3] = 255;
+        }
+      } else if (activeChannel === "combined_mask") {
+        // Green overlay for combined keep mask (#22c55e)
+        if (a > 128) {
+          data[pIdx] = Math.round(r * 0.35 + 34 * 0.65);
+          data[pIdx + 1] = Math.round(g * 0.35 + 197 * 0.65);
+          data[pIdx + 2] = Math.round(b * 0.35 + 94 * 0.65);
+          data[pIdx + 3] = 255;
+        } else {
+          data[pIdx] = Math.round(r * 0.6 + 80);
+          data[pIdx + 1] = Math.round(g * 0.2);
+          data[pIdx + 2] = Math.round(b * 0.2);
+          data[pIdx + 3] = 255;
+        }
       } else if (activeChannel === "mask" || activeChannel === "refined_mask") {
         // Pure grayscale mask visualizer: Black = 0 (background), White = 255 (foreground), Gray = boundary
         data[pIdx] = a;
         data[pIdx + 1] = a;
         data[pIdx + 2] = a;
         data[pIdx + 3] = 255;
-      } else if (activeChannel === "transparent") {
+      } else if (activeChannel === "transparent" || activeChannel === "cutout") {
         data[pIdx] = r;
         data[pIdx + 1] = g;
         data[pIdx + 2] = b;
@@ -558,7 +685,7 @@ export function ColorStudio({
             data[dIdx + 1] = a;
             data[dIdx + 2] = a;
             data[dIdx + 3] = 255;
-          } else if (activeChannel === "transparent") {
+          } else if (activeChannel === "transparent" || activeChannel === "cutout") {
             data[dIdx] = r;
             data[dIdx + 1] = g;
             data[dIdx + 2] = b;
@@ -681,17 +808,29 @@ export function ColorStudio({
             const idx = yOff + x;
             const currentAlpha = mask[idx];
 
-            if (tool === "keep") {
+            if (tool === "keep" || tool === "keep_person" || tool === "keep_text") {
               // Keep Brush: Paints white (255) onto the mask, restoring foreground areas
               mask[idx] = Math.round(currentAlpha + (255 - currentAlpha) * weight);
               if (manualKeepMaskRef.current && weight > 0.5) {
                 manualKeepMaskRef.current[idx] = 255;
+              }
+              if (tool === "keep_text" && textMaskRef.current && weight > 0.5) {
+                textMaskRef.current[idx] = 255;
+              }
+              if (tool === "keep_person" && personMaskRef.current && weight > 0.5) {
+                personMaskRef.current[idx] = 255;
               }
             } else if (tool === "remove") {
               // Remove Brush: Paints black (0) onto the mask, removing unwanted background
               mask[idx] = Math.round(currentAlpha * (1 - weight));
               if (manualKeepMaskRef.current && weight > 0.5) {
                 manualKeepMaskRef.current[idx] = 0;
+              }
+              if (textMaskRef.current && weight > 0.5) {
+                textMaskRef.current[idx] = 0;
+              }
+              if (personMaskRef.current && weight > 0.5) {
+                personMaskRef.current[idx] = 0;
               }
             } else if (tool === "soft") {
               // Soft Edge Brush: Paints semi-transparent feathering (~128) with smooth radial gradient
@@ -769,6 +908,17 @@ export function ColorStudio({
     [width, height]
   );
 
+  const updateForegroundPercentage = useCallback(() => {
+    if (!alphaMaskRef.current) return;
+    const mask = alphaMaskRef.current;
+    const total = width * height;
+    let fg = 0;
+    for (let i = 0; i < total; i++) {
+      if (mask[i] > 128) fg++;
+    }
+    setForegroundAreaPercent(total > 0 ? (fg / total) * 100 : 0);
+  }, [width, height]);
+
   // Pointer event handlers with Pointer Capture for seamless dragging
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (activeTool === "pan") {
@@ -788,6 +938,15 @@ export function ColorStudio({
     saveSnapshotToHistory();
 
     const { x, y } = getMaskCoordinates(e);
+
+    if (activeTool === "keep_rect" || activeTool === "erase_rect") {
+      rectStartRef.current = { x, y };
+      rectClientStartRef.current = { x: e.clientX, y: e.clientY };
+      isDrawingRectRef.current = true;
+      setIsDrawing(true);
+      return;
+    }
+
     lastPointRef.current = { x, y };
     setIsDrawing(true);
 
@@ -805,6 +964,21 @@ export function ColorStudio({
         x: e.clientX - panStart.x,
         y: e.clientY - panStart.y,
       });
+      return;
+    }
+
+    if (canvasContainerRef.current) {
+      const containerRect = canvasContainerRef.current.getBoundingClientRect();
+      setCursorPos({ x: e.clientX - containerRect.left, y: e.clientY - containerRect.top });
+    }
+
+    if (isDrawingRectRef.current && rectClientStartRef.current && canvasContainerRef.current) {
+      const containerRect = canvasContainerRef.current.getBoundingClientRect();
+      const left = Math.min(rectClientStartRef.current.x, e.clientX) - containerRect.left;
+      const top = Math.min(rectClientStartRef.current.y, e.clientY) - containerRect.top;
+      const w = Math.abs(e.clientX - rectClientStartRef.current.x);
+      const h = Math.abs(e.clientY - rectClientStartRef.current.y);
+      setRectBox({ left, top, width: w, height: h });
       return;
     }
 
@@ -839,6 +1013,37 @@ export function ColorStudio({
       return;
     }
 
+    if (isDrawingRectRef.current && rectStartRef.current && alphaMaskRef.current) {
+      const { x, y } = getMaskCoordinates(e);
+      const minX = Math.max(0, Math.min(rectStartRef.current.x, x));
+      const maxX = Math.min(width - 1, Math.max(rectStartRef.current.x, x));
+      const minY = Math.max(0, Math.min(rectStartRef.current.y, y));
+      const maxY = Math.min(height - 1, Math.max(rectStartRef.current.y, y));
+
+      const fillVal = activeTool === "keep_rect" ? 255 : 0;
+      const mask = alphaMaskRef.current;
+      for (let ry = minY; ry <= maxY; ry++) {
+        const yOff = ry * width;
+        for (let rx = minX; rx <= maxX; rx++) {
+          const idx = yOff + rx;
+          mask[idx] = fillVal;
+          if (manualKeepMaskRef.current) {
+            manualKeepMaskRef.current[idx] = fillVal;
+          }
+        }
+      }
+
+      redrawCanvasRegion(minX, minY, maxX, maxY);
+      updateForegroundPercentage();
+      setRectBox(null);
+      isDrawingRectRef.current = false;
+      rectStartRef.current = null;
+      rectClientStartRef.current = null;
+      setIsDrawing(false);
+      setIsDirty(true);
+      return;
+    }
+
     if (isDrawing) {
       setIsDrawing(false);
       lastPointRef.current = null;
@@ -851,6 +1056,7 @@ export function ColorStudio({
         redrawCanvasRegion(minX, minY, maxX, maxY);
         dirtyRectRef.current = null;
       }
+      updateForegroundPercentage();
     }
   };
 
@@ -863,8 +1069,9 @@ export function ColorStudio({
     alphaMaskRef.current.set(prevSnapshot);
     setHistory((h) => h.slice(0, -1));
     redrawCanvas();
+    updateForegroundPercentage();
     setIsDirty(true);
-  }, [history, redrawCanvas]);
+  }, [history, redrawCanvas, updateForegroundPercentage]);
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0 || !alphaMaskRef.current) return;
@@ -874,8 +1081,9 @@ export function ColorStudio({
     alphaMaskRef.current.set(nextSnapshot);
     setRedoStack((r) => r.slice(0, -1));
     redrawCanvas();
+    updateForegroundPercentage();
     setIsDirty(true);
-  }, [redoStack, redrawCanvas]);
+  }, [redoStack, redrawCanvas, updateForegroundPercentage]);
 
   const handleUndoRef = useRef(handleUndo);
   const handleRedoRef = useRef(handleRedo);
@@ -885,19 +1093,96 @@ export function ColorStudio({
     handleRedoRef.current = handleRedo;
   }, [handleUndo, handleRedo]);
 
-  // Keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z) - registered only once
+  // "Clear Mask": Sets entire mask to 0 (empty background)
+  const handleClearMask = useCallback(async () => {
+    if (!alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    alphaMaskRef.current.fill(0);
+    if (manualKeepMaskRef.current) {
+      manualKeepMaskRef.current.fill(0);
+    }
+    updateForegroundPercentage();
+    await recompositeAll(alphaMaskRef.current);
+    redrawCanvas();
+    setIsDirty(true);
+  }, [saveSnapshotToHistory, updateForegroundPercentage, recompositeAll, redrawCanvas]);
+
+  // "Reset Mask": Reverts working mask back to initial AI segmentation
+  const handleResetMask = useCallback(async () => {
+    if (!baseAlphaMaskRef.current || !alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    setHasAppliedCorrections(false);
+    setIsDirty(false);
+    alphaMaskRef.current.set(baseAlphaMaskRef.current);
+    committedAlphaMaskRef.current = new Uint8ClampedArray(baseAlphaMaskRef.current);
+    if (manualKeepMaskRef.current) {
+      manualKeepMaskRef.current.fill(0);
+    }
+    updateForegroundPercentage();
+    redrawCanvas();
+    await recompositeAll(alphaMaskRef.current);
+  }, [saveSnapshotToHistory, updateForegroundPercentage, redrawCanvas, recompositeAll]);
+
+  // "Use Original Image": Completely keeps original image (mask filled with 255)
+  const handleUseOriginalImage = useCallback(async () => {
+    if (!alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    alphaMaskRef.current.fill(255);
+    if (manualKeepMaskRef.current) {
+      manualKeepMaskRef.current.fill(255);
+    }
+    updateForegroundPercentage();
+    await recompositeAll(alphaMaskRef.current);
+    redrawCanvas();
+    setIsDirty(true);
+  }, [saveSnapshotToHistory, updateForegroundPercentage, recompositeAll, redrawCanvas]);
+
+  const handleResetMaskRef = useRef(handleResetMask);
+  useEffect(() => {
+    handleResetMaskRef.current = handleResetMask;
+  }, [handleResetMask]);
+
+  // Keyboard shortcuts (B Keep, E Erase, Z Undo, Y Redo, R Reset)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && key === "z") {
         e.preventDefault();
         if (e.shiftKey) {
           handleRedoRef.current();
         } else {
           handleUndoRef.current();
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      } else if ((e.ctrlKey || e.metaKey) && key === "y") {
         e.preventDefault();
         handleRedoRef.current();
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (key === "b") {
+          e.preventDefault();
+          setActiveTool("keep");
+          setIsEditMode(true);
+        } else if (key === "e") {
+          e.preventDefault();
+          setActiveTool("remove");
+          setIsEditMode(true);
+        } else if (key === "z") {
+          e.preventDefault();
+          handleUndoRef.current();
+        } else if (key === "y") {
+          e.preventDefault();
+          handleRedoRef.current();
+        } else if (key === "r") {
+          e.preventDefault();
+          handleResetMaskRef.current();
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -919,39 +1204,10 @@ export function ColorStudio({
     if (!committedAlphaMaskRef.current || !alphaMaskRef.current) return;
     cyberAudio.playClick();
     alphaMaskRef.current.set(committedAlphaMaskRef.current);
+    updateForegroundPercentage();
     redrawCanvas();
     setIsDirty(false);
-  }, [redrawCanvas]);
-
-  // "Reset Mask": Reverts working mask back to initial AI segmentation
-  const handleResetMask = useCallback(async () => {
-    if (!baseAlphaMaskRef.current || !alphaMaskRef.current) return;
-    cyberAudio.playClick();
-    saveSnapshotToHistory();
-    setHasAppliedCorrections(false);
-    setIsDirty(false);
-    alphaMaskRef.current.set(baseAlphaMaskRef.current);
-    committedAlphaMaskRef.current = new Uint8ClampedArray(baseAlphaMaskRef.current);
-    if (manualKeepMaskRef.current) {
-      manualKeepMaskRef.current.fill(0);
-    }
-    redrawCanvas();
-    await recompositeAll(alphaMaskRef.current);
-  }, [saveSnapshotToHistory, redrawCanvas, recompositeAll]);
-
-  // "Use Original Image": Completely keeps original image (mask filled with 255)
-  const handleUseOriginalImage = useCallback(async () => {
-    if (!alphaMaskRef.current) return;
-    cyberAudio.playClick();
-    saveSnapshotToHistory();
-    alphaMaskRef.current.fill(255);
-    if (manualKeepMaskRef.current) {
-      manualKeepMaskRef.current.fill(255);
-    }
-    await recompositeAll(alphaMaskRef.current);
-    redrawCanvas();
-    setIsDirty(true);
-  }, [saveSnapshotToHistory, recompositeAll, redrawCanvas]);
+  }, [updateForegroundPercentage, redrawCanvas]);
 
   // Switch Selection Mode (document_poster, person, whole_product, contents_only, custom, box_polygon)
   const handleSwitchSelectionMode = useCallback(
@@ -979,13 +1235,30 @@ export function ColorStudio({
         alphaMaskRef.current.set(pMask);
         excludedMaskRef.current = null;
         setContainerWarning("👤 [PERSON ONLY] កាត់យករូបមនុស្ស មិនរក្សាទុកអក្សរបោះពុម្ព ឬក្រាហ្វិកខាងក្រៅឡើយ។");
-      } else if (newMode === "person_plus_text") {
-        const pMask = isolatePersonMask(sourceImageData.data, baseAlphaMaskRef.current, width, height);
-        alphaMaskRef.current.set(pMask);
+      } else if (newMode === "person_text_only" || newMode === "person_plus_text") {
+        const pRes = extractPersonMask(sourceImageData.data, baseAlphaMaskRef.current, width, height);
+        const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+        personMaskRef.current = pRes.personMask;
+        textMaskRef.current = tRes.textStrokeMask;
+        graphicsMaskRef.current = tRes.graphicsMask;
+
+        const combined = combinePersonAndTextMasks(pRes.personMask, tRes.textStrokeMask, width, height, {
+          keepPerson: subOptionPerson,
+          keepText: subOptionText,
+          keepGraphics: subOptionGraphics,
+          graphicsMask: tRes.graphicsMask,
+          userKeepMask: manualKeepMaskRef.current,
+        });
+
+        alphaMaskRef.current.set(combined.finalKeepMask);
         excludedMaskRef.current = null;
+        setPersonTextDiagnostics(combined.diagnostics);
         setIsEditMode(true);
-        setActiveTool("keep");
-        setContainerWarning("✨ [PERSON + TEXT/GRAPHICS] ប្រើ Keep brush ដើម្បីជ្រើសរើសអក្សរ ឬឡូហ្គោដែលចង់រក្សាទុកបន្ថែម។");
+        setActiveTool("keep_text");
+        setContainerWarning(
+          combined.diagnostics.warning ||
+            "✨ [PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ] រក្សារូបមនុស្ស និងអក្សរដែលបានរកឃើញ ដោយលុបផ្ទាំងខាងក្រោយនៃ Poster ចេញ។"
+        );
       } else if (newMode === "contents_only") {
         const res = detectContainerAndContents(
           sourceImageData.data,
@@ -1021,8 +1294,88 @@ export function ColorStudio({
       await recompositeAll(alphaMaskRef.current);
       redrawCanvas();
     },
-    [sourceImageData, width, height, saveSnapshotToHistory, recompositeAll, redrawCanvas]
+    [sourceImageData, width, height, subOptionPerson, subOptionText, subOptionGraphics, saveSnapshotToHistory, recompositeAll, redrawCanvas]
   );
+
+  // Toggle Sub-Options for Person + Text Only mode (Person, Text, Graphics)
+  const handleToggleSubOption = useCallback(
+    async (option: "person" | "text" | "graphics") => {
+      if (!sourceImageData || !alphaMaskRef.current) return;
+      cyberAudio.playClick();
+      saveSnapshotToHistory();
+
+      const nextP = option === "person" ? !subOptionPerson : subOptionPerson;
+      const nextT = option === "text" ? !subOptionText : subOptionText;
+      const nextG = option === "graphics" ? !subOptionGraphics : subOptionGraphics;
+
+      if (option === "person") setSubOptionPerson(nextP);
+      if (option === "text") setSubOptionText(nextT);
+      if (option === "graphics") setSubOptionGraphics(nextG);
+
+      if (!personMaskRef.current || !textMaskRef.current) {
+        const pRes = extractPersonMask(sourceImageData.data, baseAlphaMaskRef.current, width, height);
+        const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+        personMaskRef.current = pRes.personMask;
+        textMaskRef.current = tRes.textStrokeMask;
+        graphicsMaskRef.current = tRes.graphicsMask;
+      }
+
+      const combined = combinePersonAndTextMasks(
+        personMaskRef.current,
+        textMaskRef.current,
+        width,
+        height,
+        {
+          keepPerson: nextP,
+          keepText: nextT,
+          keepGraphics: nextG,
+          graphicsMask: graphicsMaskRef.current,
+          userKeepMask: manualKeepMaskRef.current,
+        }
+      );
+
+      alphaMaskRef.current.set(combined.finalKeepMask);
+      setPersonTextDiagnostics(combined.diagnostics);
+      if (combined.diagnostics.warning) {
+        setContainerWarning(combined.diagnostics.warning);
+      }
+      await recompositeAll(alphaMaskRef.current);
+      redrawCanvas();
+    },
+    [subOptionPerson, subOptionText, subOptionGraphics, sourceImageData, width, height, saveSnapshotToHistory, recompositeAll, redrawCanvas]
+  );
+
+  // Reset to AI Masks (Recomputes independent person & text stroke segmentation from scratch)
+  const handleResetToAiMasks = useCallback(async () => {
+    if (!sourceImageData || !alphaMaskRef.current) return;
+    cyberAudio.playClick();
+    saveSnapshotToHistory();
+    if (manualKeepMaskRef.current) {
+      manualKeepMaskRef.current.fill(0);
+    }
+    const pRes = extractPersonMask(sourceImageData.data, baseAlphaMaskRef.current, width, height);
+    const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+    personMaskRef.current = pRes.personMask;
+    textMaskRef.current = tRes.textStrokeMask;
+    graphicsMaskRef.current = tRes.graphicsMask;
+
+    const combined = combinePersonAndTextMasks(
+      pRes.personMask,
+      tRes.textStrokeMask,
+      width,
+      height,
+      {
+        keepPerson: subOptionPerson,
+        keepText: subOptionText,
+        keepGraphics: subOptionGraphics,
+        graphicsMask: tRes.graphicsMask,
+      }
+    );
+    alphaMaskRef.current.set(combined.finalKeepMask);
+    setPersonTextDiagnostics(combined.diagnostics);
+    await recompositeAll(alphaMaskRef.current);
+    redrawCanvas();
+  }, [sourceImageData, width, height, subOptionPerson, subOptionText, subOptionGraphics, saveSnapshotToHistory, recompositeAll, redrawCanvas]);
 
   // Document / Poster Handlers
   const handleDetectPageBoundary = useCallback(async () => {
@@ -1137,6 +1490,17 @@ export function ColorStudio({
       if (onConfirmMask) {
         onConfirmMask(alphaMaskRef.current);
       }
+
+      // If user selected "No Refinement" (off by default): preserve the authoritative edited mask directly!
+      if (edgeRefinementMode === "off") {
+        await recompositeAll(alphaMaskRef.current);
+        redrawCanvas();
+        updateForegroundPercentage();
+        cyberAudio.playMetallicDing();
+        return;
+      }
+
+      // Otherwise run narrow boundary guided matting with 10% safety rollback
       const initialMask = baseAlphaMaskRef.current || alphaMaskRef.current;
       const refinedOutput = await refineAlphaMattingWithMask(
         sourceImageData,
@@ -1147,9 +1511,10 @@ export function ColorStudio({
           documentSafeMode:
             selectionMode === "document_poster" ||
             selectionMode === "whole_poster",
+          quality: edgeRefinementMode === "fine" ? "fine_details" : "balanced",
           initialMask,
           manualKeepMask: manualKeepMaskRef.current,
-          maxDropRatio: 0.20,
+          maxDropRatio: 0.10, // 10% safety drop limit
         }
       );
       alphaMaskRef.current.set(refinedOutput.alphaMaskBuffer);
@@ -1157,20 +1522,21 @@ export function ColorStudio({
       if (refinedOutput.rollbackTriggered) {
         setRollbackBanner(
           refinedOutput.diagnostics?.warning ||
-            `⚠️ Refinement removed ${refinedOutput.diagnostics?.removedAreaPercentage.toFixed(1)}% of foreground (> 20%). Automatic safety rollback engaged to prevent over-cutting white lids/boxes.`
+            `We kept the safer mask because edge refinement removed possible foreground details (Automatic safety rollback engaged).\nYou can refine it manually with Keep/Erase brush.`
         );
       } else {
         setRollbackBanner(null);
       }
       await recompositeAll(refinedOutput.alphaMaskBuffer);
       redrawCanvas();
+      updateForegroundPercentage();
       cyberAudio.playMetallicDing();
     } catch (e) {
       console.error("Mask confirmation refinement error:", e);
     } finally {
       setIsCompositing(false);
     }
-  }, [sourceImageData, onConfirmMask, recompositeAll, redrawCanvas]);
+  }, [sourceImageData, onConfirmMask, edgeRefinementMode, selectionMode, recompositeAll, redrawCanvas, updateForegroundPercentage]);
 
   // 1-Click Download for active preview channel or forced specific purpose
   const handleDownload = useCallback(async (forcedChannel?: ViewChannel) => {
@@ -1193,7 +1559,8 @@ export function ColorStudio({
           activeMask,
           width,
           height,
-          targetChannel === "custom" ? customColor : targetChannel
+          targetChannel === "custom" ? customColor : targetChannel,
+          { autoCrop: autoCropExport }
         );
         downloadUrl = fullRes.dataUrl;
         isTempUrl = true;
@@ -1455,6 +1822,147 @@ export function ColorStudio({
         </div>
       )}
 
+      {/* ── 7 Explicit Preview Tabs ── */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-none border border-cyan-500/30 bg-slate-950 p-2 text-xs font-mono">
+        <span className="text-[10px] text-slate-400 uppercase tracking-wider mr-1">PREVIEW:</span>
+        <button
+          type="button"
+          data-testid="preview-tab-original"
+          onClick={() => handleSelectChannel("original")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "original"
+              ? "bg-slate-900 border-cyan-400 text-white shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <Eye className="h-3.5 w-3.5" />
+          <span>Original</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-initial-mask"
+          onClick={() => handleSelectChannel("initial_mask")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "initial_mask"
+              ? "bg-slate-900 border-slate-300 text-white shadow-[0_0_10px_rgba(255,255,255,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <span>Initial AI Mask</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-edited-mask"
+          onClick={() => handleSelectChannel("mask")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "mask" || activeChannel === "refined_mask"
+              ? "bg-slate-900 border-amber-400 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <span>Edited Mask</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-person-mask"
+          onClick={() => handleSelectChannel("person_mask")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "person_mask"
+              ? "bg-slate-900 border-blue-400 text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <span className="h-2.5 w-2.5 bg-blue-500 rounded-none inline-block" />
+          <span>Person Mask</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-text-mask"
+          onClick={() => handleSelectChannel("text_mask")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "text_mask"
+              ? "bg-slate-900 border-yellow-400 text-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <span className="h-2.5 w-2.5 bg-yellow-500 rounded-none inline-block" />
+          <span>Text Mask</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-combined-mask"
+          onClick={() => handleSelectChannel("combined_mask")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "combined_mask"
+              ? "bg-slate-900 border-emerald-400 text-emerald-300 shadow-[0_0_10px_rgba(34,197,94,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <span className="h-2.5 w-2.5 bg-emerald-500 rounded-none inline-block" />
+          <span>Combined Keep Mask</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-cutout"
+          onClick={() => handleSelectChannel("cutout")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "cutout"
+              ? "bg-slate-900 border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <span>Cutout Preview</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-checkerboard"
+          onClick={() => handleSelectChannel("transparent")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "transparent"
+              ? "bg-slate-900 border-indigo-400 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <Grid className="h-3.5 w-3.5" />
+          <span>Checkerboard</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-white"
+          onClick={() => handleSelectChannel("white")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "white"
+              ? "bg-slate-900 border-white text-white shadow-[0_0_10px_rgba(255,255,255,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <span className="h-2.5 w-2.5 bg-white border border-slate-400 inline-block" />
+          <span>White</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="preview-tab-custom"
+          onClick={() => handleSelectChannel("custom")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "custom" || activeChannel === "pink"
+              ? "bg-slate-900 border-emerald-400 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <span className="h-2.5 w-2.5 bg-emerald-400 border border-slate-400 inline-block" />
+          <span>Custom</span>
+        </button>
+      </div>
+
       {/* ── 4-Channel Mask & Cutout Previews ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-none border border-slate-800 bg-slate-950 p-2 text-xs">
         <button
@@ -1468,7 +1976,7 @@ export function ColorStudio({
           }`}
         >
           <span className="text-xs font-bold">1. ម៉ាស់ដំបូង</span>
-          <span className="text-[9px] text-slate-500">Initial AI Mask</span>
+          <span className="text-[9px] text-slate-500">AI Initial Mask / ម៉ាស់ដំបូងពី AI</span>
         </button>
 
         <button
@@ -1504,7 +2012,7 @@ export function ColorStudio({
           data-testid="channel-cutout"
           onClick={() => handleSelectChannel(initialPurpose || "white")}
           className={`min-h-[44px] flex flex-col items-center justify-center p-2 transition-all font-mono ${
-            activeChannel === "white" || activeChannel === "pink" || activeChannel === "transparent"
+            activeChannel === "white" || activeChannel === "pink" || activeChannel === "transparent" || activeChannel === "cutout"
               ? "bg-slate-900 border-2 border-cyan-400 text-white font-bold shadow-[0_0_12px_rgba(0,240,255,0.3)]"
               : "border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-900/40"
           }`}
@@ -1640,9 +2148,24 @@ export function ColorStudio({
         <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b-2 border-r-2 border-cyan-400 pointer-events-none z-20" />
 
         {/* Corner HUD Telemetry Badges */}
-        <div className="pointer-events-none absolute top-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
-          <span className="text-slate-500">RES:</span>
-          <span className="text-white font-bold">{width}×{height}PX</span>
+        <div className="pointer-events-none absolute top-2 left-2 z-20 flex flex-wrap items-center gap-1.5 font-mono">
+          <div className="flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400">
+            <span className="text-slate-500">RES:</span>
+            <span className="text-white font-bold">{width}×{height}PX</span>
+          </div>
+          <div
+            data-testid="mask-status-badge"
+            className="flex items-center gap-1 border border-emerald-500/40 bg-emerald-950/90 px-2 py-0.5 text-[10px] text-emerald-300 font-bold"
+          >
+            <Check className="h-3 w-3 text-emerald-400" />
+            <span>Mask is ready / ម៉ាស់រួចរាល់</span>
+          </div>
+          <div
+            data-testid="foreground-area-percent"
+            className="flex items-center gap-1 border border-cyan-500/40 bg-slate-950/90 px-2 py-0.5 text-[10px] text-cyan-300 font-bold"
+          >
+            <span>Foreground: {foregroundAreaPercent.toFixed(1)}%</span>
+          </div>
         </div>
         <div className="pointer-events-none absolute top-2 right-2 z-20 flex items-center gap-1.5 border border-slate-700 bg-slate-950/85 px-2 py-0.5 text-[10px] text-slate-300 font-mono">
           <span
@@ -1681,6 +2204,7 @@ export function ColorStudio({
         ) : isEditMode ? (
           /* Interactive Mask Painting Canvas */
           <div
+            ref={canvasContainerRef}
             className="relative overflow-hidden flex items-center justify-center"
             style={{
               transform: `scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,
@@ -1689,7 +2213,7 @@ export function ColorStudio({
               cursor: activeTool === "pan" ? "grab" : "crosshair",
             }}
           >
-            {activeChannel === "transparent" && (
+            {(activeChannel === "transparent" || activeChannel === "cutout") && (
               <div
                 className="absolute inset-0 rounded-none opacity-40 pointer-events-none"
                 style={{
@@ -1708,6 +2232,35 @@ export function ColorStudio({
               className="max-h-[460px] max-w-full object-contain rounded-none shadow-2xl"
               style={{ touchAction: "none" }}
             />
+            {/* Floating Rectangle selection overlay */}
+            {rectBox && (
+              <div
+                data-testid="rect-selection-box"
+                className={`absolute pointer-events-none border-2 border-dashed z-20 ${
+                  activeTool === "keep_rect"
+                    ? "border-emerald-400 bg-emerald-500/20"
+                    : "border-rose-400 bg-rose-500/20"
+                }`}
+                style={{
+                  left: rectBox.left,
+                  top: rectBox.top,
+                  width: rectBox.width,
+                  height: rectBox.height,
+                }}
+              />
+            )}
+            {/* Floating Brush cursor indicator */}
+            {cursorPos && (activeTool === "keep" || activeTool === "remove" || activeTool === "soft" || activeTool === "eraser") && (
+              <div
+                className="absolute pointer-events-none rounded-full border border-cyan-400/70 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
+                style={{
+                  left: cursorPos.x,
+                  top: cursorPos.y,
+                  width: brushSize * 2,
+                  height: brushSize * 2,
+                }}
+              />
+            )}
           </div>
         ) : (
           /* Standard Re-composited Image Display */
@@ -1799,16 +2352,17 @@ export function ColorStudio({
 
           <button
             type="button"
-            data-testid="mode-person-plus-text"
-            onClick={() => handleSwitchSelectionMode("person_plus_text")}
+            data-testid="mode-person-text-only"
+            data-testid-alias="mode-person-plus-text"
+            onClick={() => handleSwitchSelectionMode("person_text_only")}
             className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
-              selectionMode === "person_plus_text"
+              selectionMode === "person_text_only" || selectionMode === "person_plus_text"
                 ? "border-pink-400 bg-pink-950 text-white font-bold ring-1 ring-pink-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
             }`}
           >
-            <span className="text-xs font-bold text-pink-300">✨ មនុស្ស + អក្សរ</span>
-            <span className="text-[9px] text-pink-400/80">Person + Text</span>
+            <span className="text-xs font-bold text-pink-300">✨ មនុស្ស + អក្សរតែប៉ុណ្ណោះ</span>
+            <span className="text-[9px] text-pink-400/80">Person + Text Only</span>
           </button>
 
           <button
@@ -2015,6 +2569,77 @@ export function ColorStudio({
           </div>
         )}
 
+        {/* Person + Text Only Controls & Sub-Options */}
+        {(selectionMode === "person_text_only" || selectionMode === "person_plus_text") && (
+          <div className="space-y-2 p-3 border border-pink-500/40 bg-pink-950/30 text-xs font-mono">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-bold text-pink-300">
+                ✨ PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ
+              </span>
+              <span className="text-[10px] text-pink-400/80">
+                This mode keeps the selected person and text, and removes the poster/background. Use Keep Brush if OCR misses any letters.
+              </span>
+            </div>
+
+            {/* Sub-options */}
+            <div className="flex flex-wrap items-center gap-4 pt-1 text-xs">
+              <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  data-testid="sub-option-person"
+                  checked={subOptionPerson}
+                  onChange={() => handleToggleSubOption("person")}
+                  className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Person: keep detected person</span>
+              </label>
+
+              <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  data-testid="sub-option-text"
+                  checked={subOptionText}
+                  onChange={() => handleToggleSubOption("text")}
+                  className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Text: keep detected text</span>
+              </label>
+
+              <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  data-testid="sub-option-graphics"
+                  checked={!subOptionGraphics}
+                  onChange={() => handleToggleSubOption("graphics")}
+                  className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Graphics: remove by default</span>
+              </label>
+
+              <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  data-testid="sub-option-keep-graphics"
+                  checked={subOptionGraphics}
+                  onChange={() => handleToggleSubOption("graphics")}
+                  className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Keep selected graphics: optional</span>
+              </label>
+            </div>
+
+            {/* Warning banner if text mask is empty or low confidence */}
+            {personTextDiagnostics?.warning && (
+              <div
+                data-testid="person-text-warning"
+                className="p-2 bg-amber-950/60 border border-amber-500/50 text-amber-300 text-xs flex items-center gap-2"
+              >
+                <span>{personTextDiagnostics.warning}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Warning Banner if Container/Box Detected */}
         {containerWarning && (
           <div className="flex items-start gap-2.5 p-3 border border-amber-500/40 bg-amber-950/40 text-xs text-amber-200">
@@ -2069,6 +2694,77 @@ export function ColorStudio({
           </div>
         )}
 
+        {/* ── Step 5: Optional Edge Refinement Selector ── */}
+        <div className="flex flex-col gap-2 p-3 border border-slate-800 bg-slate-900/60 font-mono text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-slate-300 text-xs">
+              ជំហានទី ៥: សម្រួលគែម (STEP 5: OPTIONAL EDGE MATTING)
+            </span>
+            <span className="text-[10px] text-slate-500">
+              {selectionMode === "document_poster" ? "Disabled for Document/Poster" : "Off by default · Non-destructive"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button
+              type="button"
+              data-testid="refine-mode-off"
+              onClick={() => {
+                cyberAudio.playClick();
+                setEdgeRefinementMode("off");
+              }}
+              className={`min-h-[44px] flex flex-col items-center justify-center p-2 border transition-all ${
+                edgeRefinementMode === "off"
+                  ? "border-cyan-400 bg-cyan-950 text-white font-bold ring-1 ring-cyan-400"
+                  : "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
+              }`}
+            >
+              <span className="text-xs font-bold text-cyan-300">1. No Refinement [DEFAULT]</span>
+              <span className="text-[9px] text-slate-400">Keep exact user mask (0 matting)</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="refine-mode-balanced"
+              disabled={selectionMode === "document_poster"}
+              onClick={() => {
+                cyberAudio.playClick();
+                setEdgeRefinementMode("balanced");
+              }}
+              className={`min-h-[44px] flex flex-col items-center justify-center p-2 border transition-all ${
+                selectionMode === "document_poster"
+                  ? "opacity-40 cursor-not-allowed border-slate-800 bg-slate-950 text-slate-600"
+                  : edgeRefinementMode === "balanced"
+                  ? "border-emerald-400 bg-emerald-950 text-white font-bold ring-1 ring-emerald-400"
+                  : "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
+              }`}
+            >
+              <span className="text-xs font-bold text-emerald-300">2. Balanced Refinement</span>
+              <span className="text-[9px] text-slate-400">Narrow edge band filter (max 10% rollback)</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="refine-mode-fine"
+              disabled={selectionMode === "document_poster"}
+              onClick={() => {
+                cyberAudio.playClick();
+                setEdgeRefinementMode("fine");
+              }}
+              className={`min-h-[44px] flex flex-col items-center justify-center p-2 border transition-all ${
+                selectionMode === "document_poster"
+                  ? "opacity-40 cursor-not-allowed border-slate-800 bg-slate-950 text-slate-600"
+                  : edgeRefinementMode === "fine"
+                  ? "border-purple-400 bg-purple-950 text-white font-bold ring-1 ring-purple-400"
+                  : "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
+              }`}
+            >
+              <span className="text-xs font-bold text-purple-300">3. Fine Hair &amp; Details</span>
+              <span className="text-[9px] text-slate-400">Hair, fur &amp; thin branches detail matte</span>
+            </button>
+          </div>
+        </div>
+
         {/* Confirm Mask and Export CTA Button */}
         {!isConfirmed && (
           <button
@@ -2115,6 +2811,16 @@ export function ColorStudio({
             </span>
           </span>
           <div className="flex items-center gap-3 text-slate-300">
+            <label className="flex items-center gap-1.5 cursor-pointer text-[11px] select-none">
+              <input
+                type="checkbox"
+                data-testid="export-crop-to-content"
+                checked={autoCropExport}
+                onChange={(e) => setAutoCropExport(e.target.checked)}
+                className="h-3.5 w-3.5 rounded-none border-slate-700 bg-slate-950 accent-cyan-400 cursor-pointer"
+              />
+              <span className="text-slate-300">Crop to Content</span>
+            </label>
             <span>
               Export: <strong className="text-white">{originalFile && (sourceWidth || sourceHeight) ? `${sourceWidth || width}×${sourceHeight || height}px` : `${width}×${height}px`}</strong>
             </span>
@@ -2224,6 +2930,7 @@ export function ColorStudio({
             <button
               type="button"
               data-testid="use-original-btn"
+              data-testid-alias="reset-original-btn"
               onClick={handleUseOriginalImage}
               className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-slate-700 bg-slate-800/80 px-3.5 py-1.5 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors font-bold tracking-wider uppercase"
               title="Use original image uncropped (recovers 100% foreground)"
@@ -2318,15 +3025,16 @@ export function ColorStudio({
             </span>
           </div>
 
-          {/* Action Buttons: Undo, Redo, Reset Mask, Cancel, Apply Corrections */}
+          {/* Action Buttons: Undo, Redo, Reset Mask, Clear Mask, Cancel, Apply Corrections */}
           <div className="flex flex-wrap items-center gap-1.5 font-mono">
             <button
               type="button"
               data-testid="tool-undo"
+              data-testid-alias="undo-btn"
               onClick={handleUndo}
               disabled={history.length === 0}
               className="flex items-center gap-1 rounded-none border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors tracking-wider uppercase"
-              title="Undo stroke (Ctrl+Z)"
+              title="Undo stroke (Ctrl+Z / Z)"
             >
               <Undo2 className="h-3 w-3" />
               <span className="text-[10px]">Undo</span>
@@ -2334,10 +3042,11 @@ export function ColorStudio({
             <button
               type="button"
               data-testid="tool-redo"
+              data-testid-alias="redo-btn"
               onClick={handleRedo}
               disabled={redoStack.length === 0}
               className="flex items-center gap-1 rounded-none border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors tracking-wider uppercase"
-              title="Redo stroke (Ctrl+Y)"
+              title="Redo stroke (Ctrl+Y / Y)"
             >
               <Redo2 className="h-3 w-3" />
               <span className="text-[10px]">Redo</span>
@@ -2345,13 +3054,36 @@ export function ColorStudio({
 
             <button
               type="button"
+              data-testid="reset-ai-masks-btn"
+              onClick={handleResetToAiMasks}
+              className="flex items-center gap-1 rounded-none border border-cyan-500/30 bg-cyan-950/40 px-2.5 py-1 text-[10px] text-cyan-300 hover:bg-cyan-900/60 transition-colors tracking-wider uppercase"
+              title="Recomputes independent person & text AI masks"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>Reset to AI masks</span>
+            </button>
+
+            <button
+              type="button"
               data-testid="mask-reset-button"
+              data-testid-alias="reset-initial-mask-btn"
               onClick={handleResetMask}
               className="flex items-center gap-1 rounded-none border border-rose-500/30 bg-rose-950/40 px-2.5 py-1 text-[10px] text-rose-300 hover:bg-rose-900/60 transition-colors tracking-wider uppercase"
-              title="Reset mask back to initial AI segmentation"
+              title="Reset mask back to initial AI segmentation (R)"
             >
               <RotateCcw className="h-3 w-3" />
               <span>Reset Mask</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="clear-mask-btn"
+              onClick={handleClearMask}
+              className="flex items-center gap-1 rounded-none border border-red-500/30 bg-red-950/40 px-2.5 py-1 text-[10px] text-red-300 hover:bg-red-900/60 transition-colors tracking-wider uppercase"
+              title="Clear entire mask to transparent (alpha = 0)"
+            >
+              <Trash2 className="h-3 w-3" />
+              <span>Clear Mask</span>
             </button>
 
             {isDirty && (
@@ -2399,26 +3131,121 @@ export function ColorStudio({
                       ? "bg-emerald-900/90 border border-emerald-400 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.35)]"
                       : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-emerald-300"
                   }`}
-                  title="Paints white/opaque (α = 255) to restore missing foreground details"
+                  title="Paints white/opaque (α = 255) to restore missing foreground details (B)"
                 >
                   <span className="h-2 w-2 rounded-none bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
                   <span>Keep Brush</span>
                 </button>
 
-                {/* 2. Remove Brush */}
+                {/* 1b. Keep Person Brush */}
+                <button
+                  type="button"
+                  data-testid="tool-keep-person"
+                  onClick={() => setActiveTool("keep_person")}
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
+                    activeTool === "keep_person"
+                      ? "bg-blue-900/90 border border-blue-400 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-blue-300"
+                  }`}
+                  title="Paints onto person mask (α = 255) for hair, clothing, body"
+                >
+                  <span className="h-2 w-2 rounded-none bg-blue-400 shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
+                  <span>Keep Person Brush</span>
+                </button>
+
+                {/* 1c. Keep Text Brush */}
+                <button
+                  type="button"
+                  data-testid="tool-keep-text"
+                  onClick={() => setActiveTool("keep_text")}
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
+                    activeTool === "keep_text"
+                      ? "bg-yellow-900/90 border border-yellow-400 text-yellow-200 shadow-[0_0_12px_rgba(234,179,8,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-yellow-300"
+                  }`}
+                  title="Paints onto text mask (α = 255) for missed letters, Khmer subscripts & diacritics"
+                >
+                  <span className="h-2 w-2 rounded-none bg-yellow-400 shadow-[0_0_6px_rgba(234,179,8,0.8)]" />
+                  <span>Keep Text Brush</span>
+                </button>
+
+                {/* 2. Remove / Erase Brush */}
                 <button
                   type="button"
                   data-testid="tool-remove-brush"
+                  data-testid-alias="tool-erase"
                   onClick={() => setActiveTool("remove")}
                   className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
                     activeTool === "remove"
                       ? "bg-rose-900/90 border border-rose-400 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.35)]"
                       : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-rose-300"
                   }`}
-                  title="Paints black/transparent (α = 0) to carve away background"
+                  title="Paints black/transparent (α = 0) to carve away background (E)"
                 >
                   <Scissors className="h-3 w-3 text-rose-400" />
-                  <span>Remove Brush</span>
+                  <span>Erase Brush</span>
+                </button>
+
+                {/* 2a. Positive Point Click */}
+                <button
+                  type="button"
+                  data-testid="tool-positive-point"
+                  onClick={() => setActiveTool("positive_point")}
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
+                    activeTool === "positive_point"
+                      ? "bg-emerald-900/90 border border-emerald-400 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-emerald-300"
+                  }`}
+                  title="Click point to add foreground (+)"
+                >
+                  <span>+ Point</span>
+                </button>
+
+                {/* 2b. Negative Point Click */}
+                <button
+                  type="button"
+                  data-testid="tool-negative-point"
+                  onClick={() => setActiveTool("negative_point")}
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
+                    activeTool === "negative_point"
+                      ? "bg-rose-900/90 border border-rose-400 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-rose-300"
+                  }`}
+                  title="Click point to remove background (-)"
+                >
+                  <span>- Point</span>
+                </button>
+
+                {/* 2b. Keep Rectangle */}
+                <button
+                  type="button"
+                  data-testid="tool-keep-rect"
+                  onClick={() => setActiveTool("keep_rect")}
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
+                    activeTool === "keep_rect"
+                      ? "bg-emerald-900/90 border border-emerald-400 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-emerald-300"
+                  }`}
+                  title="Drag rectangle to keep entire region (sets alpha = 255)"
+                >
+                  <Square className="h-3 w-3 text-emerald-400" />
+                  <span>Keep Rect</span>
+                </button>
+
+                {/* 2c. Erase Rectangle */}
+                <button
+                  type="button"
+                  data-testid="tool-erase-rect"
+                  onClick={() => setActiveTool("erase_rect")}
+                  className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] font-bold transition-all font-mono tracking-wider uppercase ${
+                    activeTool === "erase_rect"
+                      ? "bg-rose-900/90 border border-rose-400 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.35)]"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-rose-300"
+                  }`}
+                  title="Drag rectangle to erase entire region (sets alpha = 0)"
+                >
+                  <Square className="h-3 w-3 text-rose-400" />
+                  <span>Erase Rect</span>
                 </button>
 
                 {/* 3. Soft Edge Brush */}

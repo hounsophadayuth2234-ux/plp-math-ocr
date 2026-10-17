@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -46,6 +46,7 @@ export default function BgRemoverPage() {
   const [workflowStep, setWorkflowStep] = useState<
     "detecting" | "edit_mask" | "refining" | "ready" | "failed"
   >("ready");
+
   const [activeSelectionMode, setActiveSelectionMode] = useState<SelectionMode>(
     "preserve_all_foreground"
   );
@@ -67,6 +68,29 @@ export default function BgRemoverPage() {
   const [selectedEngine, setSelectedEngine] = useState<"browser" | "worker">("browser");
   const [edgeQuality, setEdgeQuality] = useState<"fast" | "balanced" | "quality" | "fine_details">("fast");
   const [directWorkerUrl, setDirectWorkerUrl] = useState<string | null>(null);
+
+  // Explicit Manual-Assisted Background Remover State Machine:
+  // idle -> image_loaded -> generating_initial_mask -> mask_editing -> previewing -> refining_edges -> ready_to_export -> error
+  const manualState = useMemo<
+    | "idle"
+    | "image_loaded"
+    | "generating_initial_mask"
+    | "mask_editing"
+    | "previewing"
+    | "refining_edges"
+    | "ready_to_export"
+    | "error"
+  >(() => {
+    if (error) return "error";
+    if (isProcessing && (workflowStep === "detecting" || !cachedResult)) return "generating_initial_mask";
+    if (isProcessing && workflowStep === "refining") return "refining_edges";
+    if (cachedResult) {
+      if (workflowStep === "edit_mask") return "mask_editing";
+      return "ready_to_export";
+    }
+    if (imageFile) return "image_loaded";
+    return "idle";
+  }, [error, isProcessing, workflowStep, cachedResult, imageFile]);
 
   // Audio settings state
   const [audioMuted, setAudioMuted] = useState(() => cyberAudio.isMuted());
@@ -708,7 +732,7 @@ export default function BgRemoverPage() {
   ];
 
   return (
-    <div className="space-y-5 font-mono">
+    <div className="space-y-5 font-mono" data-app-state={manualState}>
       {/* ── Top Telemetry Header with Robotic Audio Controls ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/30 pb-3">
         <Link
@@ -791,19 +815,26 @@ export default function BgRemoverPage() {
         </div>
       </div>
 
-      {/* ── 4-Stage Interactive Pipeline Breadcrumb ── */}
+      {/* ── Manual-Assisted Background Remover Workflow Tracker Bar ── */}
       <div
         data-testid="workflow-breadcrumb"
         className="w-full bg-slate-950/80 border border-cyan-500/30 p-2.5 font-mono text-xs shadow-[0_0_15px_rgba(0,240,255,0.06)]"
       >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {/* Step 1: Detecting */}
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 text-[11px]">
+          <span className="font-bold text-slate-300 uppercase tracking-wider">
+            {"// WORKFLOW: AI INITIAL MASK → USER KEEP/ERASE CORRECTION → MASK PREVIEW → OPTIONAL EDGE MATTING → BACKGROUND COLOR COMPOSITE → EXPORT"}
+          </span>
+          <span className="text-[10px] bg-cyan-950 border border-cyan-500/40 text-cyan-300 px-2 py-0.5 font-bold uppercase" data-testid="current-state-badge">
+            STATE: {manualState}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2" data-testid="state-tracker-bar">
+          {/* Step 1: AI Initial Mask */}
           <div
             className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
-              workflowStep === "detecting"
+              manualState === "generating_initial_mask"
                 ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
-                : isProcessing
-                ? "border-slate-800 bg-slate-900/40 text-slate-500"
                 : cachedResult
                 ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400"
@@ -811,7 +842,7 @@ export default function BgRemoverPage() {
           >
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
-                workflowStep === "detecting"
+                manualState === "generating_initial_mask"
                   ? "bg-amber-400 text-black animate-pulse"
                   : cachedResult
                   ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
@@ -822,29 +853,29 @@ export default function BgRemoverPage() {
             </span>
             <div className="min-w-0">
               <div className="text-[11px] font-bold leading-tight truncate">
-                1. ស្វែងរកវត្ថុ
+                AI Initial Mask
               </div>
               <div className="text-[9px] text-slate-400 font-sans truncate">
-                (Detecting)
+                ម៉ាស់ដំបូងពី AI
               </div>
             </div>
           </div>
 
-          {/* Step 2: Edit Mask */}
+          {/* Step 2: Keep/Erase Correction */}
           <div
             className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
-              workflowStep === "edit_mask"
+              manualState === "mask_editing"
                 ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
-                : workflowStep === "ready"
+                : cachedResult
                 ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400"
             }`}
           >
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
-                workflowStep === "edit_mask"
+                manualState === "mask_editing"
                   ? "bg-cyan-400 text-black animate-pulse"
-                  : workflowStep === "ready"
+                  : cachedResult
                   ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
                   : "bg-slate-800 text-slate-400"
               }`}
@@ -853,29 +884,25 @@ export default function BgRemoverPage() {
             </span>
             <div className="min-w-0">
               <div className="text-[11px] font-bold leading-tight truncate">
-                2. កែសម្រួលម៉ាស់
+                Keep/Erase Edit
               </div>
               <div className="text-[9px] text-slate-400 font-sans truncate">
-                (Edit Mask)
+                កែសម្រួលដោយដៃ
               </div>
             </div>
           </div>
 
-          {/* Step 3: Refining Edges */}
+          {/* Step 3: Mask Preview */}
           <div
             className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
-              workflowStep === "refining"
-                ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
-                : workflowStep === "ready"
+              cachedResult
                 ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400"
             }`}
           >
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
-                workflowStep === "refining"
-                  ? "bg-purple-400 text-black animate-pulse"
-                  : workflowStep === "ready"
+                cachedResult
                   ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
                   : "bg-slate-800 text-slate-400"
               }`}
@@ -884,26 +911,30 @@ export default function BgRemoverPage() {
             </span>
             <div className="min-w-0">
               <div className="text-[11px] font-bold leading-tight truncate">
-                3. សម្រួលគែម
+                Mask Preview
               </div>
               <div className="text-[9px] text-slate-400 font-sans truncate">
-                (Refining Edges)
+                មើលម៉ាស់ 7 របៀប
               </div>
             </div>
           </div>
 
-          {/* Step 4: Ready */}
+          {/* Step 4: Optional Edge Matting */}
           <div
             className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
-              workflowStep === "ready" && cachedResult
-                ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+              manualState === "refining_edges"
+                ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
+                : cachedResult
+                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400"
             }`}
           >
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
-                workflowStep === "ready" && cachedResult
-                  ? "bg-emerald-400 text-black"
+                manualState === "refining_edges"
+                  ? "bg-purple-400 text-black animate-pulse"
+                  : cachedResult
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
                   : "bg-slate-800 text-slate-400"
               }`}
             >
@@ -911,10 +942,64 @@ export default function BgRemoverPage() {
             </span>
             <div className="min-w-0">
               <div className="text-[11px] font-bold leading-tight truncate">
-                4. រួចរាល់
+                Optional Matting
               </div>
               <div className="text-[9px] text-slate-400 font-sans truncate">
-                (Ready)
+                សម្រួលគែម (Off ស្រេច)
+              </div>
+            </div>
+          </div>
+
+          {/* Step 5: Color Composite */}
+          <div
+            className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
+              cachedResult
+                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400"
+            }`}
+          >
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
+                cachedResult
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                  : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              5
+            </span>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold leading-tight truncate">
+                Color Composite
+              </div>
+              <div className="text-[9px] text-slate-400 font-sans truncate">
+                ផ្គុំពណ៌ផ្ទៃខាងក្រោយ
+              </div>
+            </div>
+          </div>
+
+          {/* Step 6: Export */}
+          <div
+            className={`min-h-[44px] flex items-center gap-2 p-2 border transition-all ${
+              manualState === "ready_to_export"
+                ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+                : "border-slate-800 bg-slate-900/60 text-slate-400"
+            }`}
+          >
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center font-bold text-xs ${
+                manualState === "ready_to_export"
+                  ? "bg-emerald-400 text-black"
+                  : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              6
+            </span>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold leading-tight truncate">
+                Export PNG
+              </div>
+              <div className="text-[9px] text-slate-400 font-sans truncate">
+                ទាញយករូបថ្លា/ពណ៌
               </div>
             </div>
           </div>
@@ -984,7 +1069,30 @@ export default function BgRemoverPage() {
                   <span className="text-[9px] text-emerald-300/80 mt-0.5">Keep all people, animals, plants, products, text &amp; details</span>
                 </button>
 
-                {/* 2. Person only */}
+                {/* 2. Person + Text Only */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"}
+                  data-testid="content-mode-person-text-only"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("person_text_only");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                    activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"
+                      ? "border-sky-400 bg-sky-950/60 text-white font-bold ring-1 ring-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                    <span className="h-2 w-2 rounded-none bg-sky-400" />
+                    <span>2. Person + Text Only / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ</span>
+                  </div>
+                  <span className="text-[9px] text-sky-300/80 mt-0.5">This mode keeps the selected person and text, and removes the poster/background. Use Keep Brush if OCR misses any letters.</span>
+                </button>
+
+                {/* 3. Person only */}
                 <button
                   type="button"
                   role="radio"
@@ -1002,12 +1110,12 @@ export default function BgRemoverPage() {
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-purple-400" />
-                    <span>2. Person only</span>
+                    <span>3. Person only</span>
                   </div>
                   <span className="text-[9px] text-purple-300/80 mt-0.5">Keep real person; remove printed poster text</span>
                 </button>
 
-                {/* 3. Product only */}
+                {/* 4. Product only */}
                 <button
                   type="button"
                   role="radio"
@@ -1025,12 +1133,12 @@ export default function BgRemoverPage() {
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-amber-400" />
-                    <span>3. Product only</span>
+                    <span>4. Product only</span>
                   </div>
                   <span className="text-[9px] text-amber-300/80 mt-0.5">Keep whole product, white boxes, packages</span>
                 </button>
 
-                {/* 4. Document / text preserve */}
+                {/* 5. Document / text preserve */}
                 <button
                   type="button"
                   role="radio"
@@ -1048,12 +1156,12 @@ export default function BgRemoverPage() {
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-cyan-400" />
-                    <span>4. Document/text preserve</span>
+                    <span>5. Document/text preserve</span>
                   </div>
                   <span className="text-[9px] text-cyan-300/80 mt-0.5">Byte-perfect page, Khmer text, logos, graphics</span>
                 </button>
 
-                {/* 5. Custom mask */}
+                {/* 6. Custom mask */}
                 <button
                   type="button"
                   role="radio"
@@ -1063,7 +1171,7 @@ export default function BgRemoverPage() {
                     cyberAudio.playClick();
                     setActiveSelectionMode("custom");
                   }}
-                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all col-span-1 sm:col-span-2 ${
+                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
                     activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"
                       ? "border-rose-400 bg-rose-950/60 text-white font-bold ring-1 ring-rose-400/40 shadow-[0_0_12px_rgba(244,63,94,0.2)]"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
@@ -1071,7 +1179,7 @@ export default function BgRemoverPage() {
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-rose-400" />
-                    <span>5. Custom mask</span>
+                    <span>6. Custom mask</span>
                   </div>
                   <span className="text-[9px] text-rose-300/80 mt-0.5">User paints/clicks exactly what to keep with brush &amp; points</span>
                 </button>
@@ -1093,24 +1201,29 @@ export default function BgRemoverPage() {
 
               {/* Mode Explanation */}
               <div className="text-[9.5px] text-slate-300 leading-relaxed font-mono bg-slate-950/60 p-2.5 border border-slate-800/80">
+                {(activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text") && (
+                  <span>
+                    👤📝 <strong>Person + Text Only / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ</strong>៖ This mode keeps the selected person and text, and removes the poster/background. Use Keep Brush if OCR misses any letters. (រក្សារូបមនុស្ស និងអក្សរខ្មែរ/អង់គ្លេសទាំងមូល រួមទាំងជើងអក្សរ ស្រៈ វណ្ណយុត្តិ និងលុបផ្ទៃ poster ពណ៌ស គែមស៊ុម និងផ្ទាំងក្រាហ្វិកខាងក្រោយចោល)
+                  </span>
+                )}
                 {(activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster") && (
                   <span>
-                    📄 <strong>1. Whole poster/document</strong>៖ រក្សាផ្ទៃទំព័រចតុកោណកែងទាំងមូល មិនលុបអក្សរ ឡូហ្គោ ឬរូបមនុស្សដែលបោះពុម្ពខាងក្នុង poster ឡើយ (Bypasses AI, under 1s).
+                    📄 <strong>Whole poster/document</strong>៖ រក្សាផ្ទៃទំព័រចតុកោណកែងទាំងមូល មិនលុបអក្សរ ឡូហ្គោ ឬរូបមនុស្សដែលបោះពុម្ពខាងក្នុង poster ឡើយ (Bypasses AI, under 1s).
                   </span>
                 )}
                 {(activeSelectionMode === "person" || activeSelectionMode === "person_only") && (
                   <span>
-                    👤 <strong>2. Person only</strong>៖ កាត់យករូបមនុស្សពិតចេញពីរូបថត មិនរក្សាទុកអក្សរបោះពុម្ពលើ poster ឡើយ។
+                    👤 <strong>Person only</strong>៖ កាត់យករូបមនុស្សពិតចេញពីរូបថត មិនរក្សាទុកអក្សរបោះពុម្ពលើ poster ឡើយ។
                   </span>
                 )}
-                {activeSelectionMode === "person_plus_text" && (
+                {activeSelectionMode === "preserve_all_foreground" && (
                   <span>
-                    ✨ <strong>3. Person + selected text/graphics</strong>៖ រក្សារូបមនុស្ស និងអនុញ្ញាតឱ្យគូសជ្រើសរើសអក្សរ ឬឡូហ្គោជាក់លាក់ដើម្បីរក្សាទុក។
+                    🌟 <strong>Preserve all foreground (Default)</strong>៖ រក្សាគ្រប់វត្ថុទាំងអស់ (មនុស្ស សត្វ រុក្ខជាតិ ផលិតផល អក្សរ ឡូហ្គោ និងព័ត៌មានលម្អិតតូចៗ) និងលុបតែផ្ទៃ environmental background ខាងក្រោយប៉ុណ្ណោះ។
                   </span>
                 )}
                 {(activeSelectionMode === "custom" || activeSelectionMode === "custom_mask") && (
                   <span>
-                    🎯 <strong>4. Custom mask</strong>៖ ជ្រើសរើសវត្ថុដោយដៃតាមរយៈចំណុច (+) / (-) ឬគូសប្រអប់ និងពហុកោណ (Polygon)។
+                    🎯 <strong>Custom mask</strong>៖ ជ្រើសរើសវត្ថុដោយដៃតាមរយៈចំណុច (+) / (-) ឬគូសប្រអប់ និងពហុកោណ (Polygon)។
                   </span>
                 )}
                 {activeSelectionMode === "whole_product" && (

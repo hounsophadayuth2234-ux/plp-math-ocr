@@ -25,9 +25,32 @@ import {
   combineForegroundProposals,
   detectAndProtectTextAndLogos,
   preserveSmallForegroundComponents,
+  applyRectangleToMask,
+  applyBrushStrokeToMask,
+  cropRgbaToContent,
+  extractTextStrokeMask,
+  extractPersonMask,
+  combinePersonAndTextMasks,
+  generatePersonTextLayerOverlay,
+  TextStrokeMaskOptions,
+  TextStrokeMaskResult,
+  PersonMaskOptions,
+  PersonMaskResult,
+  CombinePersonAndTextOptions,
+  CombinePersonAndTextResult,
 } from "./bg-compositor";
 
-export type { ContentMode, QuadCorners, DocumentDetectionResult };
+export type {
+  ContentMode,
+  QuadCorners,
+  DocumentDetectionResult,
+  TextStrokeMaskOptions,
+  TextStrokeMaskResult,
+  PersonMaskOptions,
+  PersonMaskResult,
+  CombinePersonAndTextOptions,
+  CombinePersonAndTextResult,
+};
 export {
   detectDocumentQuad,
   generateQuadMask,
@@ -39,11 +62,33 @@ export {
   combineForegroundProposals,
   detectAndProtectTextAndLogos,
   preserveSmallForegroundComponents,
+  applyRectangleToMask,
+  applyBrushStrokeToMask,
+  cropRgbaToContent,
+  extractTextStrokeMask,
+  extractPersonMask,
+  combinePersonAndTextMasks,
+  generatePersonTextLayerOverlay,
 };
 
 /**
  * Feature Flags for Rescue & Safety
  */
+export const MANUAL_MASK_EDITOR =
+  typeof process !== "undefined" && process.env.MANUAL_MASK_EDITOR !== undefined
+    ? process.env.MANUAL_MASK_EDITOR !== "false"
+    : true;
+
+export const EDGE_REFINEMENT_DEFAULT: "off" | "balanced" | "fine" =
+  typeof process !== "undefined" && process.env.EDGE_REFINEMENT_DEFAULT !== undefined
+    ? (process.env.EDGE_REFINEMENT_DEFAULT as any)
+    : "off";
+
+export const PRESERVE_ORIGINAL_RGB =
+  typeof process !== "undefined" && process.env.PRESERVE_ORIGINAL_RGB !== undefined
+    ? process.env.PRESERVE_ORIGINAL_RGB !== "false"
+    : true;
+
 export const DOCUMENT_SAFE_MODE =
   typeof process !== "undefined" && process.env.DOCUMENT_SAFE_MODE !== undefined
     ? process.env.DOCUMENT_SAFE_MODE !== "false"
@@ -1348,8 +1393,8 @@ export async function segmentObjectSelection(
     for (let i = 0; i < totalPixels; i++) {
       activeMask[i] = containerResult.contentsMask[i];
     }
-  } else if (mode === "person_plus_text") {
-    // Starts with isolated person mask
+  } else if (mode === "person_text_only" || mode === "person_plus_text") {
+    // Independent person mask UNION text stroke mask
     for (let i = 0; i < totalPixels; i++) {
       activeMask[i] = containerResult.contentsMask[i];
     }

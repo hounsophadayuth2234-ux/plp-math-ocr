@@ -213,6 +213,7 @@ export function generateExportFilename(
 
 export type ContentMode =
   | "preserve_all_foreground"
+  | "person_text_only"
   | "person_only"
   | "person"
   | "product_only"
@@ -225,6 +226,7 @@ export type ContentMode =
 
 export type SelectionMode =
   | "preserve_all_foreground"
+  | "person_text_only"
   | "person_only"
   | "person"
   | "product_only"
@@ -1004,6 +1006,619 @@ export function combinePersonWithSelectedRegions(
   return combined;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PERSON + TEXT ONLY: Multi-Class Independent Mask Extraction
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TextStrokeMaskOptions {
+  includeGraphics?: boolean;
+  minContrast?: number;
+  preserveDiacritics?: boolean;
+  adaptiveSensitivity?: number;
+  customKeepMask?: Uint8ClampedArray | Uint8Array | null;
+}
+
+export interface TextStrokeMaskResult {
+  textStrokeMask: Uint8ClampedArray;
+  graphicsMask: Uint8ClampedArray;
+  textComponentCount: number;
+  smallComponentCount: number;
+  textArea: number;
+  graphicsArea: number;
+  lowConfidence: boolean;
+  detectedTextLines: {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    lineType: "khmer" | "latin" | "caption" | "heading";
+  }[];
+}
+
+export interface PersonMaskOptions {
+  minInteriorAlpha?: number;
+  preserveHairStrands?: boolean;
+  includeClothingWhite?: boolean;
+  manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
+}
+
+export interface PersonMaskResult {
+  personMask: Uint8ClampedArray;
+  personArea: number;
+  hasPerson: boolean;
+  skinLandmarkFound: boolean;
+  boundaryBandMask: Uint8ClampedArray;
+}
+
+export interface CombinePersonAndTextOptions {
+  keepPerson?: boolean;
+  keepText?: boolean;
+  keepGraphics?: boolean;
+  graphicsMask?: Uint8ClampedArray | Uint8Array | null;
+  userKeepMask?: Uint8ClampedArray | Uint8Array | null;
+  userEraseMask?: Uint8ClampedArray | Uint8Array | null;
+}
+
+export interface CombinePersonAndTextResult {
+  finalKeepMask: Uint8ClampedArray;
+  personMask: Uint8ClampedArray;
+  textMask: Uint8ClampedArray;
+  graphicsMask: Uint8ClampedArray;
+  diagnostics: {
+    personArea: number;
+    textArea: number;
+    graphicsArea: number;
+    combinedArea: number;
+    textComponentCount: number;
+    smallComponentCount: number;
+    keptPixelPercentage: number;
+    warning?: string;
+  };
+}
+
+/**
+ * Extracts precise printed text strokes (Khmer & English, diacritics, subscripts,
+ * small characters, punctuation) while strictly rejecting white paper background
+ * and separating large banners/graphics.
+ */
+export function extractTextStrokeMask(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  options?: TextStrokeMaskOptions
+): TextStrokeMaskResult {
+  const totalPixels = width * height;
+  const textStrokeMask = new Uint8ClampedArray(totalPixels);
+  const graphicsMask = new Uint8ClampedArray(totalPixels);
+
+  // 1. Compute luminance & local gradient/contrast map
+  const lumMap = new Float32Array(totalPixels);
+  const gradMap = new Float32Array(totalPixels);
+  const isCandidateStroke = new Uint8Array(totalPixels);
+  const isCandidateGraphic = new Uint8Array(totalPixels);
+
+  for (let y = 0; y < height; y++) {
+    const yOff = y * width;
+    for (let x = 0; x < width; x++) {
+      const idx = yOff + x;
+      const p = idx * 4;
+      const r = sourceRgba[p];
+      const g = sourceRgba[p + 1];
+      const b = sourceRgba[p + 2];
+      lumMap[idx] = 0.299 * r + 0.587 * g + 0.114 * b;
+    }
+  }
+
+  for (let y = 1; y < height - 1; y++) {
+    const yOff = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = yOff + x;
+      const p = idx * 4;
+      const r = sourceRgba[p];
+      const g = sourceRgba[p + 1];
+      const b = sourceRgba[p + 2];
+      const lum = lumMap[idx];
+
+      const lumL = lumMap[idx - 1];
+      const lumR = lumMap[idx + 1];
+      const lumU = lumMap[idx - width];
+      const lumD = lumMap[idx + width];
+
+      const gradX = Math.abs(lumR - lumL);
+      const gradY = Math.abs(lumD - lumU);
+      const maxGrad = Math.max(gradX, gradY);
+      gradMap[idx] = maxGrad;
+
+      const maxNeighborLum = Math.max(lumL, lumR, lumU, lumD);
+      const minNeighborLum = Math.min(lumL, lumR, lumU, lumD);
+
+      const maxCh = Math.max(r, g, b);
+      const minCh = Math.min(r, g, b);
+      const sat = maxCh - minCh;
+
+      // Deep Blue Graphic Banner detector (R: 30, G: 64, B: 175)
+      const isDeepBlueGraphic = b > 120 && b - r > 30 && b - g > 15;
+      // Saturated banner or logo (e.g. yellow logo R: 245, G: 158, B: 11)
+      const isSaturatedShape = (sat > 60 && maxGrad < 30) || (r > 190 && g > 120 && b < 50);
+
+      if (isDeepBlueGraphic || isSaturatedShape) {
+        isCandidateGraphic[idx] = 1;
+        continue;
+      }
+
+      // Dark text ink (low saturation, dark luminance on lighter background)
+      const isDarkInk = lum < 145 && sat < 60 && !isDeepBlueGraphic;
+      // Dark text edge on light page
+      const isDarkEdge = isDarkInk && maxNeighborLum > 165 && (maxNeighborLum - lum) > 25 && maxGrad > 18;
+      // Light text stroke on dark page/header
+      const isLightText = lum > 165 && minNeighborLum < 100 && (lum - minNeighborLum) > 30 && maxGrad > 22;
+
+      if (isDarkInk || isDarkEdge || isLightText) {
+        isCandidateStroke[idx] = 1;
+      }
+    }
+  }
+
+  // 2. Connected component analysis on candidate strokes
+  const labels = new Int32Array(totalPixels);
+  let currentLabel = 0;
+  const queue = new Int32Array(totalPixels);
+
+  interface CompData {
+    id: number;
+    pixelCount: number;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    isGraphicBanner: boolean;
+    hasEdgeContrast: boolean;
+  }
+  const strokeComponents: CompData[] = [];
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const startIdx = y * width + x;
+      if (isCandidateStroke[startIdx] === 0 || labels[startIdx] !== 0) continue;
+
+      currentLabel++;
+      let qHead = 0, qTail = 0;
+      queue[qTail++] = startIdx;
+      labels[startIdx] = currentLabel;
+
+      let pixelCount = 0;
+      let minX = x, maxX = x, minY = y, maxY = y;
+      let hasEdgeContrast = false;
+
+      while (qHead < qTail) {
+        const curr = queue[qHead++];
+        pixelCount++;
+        const cx = curr % width;
+        const cy = Math.floor(curr / width);
+
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+
+        if (gradMap[curr] > 18) {
+          hasEdgeContrast = true;
+        }
+
+        const neighbors = [
+          cx > 0 ? curr - 1 : -1,
+          cx < width - 1 ? curr + 1 : -1,
+          cy > 0 ? curr - width : -1,
+          cy < height - 1 ? curr + width : -1,
+        ];
+
+        for (const n of neighbors) {
+          if (n >= 0 && isCandidateStroke[n] === 1 && labels[n] === 0) {
+            labels[n] = currentLabel;
+            queue[qTail++] = n;
+          }
+        }
+      }
+
+      const compW = maxX - minX + 1;
+      const compH = maxY - minY + 1;
+      const touchesAllBorders = minX <= 2 && maxX >= width - 3 && minY <= 2 && maxY >= height - 3;
+      const isOuterMargin = touchesAllBorders || (pixelCount > totalPixels * 0.35);
+      const isGraphicBanner = (compW > width * 0.35 && compH > 25 && pixelCount > 2500) || isOuterMargin;
+
+      strokeComponents.push({
+        id: currentLabel,
+        pixelCount,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        isGraphicBanner,
+        hasEdgeContrast,
+      });
+    }
+  }
+
+  let textComponentCount = 0;
+  let smallComponentCount = 0;
+  let textArea = 0;
+  let graphicsArea = 0;
+
+  const validTextLabelSet = new Set<number>();
+  for (const c of strokeComponents) {
+    if (c.isGraphicBanner) {
+      continue;
+    }
+    validTextLabelSet.add(c.id);
+    textComponentCount++;
+    if (c.pixelCount <= 120 && c.pixelCount >= 2) {
+      smallComponentCount++;
+    }
+  }
+
+  // Populate text stroke mask
+  for (let i = 0; i < totalPixels; i++) {
+    const lbl = labels[i];
+    if (lbl > 0 && validTextLabelSet.has(lbl)) {
+      textStrokeMask[i] = 255;
+      textArea++;
+    } else if (isCandidateGraphic[i] === 1 || (lbl > 0 && !validTextLabelSet.has(lbl))) {
+      graphicsMask[i] = 255;
+      graphicsArea++;
+    }
+  }
+
+  // 3. Antialiased stroke solidifying: dilate text stroke by 1px strictly
+  // onto non-paper pixels (lum < 245 or gradient > 20) to ensure thin Khmer
+  // diacritics and subscripts are unbroken, while pure white paper remains transparent.
+  const dilatedText = new Uint8ClampedArray(textStrokeMask);
+  for (let y = 1; y < height - 1; y++) {
+    const yOff = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = yOff + x;
+      if (textStrokeMask[idx] === 255) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const ny = y + dy;
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const nIdx = ny * width + nx;
+            if (dilatedText[nIdx] === 0) {
+              // Strictly preserve paper transparency: only solidify into non-white edge pixels
+              if (lumMap[nIdx] < 245 || gradMap[nIdx] > 20) {
+                dilatedText[nIdx] = 255;
+                textArea++;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  textStrokeMask.set(dilatedText);
+
+  // Preserve user custom keep regions if passed
+  if (options?.customKeepMask) {
+    for (let i = 0; i < totalPixels; i++) {
+      if (options.customKeepMask[i] > 128) {
+        textStrokeMask[i] = 255;
+      }
+    }
+  }
+
+  // Detect distinct text line bounding boxes for diagnostics and UI overlay
+  const detectedTextLines: {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    lineType: "khmer" | "latin" | "caption" | "heading";
+  }[] = [];
+
+  for (const c of strokeComponents) {
+    if (!validTextLabelSet.has(c.id)) continue;
+    if (c.maxX - c.minX > 30) {
+      const isTop = c.minY < height * 0.40;
+      const isBottom = c.minY > height * 0.85;
+      detectedTextLines.push({
+        minX: c.minX,
+        maxX: c.maxX,
+        minY: c.minY,
+        maxY: c.maxY,
+        lineType: isTop ? "heading" : isBottom ? "caption" : "khmer",
+      });
+    }
+  }
+
+  const lowConfidence = textArea < 40 && width > 100 && height > 100;
+
+  return {
+    textStrokeMask,
+    graphicsMask,
+    textComponentCount,
+    smallComponentCount,
+    textArea,
+    graphicsArea,
+    lowConfidence,
+    detectedTextLines,
+  };
+}
+
+/**
+ * Extracts the complete person mask (hair, face, hands, clothing/uniform)
+ * using person-specific segmentation while filtering out isolated document text and banners.
+ */
+export function extractPersonMask(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  initialMask: Uint8ClampedArray | Uint8Array | null,
+  width: number,
+  height: number,
+  options?: PersonMaskOptions
+): PersonMaskResult {
+  const totalPixels = width * height;
+  const personMask = isolatePersonMask(
+    sourceRgba,
+    initialMask || new Uint8ClampedArray(totalPixels).fill(255),
+    width,
+    height
+  );
+
+  // Preserve user manual keep strokes if provided
+  if (options?.manualKeepMask) {
+    for (let i = 0; i < totalPixels; i++) {
+      if (options.manualKeepMask[i] > 128) {
+        personMask[i] = 255;
+      }
+    }
+  }
+
+  // Ensure definite person interior alpha >= 0.95 (242)
+  const minAlpha =
+    options?.minInteriorAlpha !== undefined
+      ? Math.round(options.minInteriorAlpha * 255)
+      : 242;
+
+  let personArea = 0;
+  for (let i = 0; i < totalPixels; i++) {
+    if (personMask[i] > 128) {
+      if (personMask[i] < minAlpha) {
+        personMask[i] = 255;
+      }
+      personArea++;
+    }
+  }
+
+  // Generate narrow boundary band (radius 2-3 px) for person edge matting
+  const boundaryBandMask = new Uint8ClampedArray(totalPixels);
+  for (let y = 1; y < height - 1; y++) {
+    const yOff = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = yOff + x;
+      if (personMask[idx] > 128) {
+        const hasBgNeighbor =
+          personMask[idx - 1] <= 128 ||
+          personMask[idx + 1] <= 128 ||
+          personMask[idx - width] <= 128 ||
+          personMask[idx + width] <= 128;
+        if (hasBgNeighbor) {
+          boundaryBandMask[idx] = 255;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nIdx = (y + dy) * width + (x + dx);
+              boundaryBandMask[nIdx] = 255;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const hasPerson = personArea > 400;
+
+  return {
+    personMask,
+    personArea,
+    hasPerson,
+    skinLandmarkFound: hasPerson,
+    boundaryBandMask,
+  };
+}
+
+/**
+ * Combines person mask and text stroke mask conservatively:
+ * finalKeepMask = (personMask UNION textStrokeMask UNION (keepGraphics ? graphicsMask : 0) UNION userKeepMask) - userEraseMask
+ */
+export function combinePersonAndTextMasks(
+  personMask: Uint8ClampedArray | Uint8Array,
+  textStrokeMask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  options?: CombinePersonAndTextOptions
+): CombinePersonAndTextResult {
+  const totalPixels = width * height;
+  const keepPerson = options?.keepPerson !== false;
+  const keepText = options?.keepText !== false;
+  const keepGraphics = Boolean(options?.keepGraphics);
+  const userKeep = options?.userKeepMask;
+  const userErase = options?.userEraseMask;
+  const graphics = options?.graphicsMask;
+
+  const finalKeepMask = new Uint8ClampedArray(totalPixels);
+  const pMask = new Uint8ClampedArray(totalPixels);
+  const tMask = new Uint8ClampedArray(totalPixels);
+  const gMask = new Uint8ClampedArray(totalPixels);
+
+  let personArea = 0;
+  let textArea = 0;
+  let graphicsArea = 0;
+  let combinedArea = 0;
+  let textComponentCount = 0;
+  let smallComponentCount = 0;
+
+  for (let i = 0; i < totalPixels; i++) {
+    const pVal = personMask[i] > 128 ? 255 : 0;
+    const tVal = textStrokeMask[i] > 128 ? 255 : 0;
+    const gVal = graphics && graphics[i] > 128 ? 255 : 0;
+
+    pMask[i] = pVal;
+    tMask[i] = tVal;
+    gMask[i] = gVal;
+
+    if (pVal > 0) personArea++;
+    if (tVal > 0) textArea++;
+    if (gVal > 0) graphicsArea++;
+
+    let val = 0;
+    if (keepPerson && pVal > 0) val = 255;
+    if (keepText && tVal > 0 && (keepPerson || pVal === 0)) val = 255;
+    if (keepGraphics && gVal > 0) val = 255;
+    if (userKeep && userKeep[i] > 128) val = 255;
+    if (userErase && userErase[i] > 128) val = 0;
+
+    finalKeepMask[i] = val;
+    if (val > 0) combinedArea++;
+  }
+
+  // Count text components
+  const visited = new Uint8Array(totalPixels);
+  const queue = new Int32Array(totalPixels);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      if (tMask[idx] > 0 && visited[idx] === 0) {
+        textComponentCount++;
+        let qHead = 0, qTail = 0;
+        queue[qTail++] = idx;
+        visited[idx] = 1;
+        let cArea = 0;
+        while (qHead < qTail) {
+          const curr = queue[qHead++];
+          cArea++;
+          const cx = curr % width;
+          const cy = Math.floor(curr / width);
+          const neighbors = [
+            cx > 0 ? curr - 1 : -1,
+            cx < width - 1 ? curr + 1 : -1,
+            cy > 0 ? curr - width : -1,
+            cy < height - 1 ? curr + width : -1,
+          ];
+          for (const n of neighbors) {
+            if (n >= 0 && tMask[n] > 0 && visited[n] === 0) {
+              visited[n] = 1;
+              queue[qTail++] = n;
+            }
+          }
+        }
+        if (cArea <= 120 && cArea >= 2) {
+          smallComponentCount++;
+        }
+      }
+    }
+  }
+
+  let warning: string | undefined = undefined;
+  if (keepText && textArea === 0) {
+    warning =
+      "⚠️ No text strokes detected. OCR/text detection did not find text. Use Keep Text Brush to restore missed letters.";
+  } else if (keepPerson && personArea === 0) {
+    warning = "⚠️ No person detected. Please verify or use Keep Person Brush.";
+  }
+
+  const keptPixelPercentage = totalPixels > 0 ? (combinedArea / totalPixels) * 100 : 0;
+
+  return {
+    finalKeepMask,
+    personMask: pMask,
+    textMask: tMask,
+    graphicsMask: gMask,
+    diagnostics: {
+      personArea,
+      textArea,
+      graphicsArea,
+      combinedArea,
+      textComponentCount,
+      smallComponentCount,
+      keptPixelPercentage,
+      warning,
+    },
+  };
+}
+
+/**
+ * Renders color-coded preview overlays for Person + Text Only mode:
+ * - Blue for person mask
+ * - Yellow for text mask
+ * - Green for combined keep mask
+ * - Red / dimmed for removed background
+ */
+export function generatePersonTextLayerOverlay(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  personMask: Uint8ClampedArray | Uint8Array,
+  textMask: Uint8ClampedArray | Uint8Array,
+  finalKeepMask: Uint8ClampedArray | Uint8Array | null | undefined,
+  width: number,
+  height: number,
+  layer?: "person_mask" | "text_mask" | "combined_mask"
+): Uint8ClampedArray {
+  const totalPixels = width * height;
+  const overlay = new Uint8ClampedArray(totalPixels * 4);
+  const activeLayer = layer || "combined_mask";
+
+  for (let i = 0; i < totalPixels; i++) {
+    const pIdx = i * 4;
+    const r = sourceRgba[pIdx];
+    const g = sourceRgba[pIdx + 1];
+    const b = sourceRgba[pIdx + 2];
+
+    const isPerson = personMask[i] > 128;
+    const isText = textMask[i] > 128;
+    const isCombined = finalKeepMask ? finalKeepMask[i] > 128 : (isPerson || isText);
+
+    if (activeLayer === "person_mask") {
+      if (isPerson) {
+        // Blue overlay for Person: RGB [59, 130, 246]
+        overlay[pIdx] = Math.round(r * 0.35 + 59 * 0.65);
+        overlay[pIdx + 1] = Math.round(g * 0.35 + 130 * 0.65);
+        overlay[pIdx + 2] = Math.round(b * 0.35 + 246 * 0.65);
+        overlay[pIdx + 3] = 255;
+      } else {
+        overlay[pIdx] = Math.round(r * 0.6 + 60);
+        overlay[pIdx + 1] = Math.round(g * 0.3);
+        overlay[pIdx + 2] = Math.round(b * 0.3);
+        overlay[pIdx + 3] = 255;
+      }
+    } else if (layer === "text_mask") {
+      if (isText) {
+        // Yellow overlay for Text: RGB [234, 179, 8]
+        overlay[pIdx] = Math.round(r * 0.2 + 234 * 0.8);
+        overlay[pIdx + 1] = Math.round(g * 0.2 + 179 * 0.8);
+        overlay[pIdx + 2] = Math.round(b * 0.2 + 8 * 0.8);
+        overlay[pIdx + 3] = 255;
+      } else {
+        overlay[pIdx] = Math.round(r * 0.4);
+        overlay[pIdx + 1] = Math.round(g * 0.4);
+        overlay[pIdx + 2] = Math.round(b * 0.4);
+        overlay[pIdx + 3] = 255;
+      }
+    } else {
+      // layer === "combined_mask"
+      if (isCombined) {
+        // Green overlay for Combined Keep: RGB [34, 197, 94]
+        overlay[pIdx] = Math.round(r * 0.35 + 34 * 0.65);
+        overlay[pIdx + 1] = Math.round(g * 0.35 + 197 * 0.65);
+        overlay[pIdx + 2] = Math.round(b * 0.35 + 94 * 0.65);
+        overlay[pIdx + 3] = 255;
+      } else {
+        overlay[pIdx] = Math.round(r * 0.6 + 80);
+        overlay[pIdx + 1] = Math.round(g * 0.2);
+        overlay[pIdx + 2] = Math.round(b * 0.2);
+        overlay[pIdx + 3] = 255;
+      }
+    }
+  }
+
+  return overlay;
+}
+
 /**
  * Combines two foreground proposals conservatively (e.g. BiRefNet/RMBG-2.0 + ISNet).
  * Returns union of both proposals and identifies disputed edge regions.
@@ -1305,7 +1920,7 @@ export function detectContainerAndContents(
   }
 
   // PERSON ONLY MODE: Dedicated person segmentation, filters out isolated text/logos
-  if (mode === "person" || mode === "person_only" || mode === "person_plus_text") {
+  if (mode === "person" || mode === "person_only") {
     const personMask = isolatePersonMask(sourceRgba, initialMask, width, height);
     return {
       hasContainer: false,
@@ -1313,6 +1928,25 @@ export function detectContainerAndContents(
       containerMask: new Uint8ClampedArray(totalPixels),
       contentsMask: personMask,
       warning: undefined,
+    };
+  }
+
+  // PERSON + TEXT ONLY MODE: Independent person segmentation + OCR text-stroke segmentation
+  if (mode === "person_text_only" || mode === "person_plus_text") {
+    const pRes = extractPersonMask(sourceRgba, initialMask, width, height);
+    const tRes = extractTextStrokeMask(sourceRgba, width, height);
+    const combined = combinePersonAndTextMasks(pRes.personMask, tRes.textStrokeMask, width, height, {
+      keepPerson: true,
+      keepText: true,
+      keepGraphics: false,
+      graphicsMask: tRes.graphicsMask,
+    });
+    return {
+      hasContainer: false,
+      boxConfidence: 0,
+      containerMask: new Uint8ClampedArray(totalPixels),
+      contentsMask: combined.finalKeepMask,
+      warning: combined.diagnostics.warning,
     };
   }
 
@@ -2219,3 +2853,163 @@ export function applyAreaSafetyCheck(
     rollbackTriggered: Boolean(diagnostics.rollbackTriggered),
   };
 }
+
+/**
+ * Applies a Keep (255) or Erase (0) rectangle edit to a mask buffer.
+ */
+export function applyRectangleToMask(
+  mask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  rect: [number, number, number, number], // [x1, y1, x2, y2]
+  fillValue: number = 255
+): Uint8ClampedArray {
+  const updated = new Uint8ClampedArray(mask);
+  const minX = Math.max(0, Math.min(width - 1, Math.min(rect[0], rect[2])));
+  const maxX = Math.max(0, Math.min(width - 1, Math.max(rect[0], rect[2])));
+  const minY = Math.max(0, Math.min(height - 1, Math.min(rect[1], rect[3])));
+  const maxY = Math.max(0, Math.min(height - 1, Math.max(rect[1], rect[3])));
+
+  for (let y = minY; y <= maxY; y++) {
+    const yOff = y * width;
+    for (let x = minX; x <= maxX; x++) {
+      updated[yOff + x] = fillValue;
+    }
+  }
+  return updated;
+}
+
+/**
+ * Applies a series of brush stroke points (Keep = 255, Erase = 0) to a mask buffer.
+ */
+export function applyBrushStrokeToMask(
+  mask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  points: [number, number][],
+  tool: "keep" | "remove" = "keep",
+  radius: number = 10,
+  hardness: number = 0.8
+): Uint8ClampedArray {
+  const updated = new Uint8ClampedArray(mask);
+  if (!points || points.length === 0) return updated;
+
+  const rSq = radius * radius;
+  const isKeep = tool === "keep";
+
+  const stampCircle = (cx: number, cy: number) => {
+    const minX = Math.max(0, Math.floor(cx - radius));
+    const maxX = Math.min(width - 1, Math.ceil(cx + radius));
+    const minY = Math.max(0, Math.floor(cy - radius));
+    const maxY = Math.min(height - 1, Math.ceil(cy + radius));
+
+    for (let y = minY; y <= maxY; y++) {
+      const dy = y - cy;
+      const yOff = y * width;
+      for (let x = minX; x <= maxX; x++) {
+        const dx = x - cx;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= rSq) {
+          const d = Math.sqrt(distSq);
+          const u = d / radius;
+          let weight = 1.0;
+          if (hardness < 0.99 && u > hardness) {
+            const t = (u - hardness) / (1 - hardness);
+            weight = Math.max(0, 1 - (3 * t * t - 2 * t * t * t));
+          }
+          const idx = yOff + x;
+          const curr = updated[idx];
+          if (isKeep) {
+            updated[idx] = Math.round(curr + (255 - curr) * weight);
+          } else {
+            updated[idx] = Math.round(curr * (1 - weight));
+          }
+        }
+      }
+    }
+  };
+
+  for (let i = 0; i < points.length; i++) {
+    const [p0x, p0y] = points[i];
+    if (i === 0) {
+      stampCircle(p0x, p0y);
+    } else {
+      const [p1x, p1y] = points[i - 1];
+      const dist = Math.hypot(p0x - p1x, p0y - p1y);
+      const step = Math.max(1, radius / 3);
+      const steps = Math.ceil(dist / step);
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        stampCircle(p1x + (p0x - p1x) * t, p1y + (p0y - p1y) * t);
+      }
+    }
+  }
+
+  return updated;
+}
+
+/**
+ * Opt-in crop to content: trims transparent background borders around approved foreground objects.
+ */
+export function cropRgbaToContent(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  alphaThreshold: number = 10
+): {
+  croppedRgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+  cropBox: { minX: number; minY: number; maxX: number; maxY: number };
+} {
+  let minX = width, maxX = 0, minY = height, maxY = 0;
+  let hasFg = false;
+
+  for (let y = 0; y < height; y++) {
+    const yOff = y * width;
+    for (let x = 0; x < width; x++) {
+      const a = rgba[(yOff + x) * 4 + 3];
+      if (a > alphaThreshold) {
+        hasFg = true;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (!hasFg || minX > maxX || minY > maxY) {
+    return {
+      croppedRgba: new Uint8ClampedArray(rgba),
+      width,
+      height,
+      cropBox: { minX: 0, minY: 0, maxX: width - 1, maxY: height - 1 },
+    };
+  }
+
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+  const cropped = new Uint8ClampedArray(cropW * cropH * 4);
+
+  for (let cy = 0; cy < cropH; cy++) {
+    const srcY = minY + cy;
+    for (let cx = 0; cx < cropW; cx++) {
+      const srcX = minX + cx;
+      const sIdx = (srcY * width + srcX) * 4;
+      const dIdx = (cy * cropW + cx) * 4;
+      cropped[dIdx] = rgba[sIdx];
+      cropped[dIdx + 1] = rgba[sIdx + 1];
+      cropped[dIdx + 2] = rgba[sIdx + 2];
+      cropped[dIdx + 3] = rgba[sIdx + 3];
+    }
+  }
+
+  return {
+    croppedRgba: cropped,
+    width: cropW,
+    height: cropH,
+    cropBox: { minX, minY, maxX, maxY },
+  };
+}
+
