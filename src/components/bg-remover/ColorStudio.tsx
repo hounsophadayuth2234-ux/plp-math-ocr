@@ -207,9 +207,9 @@ export function ColorStudio({
   const [, setCurrentTransparentBlob] = useState<Blob>(transparentBlob);
   const [isCompositing, setIsCompositing] = useState(false);
 
-  // ── Manual Mask Refinement Studio State (Collapsed & inactive by default) ──
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
+  // ── Manual Mask Refinement Studio State (Open & active for manual corrections) ──
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(true);
+  const [isEditMode, setIsEditMode] = useState(true);
   const [activeTool, setActiveTool] = useState<BrushTool>("keep");
   const [brushSize, setBrushSize] = useState<number>(20);
   const [brushHardness, setBrushHardness] = useState<number>(80); // 0 = ultra soft, 100 = hard edge
