@@ -41,7 +41,7 @@ export default function DashboardOverviewPage() {
             </div>
 
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white font-sans uppercase">
-              DYT AI Operations Command Center
+              DYT AI WORKSPACE // ប្រព័ន្ធបញ្ជាការ AI
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
