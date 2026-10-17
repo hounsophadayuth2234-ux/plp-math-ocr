@@ -1109,8 +1109,29 @@ export function extractTextStrokeMask(
     }
   }
 
+  // 1b. 2D Integral image of luminance for fast local adaptive thresholding
+  const stride = width + 1;
+  const integral = new Float64Array(stride * (height + 1));
+  for (let y = 0; y < height; y++) {
+    let rowSum = 0;
+    const yOff = y * width;
+    const intYOff = (y + 1) * stride;
+    const prevIntYOff = y * stride;
+    for (let x = 0; x < width; x++) {
+      rowSum += lumMap[yOff + x];
+      integral[intYOff + (x + 1)] = integral[prevIntYOff + (x + 1)] + rowSum;
+    }
+  }
+
+  // Radius for adaptive local window (15x15 to 25x25 neighborhood)
+  const winR = Math.max(7, Math.min(15, Math.round(Math.min(width, height) / 35)));
+
   for (let y = 1; y < height - 1; y++) {
     const yOff = y * width;
+    const x0Base = Math.max(0, -winR);
+    const y0 = Math.max(0, y - winR);
+    const y1 = Math.min(height, y + winR + 1);
+
     for (let x = 1; x < width - 1; x++) {
       const idx = yOff + x;
       const p = idx * 4;
@@ -1146,14 +1167,26 @@ export function extractTextStrokeMask(
         continue;
       }
 
-      // Dark text ink (low saturation, dark luminance on lighter background)
-      const isDarkInk = lum < 145 && sat < 60 && !isDeepBlueGraphic;
-      // Dark text edge on light page
-      const isDarkEdge = isDarkInk && maxNeighborLum > 165 && (maxNeighborLum - lum) > 25 && maxGrad > 18;
-      // Light text stroke on dark page/header
-      const isLightText = lum > 165 && minNeighborLum < 100 && (lum - minNeighborLum) > 30 && maxGrad > 22;
+      // Compute local mean luminance via integral image
+      const x0 = Math.max(0, x - winR);
+      const x1 = Math.min(width, x + winR + 1);
+      const winCount = (x1 - x0) * (y1 - y0);
+      const winSum =
+        integral[y1 * stride + x1] -
+        integral[y0 * stride + x1] -
+        integral[y1 * stride + x0] +
+        integral[y0 * stride + x0];
+      const localMean = winSum / winCount;
 
-      if (isDarkInk || isDarkEdge || isLightText) {
+      // Dark text ink (low saturation, dark luminance on lighter local background)
+      const isDarkInk = localMean > 110 && lum < localMean - 12 && sat < 65 && !isDeepBlueGraphic;
+      const isDarkEdge = (lum < 145 && sat < 60) && maxNeighborLum > 165 && (maxNeighborLum - lum) > 20 && maxGrad > 15;
+
+      // Light text stroke on dark page/header (high luminance on darker local background)
+      const isLightText = localMean < 150 && lum > localMean + 15 && sat < 65;
+      const isLightEdge = lum > 165 && minNeighborLum < 120 && (lum - minNeighborLum) > 25 && maxGrad > 18;
+
+      if (isDarkInk || isDarkEdge || isLightText || isLightEdge) {
         isCandidateStroke[idx] = 1;
       }
     }
@@ -1222,9 +1255,11 @@ export function extractTextStrokeMask(
 
       const compW = maxX - minX + 1;
       const compH = maxY - minY + 1;
+      const fillRatio = pixelCount / (compW * compH);
       const touchesAllBorders = minX <= 2 && maxX >= width - 3 && minY <= 2 && maxY >= height - 3;
       const isOuterMargin = touchesAllBorders || (pixelCount > totalPixels * 0.35);
-      const isGraphicBanner = (compW > width * 0.35 && compH > 25 && pixelCount > 2500) || isOuterMargin;
+      // Graphic banner is a dense solid block; text lines are sparse
+      const isGraphicBanner = (compW > width * 0.40 && compH > 30 && pixelCount > 2500 && fillRatio > 0.35) || isOuterMargin;
 
       strokeComponents.push({
         id: currentLabel,
