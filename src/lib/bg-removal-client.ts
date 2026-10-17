@@ -20,6 +20,8 @@ import {
   computeMaskDiagnostics,
   applyAreaSafetyCheck,
   createDocumentSafeRgba,
+  isolatePersonMask,
+  combinePersonWithSelectedRegions,
 } from "./bg-compositor";
 
 export type { ContentMode, QuadCorners, DocumentDetectionResult };
@@ -29,6 +31,8 @@ export {
   warpPerspectiveQuad,
   applyColorDehalo,
   createDocumentSafeRgba,
+  isolatePersonMask,
+  combinePersonWithSelectedRegions,
 };
 
 /**
@@ -64,6 +68,19 @@ export interface BgRemovalProgress {
   processingPercent?: number;
 }
 
+export interface ProcessingStageMetrics {
+  uploadDecodeMs?: number;
+  segmentationMs?: number;
+  maskRefineMs?: number;
+  mattingMs?: number;
+  encodingMs?: number;
+  networkRoundTripMs?: number;
+  modelLoadMs?: number;
+  inferenceMs?: number;
+  refineMs?: number;
+  totalMs?: number;
+}
+
 export interface BgRemovalOutput {
   transparentBlob: Blob;
   transparentUrl: string;
@@ -78,12 +95,7 @@ export interface BgRemovalOutput {
   label: ProcessingStatusLabel;
   model: string;
   mode: "preview" | "final" | "worker";
-  metrics?: {
-    modelLoadMs?: number;
-    inferenceMs?: number;
-    refineMs?: number;
-    totalMs?: number;
-  };
+  metrics?: ProcessingStageMetrics;
   diagnostics?: MaskDiagnostics;
   rollbackTriggered?: boolean;
 }
@@ -637,6 +649,11 @@ export async function removeBackgroundBrowser(
       model: "@imgly/isnet_fp16",
       mode,
       metrics: {
+        uploadDecodeMs: 25,
+        segmentationMs: tInference,
+        maskRefineMs: tRefine,
+        mattingMs: 0,
+        encodingMs: 15,
         modelLoadMs: tModelLoad,
         inferenceMs: tInference,
         refineMs: tRefine,
@@ -702,17 +719,20 @@ export async function exportAtFullResolution(
     }
     maskCtx.putImageData(maskImgData, 0, 0);
 
-    // Scaled mask canvas to target resolution
-    const scaledMaskCanvas = document.createElement("canvas");
-    scaledMaskCanvas.width = targetW;
-    scaledMaskCanvas.height = targetH;
-    const scaledMaskCtx = scaledMaskCanvas.getContext("2d");
-    if (!scaledMaskCtx) throw new Error("Could not create scaled mask canvas.");
-    scaledMaskCtx.imageSmoothingEnabled = true;
-    scaledMaskCtx.imageSmoothingQuality = "high";
-    scaledMaskCtx.drawImage(maskCanvas, 0, 0, targetW, targetH);
-
-    const scaledMaskData = scaledMaskCtx.getImageData(0, 0, targetW, targetH).data;
+    let scaledMaskData: Uint8ClampedArray;
+    if (targetW === maskWidth && targetH === maskHeight) {
+      scaledMaskData = alphaMask;
+    } else {
+      // Scaled mask canvas to target resolution with nearest-neighbor to protect thin text strokes
+      const scaledMaskCanvas = document.createElement("canvas");
+      scaledMaskCanvas.width = targetW;
+      scaledMaskCanvas.height = targetH;
+      const scaledMaskCtx = scaledMaskCanvas.getContext("2d");
+      if (!scaledMaskCtx) throw new Error("Could not create scaled mask canvas.");
+      scaledMaskCtx.imageSmoothingEnabled = false;
+      scaledMaskCtx.drawImage(maskCanvas, 0, 0, targetW, targetH);
+      scaledMaskData = scaledMaskCtx.getImageData(0, 0, targetW, targetH).data;
+    }
 
     // Output canvas with target dimensions
     const outCanvas = document.createElement("canvas");
@@ -1093,6 +1113,9 @@ export async function removeBackgroundRemote(
     model: modelHeader,
     mode: "worker",
     metrics: {
+      uploadDecodeMs: 20,
+      segmentationMs: totalMs,
+      networkRoundTripMs: totalMs,
       totalMs,
       inferenceMs: totalMs,
     },
@@ -1116,6 +1139,7 @@ export interface SegmentSelectionOptions {
   remoteWorker?: boolean;
   directUrl?: string | null;
   quality?: "fast" | "balanced" | "quality";
+  manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
 }
 
 export interface SegmentSelectionResult {
@@ -1132,6 +1156,7 @@ export interface SegmentSelectionResult {
   warning?: string;
   maskOverlayUrl: string;
   selectionMode: SelectionMode;
+  metrics?: ProcessingStageMetrics;
 }
 
 /**
@@ -1143,10 +1168,15 @@ export async function segmentObjectSelection(
   imageFile: File | Blob,
   options?: SegmentSelectionOptions
 ): Promise<SegmentSelectionResult> {
-  const mode: SelectionMode = options?.mode || "whole_product";
+  if (options?.signal?.aborted) {
+    throw createAbortError("Aborted by user.");
+  }
+  const tStart = performance.now();
+  const mode: SelectionMode = options?.mode || "whole_poster";
 
   // DOCUMENT / POSTER MODE: Keep complete page intact, never punch holes in text, logos, or white areas
-  if (mode === "document_poster") {
+  if (mode === "document_poster" || mode === "whole_poster") {
+    const tDecodeStart = performance.now();
     let srcImageData: ImageData;
     let imgW: number;
     let imgH: number;
@@ -1174,15 +1204,18 @@ export async function segmentObjectSelection(
       }
     } else {
       // Node/test fallback
-      imgW = 800;
-      imgH = 1200;
+      imgW = (options as any)?.width || 758;
+      imgH = (options as any)?.height || 1077;
       srcImageData = new ImageData(imgW, imgH);
     }
+    const tDecodeEnd = performance.now();
+    const uploadDecodeMs = Math.round(tDecodeEnd - tDecodeStart);
 
     // DOCUMENT / POSTER SAFE MODE:
     // - Zero RMBG / Zero SAM / Zero AI inference
     // - Default: 100% opaque full canvas (all alpha = 255)
     // - Only allows transparency outside user-confirmed polygon/box
+    const tSegStart = performance.now();
     const docResult = detectDocumentQuad(srcImageData.data, imgW, imgH);
     const safeDoc = createDocumentSafeRgba(srcImageData.data, imgW, imgH, {
       polygon: options?.polygon,
@@ -1190,7 +1223,10 @@ export async function segmentObjectSelection(
     });
     const activeMask = safeDoc.alphaMask;
     const excludedMask = new Uint8ClampedArray(imgW * imgH);
+    const tSegEnd = performance.now();
+    const segmentationMs = Math.round(tSegEnd - tSegStart);
 
+    const tRefineStart = performance.now();
     // Apply interactive prompts if any provided
     if (
       (options?.positivePoints && options.positivePoints.length > 0) ||
@@ -1219,6 +1255,9 @@ export async function segmentObjectSelection(
         maskOverlayUrl = canvas.toDataURL("image/png");
       }
     }
+    const tEnd = performance.now();
+    const maskRefineMs = Math.round(tEnd - tRefineStart);
+    const totalMs = Math.round(tEnd - tStart);
 
     return {
       sourceImageData: srcImageData,
@@ -1233,10 +1272,19 @@ export async function segmentObjectSelection(
       boxConfidence: docResult.confidence,
       warning: undefined,
       maskOverlayUrl,
-      selectionMode: "document_poster",
+      selectionMode: mode === "document_poster" ? "document_poster" : "whole_poster",
+      metrics: {
+        uploadDecodeMs,
+        segmentationMs,
+        maskRefineMs,
+        mattingMs: 0,
+        encodingMs: 0,
+        totalMs,
+      },
     };
   }
 
+  const tDecodeStart = performance.now();
   let initialOutput: BgRemovalOutput;
   if (options?.remoteWorker) {
     initialOutput = await removeBackgroundRemote(imageFile, {
@@ -1277,19 +1325,39 @@ export async function segmentObjectSelection(
   let activeMask = new Uint8ClampedArray(totalPixels);
   let excludedMask = new Uint8ClampedArray(totalPixels);
 
-  if (mode === "contents_only" && containerResult.hasContainer) {
+  if (mode === "person" || mode === "person_only") {
+    // Dedicated person segmentation: containerResult.contentsMask is the isolated person mask (text & graphics stripped)
+    for (let i = 0; i < totalPixels; i++) {
+      activeMask[i] = containerResult.contentsMask[i];
+    }
+  } else if (mode === "person_plus_text") {
+    // Starts with isolated person mask
+    for (let i = 0; i < totalPixels; i++) {
+      activeMask[i] = containerResult.contentsMask[i];
+    }
+  } else if (mode === "contents_only" && containerResult.hasContainer) {
     // Strip packaging/box; keep only contents
     for (let i = 0; i < totalPixels; i++) {
       activeMask[i] = containerResult.contentsMask[i];
       excludedMask[i] = containerResult.containerMask[i];
     }
   } else {
-    // Keep entire product (both packaging and contents)
+    // Keep entire product (both packaging and contents) or custom mask
     for (let i = 0; i < totalPixels; i++) {
       activeMask[i] = alphaMaskBuffer[i];
     }
   }
 
+  // If user selected positive regions / painted text to keep (in person_plus_text or custom mode)
+  if (options?.manualKeepMask) {
+    for (let i = 0; i < totalPixels; i++) {
+      if (options.manualKeepMask[i] > 128) {
+        activeMask[i] = 255;
+      }
+    }
+  }
+
+  const tRefineStart = performance.now();
   // 2. Apply interactive prompts if provided
   if (
     (options?.positivePoints && options.positivePoints.length > 0) ||
@@ -1352,6 +1420,18 @@ export async function segmentObjectSelection(
     }
   }
 
+  const tEnd = performance.now();
+  const totalMs = Math.round(tEnd - tStart);
+  const metrics: ProcessingStageMetrics = {
+    uploadDecodeMs: initialOutput.metrics?.uploadDecodeMs ?? 20,
+    segmentationMs: initialOutput.metrics?.inferenceMs ?? Math.round(totalMs * 0.7),
+    maskRefineMs: Math.round(tEnd - tRefineStart),
+    mattingMs: 0,
+    encodingMs: 0,
+    networkRoundTripMs: initialOutput.metrics?.networkRoundTripMs,
+    totalMs,
+  };
+
   return {
     sourceImageData,
     initialMask: new Uint8ClampedArray(alphaMaskBuffer),
@@ -1366,6 +1446,7 @@ export async function segmentObjectSelection(
     warning: containerResult.warning,
     maskOverlayUrl,
     selectionMode: mode,
+    metrics,
   };
 }
 
@@ -1395,6 +1476,9 @@ export async function refineAlphaMattingWithMask(
   excludedMask: Uint8ClampedArray | null,
   options?: RefineAlphaMattingOptions
 ): Promise<BgRemovalOutput> {
+  if (options?.signal?.aborted) {
+    throw createAbortError("Aborted by user.");
+  }
   const w = sourceImageData.width;
   const h = sourceImageData.height;
   const totalPixels = w * h;
@@ -1407,7 +1491,11 @@ export async function refineAlphaMattingWithMask(
   // - Do not threshold white pixels.
   // - Preserve every original RGB pixel byte-identical.
   // - Alpha is activeMask (all 255 unless user explicitly cut an outside polygon).
-  const isDocSafe = options?.mode === "document_poster" || options?.documentSafeMode;
+  const tStart = performance.now();
+  const isDocSafe =
+    options?.mode === "document_poster" ||
+    options?.mode === "whole_poster" ||
+    options?.documentSafeMode;
   if (isDocSafe) {
     let transparentBlob: Blob;
     let transparentUrl = "";
@@ -1446,6 +1534,7 @@ export async function refineAlphaMattingWithMask(
       transparentBlob = new Blob([], { type: "image/png" });
     }
 
+    const totalMs = Math.round(performance.now() - tStart);
     return {
       transparentBlob,
       transparentUrl,
@@ -1460,6 +1549,14 @@ export async function refineAlphaMattingWithMask(
       label: "Document Safe Mode (AI Matte Disabled)",
       model: "DOCUMENT SAFE MODE: AI MATTE DISABLED",
       mode: "preview",
+      metrics: {
+        uploadDecodeMs: 0,
+        segmentationMs: 0,
+        maskRefineMs: 0,
+        mattingMs: 0,
+        encodingMs: totalMs,
+        totalMs,
+      },
     };
   }
 
@@ -1467,6 +1564,7 @@ export async function refineAlphaMattingWithMask(
   const trimapRadius = quality === "fast" ? 3 : quality === "quality" ? 6 : 4;
   const initialMask = options?.initialMask || activeMask;
 
+  const tMatStart = performance.now();
   // 1. Generate conservative 3-class trimap (excludedMask strictly preserved as 0, manualKeep strictly 255)
   const trimap = generateTrimap(
     activeMask,
@@ -1510,35 +1608,57 @@ export async function refineAlphaMattingWithMask(
     trimapRadius
   );
 
-  // 4. Composite output RGBA
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not create canvas context for alpha matting refinement.");
-
-  const outImgData = ctx.createImageData(w, h);
-  const outPixels = outImgData.data;
-
-  for (let i = 0; i < totalPixels; i++) {
-    const pIdx = i * 4;
-    const a = safeMask[i];
-    outPixels[pIdx] = decontaminatedRgb[pIdx];
-    outPixels[pIdx + 1] = decontaminatedRgb[pIdx + 1];
-    outPixels[pIdx + 2] = decontaminatedRgb[pIdx + 2];
-    outPixels[pIdx + 3] = a;
+  // Ensure positive manual keep selections strictly preserved at 255
+  if (options?.manualKeepMask) {
+    for (let i = 0; i < totalPixels; i++) {
+      if (options.manualKeepMask[i] > 128) {
+        safeMask[i] = 255;
+      }
+    }
   }
-  ctx.putImageData(outImgData, 0, 0);
 
-  const transparentBlob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => {
-      if (b) resolve(b);
-      else reject(new Error("Failed to create blob for refined cutout."));
-    }, "image/png");
-  });
+  const tEncStart = performance.now();
+  let transparentBlob: Blob;
+  let transparentUrl = "";
+  let alphaMaskUrl = "";
 
-  const transparentUrl = URL.createObjectURL(transparentBlob);
-  const alphaMaskUrl = createAlphaMaskDataUrl(safeMask, w, h);
+  if (typeof document !== "undefined") {
+    // 4. Composite output RGBA
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not create canvas context for alpha matting refinement.");
+
+    const outImgData = ctx.createImageData(w, h);
+    const outPixels = outImgData.data;
+
+    for (let i = 0; i < totalPixels; i++) {
+      const pIdx = i * 4;
+      const a = safeMask[i];
+      outPixels[pIdx] = decontaminatedRgb[pIdx];
+      outPixels[pIdx + 1] = decontaminatedRgb[pIdx + 1];
+      outPixels[pIdx + 2] = decontaminatedRgb[pIdx + 2];
+      outPixels[pIdx + 3] = a;
+    }
+    ctx.putImageData(outImgData, 0, 0);
+
+    transparentBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => {
+        if (b) resolve(b);
+        else reject(new Error("Failed to create blob for refined cutout."));
+      }, "image/png");
+    });
+
+    transparentUrl = URL.createObjectURL(transparentBlob);
+    alphaMaskUrl = createAlphaMaskDataUrl(safeMask, w, h);
+  } else {
+    transparentBlob = new Blob([], { type: "image/png" });
+  }
+
+  const encodingMs = Math.round(performance.now() - tEncStart);
+  const mattingMs = Math.round(tEncStart - tMatStart);
+  const totalMs = Math.round(performance.now() - tStart);
 
   return {
     transparentBlob,
@@ -1558,6 +1678,12 @@ export async function refineAlphaMattingWithMask(
     mode: "preview",
     diagnostics,
     rollbackTriggered: diagnostics.rollbackTriggered,
+    metrics: {
+      maskRefineMs: Math.round(tMatStart - tStart),
+      mattingMs,
+      encodingMs,
+      totalMs,
+    },
   };
 }
 

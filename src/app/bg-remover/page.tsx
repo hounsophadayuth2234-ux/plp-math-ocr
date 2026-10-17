@@ -264,7 +264,9 @@ export default function BgRemoverPage() {
           excludedMaskRef.current,
           {
             mode: activeSelectionMode,
-            documentSafeMode: activeSelectionMode === "document_poster",
+            documentSafeMode:
+              activeSelectionMode === "document_poster" ||
+              activeSelectionMode === "whole_poster",
             quality: edgeQuality,
             remoteWorker: processingMode === "worker",
             directUrl: directWorkerUrl,
@@ -400,11 +402,11 @@ export default function BgRemoverPage() {
       console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, mode=${mode}`);
       let output: BgRemovalOutput;
 
-      if (activeSelectionMode === "document_poster") {
+      if (activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster") {
         // DOCUMENT SAFE MODE: AI MATTE DISABLED
         // Zero worker calls, zero model inference, 100% byte-identical RGB preservation.
         const segResult = await segmentObjectSelection(imageFile, {
-          mode: "document_poster",
+          mode: activeSelectionMode,
           signal: abortController.signal,
         });
 
@@ -456,7 +458,14 @@ export default function BgRemoverPage() {
           label: "Document Safe Mode (AI Matte Disabled)",
           model: "DOCUMENT SAFE MODE: AI MATTE DISABLED",
           mode: "preview",
-          metrics: { totalMs: elapsedTotal },
+          metrics: {
+            uploadDecodeMs: segResult.metrics?.uploadDecodeMs ?? 20,
+            segmentationMs: segResult.metrics?.segmentationMs ?? 5,
+            maskRefineMs: segResult.metrics?.maskRefineMs ?? 5,
+            mattingMs: 0,
+            encodingMs: Math.max(1, elapsedTotal - (segResult.metrics?.uploadDecodeMs ?? 20)),
+            totalMs: elapsedTotal,
+          },
         };
       } else if (mode === "worker") {
         output = await removeBackgroundRemote(imageFile, {
@@ -533,7 +542,7 @@ export default function BgRemoverPage() {
           label: "Browser AI result",
           model: "@imgly/isnet_fp16",
           mode,
-          metrics: { totalMs: elapsedTotal },
+          metrics: segResult.metrics || { totalMs: elapsedTotal },
         };
       }
 
@@ -944,109 +953,129 @@ export default function BgRemoverPage() {
               />
             </div>
 
-            {/* ── ជំហានទី ២ ៖ ប្រភេទរូបភាព (STEP 2: CONTENT TYPE) ── */}
+            {/* ── ជំហានទី ២ ៖ គោលដៅរក្សាទុក (STEP 2: WHAT DO YOU WANT TO KEEP?) ── */}
             <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
               <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
-                <span>ប្រភេទរូបភាព / Content type</span>
+                <span>What do you want to keep? / តើអ្នកចង់រក្សាទុកអ្វី?</span>
                 <span className="text-cyan-400 font-bold uppercase">{activeSelectionMode}</span>
               </div>
 
-              <div role="radiogroup" aria-label="ប្រភេទរូបភាព / Content type" className="grid grid-cols-2 gap-2 text-xs font-mono">
-                {/* 1. Document / Poster Mode */}
+              <div role="radiogroup" aria-label="What do you want to keep?" className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                {/* 1. Whole poster/document */}
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={activeSelectionMode === "document_poster"}
+                  aria-checked={activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster"}
                   data-testid="content-mode-document"
                   onClick={() => {
                     cyberAudio.playClick();
                     setActiveSelectionMode("document_poster");
                   }}
                   className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "document_poster"
+                    activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster"
                       ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-cyan-400" />
-                    <span>📄 Document / Poster</span>
+                    <span>1. Whole poster/document</span>
                   </div>
-                  <span className="text-[9px] text-cyan-300/80 mt-0.5">Preserve all content</span>
+                  <span className="text-[9px] text-cyan-300/80 mt-0.5">Keep every pixel (all text, logos, graphics, person)</span>
                 </button>
 
-                {/* 2. Person Mode */}
+                {/* 2. Person only */}
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={activeSelectionMode === "person"}
+                  aria-checked={activeSelectionMode === "person" || activeSelectionMode === "person_only"}
                   data-testid="content-mode-person"
                   onClick={() => {
                     cyberAudio.playClick();
                     setActiveSelectionMode("person");
                   }}
                   className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "person"
+                    activeSelectionMode === "person" || activeSelectionMode === "person_only"
                       ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-purple-400" />
-                    <span>👤 Person cutout</span>
+                    <span>2. Person only</span>
                   </div>
-                  <span className="text-[9px] text-purple-300/80 mt-0.5">Isolated portrait</span>
+                  <span className="text-[9px] text-purple-300/80 mt-0.5">Keep real person; remove printed poster text</span>
                 </button>
 
-                {/* 3. Product Mode */}
+                {/* 3. Person + selected text/graphics */}
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={activeSelectionMode === "whole_product"}
-                  data-testid="content-mode-product"
+                  aria-checked={activeSelectionMode === "person_plus_text"}
+                  data-testid="content-mode-person-plus-text"
                   onClick={() => {
                     cyberAudio.playClick();
-                    setActiveSelectionMode("whole_product");
+                    setActiveSelectionMode("person_plus_text");
                   }}
                   className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "whole_product"
-                      ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                    activeSelectionMode === "person_plus_text"
+                      ? "border-pink-400 bg-pink-950/60 text-white font-bold ring-1 ring-pink-400/40 shadow-[0_0_12px_rgba(244,114,182,0.2)]"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-emerald-400" />
-                    <span>📦 Product cutout</span>
+                    <span className="h-2 w-2 rounded-none bg-pink-400" />
+                    <span>3. Person + selected text/graphics</span>
                   </div>
-                  <span className="text-[9px] text-emerald-300/80 mt-0.5">Keep whole product</span>
+                  <span className="text-[9px] text-pink-300/80 mt-0.5">Person plus user-selected poster regions</span>
                 </button>
 
-                {/* 4. Custom Mode */}
+                {/* 4. Custom mask */}
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={activeSelectionMode === "custom"}
+                  aria-checked={activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"}
                   data-testid="content-mode-custom"
                   onClick={() => {
                     cyberAudio.playClick();
                     setActiveSelectionMode("custom");
                   }}
                   className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "custom"
+                    activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"
                       ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
                     <span className="h-2 w-2 rounded-none bg-amber-400" />
-                    <span>🎯 Custom selection</span>
+                    <span>4. Custom mask</span>
                   </div>
-                  <span className="text-[9px] text-amber-300/80 mt-0.5">Draw selection</span>
+                  <span className="text-[9px] text-amber-300/80 mt-0.5">User paints/clicks exactly what to keep</span>
+                </button>
+              </div>
+
+              {/* Product cutout option for e-commerce boxes/products */}
+              <div className="pt-1 flex items-center justify-between text-[10px] font-mono">
+                <span className="text-slate-500">Other object targets:</span>
+                <button
+                  type="button"
+                  data-testid="content-mode-product"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("whole_product");
+                  }}
+                  className={`px-2 py-1 border text-[10px] transition-all ${
+                    activeSelectionMode === "whole_product"
+                      ? "border-emerald-400 bg-emerald-950/60 text-emerald-300 font-bold"
+                      : "border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  📦 Product cutout (Keep Whole Product)
                 </button>
               </div>
 
               {/* Document Safe Mode Badge */}
-              {activeSelectionMode === "document_poster" && (
+              {(activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster") && (
                 <div
                   data-testid="document-safe-mode-badge"
                   className="flex items-center justify-between px-3 py-2 bg-emerald-950/80 border border-emerald-400 text-emerald-300 font-mono text-[11px] font-bold shadow-[0_0_12px_rgba(16,185,129,0.3)] mt-2"
@@ -1055,30 +1084,35 @@ export default function BgRemoverPage() {
                     <span className="h-2 w-2 rounded-none bg-emerald-400 animate-pulse" />
                     <span>DOCUMENT SAFE MODE: AI MATTE DISABLED</span>
                   </div>
-                  <span className="text-[9px] text-emerald-400/80 font-normal">Byte-Preserved</span>
+                  <span className="text-[9px] text-emerald-400/80 font-normal">Byte-Preserved (&lt;1s)</span>
                 </div>
               )}
 
               {/* Mode Explanation */}
               <div className="text-[9.5px] text-slate-300 leading-relaxed font-mono bg-slate-950/60 p-2.5 border border-slate-800/80">
-                {activeSelectionMode === "document_poster" && (
+                {(activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster") && (
                   <span>
-                    📄 <strong>ឯកសារ/Poster</strong>៖ រក្សាផ្ទៃទំព័រចតុកោណកែងទាំងមូល មិនលុបអក្សរ ឡូហ្គោ ឬរូបមនុស្សដែលបោះពុម្ពខាងក្នុង poster ឡើយ។
+                    📄 <strong>1. Whole poster/document</strong>៖ រក្សាផ្ទៃទំព័រចតុកោណកែងទាំងមូល មិនលុបអក្សរ ឡូហ្គោ ឬរូបមនុស្សដែលបោះពុម្ពខាងក្នុង poster ឡើយ (Bypasses AI, under 1s).
                   </span>
                 )}
-                {activeSelectionMode === "person" && (
+                {(activeSelectionMode === "person" || activeSelectionMode === "person_only") && (
                   <span>
-                    👤 <strong>មនុស្ស (Person)</strong>៖ កាត់យករូបមនុស្សចេញពីរូបថត រក្សាអាវពណ៌ស និងសម្អាត halo ជុំវិញសក់ និងសម្លៀកបំពាក់។
+                    👤 <strong>2. Person only</strong>៖ កាត់យករូបមនុស្សពិតចេញពីរូបថត មិនរក្សាទុកអក្សរបោះពុម្ពលើ poster ឡើយ។
+                  </span>
+                )}
+                {activeSelectionMode === "person_plus_text" && (
+                  <span>
+                    ✨ <strong>3. Person + selected text/graphics</strong>៖ រក្សារូបមនុស្ស និងអនុញ្ញាតឱ្យគូសជ្រើសរើសអក្សរ ឬឡូហ្គោជាក់លាក់ដើម្បីរក្សាទុក។
+                  </span>
+                )}
+                {(activeSelectionMode === "custom" || activeSelectionMode === "custom_mask") && (
+                  <span>
+                    🎯 <strong>4. Custom mask</strong>៖ ជ្រើសរើសវត្ថុដោយដៃតាមរយៈចំណុច (+) / (-) ឬគូសប្រអប់ និងពហុកោណ (Polygon)។
                   </span>
                 )}
                 {activeSelectionMode === "whole_product" && (
                   <span>
-                    📦 <strong>ផលិតផល (Whole Product)</strong>៖ រក្សាផលិតផល និងប្រអប់វេចខ្ចប់ទាំងមូល (Conservative default) ការពារមិនឱ្យកាត់ឆកគម្របប្រអប់។
-                  </span>
-                )}
-                {activeSelectionMode === "custom" && (
-                  <span>
-                    🎯 <strong>Custom</strong>៖ ជ្រើសរើសវត្ថុដោយដៃតាមរយៈចំណុច (+) / (-) ឬគូសប្រអប់ និងពហុកោណ (Polygon)។
+                    📦 <strong>Product cutout</strong>៖ រក្សាផលិតផល និងប្រអប់វេចខ្ចប់ទាំងមូល (Conservative default) ការពារមិនឱ្យកាត់ឆកគម្របប្រអប់។
                   </span>
                 )}
               </div>

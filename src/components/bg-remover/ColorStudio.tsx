@@ -30,6 +30,7 @@ import {
   exportAtFullResolution,
   refineAlphaMattingWithMask,
   BgRemovalOutput,
+  ProcessingStageMetrics,
 } from "@/lib/bg-removal-client";
 import {
   generateExportFilename,
@@ -46,6 +47,8 @@ import {
   generateQuadMask,
   warpPerspectiveQuad,
   applyColorDehalo,
+  isolatePersonMask,
+  combinePersonWithSelectedRegions,
 } from "@/lib/bg-compositor";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ProcessingStatusLabel } from "@/lib/types";
@@ -89,12 +92,7 @@ interface ColorStudioProps {
   initialPurpose?: "white" | "pink" | "transparent";
   provider?: string;
   processingLabel?: ProcessingStatusLabel;
-  metrics?: {
-    modelLoadMs?: number;
-    inferenceMs?: number;
-    refineMs?: number;
-    totalMs?: number;
-  };
+  metrics?: ProcessingStageMetrics;
   diagnostics?: MaskDiagnostics;
   rollbackTriggered?: boolean;
   previousResult?: BgRemovalOutput | null;
@@ -954,7 +952,7 @@ export function ColorStudio({
 
       saveSnapshotToHistory();
 
-      if (newMode === "document_poster") {
+      if (newMode === "document_poster" || newMode === "whole_poster") {
         const docResult = detectDocumentQuad(sourceImageData.data, width, height);
         const quadMask = generateQuadMask(docResult.corners, width, height);
         alphaMaskRef.current.set(quadMask);
@@ -965,10 +963,18 @@ export function ColorStudio({
             ? "📄 [POSTER/DOCUMENT] រក្សាទំព័រ និងខ្លឹមសារទាំងស្រុង (Full poster page preserved intact)."
             : "📄 [POSTER/DOCUMENT] រកឃើញព្រំដែនទំព័រ (Document boundary detected. Outside page is transparent)."
         );
-      } else if (newMode === "person") {
-        alphaMaskRef.current.set(baseAlphaMaskRef.current);
+      } else if (newMode === "person" || newMode === "person_only") {
+        const pMask = isolatePersonMask(sourceImageData.data, baseAlphaMaskRef.current, width, height);
+        alphaMaskRef.current.set(pMask);
         excludedMaskRef.current = null;
-        setContainerWarning("👤 [PERSON MODE] កាត់រូបមនុស្ស និងសម្អាត halo ជុំវិញសក់/សម្លៀកបំពាក់។");
+        setContainerWarning("👤 [PERSON ONLY] កាត់យករូបមនុស្ស មិនរក្សាទុកអក្សរបោះពុម្ព ឬក្រាហ្វិកខាងក្រៅឡើយ។");
+      } else if (newMode === "person_plus_text") {
+        const pMask = isolatePersonMask(sourceImageData.data, baseAlphaMaskRef.current, width, height);
+        alphaMaskRef.current.set(pMask);
+        excludedMaskRef.current = null;
+        setIsEditMode(true);
+        setActiveTool("keep");
+        setContainerWarning("✨ [PERSON + TEXT/GRAPHICS] ប្រើ Keep brush ដើម្បីជ្រើសរើសអក្សរ ឬឡូហ្គោដែលចង់រក្សាទុកបន្ថែម។");
       } else if (newMode === "contents_only") {
         const res = detectContainerAndContents(
           sourceImageData.data,
@@ -1127,7 +1133,9 @@ export function ColorStudio({
         excludedMaskRef.current,
         {
           mode: selectionMode,
-          documentSafeMode: selectionMode === "document_poster",
+          documentSafeMode:
+            selectionMode === "document_poster" ||
+            selectionMode === "whole_poster",
           initialMask,
           manualKeepMask: manualKeepMaskRef.current,
           maxDropRatio: 0.20,
@@ -1293,9 +1301,18 @@ export function ColorStudio({
           {metrics?.totalMs ? (
             <>
               <span className="hidden sm:inline text-slate-600">·</span>
-              <span className="text-slate-300 text-[11px]">
+              <span className="text-slate-300 text-[11px]" data-testid="timing-total">
                 រយៈពេល: <strong className="text-emerald-300">{(metrics.totalMs / 1000).toFixed(2)}s</strong>
               </span>
+              {(metrics.uploadDecodeMs !== undefined || metrics.segmentationMs !== undefined || metrics.mattingMs !== undefined) && (
+                <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] text-slate-400 font-mono ml-1 border-l border-slate-800 pl-2">
+                  {metrics.uploadDecodeMs !== undefined && <span>Decode: <strong className="text-slate-300">{metrics.uploadDecodeMs}ms</strong></span>}
+                  {metrics.segmentationMs !== undefined && <span>Seg: <strong className="text-cyan-300">{metrics.segmentationMs}ms</strong></span>}
+                  {metrics.maskRefineMs !== undefined && metrics.maskRefineMs > 0 && <span>Refine: <strong className="text-amber-300">{metrics.maskRefineMs}ms</strong></span>}
+                  {metrics.mattingMs !== undefined && metrics.mattingMs > 0 && <span>Matte: <strong className="text-pink-300">{metrics.mattingMs}ms</strong></span>}
+                  {metrics.encodingMs !== undefined && <span>Encode: <strong className="text-slate-300">{metrics.encodingMs}ms</strong></span>}
+                </span>
+              )}
             </>
           ) : metrics?.inferenceMs ? (
             <>
@@ -1723,13 +1740,27 @@ export function ColorStudio({
             data-testid="mode-person"
             onClick={() => handleSwitchSelectionMode("person")}
             className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
-              selectionMode === "person"
+              selectionMode === "person" || selectionMode === "person_only"
                 ? "border-purple-400 bg-purple-950 text-white font-bold ring-1 ring-purple-400"
                 : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
             }`}
           >
             <span className="text-xs font-bold text-purple-300">👤 មនុស្ស</span>
             <span className="text-[9px] text-purple-400/80">Person Cutout</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="mode-person-plus-text"
+            onClick={() => handleSwitchSelectionMode("person_plus_text")}
+            className={`min-h-[44px] flex flex-col items-center justify-center p-2 border text-center transition-all ${
+              selectionMode === "person_plus_text"
+                ? "border-pink-400 bg-pink-950 text-white font-bold ring-1 ring-pink-400"
+                : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white"
+            }`}
+          >
+            <span className="text-xs font-bold text-pink-300">✨ មនុស្ស + អក្សរ</span>
+            <span className="text-[9px] text-pink-400/80">Person + Text</span>
           </button>
 
           <button

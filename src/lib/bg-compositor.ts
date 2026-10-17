@@ -211,14 +211,26 @@ export function generateExportFilename(
 // Interactive Segmentation, Container Detection & Trimap Generation
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ContentMode = "document_poster" | "person" | "whole_product" | "custom";
+export type ContentMode =
+  | "whole_poster"
+  | "document_poster"
+  | "person_only"
+  | "person"
+  | "person_plus_text"
+  | "custom_mask"
+  | "custom"
+  | "whole_product";
 
 export type SelectionMode =
+  | "whole_poster"
   | "document_poster"
+  | "person_only"
   | "person"
+  | "person_plus_text"
+  | "custom_mask"
+  | "custom"
   | "whole_product"
   | "contents_only"
-  | "custom"
   | "box_polygon";
 
 export interface QuadCorners {
@@ -754,6 +766,240 @@ export function applyColorDehalo(
 }
 
 /**
+ * Isolates the person component from a segmentation mask that may contain
+ * printed document text, logos, headers, and banners.
+ *
+ * Rules:
+ * - Dedicated person segmentation mask: printed poster text is not part of the person.
+ * - Preserves red/blue uniform, hair, skin, hands, and light-colored clothing.
+ * - Filters out isolated thin text strokes, small caption text lines, and top banner graphics.
+ * - Never reuses a document mask for person mode.
+ */
+export function isolatePersonMask(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  initialMask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const totalPixels = width * height;
+  const isMask4Ch = initialMask.length === totalPixels * 4;
+  const result = new Uint8ClampedArray(totalPixels);
+
+  const getMaskVal = (idx: number) => (isMask4Ch ? initialMask[idx * 4 + 3] : initialMask[idx]);
+
+  const labels = new Int32Array(totalPixels);
+  let currentLabel = 0;
+
+  interface CompStats {
+    id: number;
+    pixelCount: number;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    hasSkin: boolean;
+    hasUniformOrHair: boolean;
+  }
+  const components: CompStats[] = [];
+  const queue = new Int32Array(totalPixels);
+
+  const isPaperWhite = (idx: number) => {
+    const p = idx * 4;
+    return sourceRgba[p] >= 252 && sourceRgba[p + 1] >= 252 && sourceRgba[p + 2] >= 252;
+  };
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const startIdx = y * width + x;
+      if (getMaskVal(startIdx) <= 128 || labels[startIdx] !== 0 || isPaperWhite(startIdx)) continue;
+
+      currentLabel++;
+      let qHead = 0;
+      let qTail = 0;
+      queue[qTail++] = startIdx;
+      labels[startIdx] = currentLabel;
+
+      let pixelCount = 0;
+      let minX = x, maxX = x, minY = y, maxY = y;
+      let hasSkin = false;
+      let hasUniformOrHair = false;
+
+      while (qHead < qTail) {
+        const curr = queue[qHead++];
+        pixelCount++;
+
+        const cy = Math.floor(curr / width);
+        const cx = curr % width;
+
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+
+        const pIdx = curr * 4;
+        const r = sourceRgba[pIdx];
+        const g = sourceRgba[pIdx + 1];
+        const b = sourceRgba[pIdx + 2];
+
+        // 1. Skin tone detector: face, hands, skin
+        if (
+          r > 125 &&
+          g > 70 &&
+          b > 45 &&
+          r >= g &&
+          g >= b - 20 &&
+          r - g >= 8 &&
+          r - b >= 15
+        ) {
+          hasSkin = true;
+        }
+
+        // 2. Uniform (red or blue) or hair detector
+        // Red uniform
+        if (r > 130 && g < 115 && b < 115 && r - g > 35) {
+          hasUniformOrHair = true;
+        }
+        // Blue uniform
+        if (b > 110 && r < 110 && b - r > 20 && b - g > 10) {
+          hasUniformOrHair = true;
+        }
+        // Dark hair
+        if (r < 65 && g < 55 && b < 50 && cy < height * 0.75) {
+          hasUniformOrHair = true;
+        }
+
+        // 4-connected neighbors
+        const neighbors = [
+          cx > 0 ? curr - 1 : -1,
+          cx < width - 1 ? curr + 1 : -1,
+          cy > 0 ? curr - width : -1,
+          cy < height - 1 ? curr + width : -1,
+        ];
+
+        for (const n of neighbors) {
+          if (n >= 0 && labels[n] === 0 && getMaskVal(n) > 128 && !isPaperWhite(n)) {
+            labels[n] = currentLabel;
+            queue[qTail++] = n;
+          }
+        }
+      }
+
+      components.push({
+        id: currentLabel,
+        pixelCount,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        hasSkin,
+        hasUniformOrHair,
+      });
+    }
+  }
+
+  const personLabelSet = new Set<number>();
+
+  // Find components with definite human skin
+  const skinComponents = components.filter(
+    (c) => c.hasSkin && (c.maxY - c.minY + 1) > 20
+  );
+
+  let personMinX = width, personMaxX = 0, personMinY = height, personMaxY = 0;
+  for (const sc of skinComponents) {
+    personLabelSet.add(sc.id);
+    if (sc.minX < personMinX) personMinX = sc.minX;
+    if (sc.maxX > personMaxX) personMaxX = sc.maxX;
+    if (sc.minY < personMinY) personMinY = sc.minY;
+    if (sc.maxY > personMaxY) personMaxY = sc.maxY;
+  }
+
+  // Expand person bounding box to capture clothing/hair around the person
+  const expandedMinY = Math.max(0, personMinY - Math.round(height * 0.20));
+  const expandedMaxY = Math.min(height - 1, personMaxY + Math.round(height * 0.45));
+  const expandedMinX = Math.max(0, personMinX - Math.round(width * 0.20));
+  const expandedMaxX = Math.min(width - 1, personMaxX + Math.round(width * 0.20));
+
+  for (const c of components) {
+    if (personLabelSet.has(c.id)) continue;
+
+    const compW = c.maxX - c.minX + 1;
+    const compH = c.maxY - c.minY + 1;
+    const isHorizontalBanner = c.minY < height * 0.20 && compW > width * 0.5;
+    const isTextStroke = compH <= 32 || (compW / Math.max(1, compH) > 4 && !c.hasSkin);
+
+    if (isHorizontalBanner || isTextStroke) {
+      continue; // Never include document banners or printed text lines
+    }
+
+    // Include uniform or clothing if within the person's anatomical span
+    if (c.hasUniformOrHair && c.pixelCount > 50) {
+      if (
+        skinComponents.length === 0 ||
+        (c.minY >= expandedMinY && c.maxY <= expandedMaxY && c.minX >= expandedMinX && c.maxX <= expandedMaxX)
+      ) {
+        personLabelSet.add(c.id);
+      }
+    } else if (
+      skinComponents.length === 0 &&
+      c.pixelCount / totalPixels >= 0.03 &&
+      compH > height * 0.15
+    ) {
+      personLabelSet.add(c.id);
+    }
+  }
+
+  // Fallback: If no anatomical cues found, keep largest non-banner component
+  if (personLabelSet.size === 0 && components.length > 0) {
+    let maxComp: CompStats | null = null;
+    for (const c of components) {
+      const compW = c.maxX - c.minX + 1;
+      const compH = c.maxY - c.minY + 1;
+      const isBanner = c.minY < height * 0.20 && compW > width * 0.5;
+      const isText = compH <= 32 || (compW / Math.max(1, compH) > 4);
+      if (isBanner || isText) continue;
+      if (!maxComp || c.pixelCount > maxComp.pixelCount) maxComp = c;
+    }
+    if (maxComp) {
+      personLabelSet.add((maxComp as CompStats).id);
+    } else {
+      personLabelSet.add(components[0].id);
+    }
+  }
+
+  for (let i = 0; i < totalPixels; i++) {
+    const lbl = labels[i];
+    if (lbl > 0 && personLabelSet.has(lbl)) {
+      result[i] = getMaskVal(i);
+    } else {
+      result[i] = 0;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Combines person mask with user-painted or user-selected text/graphic regions.
+ */
+export function combinePersonWithSelectedRegions(
+  personMask: Uint8ClampedArray | Uint8Array,
+  userSelectedMask: Uint8ClampedArray | Uint8Array | null,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const totalPixels = width * height;
+  const isPerson4Ch = personMask.length === totalPixels * 4;
+  const combined = new Uint8ClampedArray(totalPixels);
+
+  for (let i = 0; i < totalPixels; i++) {
+    const pVal = isPerson4Ch ? personMask[i * 4 + 3] : personMask[i];
+    const uVal = userSelectedMask ? userSelectedMask[i] : 0;
+    combined[i] = Math.max(pVal, uVal);
+  }
+  return combined;
+}
+
+/**
  * Detects whether the segmented object contains an outer packaging/box container
  * versus inner food/pastry/donut contents.
  *
@@ -778,7 +1024,7 @@ export function detectContainerAndContents(
   const isConservative = options?.conservative ?? (mode === "whole_product" || !mode);
 
   // DOCUMENT / POSTER MODE: Never remove internal white areas, text, logos, or printed person.
-  if (mode === "document_poster") {
+  if (mode === "document_poster" || mode === "whole_poster") {
     const fullMask = new Uint8ClampedArray(totalPixels);
     fullMask.fill(255);
     return {
@@ -789,12 +1035,9 @@ export function detectContainerAndContents(
     };
   }
 
-  // PERSON MODE: Isolated person portrait does not have a cardboard box / container.
-  if (mode === "person") {
-    const personMask = new Uint8ClampedArray(totalPixels);
-    for (let i = 0; i < totalPixels; i++) {
-      personMask[i] = isMask4Ch ? initialMask[i * 4 + 3] : initialMask[i];
-    }
+  // PERSON ONLY MODE: Dedicated person segmentation, filters out isolated text/logos
+  if (mode === "person" || mode === "person_only" || mode === "person_plus_text") {
+    const personMask = isolatePersonMask(sourceRgba, initialMask, width, height);
     return {
       hasContainer: false,
       boxConfidence: 0,

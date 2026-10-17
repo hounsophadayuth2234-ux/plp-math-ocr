@@ -60,8 +60,10 @@ class BgWorkerManager {
       throw err;
     }
 
-    // Terminate any previous running worker job to prevent concurrency overlap
-    this.terminateActiveWorker();
+    // Terminate any running worker job to prevent concurrency overlap, but preserve idle worker for model cache
+    if (this.activeJobId) {
+      this.terminateActiveWorker();
+    }
 
     const jobId = `job_${Date.now()}_${++this.jobCounter}`;
     this.activeJobId = jobId;
