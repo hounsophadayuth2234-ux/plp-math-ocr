@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Move } from "lucide-react";
 
 interface BeforeAfterSliderProps {
@@ -54,6 +54,20 @@ export function BeforeAfterSlider({
   };
   const onTouchEnd = () => { isDragging.current = false; };
 
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    setContainerWidth(containerRef.current.offsetWidth);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -89,7 +103,7 @@ export function BeforeAfterSlider({
           src={beforeSrc}
           alt="Before upscaling"
           className="h-full object-contain"
-          style={{ width: containerRef.current?.offsetWidth ?? "100%" }}
+          style={{ width: containerWidth ? `${containerWidth}px` : "100%" }}
           draggable={false}
         />
       </div>

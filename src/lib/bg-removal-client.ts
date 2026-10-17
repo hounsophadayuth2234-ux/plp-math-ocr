@@ -81,7 +81,7 @@ export const MANUAL_MASK_EDITOR =
 
 export const EDGE_REFINEMENT_DEFAULT: "off" | "balanced" | "fine" =
   typeof process !== "undefined" && process.env.EDGE_REFINEMENT_DEFAULT !== undefined
-    ? (process.env.EDGE_REFINEMENT_DEFAULT as any)
+    ? (process.env.EDGE_REFINEMENT_DEFAULT as "off" | "balanced" | "fine")
     : "off";
 
 export const PRESERVE_ORIGINAL_RGB =
@@ -1267,8 +1267,8 @@ export async function segmentObjectSelection(
       }
     } else {
       // Node/test fallback
-      imgW = (options as any)?.width || 758;
-      imgH = (options as any)?.height || 1077;
+      imgW = (options as { width?: number; height?: number } | undefined)?.width || 758;
+      imgH = (options as { width?: number; height?: number } | undefined)?.height || 1077;
       srcImageData = new ImageData(imgW, imgH);
     }
     const tDecodeEnd = performance.now();
@@ -1385,8 +1385,8 @@ export async function segmentObjectSelection(
     }
   );
 
-  let activeMask = new Uint8ClampedArray(totalPixels);
-  let excludedMask = new Uint8ClampedArray(totalPixels);
+  const activeMask = new Uint8ClampedArray(totalPixels);
+  const excludedMask = new Uint8ClampedArray(totalPixels);
 
   if (mode === "person" || mode === "person_only") {
     // Dedicated person segmentation: containerResult.contentsMask is the isolated person mask (text & graphics stripped)

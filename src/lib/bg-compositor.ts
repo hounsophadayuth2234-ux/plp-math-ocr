@@ -2450,7 +2450,7 @@ export function refineMaskWithGuidedFilter(
       const aCoeff = covGA / (varG + eps);
       const bCoeff = meanA - aCoeff * meanG;
 
-      let outA = Math.max(0, Math.min(1, aCoeff * guide[idx] + bCoeff));
+      const outA = Math.max(0, Math.min(1, aCoeff * guide[idx] + bCoeff));
       let outByte = Math.round(outA * 255);
 
       // If this pixel was strong foreground (> 200) in initial mask, enforce alpha floor

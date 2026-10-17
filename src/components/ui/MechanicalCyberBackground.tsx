@@ -38,21 +38,21 @@ export function MechanicalCyberBackground({
     >
       {/* ── Layer 1: Precision Blueprint / Animated Technical Grid ── */}
       <div
-        className="absolute inset-0 opacity-[0.14] animate-grid-drift"
+        className="absolute inset-0 opacity-[0.25] animate-grid-drift"
         style={{
           backgroundColor: "#050811",
           backgroundImage: `
-            linear-gradient(rgba(0, 240, 255, 0.22) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 240, 255, 0.22) 1px, transparent 1px),
-            linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px)
+            linear-gradient(rgba(0, 240, 255, 0.35) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 240, 255, 0.35) 1px, transparent 1px),
+            linear-gradient(rgba(56, 189, 248, 0.15) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(56, 189, 248, 0.15) 1px, transparent 1px)
           `,
           backgroundSize: "80px 80px, 80px 80px, 16px 16px, 16px 16px",
         }}
       />
 
       {/* Technical Grid Coordinate Crosshairs */}
-      <div className="absolute inset-0 opacity-20">
+      <div className="absolute inset-0 opacity-35">
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <pattern
@@ -88,7 +88,7 @@ export function MechanicalCyberBackground({
       </div>
 
       {/* ── Layer 2: Perspective Engineering Floor Grid ── */}
-      <div className="perspective-floor-grid opacity-30" />
+      <div className="perspective-floor-grid opacity-50" />
 
       {/* ── Layer 3: Two Horizontal Industrial Scanning Beams ── */}
       {/* Primary Scanning Beam */}
@@ -109,7 +109,7 @@ export function MechanicalCyberBackground({
       />
 
       {/* ── Layer 4: Two Slowly Rotating Mechanical Radar Rings ── */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[760px] h-[760px] opacity-15 pointer-events-none">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[760px] h-[760px] opacity-30 pointer-events-none">
         {/* Outer Ring: Rotating Clockwise */}
         <svg
           viewBox="0 0 760 760"
@@ -201,7 +201,7 @@ export function MechanicalCyberBackground({
       </div>
 
       {/* ── Layer 6: Animated Circuit Traces with Pulsing Nodes ── */}
-      <div className="absolute inset-0 opacity-25">
+      <div className="absolute inset-0 opacity-40">
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
           {/* Top-left circuit branch */}
           <path

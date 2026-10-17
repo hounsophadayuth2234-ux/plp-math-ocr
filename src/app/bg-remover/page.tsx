@@ -836,7 +836,7 @@ export default function BgRemoverPage() {
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 bg-cyan-400 animate-pulse" />
             <span className="font-bold text-slate-300 uppercase tracking-wider font-mono">
-              // PIPELINE: 01.AI MASK → 02.USER CORRECTION → 03.PREVIEWS → 04.EDGE MATTING → 05.COLOR COMPOSITE → 06.EXPORT
+              {"//"} PIPELINE: 01.AI MASK → 02.USER CORRECTION → 03.PREVIEWS → 04.EDGE MATTING → 05.COLOR COMPOSITE → 06.EXPORT
             </span>
           </div>
           <span

@@ -49,7 +49,7 @@ export function BgStudioHelpModal({ isOpen, onClose }: BgStudioHelpModalProps) {
           {/* Quick 4-Step Process */}
           <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 font-mono">
-              // Step-by-Step Poster Extraction
+              {"//"} Step-by-Step Poster Extraction
             </h3>
             <div className="space-y-2.5 text-slate-300">
               <div className="flex items-start gap-2.5">
@@ -69,7 +69,7 @@ export function BgStudioHelpModal({ isOpen, onClose }: BgStudioHelpModalProps) {
                   2
                 </span>
                 <div>
-                  <div className="font-semibold text-white">Select "Person + Text Only"</div>
+                  <div className="font-semibold text-white">Select &quot;Person + Text Only&quot;</div>
                   <div className="text-[11px] text-slate-400">
                     Ensures dual-channel segmentation: real humans and printed typography are isolated, while background graphics and borders are dropped.
                   </div>

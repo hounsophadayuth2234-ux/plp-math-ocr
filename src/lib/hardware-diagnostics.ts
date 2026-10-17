@@ -32,7 +32,10 @@ export async function checkWebGpuAvailability(): Promise<boolean> {
     return false;
   }
   try {
-    const adapter = await (navigator as any).gpu?.requestAdapter({
+    const nav = navigator as unknown as {
+      gpu?: { requestAdapter(options?: unknown): Promise<unknown> };
+    };
+    const adapter = await nav.gpu?.requestAdapter({
       powerPreference: "high-performance",
     });
     cachedWebGpuCheck = !!adapter;
@@ -51,7 +54,15 @@ export async function checkWebGpuAvailability(): Promise<boolean> {
  */
 export function detectActualMlBackend(): "WebGPU" | "WebGL" | "WASM" | "unknown" {
   try {
-    const ort = typeof window !== "undefined" ? (window as any).ort : null;
+    const win = typeof window !== "undefined" ? (window as unknown as {
+      ort?: {
+        env?: {
+          webgpu?: { device?: unknown };
+          backend?: string;
+        };
+      };
+    }) : null;
+    const ort = win?.ort;
     // Check if ONNX Runtime Web has active WebGPU execution provider configured
     if (ort?.env?.webgpu?.device || ort?.env?.backend === "webgpu") {
       return "WebGPU";

@@ -622,7 +622,7 @@ export default function ImageGeneratorPage() {
               </h3>
               <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-slate-400">
                 Enter a prompt and click{" "}
-                <span className="font-semibold text-pink-400">"Synthesize"</span>.
+                <span className="font-semibold text-pink-400">&quot;Synthesize&quot;</span>.
                 Generated images accumulate here with instant PNG download.
               </p>
             </div>

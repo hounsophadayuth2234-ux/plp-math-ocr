@@ -15,21 +15,24 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
+    <div className="relative isolate min-h-screen overflow-hidden flex h-screen w-full bg-slate-950 text-slate-100">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0 max-w-full w-full">
+      <div className="relative isolate flex flex-1 flex-col overflow-hidden min-w-0 max-w-full w-full">
         <Header
           onOpenSidebar={() => setSidebarOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
         />
 
-        <main className="relative flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full w-full bg-slate-950 p-4 sm:p-6 lg:p-8">
-          {/* Shared Mechanical Cyber Technology Animated Background */}
+        <div className="relative isolate flex-1 min-h-0 overflow-hidden">
+          {/* Shared Mechanical Cyber Technology Animated Background Layer (z-0) */}
           <MechanicalCyberBackground />
 
-          <div className="relative z-10 mx-auto max-w-7xl min-w-0 max-w-full w-full">{children}</div>
-        </main>
+          {/* Interactive Content Scroll Layer (z-10) */}
+          <main className="relative z-10 h-full overflow-y-auto overflow-x-hidden min-w-0 max-w-full w-full p-4 sm:p-6 lg:p-8">
+            <div className="mx-auto max-w-7xl min-w-0 max-w-full w-full">{children}</div>
+          </main>
+        </div>
       </div>
 
       <SettingsModal

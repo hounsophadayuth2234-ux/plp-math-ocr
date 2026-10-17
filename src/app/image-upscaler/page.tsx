@@ -376,7 +376,7 @@ export default function ImageUpscalerPage() {
                 Runs 100% in your browser using bicubic resampling and high-pass
                 unsharp masking. Results will be explicitly tagged as{" "}
                 <span className="font-mono text-amber-300 font-semibold">
-                  "Enhanced resize — not AI super-resolution"
+                  &quot;Enhanced resize — not AI super-resolution&quot;
                 </span>
                 .
               </div>
@@ -546,7 +546,7 @@ export default function ImageUpscalerPage() {
               <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-slate-400">
                 Upload an image and select{" "}
                 <span className="font-semibold text-amber-400">
-                  "Browser 2× Enhancer"
+                  &quot;Browser 2× Enhancer&quot;
                 </span>{" "}
                 for instant zero-cost results, or Real-ESRGAN for neural super-resolution.
               </p>

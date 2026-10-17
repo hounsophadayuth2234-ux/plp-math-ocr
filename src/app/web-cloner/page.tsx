@@ -421,7 +421,7 @@ export default function WebClonerPage() {
               <h3 className="mt-4 text-sm font-semibold text-white">Cloned code will appear here</h3>
               <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-slate-400">
                 Enter a URL and click{" "}
-                <span className="font-semibold text-cyan-400">"Clone Web Element"</span>. Inspect
+                <span className="font-semibold text-cyan-400">&quot;Clone Web Element&quot;</span>. Inspect
                 the live preview, raw HTML, scoped CSS, and self-contained bundle.
               </p>
             </div>
