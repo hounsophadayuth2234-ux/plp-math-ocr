@@ -59,6 +59,11 @@ import {
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ProcessingStatusLabel } from "@/lib/types";
 import { BeforeAfterSlider } from "@/components/image-upscaler/BeforeAfterSlider";
+import {
+  getTelemetrySnapshot,
+  getTelemetrySnapshotSync,
+  TelemetryDiagnostics,
+} from "@/lib/hardware-diagnostics";
 
 export type ViewChannel =
   | "white"
@@ -159,6 +164,12 @@ export function ColorStudio({
 
   // ── Safety & Diagnostics State ──
   const [localDiagnostics, setLocalDiagnostics] = useState<MaskDiagnostics | null>(diagnostics || null);
+  const [telemetry, setTelemetry] = useState<TelemetryDiagnostics>(() => getTelemetrySnapshotSync());
+
+  useEffect(() => {
+    getTelemetrySnapshot().then(setTelemetry).catch(() => {});
+  }, [metrics, width, height, sourceWidth, sourceHeight]);
+
   const [rollbackBanner, setRollbackBanner] = useState<string | null>(
     rollbackTriggered
       ? diagnostics?.warning ||
@@ -1764,63 +1775,110 @@ export function ColorStudio({
         </div>
       )}
 
-      {/* ── Mask Diagnostics HUD Panel ── */}
-      {localDiagnostics && (
-        <div
-          data-testid="mask-diagnostics-panel"
-          className="rounded-none border border-slate-800 bg-slate-950/90 p-3 space-y-2 text-xs font-mono"
-        >
-          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-            <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px]">
-              {"// MASK DIAGNOSTICS & SAFETY TELEMETRY"}
-            </span>
-            <span
-              className={`text-[9px] px-2 py-0.5 font-bold uppercase ${
-                localDiagnostics.rollbackTriggered
-                  ? "bg-amber-950 border border-amber-500 text-amber-300"
-                  : "bg-emerald-950 border border-emerald-500 text-emerald-300"
-              }`}
-            >
-              {localDiagnostics.rollbackTriggered ? "ROLLBACK ENGAGED" : "SAFETY PASS"}
-            </span>
-          </div>
+      {/* ── Mask Diagnostics & Telemetry HUD Panel ── */}
+      <div
+        data-testid="mask-diagnostics-panel"
+        className="rounded-none border border-slate-800 bg-slate-950/90 p-3 space-y-2 text-xs font-mono"
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+          <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px]">
+            {"// HARDWARE ACCELERATION & ML RUNTIME TELEMETRY"}
+          </span>
+          <span
+            className={`text-[9px] px-2 py-0.5 font-bold uppercase ${
+              localDiagnostics?.rollbackTriggered
+                ? "bg-amber-950 border border-amber-500 text-amber-300"
+                : "bg-emerald-950 border border-emerald-500 text-emerald-300"
+            }`}
+          >
+            {localDiagnostics?.rollbackTriggered ? "ROLLBACK ENGAGED" : "SAFETY PASS"}
+          </span>
+        </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px]">
-            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+        {/* Hardware & Runtime Telemetry Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px]">
+          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="text-slate-500 text-[9px]">WEBGPU AVAILABLE</div>
+            <div data-testid="diag-webgpu-available" className={`font-bold ${telemetry.webGpuAvailable ? "text-emerald-400" : "text-slate-400"}`}>
+              {telemetry.webGpuAvailable ? "true" : "false"}
+            </div>
+          </div>
+          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="text-slate-500 text-[9px]">ACTUAL BACKEND</div>
+            <div data-testid="diag-actual-backend" className="font-bold text-cyan-300">
+              {telemetry.actualBackend}
+            </div>
+          </div>
+          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="text-slate-500 text-[9px]">COLD-START TIME</div>
+            <div data-testid="diag-cold-start" className="font-bold text-slate-200">
+              {telemetry.coldStartTimeMs ? `${telemetry.coldStartTimeMs} ms` : metrics?.totalMs ? `${metrics.totalMs} ms` : "N/A"}
+            </div>
+          </div>
+          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="text-slate-500 text-[9px]">CACHED MODEL-LOAD</div>
+            <div data-testid="diag-cached-load" className="font-bold text-slate-200">
+              {telemetry.cachedModelLoadTimeMs ? `${telemetry.cachedModelLoadTimeMs} ms` : metrics?.modelLoadMs ? `${metrics.modelLoadMs} ms` : "cached"}
+            </div>
+          </div>
+          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="text-slate-500 text-[9px]">INFERENCE TIME</div>
+            <div data-testid="diag-inference-time" className="font-bold text-cyan-300">
+              {telemetry.inferenceTimeMs ? `${telemetry.inferenceTimeMs} ms` : metrics?.inferenceMs ? `${metrics.inferenceMs} ms` : `${metrics?.segmentationMs || 0} ms`}
+            </div>
+          </div>
+          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="text-slate-500 text-[9px]">INPUT DIMENSIONS</div>
+            <div data-testid="diag-input-dim" className="font-bold text-slate-200">
+              {sourceWidth || width}×{sourceHeight || height} px
+            </div>
+          </div>
+          <div className="p-1.5 bg-slate-900/60 border border-slate-800 col-span-2">
+            <div className="text-slate-500 text-[9px]">INFERENCE DIMENSIONS</div>
+            <div data-testid="diag-inference-dim" className="font-bold text-slate-200">
+              {width}×{height} px
+            </div>
+          </div>
+        </div>
+
+        {/* Safety & Retention Metrics */}
+        {localDiagnostics && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px] pt-1 border-t border-slate-800/80">
+            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
               <div className="text-slate-500 text-[9px]">INITIAL AREA</div>
               <div className="font-bold text-slate-200">{localDiagnostics.initialForegroundArea.toLocaleString()} px</div>
             </div>
-            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
               <div className="text-slate-500 text-[9px]">REFINED AREA</div>
               <div className="font-bold text-slate-200">{localDiagnostics.refinedForegroundArea.toLocaleString()} px</div>
             </div>
-            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
               <div className="text-slate-500 text-[9px]">AREA RETENTION</div>
               <div className={`font-bold ${(localDiagnostics.areaRetentionRatio < 0.8) ? "text-amber-400" : "text-emerald-400"}`}>
                 {(localDiagnostics.areaRetentionRatio * 100).toFixed(1)}%
               </div>
             </div>
-            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
               <div className="text-slate-500 text-[9px]">REMOVED RATIO</div>
               <div className="font-bold text-slate-200">{localDiagnostics.removedAreaPercentage.toFixed(1)}%</div>
             </div>
-            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
               <div className="text-slate-500 text-[9px]">COMPONENTS (&gt;20px)</div>
               <div className="font-bold text-cyan-300">{localDiagnostics.connectedComponentCount}</div>
             </div>
-            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
               <div className="text-slate-500 text-[9px]">HOLES (&gt;50px)</div>
               <div className="font-bold text-cyan-300">{localDiagnostics.interiorHoleCount}</div>
             </div>
-            <div className="p-1.5 bg-slate-900/60 border border-slate-800 col-span-2">
+            <div className="p-1.5 bg-slate-900/40 border border-slate-800 col-span-2">
               <div className="text-slate-500 text-[9px]">BOUNDING BOX</div>
               <div className="font-bold text-slate-200">
                 {localDiagnostics.boundingBox.width}×{localDiagnostics.boundingBox.height} px ({localDiagnostics.boundingBoxArea.toLocaleString()} px²)
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ── 7 Explicit Preview Tabs ── */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-none border border-cyan-500/30 bg-slate-950 p-2 text-xs font-mono">
@@ -2907,6 +2965,7 @@ export function ColorStudio({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              data-testid="export-transparent-png-btn"
               onClick={handleExportTransparentPng}
               className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-cyan-500/40 bg-cyan-950/60 px-3.5 py-1.5 text-cyan-300 hover:bg-cyan-900/70 hover:text-white transition-colors shadow-[0_0_12px_rgba(0,240,255,0.2)] font-bold tracking-wider uppercase"
             >

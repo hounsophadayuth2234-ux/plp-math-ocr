@@ -1395,8 +1395,22 @@ export async function segmentObjectSelection(
     }
   } else if (mode === "person_text_only" || mode === "person_plus_text") {
     // Independent person mask UNION text stroke mask
+    const pRes = extractPersonMask(sourceImageData.data, alphaMaskBuffer, width, height);
+    const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+    const combined = combinePersonAndTextMasks(
+      pRes.personMask,
+      tRes.textStrokeMask,
+      width,
+      height,
+      {
+        keepPerson: true,
+        keepText: true,
+        keepGraphics: false,
+        graphicsMask: tRes.graphicsMask,
+      }
+    );
     for (let i = 0; i < totalPixels; i++) {
-      activeMask[i] = containerResult.contentsMask[i];
+      activeMask[i] = combined.finalKeepMask[i];
     }
   } else if (mode === "contents_only" && containerResult.hasContainer) {
     // Strip packaging/box; keep only contents

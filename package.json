@@ -22,6 +22,7 @@
     "replicate": "^1.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/katex": "^0.16.8",
     "@types/node": "^20",

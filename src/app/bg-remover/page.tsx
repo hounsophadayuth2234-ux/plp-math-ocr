@@ -33,6 +33,7 @@ import { ObjectUrlRegistry } from "@/lib/processing-utils";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
+import { recordExecutionTelemetry } from "@/lib/hardware-diagnostics";
 
 export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -101,6 +102,13 @@ export default function BgRemoverPage() {
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const urlRegistryRef = useRef<ObjectUrlRegistry>(new ObjectUrlRegistry());
   const requestGenerationIdRef = useRef<number>(0);
+  const isFirstRunRef = useRef(true);
+  const lastCompletedRunKeyRef = useRef<string | null>(null);
+
+  // Sub-options for Person + Text Only mode
+  const [personSubOption, setPersonSubOption] = useState<boolean>(true);
+  const [textSubOption, setTextSubOption] = useState<boolean>(true);
+  const [keepGraphicsSubOption, setKeepGraphicsSubOption] = useState<boolean>(false);
 
   // Subscribe to audio changes
   useEffect(() => {
@@ -349,6 +357,13 @@ export default function BgRemoverPage() {
     }
     const startTime = performance.now();
     if (!imageFile) return;
+
+    // Safe optimization: Reuse previous result when image bytes and settings are unchanged
+    const runKey = `${imageFile.name}_${imageFile.size}_${imageFile.lastModified}_${mode}_${targetMaxDim || "def"}_${activeSelectionMode}`;
+    if (lastCompletedRunKeyRef.current === runKey && cachedResult) {
+      console.log(`[bg-remover] Reusing previous result for unchanged image & settings: ${runKey}`);
+      return;
+    }
 
     if (mode === "worker" && (!isWorkerConfigured || workerStatus === "unavailable")) {
       setError(
@@ -600,6 +615,19 @@ export default function BgRemoverPage() {
       setInitialCompositeUrl(dataUrl);
       setIsModelCached(true);
       setWorkflowStep("edit_mask");
+
+      recordExecutionTelemetry({
+        isFirstRun: isFirstRunRef.current,
+        totalMs: output.metrics?.totalMs || Math.round(performance.now() - startTime),
+        modelLoadMs: output.metrics?.modelLoadMs,
+        inferenceMs: output.metrics?.inferenceMs || output.metrics?.segmentationMs,
+        inputWidth: output.sourceWidth || output.width,
+        inputHeight: output.sourceHeight || output.height,
+        inferenceWidth: output.width,
+        inferenceHeight: output.height,
+      });
+      isFirstRunRef.current = false;
+      lastCompletedRunKeyRef.current = runKey;
 
       cyberAudio.playShutter();
       cyberAudio.playMetallicDing();
@@ -1206,9 +1234,43 @@ export default function BgRemoverPage() {
               {/* Mode Explanation */}
               <div className="text-[9.5px] text-slate-300 leading-relaxed font-mono bg-slate-950/60 p-2.5 border border-slate-800/80">
                 {(activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text") && (
-                  <span>
-                    👤📝 <strong>Person + Text Only / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ</strong>៖ This mode keeps the selected person and text, and removes the poster/background. Use Keep Brush if OCR misses any letters. (រក្សារូបមនុស្ស និងអក្សរខ្មែរ/អង់គ្លេសទាំងមូល រួមទាំងជើងអក្សរ ស្រៈ វណ្ណយុត្តិ និងលុបផ្ទៃ poster ពណ៌ស គែមស៊ុម និងផ្ទាំងក្រាហ្វិកខាងក្រោយចោល)
-                  </span>
+                  <div className="space-y-2">
+                    <div>
+                      👤📝 <strong>Person + Text Only / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ</strong>៖ This mode keeps the selected person and text, and removes the poster/background. Use Keep Brush if OCR misses any letters. (រក្សារូបមនុស្ស និងអក្សរខ្មែរ/អង់គ្លេសទាំងមូល រួមទាំងជើងអក្សរ ស្រៈ វណ្ណយុត្តិ និងលុបផ្ទៃ poster ពណ៌ស គែមស៊ុម និងផ្ទាំងក្រាហ្វិកខាងក្រោយចោល)
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-800 text-[10px]">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                        <input
+                          type="checkbox"
+                          data-testid="sub-option-person"
+                          checked={personSubOption}
+                          onChange={(e) => setPersonSubOption(e.target.checked)}
+                          className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>Person: keep detected person</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                        <input
+                          type="checkbox"
+                          data-testid="sub-option-text"
+                          checked={textSubOption}
+                          onChange={(e) => setTextSubOption(e.target.checked)}
+                          className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>Text: keep detected text</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                        <input
+                          type="checkbox"
+                          data-testid="sub-option-keep-graphics"
+                          checked={keepGraphicsSubOption}
+                          onChange={(e) => setKeepGraphicsSubOption(e.target.checked)}
+                          className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>Keep selected graphics: optional</span>
+                      </label>
+                    </div>
+                  </div>
                 )}
                 {(activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster") && (
                   <span>
@@ -1564,6 +1626,7 @@ export default function BgRemoverPage() {
                   {/* Primary: Fast Preview (Highlighted Default) */}
                   <button
                     type="button"
+                    data-testid="fast-preview-start-btn"
                     onClick={() => handleRunSegmentation("preview")}
                     disabled={!imageFile || isProcessing}
                     className={`min-h-[48px] group relative w-full overflow-hidden rounded-none border p-3 text-left transition-all duration-200 active:scale-[0.98] font-mono ${
@@ -1650,7 +1713,8 @@ export default function BgRemoverPage() {
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      data-testid="processing-cancel-btn"
+                      data-testid="cancel-btn"
+                      data-testid-alias="processing-cancel-btn"
                       onClick={handleCancel}
                       className="min-h-[44px] flex items-center gap-1 rounded-none border border-rose-500/40 bg-rose-950/60 px-2.5 py-1 text-[10px] font-mono text-rose-300 hover:bg-rose-900/60 transition-colors uppercase"
                     >
@@ -1659,7 +1723,8 @@ export default function BgRemoverPage() {
                     </button>
                     <button
                       type="button"
-                      data-testid="processing-reset-btn"
+                      data-testid="reset-btn"
+                      data-testid-alias="processing-reset-btn"
                       onClick={handleReset}
                       className="min-h-[44px] flex items-center gap-1 rounded-none border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-mono text-slate-300 hover:text-white transition-colors uppercase"
                     >
@@ -1798,6 +1863,7 @@ export default function BgRemoverPage() {
                 <div className="pt-2 border-t border-slate-800/60">
                   <button
                     type="button"
+                    data-testid="manual-mask-btn"
                     onClick={handleOpenManualMode}
                     disabled={!imageFile || isProcessing}
                     className="min-h-[44px] w-full flex items-center justify-center gap-1.5 rounded-none border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:text-white hover:border-cyan-400 transition-colors uppercase font-mono"

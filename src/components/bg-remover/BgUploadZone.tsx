@@ -287,6 +287,7 @@ export function BgUploadZone({
 
       <input
         id="bg-source-file-input"
+        data-testid="image-upload-input"
         ref={inputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp"
