@@ -47,7 +47,7 @@ export default function BgRemoverPage() {
     "detecting" | "edit_mask" | "refining" | "ready" | "failed"
   >("ready");
   const [activeSelectionMode, setActiveSelectionMode] = useState<SelectionMode>(
-    DOCUMENT_SAFE_MODE ? "document_poster" : "whole_product"
+    "preserve_all_foreground"
   );
   const excludedMaskRef = useRef<Uint8ClampedArray | null>(null);
 
@@ -65,7 +65,7 @@ export default function BgRemoverPage() {
   const [workerModel, setWorkerModel] = useState<string | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
   const [selectedEngine, setSelectedEngine] = useState<"browser" | "worker">("browser");
-  const [edgeQuality, setEdgeQuality] = useState<"fast" | "balanced" | "quality">("fast");
+  const [edgeQuality, setEdgeQuality] = useState<"fast" | "balanced" | "quality" | "fine_details">("fast");
   const [directWorkerUrl, setDirectWorkerUrl] = useState<string | null>(null);
 
   // Audio settings state
@@ -961,27 +961,27 @@ export default function BgRemoverPage() {
               </div>
 
               <div role="radiogroup" aria-label="What do you want to keep?" className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-                {/* 1. Whole poster/document */}
+                {/* 1. Preserve all foreground (Default) */}
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster"}
-                  data-testid="content-mode-document"
+                  aria-checked={activeSelectionMode === "preserve_all_foreground"}
+                  data-testid="content-mode-preserve-all"
                   onClick={() => {
                     cyberAudio.playClick();
-                    setActiveSelectionMode("document_poster");
+                    setActiveSelectionMode("preserve_all_foreground");
                   }}
                   className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster"
-                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                    activeSelectionMode === "preserve_all_foreground"
+                      ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-cyan-400" />
-                    <span>1. Whole poster/document</span>
+                    <span className="h-2 w-2 rounded-none bg-emerald-400" />
+                    <span>1. Preserve all foreground (Default)</span>
                   </div>
-                  <span className="text-[9px] text-cyan-300/80 mt-0.5">Keep every pixel (all text, logos, graphics, person)</span>
+                  <span className="text-[9px] text-emerald-300/80 mt-0.5">Keep all people, animals, plants, products, text &amp; details</span>
                 </button>
 
                 {/* 2. Person only */}
@@ -1007,30 +1007,53 @@ export default function BgRemoverPage() {
                   <span className="text-[9px] text-purple-300/80 mt-0.5">Keep real person; remove printed poster text</span>
                 </button>
 
-                {/* 3. Person + selected text/graphics */}
+                {/* 3. Product only */}
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={activeSelectionMode === "person_plus_text"}
-                  data-testid="content-mode-person-plus-text"
+                  aria-checked={activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"}
+                  data-testid="content-mode-product"
                   onClick={() => {
                     cyberAudio.playClick();
-                    setActiveSelectionMode("person_plus_text");
+                    setActiveSelectionMode("whole_product");
                   }}
                   className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                    activeSelectionMode === "person_plus_text"
-                      ? "border-pink-400 bg-pink-950/60 text-white font-bold ring-1 ring-pink-400/40 shadow-[0_0_12px_rgba(244,114,182,0.2)]"
+                    activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"
+                      ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-pink-400" />
-                    <span>3. Person + selected text/graphics</span>
+                    <span className="h-2 w-2 rounded-none bg-amber-400" />
+                    <span>3. Product only</span>
                   </div>
-                  <span className="text-[9px] text-pink-300/80 mt-0.5">Person plus user-selected poster regions</span>
+                  <span className="text-[9px] text-amber-300/80 mt-0.5">Keep whole product, white boxes, packages</span>
                 </button>
 
-                {/* 4. Custom mask */}
+                {/* 4. Document / text preserve */}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster" || activeSelectionMode === "document_text"}
+                  data-testid="content-mode-document"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("document_poster");
+                  }}
+                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                    activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster" || activeSelectionMode === "document_text"
+                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                    <span className="h-2 w-2 rounded-none bg-cyan-400" />
+                    <span>4. Document/text preserve</span>
+                  </div>
+                  <span className="text-[9px] text-cyan-300/80 mt-0.5">Byte-perfect page, Khmer text, logos, graphics</span>
+                </button>
+
+                {/* 5. Custom mask */}
                 <button
                   type="button"
                   role="radio"
@@ -1040,37 +1063,17 @@ export default function BgRemoverPage() {
                     cyberAudio.playClick();
                     setActiveSelectionMode("custom");
                   }}
-                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
+                  className={`min-h-[44px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all col-span-1 sm:col-span-2 ${
                     activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"
-                      ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                      ? "border-rose-400 bg-rose-950/60 text-white font-bold ring-1 ring-rose-400/40 shadow-[0_0_12px_rgba(244,63,94,0.2)]"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                    <span className="h-2 w-2 rounded-none bg-amber-400" />
-                    <span>4. Custom mask</span>
+                    <span className="h-2 w-2 rounded-none bg-rose-400" />
+                    <span>5. Custom mask</span>
                   </div>
-                  <span className="text-[9px] text-amber-300/80 mt-0.5">User paints/clicks exactly what to keep</span>
-                </button>
-              </div>
-
-              {/* Product cutout option for e-commerce boxes/products */}
-              <div className="pt-1 flex items-center justify-between text-[10px] font-mono">
-                <span className="text-slate-500">Other object targets:</span>
-                <button
-                  type="button"
-                  data-testid="content-mode-product"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("whole_product");
-                  }}
-                  className={`px-2 py-1 border text-[10px] transition-all ${
-                    activeSelectionMode === "whole_product"
-                      ? "border-emerald-400 bg-emerald-950/60 text-emerald-300 font-bold"
-                      : "border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  📦 Product cutout (Keep Whole Product)
+                  <span className="text-[9px] text-rose-300/80 mt-0.5">User paints/clicks exactly what to keep with brush &amp; points</span>
                 </button>
               </div>
 
@@ -1309,10 +1312,10 @@ export default function BgRemoverPage() {
                 <span>គុណភាពគែម (Edge Quality)</span>
                 <span className="text-cyan-400 font-bold">
                   {edgeQuality === "fast"
-                    ? "FAST"
+                    ? "FAST PREVIEW"
                     : edgeQuality === "balanced"
                     ? "BALANCED"
-                    : "FINE EDGES"}
+                    : "FINE HAIR & DETAILS"}
                 </span>
               </div>
               <div role="radiogroup" aria-label="Edge Quality & Alpha Matting" className="grid grid-cols-3 gap-1.5 text-xs font-mono">
@@ -1332,8 +1335,8 @@ export default function BgRemoverPage() {
                       : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
                   }`}
                 >
-                  <span className="text-[11px] font-bold">Fast</span>
-                  <span className="text-[9px] text-slate-500">លំនាំដើម</span>
+                  <span className="text-[11px] font-bold">Fast Preview</span>
+                  <span className="text-[9px] text-slate-500">Preview / Low-res</span>
                 </button>
 
                 <button
@@ -1359,21 +1362,21 @@ export default function BgRemoverPage() {
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={edgeQuality === "quality"}
+                  aria-checked={edgeQuality === "quality" || edgeQuality === "fine_details"}
                   data-testid="edge-quality-quality"
                   onClick={() => {
                     cyberAudio.playClick();
-                    setEdgeQuality("quality");
+                    setEdgeQuality("fine_details");
                   }}
                   disabled={isProcessing}
                   className={`min-h-[44px] flex flex-col items-center justify-center p-2 rounded-none border text-center transition-all ${
-                    edgeQuality === "quality"
+                    edgeQuality === "quality" || edgeQuality === "fine_details"
                       ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40"
                       : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
                   }`}
                 >
-                  <span className="text-[11px] font-bold text-emerald-300">Fine Edges</span>
-                  <span className="text-[9px] text-emerald-400/80">Guided Filter</span>
+                  <span className="text-[11px] font-bold text-emerald-300">Fine Hair &amp; Details</span>
+                  <span className="text-[9px] text-emerald-400/80">Hair, Fur, Plants</span>
                 </button>
               </div>
 

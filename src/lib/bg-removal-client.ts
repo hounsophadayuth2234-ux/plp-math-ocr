@@ -22,6 +22,9 @@ import {
   createDocumentSafeRgba,
   isolatePersonMask,
   combinePersonWithSelectedRegions,
+  combineForegroundProposals,
+  detectAndProtectTextAndLogos,
+  preserveSmallForegroundComponents,
 } from "./bg-compositor";
 
 export type { ContentMode, QuadCorners, DocumentDetectionResult };
@@ -33,6 +36,9 @@ export {
   createDocumentSafeRgba,
   isolatePersonMask,
   combinePersonWithSelectedRegions,
+  combineForegroundProposals,
+  detectAndProtectTextAndLogos,
+  preserveSmallForegroundComponents,
 };
 
 /**
@@ -680,7 +686,7 @@ export async function exportAtFullResolution(
   alphaMask: Uint8ClampedArray,
   maskWidth: number,
   maskHeight: number,
-  targetBg: "white" | "pink" | "transparent",
+  targetBg: "white" | "pink" | "transparent" | string,
   options?: { autoCrop?: boolean }
 ): Promise<{ blob: Blob; dataUrl: string; width: number; height: number; wasClamped?: boolean }> {
   const origBitmap = await createImageBitmap(originalFileOrBlob);
@@ -743,12 +749,23 @@ export async function exportAtFullResolution(
 
     outCtx.drawImage(origBitmap, 0, 0, targetW, targetH);
     const outImageData = outCtx.getImageData(0, 0, targetW, targetH);
+    const isCustomHex = typeof targetBg === "string" && targetBg.startsWith("#");
+    const purpose: "white" | "pink" | "transparent" =
+      targetBg === "pink" ? "pink" : targetBg === "transparent" ? "transparent" : "white";
+    const customBg = isCustomHex
+      ? {
+          r: parseInt(targetBg.slice(1, 3), 16) || 255,
+          g: parseInt(targetBg.slice(3, 5), 16) || 255,
+          b: parseInt(targetBg.slice(5, 7), 16) || 255,
+        }
+      : undefined;
     const compositedPixels = compositeRgbaBuffer(
       outImageData.data,
       scaledMaskData,
       targetW,
       targetH,
-      targetBg
+      purpose,
+      customBg
     );
     outImageData.data.set(compositedPixels);
     outCtx.putImageData(outImageData, 0, 0);
@@ -928,7 +945,7 @@ export async function compositeWithSolidColor(
 
 export interface RemoteWorkerOptions {
   refine?: boolean;
-  quality?: "fast" | "balanced" | "quality";
+  quality?: "fast" | "balanced" | "quality" | "fine_details";
   directUrl?: string | null;
   signal?: AbortSignal;
   mode?: SelectionMode;
@@ -1138,8 +1155,9 @@ export interface SegmentSelectionOptions {
   onProgress?: (progress: BgRemovalProgress) => void;
   remoteWorker?: boolean;
   directUrl?: string | null;
-  quality?: "fast" | "balanced" | "quality";
+  quality?: "fast" | "balanced" | "fine_details" | "quality";
   manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
+  secondaryProposalMask?: Uint8ClampedArray | Uint8Array | null;
 }
 
 export interface SegmentSelectionResult {
@@ -1172,7 +1190,7 @@ export async function segmentObjectSelection(
     throw createAbortError("Aborted by user.");
   }
   const tStart = performance.now();
-  const mode: SelectionMode = options?.mode || "whole_poster";
+  const mode: SelectionMode = options?.mode || "preserve_all_foreground";
 
   // DOCUMENT / POSTER MODE: Keep complete page intact, never punch holes in text, logos, or white areas
   if (mode === "document_poster" || mode === "whole_poster") {
@@ -1453,8 +1471,9 @@ export async function segmentObjectSelection(
 export interface RefineAlphaMattingOptions {
   mode?: SelectionMode;
   documentSafeMode?: boolean;
-  quality?: "fast" | "balanced" | "quality";
+  quality?: "fast" | "balanced" | "fine_details" | "quality";
   edgeQuality?: "fast" | "balanced" | "fine";
+  background?: "transparent" | "white" | "pink" | string;
   remoteWorker?: boolean;
   directUrl?: string | null;
   signal?: AbortSignal;
@@ -1510,6 +1529,7 @@ export async function refineAlphaMattingWithMask(
         const outImgData = ctx.createImageData(w, h);
         const outPixels = outImgData.data;
         const srcPixels = sourceImageData.data;
+
         for (let i = 0; i < totalPixels; i++) {
           const pIdx = i * 4;
           outPixels[pIdx] = srcPixels[pIdx];
@@ -1560,8 +1580,9 @@ export async function refineAlphaMattingWithMask(
     };
   }
 
-  const quality = options?.quality || (options?.edgeQuality === "fine" ? "quality" : "balanced");
-  const trimapRadius = quality === "fast" ? 3 : quality === "quality" ? 6 : 4;
+  const quality = options?.quality || (options?.edgeQuality === "fine" ? "fine_details" : "balanced");
+  const isFineQuality = quality === "quality" || quality === "fine_details";
+  const trimapRadius = quality === "fast" ? 3 : isFineQuality ? 6 : 4;
   const initialMask = options?.initialMask || activeMask;
 
   const tMatStart = performance.now();
@@ -1572,7 +1593,8 @@ export async function refineAlphaMattingWithMask(
     h,
     trimapRadius,
     excludedMask,
-    options?.manualKeepMask
+    options?.manualKeepMask,
+    { quality: isFineQuality ? "fine_details" : (quality === "fast" ? "fast" : "balanced") }
   );
 
   // 2. Refine alpha transitions using edge-aware guided filter
@@ -1590,13 +1612,20 @@ export async function refineAlphaMattingWithMask(
     }
   );
 
-  // 3. Automated Area Safety Check: Rollback to initial mask if > 20% area was dropped
+  // 3. Automated Area Safety Check: Rollback to initial mask if area drops > 10% (or > 5% in document mode)
+  const isDoc = options?.mode === "document_poster" || options?.mode === "whole_poster" || options?.mode === "document_text";
+  const defaultDrop = isDoc ? 0.05 : 0.10;
   const { safeMask, diagnostics } = applyAreaSafetyCheck(
     initialMask,
     rawRefinedAlpha,
     w,
     h,
-    options?.maxDropRatio ?? 0.20
+    options?.maxDropRatio ?? defaultDrop,
+    {
+      mode: options?.mode,
+      manualKeepMask: options?.manualKeepMask,
+      trimap,
+    }
   );
 
   // 3b. Controlled Color Decontamination & Dehalo pass on boundary band

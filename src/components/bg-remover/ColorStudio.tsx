@@ -57,6 +57,7 @@ import { BeforeAfterSlider } from "@/components/image-upscaler/BeforeAfterSlider
 export type ViewChannel =
   | "white"
   | "pink"
+  | "custom"
   | "transparent"
   | "initial_mask"
   | "refined_mask"
@@ -147,7 +148,7 @@ export function ColorStudio({
   const [rollbackBanner, setRollbackBanner] = useState<string | null>(
     rollbackTriggered
       ? diagnostics?.warning ||
-        "⚠️ Refinement removed > 20% of foreground. Automatic safety rollback engaged to prevent over-cutting white lids/boxes."
+        "⚠️ We kept the safer mask because edge refinement removed possible foreground details (Automatic safety rollback engaged).\nYou can refine it manually with Keep/Erase brush."
       : null
   );
   const [initialAlphaMaskDataUrl, setInitialAlphaMaskDataUrl] = useState<string>(initialAlphaMaskUrl || "");
@@ -165,7 +166,7 @@ export function ColorStudio({
       if (diagnostics.rollbackTriggered) {
         setRollbackBanner(
           diagnostics.warning ||
-            `⚠️ Refinement removed ${diagnostics.removedAreaPercentage.toFixed(1)}% of foreground (> 20%). Automatic safety rollback engaged to prevent over-cutting white lids/boxes.`
+            `⚠️ We kept the safer mask because edge refinement removed possible foreground details (${diagnostics.removedAreaPercentage.toFixed(1)}% removed).\nYou can refine it manually with Keep/Erase brush.`
         );
       }
     }
@@ -173,6 +174,7 @@ export function ColorStudio({
 
   // ── Channel & Preview State (Default to user's selected purpose) ──
   const [activeChannel, setActiveChannel] = useState<ViewChannel>(initialPurpose || "white");
+  const [customColor, setCustomColor] = useState<string>("#3b82f6");
   const [whiteCompositeUrl, setWhiteCompositeUrl] = useState<string>(initialCompositeUrl);
   const [pinkCompositeUrl, setPinkCompositeUrl] = useState<string>("");
   const [currentTransparentUrl, setCurrentTransparentUrl] = useState<string>(transparentUrl);
@@ -487,6 +489,15 @@ export function ColorStudio({
         data[pIdx + 1] = g;
         data[pIdx + 2] = b;
         data[pIdx + 3] = 255;
+      } else if (activeChannel === "custom") {
+        const cR = parseInt(customColor.slice(1, 3), 16) || 0;
+        const cG = parseInt(customColor.slice(3, 5), 16) || 0;
+        const cB = parseInt(customColor.slice(5, 7), 16) || 0;
+        const aNorm = a / 255;
+        data[pIdx] = Math.round(r * aNorm + cR * (1 - aNorm));
+        data[pIdx + 1] = Math.round(g * aNorm + cG * (1 - aNorm));
+        data[pIdx + 2] = Math.round(b * aNorm + cB * (1 - aNorm));
+        data[pIdx + 3] = 255;
       } else {
         // Default white composite #FFFFFF
         const aNorm = a / 255;
@@ -498,7 +509,7 @@ export function ColorStudio({
     }
 
     ctx.putImageData(imgData, 0, 0);
-  }, [width, height, sourceImageData, activeChannel]);
+  }, [width, height, sourceImageData, activeChannel, customColor]);
 
   // Redraw ONLY the dirty region modified by the brush stroke (draws only the brush region)
   const redrawCanvasRegion = useCallback(
@@ -1174,7 +1185,7 @@ export function ColorStudio({
     if (
       originalFile &&
       activeMask &&
-      (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink")
+      (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink" || targetChannel === "custom")
     ) {
       try {
         const fullRes = await exportAtFullResolution(
@@ -1182,7 +1193,7 @@ export function ColorStudio({
           activeMask,
           width,
           height,
-          targetChannel
+          targetChannel === "custom" ? customColor : targetChannel
         );
         downloadUrl = fullRes.dataUrl;
         isTempUrl = true;
@@ -1196,6 +1207,14 @@ export function ColorStudio({
         downloadUrl = currentTransparentUrl || transparentUrl;
       } else if (targetChannel === "pink") {
         downloadUrl = pinkCompositeUrl || activeDisplayUrl;
+      } else if (targetChannel === "custom") {
+        try {
+          const comp = await compositeWithSolidColor(transparentBlob, customColor);
+          downloadUrl = comp.dataUrl;
+          isTempUrl = true;
+        } catch {
+          downloadUrl = whiteCompositeUrl || activeDisplayUrl;
+        }
       } else if (targetChannel === "mask") {
         downloadUrl = currentAlphaMaskUrl || initialAlphaMaskUrl || transparentUrl;
       } else {
@@ -1203,10 +1222,10 @@ export function ColorStudio({
       }
     }
 
-    if (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink") {
+    if (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink" || targetChannel === "custom") {
       filename = generateExportFilename(
         originalFile?.name || "image",
-        targetChannel,
+        targetChannel === "custom" ? "white" : targetChannel,
         width,
         height,
         mode
@@ -1496,7 +1515,7 @@ export function ColorStudio({
       </div>
 
       {/* ── Primary Output Purpose Selector (Khmer-First, accessible min 44px) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-none border border-cyan-500/30 bg-slate-950 p-2 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 rounded-none border border-cyan-500/30 bg-slate-950 p-2 text-xs">
         {/* 1. White Background */}
         <button
           type="button"
@@ -1536,7 +1555,34 @@ export function ColorStudio({
           <span className="text-[10px] text-pink-300/80 font-mono">#FFF0F5 Solid Pink</span>
         </button>
 
-        {/* 3. Transparent Checkerboard */}
+        {/* 3. Custom Color */}
+        <div
+          data-channel="custom"
+          onClick={() => handleSelectChannel("custom")}
+          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider cursor-pointer ${
+            activeChannel === "custom"
+              ? "bg-slate-900 border-2 border-emerald-400 text-white shadow-[0_0_12px_rgba(16,185,129,0.3)] font-bold"
+              : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <input
+              type="color"
+              data-testid="custom-color-picker"
+              value={customColor}
+              onChange={(e) => {
+                setCustomColor(e.target.value);
+                handleSelectChannel("custom");
+              }}
+              className="h-4 w-4 rounded-none cursor-pointer border border-slate-300 bg-transparent p-0"
+              title="Pick custom background color"
+            />
+            <span className="text-white font-bold">ពណ៌ផ្ទាល់ខ្លួន</span>
+          </div>
+          <span className="text-[10px] text-emerald-300/80 font-mono uppercase">{customColor} Custom</span>
+        </div>
+
+        {/* 4. Transparent Checkerboard */}
         <button
           type="button"
           data-channel="transparent"
@@ -1554,7 +1600,7 @@ export function ColorStudio({
           <span className="text-[10px] text-indigo-300/80 font-mono">Transparent Cutout</span>
         </button>
 
-        {/* 4. Original Photo */}
+        {/* 5. Original Photo */}
         <button
           type="button"
           onClick={() => handleSelectChannel("original")}
@@ -1577,6 +1623,8 @@ export function ColorStudio({
         className={`relative flex items-center justify-center overflow-hidden rounded-none border p-4 transition-all duration-300 font-mono ${
           activeChannel === "pink"
             ? "border-pink-500/40 shadow-[0_0_35px_rgba(255,105,180,0.12)] bg-slate-950"
+            : activeChannel === "custom"
+            ? "border-emerald-500/40 shadow-[0_0_35px_rgba(16,185,129,0.12)] bg-slate-950"
             : activeChannel === "transparent"
             ? "border-indigo-500/40 shadow-[0_0_35px_rgba(99,102,241,0.12)] bg-slate-950"
             : activeChannel === "mask"
@@ -2043,6 +2091,8 @@ export function ColorStudio({
               className={`h-2 w-2 rounded-none ${
                 activeChannel === "pink"
                   ? "bg-pink-400"
+                  : activeChannel === "custom"
+                  ? "bg-emerald-400"
                   : activeChannel === "mask"
                   ? "bg-amber-400"
                   : activeChannel === "transparent"
@@ -2055,6 +2105,8 @@ export function ColorStudio({
                 ? "រូបសំណួរ — ផ្ទៃស (#FFFFFF)"
                 : activeChannel === "pink"
                 ? "រូបដំណោះស្រាយ — ផ្ទៃផ្កាឈូក (#FFF0F5)"
+                : activeChannel === "custom"
+                ? `ពណ៌ផ្ទាល់ខ្លួន — ${customColor.toUpperCase()}`
                 : activeChannel === "transparent"
                 ? "រូបថ្លា — គ្មានផ្ទៃ (TRANSPARENT PNG)"
                 : activeChannel === "mask"
@@ -2078,6 +2130,8 @@ export function ColorStudio({
           className={`min-h-[48px] flex w-full items-center justify-center gap-2 rounded-none px-5 py-3.5 text-xs font-black tracking-wider uppercase text-white shadow-lg transition-all duration-200 active:scale-[0.98] font-mono ${
             activeChannel === "pink"
               ? "bg-gradient-to-r from-pink-600 via-rose-600 to-fuchsia-600 shadow-pink-900/40 hover:shadow-pink-500/25 ring-1 ring-pink-400/40"
+              : activeChannel === "custom"
+              ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 shadow-emerald-900/40 hover:shadow-emerald-500/25 ring-1 ring-emerald-400/40"
               : activeChannel === "transparent"
               ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 shadow-indigo-900/40 hover:shadow-indigo-500/25 ring-1 ring-indigo-400/40"
               : "bg-gradient-to-r from-cyan-600 via-indigo-600 to-blue-600 shadow-cyan-900/40 hover:shadow-cyan-500/25 ring-1 ring-cyan-400/40"
@@ -2089,18 +2143,20 @@ export function ColorStudio({
               ? "ទាញយករូបថ្លា — គ្មានផ្ទៃ (EXPORT TRANSPARENT PNG)"
               : activeChannel === "pink"
               ? "ទាញយករូបដំណោះស្រាយ — ផ្ទៃផ្កាឈូក (#FFF0F5)"
+              : activeChannel === "custom"
+              ? `ទាញយកពណ៌ផ្ទាល់ខ្លួន (${customColor.toUpperCase()})`
               : activeChannel === "mask"
               ? "ទាញយកម៉ាសអាល់ហ្វា (ALPHA MASK DEBUG)"
               : "ទាញយករូបសំណួរ — ផ្ទៃស (#FFFFFF)"}
           </span>
         </button>
 
-        {/* Direct 3-Button Quick Download Row */}
+        {/* Direct Quick Download Row */}
         <div className="space-y-1.5 pt-1">
           <div className="text-[10px] text-slate-400 font-mono tracking-wider">
             ទាញយកភ្លាមៗតាមតម្រូវការ (1-CLICK QUICK DOWNLOAD):
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
             <button
               type="button"
               data-testid="quick-download-white"
@@ -2117,7 +2173,16 @@ export function ColorStudio({
               className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-pink-400 hover:text-white transition-colors"
             >
               <span className="h-2.5 w-2.5 border border-pink-400" style={{ backgroundColor: "#FFF0F5" }} />
-              <span>ទាញយករូបដំណោះស្រាយ (ផ្កាឈូក)</span>
+              <span>ទាញយក (ផ្កាឈូក)</span>
+            </button>
+            <button
+              type="button"
+              data-testid="quick-download-custom"
+              onClick={() => handleDownload("custom")}
+              className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-emerald-400 hover:text-white transition-colors"
+            >
+              <span className="h-2.5 w-2.5 border border-slate-400" style={{ backgroundColor: customColor }} />
+              <span>ពណ៌ផ្ទាល់ខ្លួន</span>
             </button>
             <button
               type="button"
@@ -2126,7 +2191,7 @@ export function ColorStudio({
               className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-indigo-400 hover:text-white transition-colors"
             >
               <Grid className="h-3.5 w-3.5 text-indigo-400" />
-              <span>ទាញយករូបថ្លា (PNG)</span>
+              <span>រូបថ្លា (PNG)</span>
             </button>
           </div>
         </div>

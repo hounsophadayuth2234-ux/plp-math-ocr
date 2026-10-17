@@ -212,24 +212,29 @@ export function generateExportFilename(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type ContentMode =
-  | "whole_poster"
-  | "document_poster"
+  | "preserve_all_foreground"
   | "person_only"
   | "person"
+  | "product_only"
+  | "whole_product"
+  | "document_poster"
+  | "whole_poster"
   | "person_plus_text"
   | "custom_mask"
-  | "custom"
-  | "whole_product";
+  | "custom";
 
 export type SelectionMode =
-  | "whole_poster"
-  | "document_poster"
+  | "preserve_all_foreground"
   | "person_only"
   | "person"
+  | "product_only"
+  | "whole_product"
+  | "document_poster"
+  | "whole_poster"
+  | "document_text"
   | "person_plus_text"
   | "custom_mask"
   | "custom"
-  | "whole_product"
   | "contents_only"
   | "box_polygon";
 
@@ -1000,6 +1005,248 @@ export function combinePersonWithSelectedRegions(
 }
 
 /**
+ * Combines two foreground proposals conservatively (e.g. BiRefNet/RMBG-2.0 + ISNet).
+ * Returns union of both proposals and identifies disputed edge regions.
+ */
+export function combineForegroundProposals(
+  proposalA: Uint8ClampedArray | Uint8Array,
+  proposalB: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  options?: {
+    conservativeUnion?: boolean;
+    disagreementThreshold?: number;
+  }
+): {
+  unionMask: Uint8ClampedArray;
+  disputedMask: Uint8ClampedArray;
+  hasStrongDisagreement: boolean;
+  disagreementPixelCount: number;
+} {
+  const totalPixels = width * height;
+  const isA4Ch = proposalA.length === totalPixels * 4;
+  const isB4Ch = proposalB.length === totalPixels * 4;
+  const unionMask = new Uint8ClampedArray(totalPixels);
+  const disputedMask = new Uint8ClampedArray(totalPixels);
+  const thresh = options?.disagreementThreshold ?? 100;
+
+  let disagreementCount = 0;
+
+  for (let i = 0; i < totalPixels; i++) {
+    const valA = isA4Ch ? proposalA[i * 4 + 3] : proposalA[i];
+    const valB = isB4Ch ? proposalB[i * 4 + 3] : proposalB[i];
+
+    // Conservative union: take maximum proposal to avoid deleting real foreground
+    unionMask[i] = Math.max(valA, valB);
+
+    if (Math.abs(valA - valB) >= thresh) {
+      disputedMask[i] = 255;
+      disagreementCount++;
+    }
+  }
+
+  const hasStrongDisagreement = disagreementCount > totalPixels * 0.03;
+
+  return {
+    unionMask,
+    disputedMask,
+    hasStrongDisagreement,
+    disagreementPixelCount: disagreementCount,
+  };
+}
+
+/**
+ * Detects printed Khmer/Latin text strokes and logo regions, protecting them
+ * from being deleted or eroded during alpha matting or background removal.
+ */
+export function detectAndProtectTextAndLogos(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  existingMask?: Uint8ClampedArray | Uint8Array | null
+): {
+  protectedMask: Uint8ClampedArray;
+  textProtectedArea: number;
+  hasProtectedText: boolean;
+} {
+  const totalPixels = width * height;
+  const isExisting4Ch = existingMask ? existingMask.length === totalPixels * 4 : false;
+  const protectedMask = new Uint8ClampedArray(totalPixels);
+  let textProtectedArea = 0;
+
+  if (existingMask) {
+    for (let i = 0; i < totalPixels; i++) {
+      protectedMask[i] = isExisting4Ch ? existingMask[i * 4 + 3] : existingMask[i];
+    }
+  }
+
+  const textStrokes = new Uint8Array(totalPixels);
+
+  for (let y = 1; y < height - 1; y++) {
+    const yOff = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = yOff + x;
+      const p = idx * 4;
+
+      const r = sourceRgba[p];
+      const g = sourceRgba[p + 1];
+      const b = sourceRgba[p + 2];
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+      const pL = (idx - 1) * 4;
+      const pR = (idx + 1) * 4;
+      const pU = (idx - width) * 4;
+      const pD = (idx + width) * 4;
+
+      const lumL = 0.299 * sourceRgba[pL] + 0.587 * sourceRgba[pL + 1] + 0.114 * sourceRgba[pL + 2];
+      const lumR = 0.299 * sourceRgba[pR] + 0.587 * sourceRgba[pR + 1] + 0.114 * sourceRgba[pR + 2];
+      const lumU = 0.299 * sourceRgba[pU] + 0.587 * sourceRgba[pU + 1] + 0.114 * sourceRgba[pU + 2];
+      const lumD = 0.299 * sourceRgba[pD] + 0.587 * sourceRgba[pD + 1] + 0.114 * sourceRgba[pD + 2];
+
+      const gradX = Math.abs(lumR - lumL);
+      const gradY = Math.abs(lumD - lumU);
+      const maxGrad = Math.max(gradX, gradY);
+
+      // Contrast text stroke: Dark text (lum < 135) with nearby brighter page (lum > 175)
+      const maxNeighborLum = Math.max(lumL, lumR, lumU, lumD);
+      const isTextContrast = lum < 135 && maxNeighborLum > 175 && maxGrad > 35;
+
+      // Saturated logo stroke: e.g. yellow, blue, red graphic element
+      const maxCh = Math.max(r, g, b);
+      const minCh = Math.min(r, g, b);
+      const isSaturatedLogo = (maxCh - minCh) > 55 && maxGrad > 30;
+
+      if (isTextContrast || isSaturatedLogo) {
+        textStrokes[idx] = 1;
+      }
+    }
+  }
+
+  // Preserve text strokes safely (with 2-pixel dilation to cover interior of small glyphs)
+  for (let y = 0; y < height; y++) {
+    const yOff = y * width;
+    for (let x = 0; x < width; x++) {
+      const idx = yOff + x;
+      if (textStrokes[idx] === 1) {
+        for (let dy = -2; dy <= 2; dy++) {
+          const ny = y + dy;
+          if (ny < 0 || ny >= height) continue;
+          for (let dx = -2; dx <= 2; dx++) {
+            const nx = x + dx;
+            if (nx < 0 || nx >= width) continue;
+            if (Math.abs(dx) + Math.abs(dy) <= 3) {
+              const nIdx = ny * width + nx;
+              if (protectedMask[nIdx] !== 255) {
+                protectedMask[nIdx] = 255;
+                textProtectedArea++;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    protectedMask,
+    textProtectedArea,
+    hasProtectedText: textProtectedArea > 20,
+  };
+}
+
+/**
+ * Detects and preserves small disconnected foreground components (leaves, twigs,
+ * hair strands, dots, accents, small logos) down to 2 pixels.
+ */
+export function preserveSmallForegroundComponents(
+  mask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  minArea: number = 2
+): {
+  preservedMask: Uint8ClampedArray;
+  smallComponentCount: number;
+  totalComponentCount: number;
+} {
+  const totalPixels = width * height;
+  const isMask4Ch = mask.length === totalPixels * 4;
+  const preservedMask = new Uint8ClampedArray(totalPixels);
+
+  for (let i = 0; i < totalPixels; i++) {
+    preservedMask[i] = isMask4Ch ? mask[i * 4 + 3] : mask[i];
+  }
+
+  const visited = new Uint8Array(totalPixels);
+  const queue = new Int32Array(totalPixels);
+  let totalComponentCount = 0;
+  let smallComponentCount = 0;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const startIdx = y * width + x;
+      if (preservedMask[startIdx] <= 128 || visited[startIdx] === 1) continue;
+
+      let qHead = 0;
+      let qTail = 0;
+      queue[qTail++] = startIdx;
+      visited[startIdx] = 1;
+      let compArea = 0;
+
+      while (qHead < qTail) {
+        const curr = queue[qHead++];
+        compArea++;
+
+        const cy = Math.floor(curr / width);
+        const cx = curr % width;
+
+        if (cx > 0) {
+          const left = curr - 1;
+          if (preservedMask[left] > 128 && visited[left] === 0) {
+            visited[left] = 1;
+            queue[qTail++] = left;
+          }
+        }
+        if (cx < width - 1) {
+          const right = curr + 1;
+          if (preservedMask[right] > 128 && visited[right] === 0) {
+            visited[right] = 1;
+            queue[qTail++] = right;
+          }
+        }
+        if (cy > 0) {
+          const top = curr - width;
+          if (preservedMask[top] > 128 && visited[top] === 0) {
+            visited[top] = 1;
+            queue[qTail++] = top;
+          }
+        }
+        if (cy < height - 1) {
+          const bottom = curr + width;
+          if (preservedMask[bottom] > 128 && visited[bottom] === 0) {
+            visited[bottom] = 1;
+            queue[qTail++] = bottom;
+          }
+        }
+      }
+
+      totalComponentCount++;
+      if (compArea <= 120 && compArea >= minArea) {
+        smallComponentCount++;
+        for (let k = 0; k < qTail; k++) {
+          preservedMask[queue[k]] = 255;
+        }
+      }
+    }
+  }
+
+  return {
+    preservedMask,
+    smallComponentCount,
+    totalComponentCount,
+  };
+}
+
+/**
  * Detects whether the segmented object contains an outer packaging/box container
  * versus inner food/pastry/donut contents.
  *
@@ -1021,7 +1268,29 @@ export function detectContainerAndContents(
   const isMask4Ch = initialMask.length === totalPixels * 4;
 
   const mode = options?.mode;
-  const isConservative = options?.conservative ?? (mode === "whole_product" || !mode);
+  const isConservative = options?.conservative ?? (mode === "whole_product" || mode === "preserve_all_foreground" || !mode);
+
+  // PRESERVE ALL FOREGROUND (DEFAULT MODE):
+  // Preserve all people, animals, plants, products, boxes, text, logos, hair, fur, disconnected objects
+  if (!mode || mode === "preserve_all_foreground") {
+    const contentsMask = new Uint8ClampedArray(totalPixels);
+    for (let i = 0; i < totalPixels; i++) {
+      contentsMask[i] = isMask4Ch ? initialMask[i * 4 + 3] : initialMask[i];
+    }
+
+    // Protect text and logo regions in document-like or complex imagery
+    const { protectedMask } = detectAndProtectTextAndLogos(sourceRgba, width, height, contentsMask);
+
+    // Preserve small components down to 2 pixels (hair strands, leaves, twigs, disconnected details)
+    const { preservedMask } = preserveSmallForegroundComponents(protectedMask, width, height, 2);
+
+    return {
+      hasContainer: false,
+      boxConfidence: 0,
+      containerMask: new Uint8ClampedArray(totalPixels),
+      contentsMask: preservedMask,
+    };
+  }
 
   // DOCUMENT / POSTER MODE: Never remove internal white areas, text, logos, or printed person.
   if (mode === "document_poster" || mode === "whole_poster") {
@@ -1280,7 +1549,11 @@ export function generateTrimap(
   height: number,
   radius: number = 3,
   excludedMask?: Uint8ClampedArray | Uint8Array | null,
-  manualKeepMask?: Uint8ClampedArray | Uint8Array | null
+  manualKeepMask?: Uint8ClampedArray | Uint8Array | null,
+  options?: {
+    quality?: "fast" | "balanced" | "fine_details" | "quality";
+    isHairOrPlant?: boolean;
+  }
 ): Uint8ClampedArray {
   const totalPixels = width * height;
   const isMask4Ch = mask.length === totalPixels * 4;
@@ -1290,8 +1563,10 @@ export function generateTrimap(
   const isExcluded = (idx: number) => (excludedMask ? excludedMask[idx] > 128 : false);
   const isManualKeep = (idx: number) => (manualKeepMask ? manualKeepMask[idx] > 128 : false);
 
-  // Safe bounded radius: 2 to 8 px
-  const safeRadius = Math.max(2, Math.min(8, Math.round(radius)));
+  // Widen unknown band for hair, fur, plant branches, or fine_details quality
+  const isFine = options?.quality === "fine_details" || options?.quality === "quality" || options?.isHairOrPlant;
+  const effectiveRadius = isFine ? Math.max(radius, 6) : radius;
+  const safeRadius = Math.max(2, Math.min(10, Math.round(effectiveRadius)));
 
   for (let y = 0; y < height; y++) {
     const minY = Math.max(0, y - safeRadius);
@@ -1528,6 +1803,9 @@ export interface MaskDiagnostics {
   removedAreaPercentage: number;
   connectedComponentCount: number;
   largestComponentArea: number;
+  smallComponentCount: number;
+  textProtectedArea?: number;
+  uncertainEdgeArea?: number;
   boundingBox: {
     minX: number;
     minY: number;
@@ -1547,18 +1825,25 @@ export interface MaskDiagnostics {
  * Computes deep mask diagnostics before export:
  * - Foreground area before and after refinement
  * - Percentage of alpha pixels removed by refinement
- * - Connected-component count (components > 20px)
- * - Bounding box area and dimensions
- * - Largest component area
- * - Number of large interior holes (> 50px)
- * - Automated safety threshold: triggers rollback when refined area < 80% of initial area
+ * - Connected-component count
+ * - Small component count (area <= 120px)
+ * - Text-protected area and safety
+ * - Uncertain edge band area
+ * - Automated safety threshold: triggers rollback when refined area < 90% of initial area (10% drop limit)
+ *   or 95% in document mode (5% drop limit), or if large component disappears or text becomes transparent.
  */
 export function computeMaskDiagnostics(
   initialMask: Uint8ClampedArray | Uint8Array,
   refinedMask: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
-  maxDropRatio: number = 0.20
+  maxDropRatio: number = 0.10,
+  options?: {
+    mode?: string;
+    textProtectedMask?: Uint8ClampedArray | Uint8Array | null;
+    manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
+    trimap?: Uint8ClampedArray | Uint8Array | null;
+  }
 ): MaskDiagnostics {
   const totalPixels = width * height;
   const isInit4Ch = initialMask.length === totalPixels * 4;
@@ -1606,10 +1891,11 @@ export function computeMaskDiagnostics(
   const removedAreaPercentage =
     initialArea > 0 ? Math.round(Math.max(0, (1 - areaRetentionRatio) * 100) * 100) / 100 : 0;
 
-  // 1. Connected Components of refined foreground (> 128) using flood fill
+  // 1. Connected Components of refined foreground (> 128)
   const visited = new Uint8Array(totalPixels);
   let connectedComponentCount = 0;
   let largestComponentArea = 0;
+  let smallComponentCount = 0;
 
   const queue = new Int32Array(totalPixels);
 
@@ -1628,7 +1914,6 @@ export function computeMaskDiagnostics(
         const cy = Math.floor(cur / width);
         const cx = cur % width;
 
-        // 4 neighbors
         if (cx > 0) {
           const left = cur - 1;
           const leftA = isRef4Ch ? refinedMask[left * 4 + 3] : refinedMask[left];
@@ -1663,11 +1948,12 @@ export function computeMaskDiagnostics(
         }
       }
 
-      if (compSize > 20) {
-        connectedComponentCount++;
-        if (compSize > largestComponentArea) {
-          largestComponentArea = compSize;
-        }
+      connectedComponentCount++;
+      if (compSize > largestComponentArea) {
+        largestComponentArea = compSize;
+      }
+      if (compSize <= 120 && compSize >= 2) {
+        smallComponentCount++;
       }
     }
   }
@@ -1677,7 +1963,6 @@ export function computeMaskDiagnostics(
   let head = 0;
   let tail = 0;
 
-  // Enqueue all outer border background pixels
   for (let x = 0; x < width; x++) {
     const topIdx = x;
     const botIdx = (height - 1) * width + x;
@@ -1746,7 +2031,6 @@ export function computeMaskDiagnostics(
     }
   }
 
-  // Any background pixel (<= 128) where exteriorBg[i] === 0 is an interior hole!
   const holeVisited = new Uint8Array(totalPixels);
   let interiorHoleCount = 0;
 
@@ -1805,13 +2089,65 @@ export function computeMaskDiagnostics(
     }
   }
 
-  // 3. Excessive drop check: If refined area dropped by more than maxDropRatio (e.g. 20%)
-  const isAreaDropExcessive = initialArea > 100 && areaRetentionRatio < (1 - maxDropRatio);
-  const rollbackTriggered = isAreaDropExcessive;
+  // 3. Telemetry: text protected area and uncertain edge area
+  let textProtectedArea: number | undefined = undefined;
+  let textLossTriggered = false;
+  if (options?.textProtectedMask) {
+    let protCount = 0;
+    let protLost = 0;
+    for (let i = 0; i < totalPixels; i++) {
+      if (options.textProtectedMask[i] > 128) {
+        protCount++;
+        const refA = isRef4Ch ? refinedMask[i * 4 + 3] : refinedMask[i];
+        if (refA < 128) protLost++;
+      }
+    }
+    textProtectedArea = protCount;
+    if (protCount > 20 && protLost / protCount > 0.05) {
+      textLossTriggered = true;
+    }
+  }
+
+  let uncertainEdgeArea: number | undefined = undefined;
+  if (options?.trimap) {
+    let uncertCount = 0;
+    for (let i = 0; i < totalPixels; i++) {
+      if (options.trimap[i] === 128) uncertCount++;
+    }
+    uncertainEdgeArea = uncertCount;
+  }
+
+  // Manual keep check: If user painted keep areas and > 10% was removed
+  let keepLossTriggered = false;
+  if (options?.manualKeepMask) {
+    let keepCount = 0;
+    let keepLost = 0;
+    for (let i = 0; i < totalPixels; i++) {
+      if (options.manualKeepMask[i] > 128) {
+        keepCount++;
+        const refA = isRef4Ch ? refinedMask[i * 4 + 3] : refinedMask[i];
+        if (refA < 200) keepLost++;
+      }
+    }
+    if (keepCount > 20 && keepLost / keepCount > 0.10) {
+      keepLossTriggered = true;
+    }
+  }
+
+  // 4. Excessive drop check: 10% drop threshold (or 5% in document mode)
+  const isTextDoc =
+    options?.mode === "document_poster" ||
+    options?.mode === "whole_poster" ||
+    options?.mode === "document_text";
+  const effectiveMaxDrop = isTextDoc ? 0.05 : (maxDropRatio ?? 0.10);
+
+  const isAreaDropExcessive = initialArea > 100 && areaRetentionRatio < (1 - effectiveMaxDrop);
+  const rollbackTriggered = isAreaDropExcessive || textLossTriggered || keepLossTriggered;
   let warning: string | undefined = undefined;
 
   if (rollbackTriggered) {
-    warning = `⚠️ Refinement removed ${removedAreaPercentage.toFixed(1)}% of foreground (> 20%). Automatic safety rollback engaged to prevent over-cutting white lids/boxes.`;
+    warning =
+      "We kept the safer mask because edge refinement removed possible foreground details (Automatic safety rollback engaged).\nYou can refine it manually with Keep/Erase brush.";
   }
 
   return {
@@ -1821,6 +2157,9 @@ export function computeMaskDiagnostics(
     removedAreaPercentage,
     connectedComponentCount,
     largestComponentArea,
+    smallComponentCount,
+    textProtectedArea,
+    uncertainEdgeArea,
     boundingBox: {
       minX,
       minY,
@@ -1838,15 +2177,21 @@ export function computeMaskDiagnostics(
 }
 
 /**
- * Validates refined mask against initial mask. If area drop exceeds maxDropRatio (20%),
- * automatically reverts to initial mask to ensure white lids/shells are never lost.
+ * Validates refined mask against initial mask. If area drop exceeds maxDropRatio (default 10%, 5% for text),
+ * or text-protected details/keep strokes are lost, automatically reverts to initial mask.
  */
 export function applyAreaSafetyCheck(
   initialMask: Uint8ClampedArray | Uint8Array,
   refinedMask: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
-  maxDropRatio: number = 0.20
+  maxDropRatio: number = 0.10,
+  options?: {
+    mode?: string;
+    textProtectedMask?: Uint8ClampedArray | Uint8Array | null;
+    manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
+    trimap?: Uint8ClampedArray | Uint8Array | null;
+  }
 ): {
   safeMask: Uint8ClampedArray;
   diagnostics: MaskDiagnostics;
@@ -1857,7 +2202,8 @@ export function applyAreaSafetyCheck(
     refinedMask,
     width,
     height,
-    maxDropRatio
+    maxDropRatio,
+    options
   );
 
   let safeMask: Uint8ClampedArray;

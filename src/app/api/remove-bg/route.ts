@@ -108,8 +108,101 @@ export function validatePoints(
   return { valid: true, points };
 }
 
+export function getImageDimensions(
+  buffer: Uint8Array
+): { width: number; height: number } | null {
+  if (buffer.length < 24) return null;
+
+  // 1. PNG: magic bytes 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    const width = view.getUint32(16, false);
+    const height = view.getUint32(20, false);
+    return { width, height };
+  }
+
+  // 2. JPEG: magic bytes FF D8
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2;
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    while (offset < buffer.length - 8) {
+      if (buffer[offset] !== 0xff) {
+        offset++;
+        continue;
+      }
+      const marker = buffer[offset + 1];
+      // Baseline SOF0 (0xC0), Extended SOF1 (0xC1), Progressive SOF2 (0xC2)
+      if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+        const height = view.getUint16(offset + 5, false);
+        const width = view.getUint16(offset + 7, false);
+        return { width, height };
+      }
+      // Skip variable length marker
+      if (marker !== 0xd8 && marker !== 0xd9 && marker !== 0x00 && marker !== 0xff) {
+        const length = view.getUint16(offset + 2, false);
+        offset += 2 + length;
+      } else {
+        offset += 2;
+      }
+    }
+  }
+
+  // 3. WebP: magic bytes 'RIFF' .... 'WEBP'
+  if (
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    // VP8 lossy
+    if (buffer[12] === 0x56 && buffer[13] === 0x50 && buffer[14] === 0x38 && buffer[15] === 0x20) {
+      if (buffer.length >= 30) {
+        const width = (buffer[26] | ((buffer[27] & 0x3f) << 8));
+        const height = (buffer[28] | ((buffer[29] & 0x3f) << 8));
+        return { width, height };
+      }
+    }
+    // VP8L lossless
+    if (buffer[12] === 0x56 && buffer[13] === 0x50 && buffer[14] === 0x38 && buffer[15] === 0x4c) {
+      if (buffer.length >= 25 && buffer[20] === 0x2f) {
+        const b1 = buffer[21];
+        const b2 = buffer[22];
+        const b3 = buffer[23];
+        const b4 = buffer[24];
+        const width = 1 + (b1 | ((b2 & 0x3f) << 8));
+        const height = 1 + (((b2 >> 6) | (b3 << 2) | ((b4 & 0x0f) << 10)));
+        return { width, height };
+      }
+    }
+    // VP8X extended
+    if (buffer[12] === 0x56 && buffer[13] === 0x50 && buffer[14] === 0x38 && buffer[15] === 0x58) {
+      if (buffer.length >= 30) {
+        const width = 1 + (buffer[24] | (buffer[25] << 8) | (buffer[26] << 16));
+        const height = 1 + (buffer[27] | (buffer[28] << 8) | (buffer[29] << 16));
+        return { width, height };
+      }
+    }
+  }
+
+  return null;
+}
+
 export function validateBoxes(
-  rawBoxes: unknown
+  rawBoxes: unknown,
+  name = "boxes"
 ): { valid: boolean; boxes?: [number, number, number, number][]; error?: string } {
   if (rawBoxes === undefined || rawBoxes === null || rawBoxes === "") {
     return { valid: true, boxes: [] };
@@ -119,24 +212,24 @@ export function validateBoxes(
     try {
       parsed = JSON.parse(rawBoxes);
     } catch {
-      return { valid: false, error: "boxes must be a valid JSON array of [x1, y1, x2, y2]." };
+      return { valid: false, error: `${name} must be a valid JSON array of [x1, y1, x2, y2].` };
     }
   }
   if (!Array.isArray(parsed)) {
-    return { valid: false, error: "boxes must be an array of [x1, y1, x2, y2] bounding boxes." };
+    return { valid: false, error: `${name} must be an array of [x1, y1, x2, y2] bounding boxes.` };
   }
   const boxes: [number, number, number, number][] = [];
   for (let i = 0; i < parsed.length; i++) {
     const b = parsed[i];
     if (!Array.isArray(b) || b.length !== 4) {
-      return { valid: false, error: `boxes[${i}] must be a 4-element [x1, y1, x2, y2] array.` };
+      return { valid: false, error: `${name}[${i}] must be a 4-element [x1, y1, x2, y2] array.` };
     }
     const [x1, y1, x2, y2] = b;
     if ([x1, y1, x2, y2].some((v) => typeof v !== "number" || !Number.isFinite(v) || v < 0)) {
-      return { valid: false, error: `boxes[${i}] coordinates must be non-negative finite numbers.` };
+      return { valid: false, error: `${name}[${i}] coordinates must be non-negative finite numbers.` };
     }
     if (x2 < x1 || y2 < y1) {
-      return { valid: false, error: `boxes[${i}] has invalid bounds: [x2, y2] must be >= [x1, y1].` };
+      return { valid: false, error: `${name}[${i}] has invalid bounds: [x2, y2] must be >= [x1, y1].` };
     }
     boxes.push([x1, y1, x2, y2]);
   }
@@ -442,14 +535,21 @@ export async function POST(req: NextRequest) {
     "image/webp",
   ];
 
+  const startTime = performance.now();
   let imageBuffer: ArrayBuffer;
   let imageMime = "image/png";
   let fileName = "image.png";
-  let selectionMode = "whole_product";
+  let selectionMode = "preserve_all_foreground";
+  let quality = "balanced";
+  let background: string | undefined = undefined;
+  let isJsonResponseExpected = false;
   let positivePoints: [number, number][] = [];
   let negativePoints: [number, number][] = [];
   let boxes: [number, number, number, number][] = [];
+  let keepBoxes: [number, number, number, number][] = [];
+  let eraseBoxes: [number, number, number, number][] = [];
   let polygon: [number, number][] = [];
+  let inputDims: { width: number; height: number } | null = null;
 
   if (contentType.includes("application/json")) {
     let jsonBody: Record<string, unknown>;
@@ -485,7 +585,7 @@ export async function POST(req: NextRequest) {
     }
     negativePoints = negVal.points || [];
 
-    const boxVal = validateBoxes(jsonBody.boxes);
+    const boxVal = validateBoxes(jsonBody.boxes, "boxes");
     if (!boxVal.valid) {
       return NextResponse.json(
         { ok: false, code: "INVALID_COORDINATES", error: boxVal.error },
@@ -493,6 +593,24 @@ export async function POST(req: NextRequest) {
       );
     }
     boxes = boxVal.boxes || [];
+
+    const kbVal = validateBoxes(jsonBody.keepBoxes, "keepBoxes");
+    if (!kbVal.valid) {
+      return NextResponse.json(
+        { ok: false, code: "INVALID_COORDINATES", error: kbVal.error },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+    keepBoxes = kbVal.boxes || [];
+
+    const ebVal = validateBoxes(jsonBody.eraseBoxes, "eraseBoxes");
+    if (!ebVal.valid) {
+      return NextResponse.json(
+        { ok: false, code: "INVALID_COORDINATES", error: ebVal.error },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+    eraseBoxes = ebVal.boxes || [];
 
     const polyVal = validatePoints(jsonBody.polygon, "polygon");
     if (!polyVal.valid) {
@@ -505,6 +623,12 @@ export async function POST(req: NextRequest) {
 
     if (typeof jsonBody.mode === "string" && jsonBody.mode.trim()) {
       selectionMode = jsonBody.mode.trim();
+    }
+    if (typeof jsonBody.quality === "string" && jsonBody.quality.trim()) {
+      quality = jsonBody.quality.trim();
+    }
+    if (typeof jsonBody.background === "string" && jsonBody.background.trim()) {
+      background = jsonBody.background.trim();
     }
 
     // Check for maskPngBase64 oversized payload
@@ -519,99 +643,176 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Image URL validation
-    const rawImageUrl = typeof jsonBody.imageUrl === "string" ? jsonBody.imageUrl.trim() : "";
-    if (!rawImageUrl) {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "IMAGE_REQUIRED",
-          error: "imageUrl is required for JSON background removal requests.",
-        },
-        { status: 400, headers: { "Cache-Control": "no-store, private" } }
-      );
-    }
-
-    const urlCheck = validateImageUrl(rawImageUrl, isVercelProduction);
-    if (!urlCheck.ok) {
-      const isSsrf = (urlCheck.error || "").toLowerCase().includes("ssrf") || (urlCheck.error || "").toLowerCase().includes("private");
-      return NextResponse.json(
-        {
-          ok: false,
-          code: isSsrf ? "SSRF_BLOCKED" : "INVALID_IMAGE_URL",
-          error: urlCheck.error,
-        },
-        { status: 400, headers: { "Cache-Control": "no-store, private" } }
-      );
-    }
-
-    // Fetch image from approved URL with timeout
-    const fetchController = new AbortController();
-    const fetchTimeout = setTimeout(() => fetchController.abort(), 15000);
-    try {
-      const imgRes = await fetch(rawImageUrl, {
-        signal: fetchController.signal,
-        headers: { "User-Agent": "PLP-BackgroundRemover/2.0" },
-      });
-      if (!imgRes.ok) {
+    if (typeof jsonBody.imageBase64 === "string" && jsonBody.imageBase64.trim()) {
+      isJsonResponseExpected = true;
+      const rawBase64 = jsonBody.imageBase64.trim();
+      let base64Data = rawBase64;
+      let declaredMime = "";
+      const match = rawBase64.match(/^data:([^;]+);base64,([\s\S]*)$/);
+      if (match) {
+        declaredMime = match[1].toLowerCase();
+        base64Data = match[2];
+      }
+      const buf = Buffer.from(base64Data, "base64");
+      if (buf.length === 0) {
         return NextResponse.json(
-          {
-            ok: false,
-            code: "IMAGE_FETCH_FAILED",
-            error: `Failed to fetch image from imageUrl: HTTP ${imgRes.status}`,
-          },
+          { ok: false, code: "IMAGE_REQUIRED", error: "imageBase64 is empty (0 bytes)." },
           { status: 400, headers: { "Cache-Control": "no-store, private" } }
         );
       }
-      const ct = (imgRes.headers.get("content-type") || "").toLowerCase();
-      if (!allowedMimes.some((m) => ct.includes(m))) {
+      if (buf.length > config.maxUploadBytes) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "IMAGE_TOO_LARGE",
+            error: `Image size (${buf.length} bytes) exceeds maximum limit (${config.maxUploadBytes} bytes).`,
+          },
+          { status: 413, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+
+      let detectedMime = declaredMime;
+      if (!detectedMime || !allowedMimes.includes(detectedMime)) {
+        if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+          detectedMime = "image/png";
+        } else if (buf[0] === 0xff && buf[1] === 0xd8) {
+          detectedMime = "image/jpeg";
+        } else if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) {
+          detectedMime = "image/webp";
+        }
+      }
+      if (!allowedMimes.includes(detectedMime)) {
         return NextResponse.json(
           {
             ok: false,
             code: "UNSUPPORTED_MEDIA_TYPE",
-            error: `Unsupported media type '${ct || "unknown"}'. Only PNG, JPEG, and WebP are allowed.`,
+            error: `Unsupported media type '${detectedMime || "unknown"}'. Only PNG, JPEG, and WebP are allowed.`,
           },
           { status: 415, headers: { "Cache-Control": "no-store, private" } }
         );
       }
-      imageMime = ct;
-      imageBuffer = await imgRes.arrayBuffer();
-      fileName = rawImageUrl.split("/").pop()?.split("?")[0] || "image.png";
-    } catch {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "IMAGE_FETCH_FAILED",
-          error: fetchController.signal.aborted
-            ? "Image fetch timed out (15s)."
-            : "Failed to connect to imageUrl host.",
-        },
-        { status: 400, headers: { "Cache-Control": "no-store, private" } }
-      );
-    } finally {
-      clearTimeout(fetchTimeout);
-    }
 
-    if (!imageBuffer || imageBuffer.byteLength === 0) {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "IMAGE_REQUIRED",
-          error: "Image fetched from imageUrl is empty (0 bytes).",
-        },
-        { status: 400, headers: { "Cache-Control": "no-store, private" } }
-      );
-    }
+      imageMime = detectedMime;
+      imageBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+      inputDims = getImageDimensions(new Uint8Array(imageBuffer));
+      if (inputDims && (inputDims.width > 8000 || inputDims.height > 8000 || inputDims.width * inputDims.height > 50000000)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "DECOMPRESSION_BOMB",
+            error: "Image dimensions exceed maximum safe limit of 50MP or 8000x8000.",
+          },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+      fileName = "upload." + (detectedMime === "image/webp" ? "webp" : detectedMime === "image/jpeg" ? "jpg" : "png");
+    } else {
+      // Image URL validation
+      const rawImageUrl = typeof jsonBody.imageUrl === "string" ? jsonBody.imageUrl.trim() : "";
+      if (!rawImageUrl) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "IMAGE_REQUIRED",
+            error: "imageUrl or imageBase64 is required for JSON background removal requests.",
+          },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
 
-    if (imageBuffer.byteLength > config.maxUploadBytes) {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "IMAGE_TOO_LARGE",
-          error: `Image size (${imageBuffer.byteLength} bytes) exceeds maximum limit (${config.maxUploadBytes} bytes).`,
-        },
-        { status: 413, headers: { "Cache-Control": "no-store, private" } }
-      );
+      const urlCheck = validateImageUrl(rawImageUrl, isVercelProduction);
+      if (!urlCheck.ok) {
+        const isSsrf = (urlCheck.error || "").toLowerCase().includes("ssrf") || (urlCheck.error || "").toLowerCase().includes("private");
+        return NextResponse.json(
+          {
+            ok: false,
+            code: isSsrf ? "SSRF_BLOCKED" : "INVALID_IMAGE_URL",
+            error: urlCheck.error,
+          },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+
+      // Fetch image from approved URL with timeout
+      const fetchController = new AbortController();
+      const fetchTimeout = setTimeout(() => fetchController.abort(), 15000);
+      try {
+        const imgRes = await fetch(rawImageUrl, {
+          signal: fetchController.signal,
+          headers: { "User-Agent": "PLP-BackgroundRemover/2.0" },
+        });
+        if (!imgRes.ok) {
+          return NextResponse.json(
+            {
+              ok: false,
+              code: "IMAGE_FETCH_FAILED",
+              error: `Failed to fetch image from imageUrl: HTTP ${imgRes.status}`,
+            },
+            { status: 400, headers: { "Cache-Control": "no-store, private" } }
+          );
+        }
+        const ct = (imgRes.headers.get("content-type") || "").toLowerCase();
+        if (!allowedMimes.some((m) => ct.includes(m))) {
+          return NextResponse.json(
+            {
+              ok: false,
+              code: "UNSUPPORTED_MEDIA_TYPE",
+              error: `Unsupported media type '${ct || "unknown"}'. Only PNG, JPEG, and WebP are allowed.`,
+            },
+            { status: 415, headers: { "Cache-Control": "no-store, private" } }
+          );
+        }
+        imageMime = ct;
+        imageBuffer = await imgRes.arrayBuffer();
+        fileName = rawImageUrl.split("/").pop()?.split("?")[0] || "image.png";
+      } catch {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "IMAGE_FETCH_FAILED",
+            error: fetchController.signal.aborted
+              ? "Image fetch timed out (15s)."
+              : "Failed to connect to imageUrl host.",
+          },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      } finally {
+        clearTimeout(fetchTimeout);
+      }
+
+      if (!imageBuffer || imageBuffer.byteLength === 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "IMAGE_REQUIRED",
+            error: "Image fetched from imageUrl is empty (0 bytes).",
+          },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+
+      if (imageBuffer.byteLength > config.maxUploadBytes) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "IMAGE_TOO_LARGE",
+            error: `Image size (${imageBuffer.byteLength} bytes) exceeds maximum limit (${config.maxUploadBytes} bytes).`,
+          },
+          { status: 413, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+
+      inputDims = getImageDimensions(new Uint8Array(imageBuffer));
+      if (inputDims && (inputDims.width > 8000 || inputDims.height > 8000 || inputDims.width * inputDims.height > 50000000)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "DECOMPRESSION_BOMB",
+            error: "Image dimensions exceed maximum safe limit of 50MP or 8000x8000.",
+          },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
     }
   } else {
     // 2. Parse and validate multipart form data
@@ -719,7 +920,7 @@ export async function POST(req: NextRequest) {
 
     const rawBoxes = formData.get("boxes");
     if (rawBoxes) {
-      const boxVal = validateBoxes(rawBoxes);
+      const boxVal = validateBoxes(rawBoxes, "boxes");
       if (!boxVal.valid) {
         return NextResponse.json(
           { ok: false, code: "INVALID_COORDINATES", error: boxVal.error },
@@ -727,6 +928,30 @@ export async function POST(req: NextRequest) {
         );
       }
       boxes = boxVal.boxes || [];
+    }
+
+    const rawKeepBoxes = formData.get("keepBoxes");
+    if (rawKeepBoxes) {
+      const kbVal = validateBoxes(rawKeepBoxes, "keepBoxes");
+      if (!kbVal.valid) {
+        return NextResponse.json(
+          { ok: false, code: "INVALID_COORDINATES", error: kbVal.error },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+      keepBoxes = kbVal.boxes || [];
+    }
+
+    const rawEraseBoxes = formData.get("eraseBoxes");
+    if (rawEraseBoxes) {
+      const ebVal = validateBoxes(rawEraseBoxes, "eraseBoxes");
+      if (!ebVal.valid) {
+        return NextResponse.json(
+          { ok: false, code: "INVALID_COORDINATES", error: ebVal.error },
+          { status: 400, headers: { "Cache-Control": "no-store, private" } }
+        );
+      }
+      eraseBoxes = ebVal.boxes || [];
     }
 
     const rawPoly = formData.get("polygon");
@@ -746,9 +971,31 @@ export async function POST(req: NextRequest) {
       selectionMode = rawMode.trim();
     }
 
+    const rawQuality = formData.get("quality");
+    if (typeof rawQuality === "string" && rawQuality.trim()) {
+      quality = rawQuality.trim();
+    }
+
+    const rawBg = formData.get("background");
+    if (typeof rawBg === "string" && rawBg.trim()) {
+      background = rawBg.trim();
+    }
+
     imageMime = mimeType;
     imageBuffer = await imageFile.arrayBuffer();
     fileName = (imageFile as File).name || "image.png";
+
+    inputDims = getImageDimensions(new Uint8Array(imageBuffer));
+    if (inputDims && (inputDims.width > 8000 || inputDims.height > 8000 || inputDims.width * inputDims.height > 50000000)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "DECOMPRESSION_BOMB",
+          error: "Image dimensions exceed maximum safe limit of 50MP or 8000x8000.",
+        },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
   }
 
   // 5. Build worker target URL including refinement parameters
@@ -769,6 +1016,10 @@ export async function POST(req: NextRequest) {
   const imageBlob = new Blob([imageBuffer], { type: imageMime });
   forwardFormData.append("image", imageBlob, fileName);
   forwardFormData.append("mode", selectionMode);
+  forwardFormData.append("quality", quality);
+  if (background) {
+    forwardFormData.append("background", background);
+  }
   if (positivePoints.length > 0) {
     forwardFormData.append("positivePoints", JSON.stringify(positivePoints));
   }
@@ -777,6 +1028,12 @@ export async function POST(req: NextRequest) {
   }
   if (boxes.length > 0) {
     forwardFormData.append("boxes", JSON.stringify(boxes));
+  }
+  if (keepBoxes.length > 0) {
+    forwardFormData.append("keepBoxes", JSON.stringify(keepBoxes));
+  }
+  if (eraseBoxes.length > 0) {
+    forwardFormData.append("eraseBoxes", JSON.stringify(eraseBoxes));
   }
   if (polygon.length > 0) {
     forwardFormData.append("polygon", JSON.stringify(polygon));
@@ -865,6 +1122,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const upstreamModel =
+    workerRes.headers.get("X-Segmentation-Model") ||
+    "Remote Worker (rembg)";
+
   // 9. Validate worker response body
   const outputBuffer = await workerRes.arrayBuffer();
   if (!outputBuffer || outputBuffer.byteLength === 0) {
@@ -895,11 +1156,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 10. Deliver transparent cutout image with required headers
-  // Forward X-Segmentation-Model from the actual upstream worker response
-  const upstreamModel =
-    workerRes.headers.get("X-Segmentation-Model") ||
-    "Remote Worker (rembg)";
+  // 10. Deliver transparent cutout image with required headers (JSON or binary)
+  if (isJsonResponseExpected) {
+    const base64Str = Buffer.from(outputBuffer).toString("base64");
+    const mime = isWebp ? "image/webp" : "image/png";
+    const dims = getImageDimensions(new Uint8Array(outputBuffer)) || inputDims || { width: 0, height: 0 };
+    return NextResponse.json(
+      {
+        ok: true,
+        width: dims.width,
+        height: dims.height,
+        alphaPngBase64: `data:${mime};base64,${base64Str}`,
+        maskPngBase64: `data:${mime};base64,${base64Str}`,
+        quality,
+        timingsMs: {
+          total: Math.round(performance.now() - startTime),
+          inference: Math.round(performance.now() - startTime),
+        },
+        warnings: [],
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, private",
+          "X-Processing-Source": "Remote Worker",
+          "X-Segmentation-Model": upstreamModel,
+          "X-Selection-Mode": selectionMode,
+          "X-Request-ID": requestId,
+        },
+      }
+    );
+  }
 
   return new Response(outputBuffer, {
     status: 200,
