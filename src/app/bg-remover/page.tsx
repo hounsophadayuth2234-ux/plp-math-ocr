@@ -350,8 +350,12 @@ export default function BgRemoverPage() {
     const startTime = performance.now();
     if (!imageFile) return;
 
-    if (mode === "worker" && !isWorkerConfigured) {
-      setError("Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។ សូមប្រើ Browser AI ជំនួសវិញ។");
+    if (mode === "worker" && (!isWorkerConfigured || workerStatus === "unavailable")) {
+      setError(
+        workerStatus === "unavailable"
+          ? `Remote Worker មិនអាចភ្ជាប់បានទេ (OFFLINE / UNAVAILABLE): ${workerError || "Connection timed out"}។ សូមប្រើ Browser AI ជំនួសវិញ។`
+          : "Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។ សូមប្រើ Browser AI ជំនួសវិញ。"
+      );
       return;
     }
 
@@ -1348,7 +1352,7 @@ export default function BgRemoverPage() {
                     !isWorkerConfigured
                       ? "Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។"
                       : workerStatus === "unavailable"
-                      ? `Remote Worker មិនអាចភ្ជាប់បាន (${workerError || "Offline"})`
+                      ? `Remote Worker មិនអាចភ្ជាប់បានទេ (OFFLINE / UNAVAILABLE): ${workerError || "Offline"}`
                       : `Remote Worker Microservice (${workerModel || "Online"})`
                   }
                 >
@@ -1370,9 +1374,9 @@ export default function BgRemoverPage() {
                         ) : workerStatus === "checking" ? (
                           <span className="text-amber-400 animate-pulse">⏳ កំពុងពិនិត្យ...</span>
                         ) : workerStatus === "ready" ? (
-                          <span className="text-emerald-400">🟢 ត្រៀមរួចរាល់</span>
+                          <span className="text-emerald-400">🟢 ត្រៀមរួចរាល់ (ONLINE)</span>
                         ) : workerStatus === "unavailable" ? (
-                          <span className="text-rose-400">🔴 មិនអាចភ្ជាប់បាន</span>
+                          <span className="text-rose-400 font-bold">🔴 OFFLINE / UNAVAILABLE</span>
                         ) : (
                           <span className="text-cyan-400">⚙️ បានកំណត់</span>
                         )}
@@ -1514,11 +1518,11 @@ export default function BgRemoverPage() {
                   type="button"
                   data-testid="run-remote-worker-btn"
                   onClick={() => handleRunSegmentation("worker")}
-                  disabled={!imageFile || isProcessing || !isWorkerConfigured}
+                  disabled={!imageFile || isProcessing || !isWorkerConfigured || workerStatus === "unavailable"}
                   className={`min-h-[48px] group relative w-full overflow-hidden rounded-none border p-3 text-left transition-all duration-200 active:scale-[0.98] font-mono ${
                     isProcessing && processingMode === "worker"
                       ? "pointer-events-none opacity-80 border-purple-400 bg-purple-950/50"
-                      : !imageFile || !isWorkerConfigured
+                      : !imageFile || !isWorkerConfigured || workerStatus === "unavailable"
                       ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50"
                       : "border-purple-400 bg-gradient-to-r from-slate-900 via-slate-900/90 to-purple-950/40 shadow-[0_0_20px_rgba(168,85,247,0.2)] hover:border-purple-300 ring-1 ring-purple-400/40"
                   }`}
@@ -1531,19 +1535,27 @@ export default function BgRemoverPage() {
                       <div>
                         <div className="text-xs font-black uppercase tracking-wider text-white font-mono flex items-center gap-2">
                           <span>ដំណើរការ REMOTE WORKER</span>
-                          <span className="text-[9px] rounded-none bg-purple-950 border border-purple-500/40 text-purple-300 px-1 py-0.2">
-                            SERVER
+                          <span className={`text-[9px] rounded-none px-1 py-0.2 ${
+                            workerStatus === "unavailable"
+                              ? "bg-rose-950 border border-rose-500/40 text-rose-300"
+                              : "bg-purple-950 border border-purple-500/40 text-purple-300"
+                          }`}>
+                            {workerStatus === "unavailable" ? "OFFLINE / UNAVAILABLE" : "SERVER"}
                           </span>
                         </div>
                         <span className="text-[10px] text-purple-300/80 font-mono">
-                          បញ្ជូនទៅកាន់ Remote AI Server តាមរយៈសុវត្ថិភាព Proxy
+                          {workerStatus === "unavailable"
+                            ? "Remote Worker មិនអាចភ្ជាប់បានទេ — សូមជ្រើសរើស Browser AI ជំនួសវិញ"
+                            : "បញ្ជូនទៅកាន់ Remote AI Server តាមរយៈសុវត្ថិភាព Proxy"}
                         </span>
                       </div>
                     </div>
                     {isProcessing && processingMode === "worker" ? (
                       <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
                     ) : (
-                      <span className="text-[10px] font-bold text-purple-400 font-mono">[START]</span>
+                      <span className="text-[10px] font-bold text-purple-400 font-mono">
+                        {workerStatus === "unavailable" ? "[OFFLINE]" : "[START]"}
+                      </span>
                     )}
                   </div>
                 </button>
@@ -1730,39 +1742,55 @@ export default function BgRemoverPage() {
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-[10px] uppercase text-slate-400 font-mono">
                     <span>REMOTE WORKER SERVICE</span>
-                    {isWorkerConfigured ? (
-                      <span className="text-emerald-400">ONLINE</span>
-                    ) : (
+                    {!isWorkerConfigured ? (
                       <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5 border border-slate-700">
                         🔒 NOT CONFIGURED
                       </span>
+                    ) : workerStatus === "checking" ? (
+                      <span className="text-amber-400 animate-pulse text-[10px]">⏳ CHECKING...</span>
+                    ) : workerStatus === "ready" ? (
+                      <span className="text-emerald-400 text-[10px]">🟢 ONLINE / READY</span>
+                    ) : workerStatus === "unavailable" ? (
+                      <span className="text-rose-400 text-[10px] font-bold">🔴 OFFLINE / UNAVAILABLE</span>
+                    ) : (
+                      <span className="text-cyan-400 text-[10px]">⚙️ CONFIGURED</span>
                     )}
                   </div>
                   <button
                     type="button"
-                    disabled={!isWorkerConfigured || isProcessing}
+                    disabled={!isWorkerConfigured || isProcessing || workerStatus === "unavailable"}
                     onClick={() => {
                       if (!isWorkerConfigured) {
                         setError("Remote Worker មិនទាន់កំណត់ក្នុង Settings (BACKGROUND_REMOVAL_WORKER_URL)។");
                         return;
                       }
+                      if (workerStatus === "unavailable") {
+                        setError(`Remote Worker មិនអាចភ្ជាប់បានទេ (OFFLINE / UNAVAILABLE): ${workerError || "Connection timed out"}។ សូមប្រើ Browser AI ជំនួសវិញ។`);
+                        return;
+                      }
                       handleRunSegmentation("worker");
                     }}
                     className={`min-h-[44px] w-full flex items-center justify-between border p-2 text-left transition-all ${
-                      !isWorkerConfigured
+                      !isWorkerConfigured || workerStatus === "unavailable"
                         ? "opacity-50 cursor-not-allowed border-slate-800 bg-slate-900/40 text-slate-500"
                         : "border-purple-400/60 bg-purple-950/30 text-purple-200 hover:bg-purple-950/60"
                     }`}
                   >
                     <span className="text-[11px] font-mono">
-                      {isWorkerConfigured ? "RUN REMOTE WORKER" : "Remote Worker (មិនទាន់កំណត់)"}
+                      {!isWorkerConfigured
+                        ? "Remote Worker (មិនទាន់កំណត់)"
+                        : workerStatus === "unavailable"
+                        ? "Remote Worker (OFFLINE / UNAVAILABLE)"
+                        : "RUN REMOTE WORKER"}
                     </span>
                     <Server className="h-3.5 w-3.5 text-slate-500" />
                   </button>
                   <p className="text-[9.5px] text-slate-500 leading-relaxed font-mono">
                     {!isWorkerConfigured
                       ? "Remote Worker មិនទាន់កំណត់ក្នុង Settings។ Browser AI ដំណើរការក្នុងម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ និងមានសុវត្ថិភាពខ្ពស់។"
-                      : "សេវាកម្ម Remote Worker ត្រូវបានកំណត់ក្នុង Settings។"}
+                      : workerStatus === "unavailable"
+                      ? `Remote Worker មិនអាចភ្ជាប់បានទេ (OFFLINE / UNAVAILABLE): ${workerError || "Connection timed out"}។ សូមប្រើ Browser AI ជំនួសវិញ។`
+                      : "សេវាកម្ម Remote Worker ត្រូវបានកំណត់ក្នុង Settings និងត្រៀមរួចរាល់។"}
                   </p>
                 </div>
 
