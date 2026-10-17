@@ -14,6 +14,7 @@ export function MechanicalCyberBackground({
   return (
     <div
       aria-hidden="true"
+      data-testid="cyber-bg-canvas"
       className="pointer-events-none absolute inset-0 overflow-hidden z-0 select-none"
     >
       {/* ── Layer 1: Precision Blueprint / Animated Technical Grid ── */}

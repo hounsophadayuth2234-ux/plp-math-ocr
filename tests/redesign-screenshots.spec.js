@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 const PREVIEW_URL =
   process.env.PREVIEW_URL ||
-  'https://ai-toolkit-nrc2a1yrk-hounsophadayuth2234-6445s-projects.vercel.app/bg-remover';
+  'https://ai-toolkit-ce49lrxrh-hounsophadayuth2234-6445s-projects.vercel.app/bg-remover';
 const FIXTURES_DIR = path.resolve('tests/fixtures');
 const SCREENSHOTS_DIR = path.resolve('test-results/redesign-screenshots');
 
@@ -22,6 +22,22 @@ test.describe('AI Background Studio — UI/UX Redesign Visual Verification', () 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(PREVIEW_URL, { waitUntil: 'load', timeout: 60000 });
     await page.waitForTimeout(1000);
+
+    // Verify Untouched Sidebar Elements
+    await expect(page.locator('text=PLP Math Content').first()).toBeVisible();
+    await expect(page.locator('text=DYT ECOSYSTEM').first()).toBeVisible();
+    await expect(page.locator('text=Workspace').first()).toBeVisible();
+    await expect(page.locator('text=Active Modules').first()).toBeVisible();
+    await expect(page.locator('aside a[href="/bg-remover"]').first()).toBeVisible();
+    await expect(page.locator('text=Modules 03–04').first()).toBeVisible();
+
+    // Verify Mechanical Cyber Technology Background & Workstation Controls
+    await expect(page.locator('[data-testid="cyber-bg-canvas"]')).toBeVisible();
+    await expect(page.locator('text=WORKSTATION // UNIT-02').first()).toBeVisible();
+    await expect(page.locator('text=DROP IMAGE INTO SCANNER').first()).toBeVisible();
+    await expect(page.locator('text=or choose a file from your device').first()).toBeVisible();
+    await expect(page.locator('text=PNG · JPG · WEBP · MAX 12MB').first()).toBeVisible();
+    await expect(page.locator('text=PRECISION INSPECTION CHAMBER // STANDBY').first()).toBeVisible();
 
     // Verify title and nav elements
     await expect(page.locator('text=AI Background Studio').first()).toBeVisible();
