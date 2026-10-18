@@ -1,9 +1,89 @@
+@import url('https://fonts.googleapis.com/css2?family=Battambang:wght@400;700&family=Hanuman:wght@400;700&family=Kantumruy+Pro:ital,wght@0,400..700;1,400..700&family=Noto+Sans+Khmer:wght@400;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
   --background: #030712;
   --foreground: #f0f6fc;
 }
+
+/* Studio Font Family Utility Classes */
+.font-kantumruy {
+  font-family: 'Kantumruy Pro', var(--font-geist-sans), sans-serif !important;
+}
+.font-battambang {
+  font-family: 'Battambang', var(--font-geist-sans), sans-serif !important;
+}
+.font-hanuman {
+  font-family: 'Hanuman', Georgia, serif !important;
+}
+.font-noto-khmer {
+  font-family: 'Noto Sans Khmer', var(--font-geist-sans), sans-serif !important;
+}
+.font-mono-tech {
+  font-family: 'JetBrains Mono', var(--font-geist-mono), monospace !important;
+}
+
+/* Studio Theme Surface Containers */
+[data-studio-theme="cyber-dark"] {
+  --studio-bg: #030712;
+  --studio-panel: #0b1120;
+  --studio-border: rgba(30, 41, 59, 0.9);
+  --studio-accent: #00f0ff;
+  --studio-accent-bg: rgba(0, 240, 255, 0.12);
+  --studio-accent-border: rgba(0, 240, 255, 0.4);
+  --studio-text: #f0f6fc;
+}
+
+[data-studio-theme="pitch-black"] {
+  --studio-bg: #000000;
+  --studio-panel: #0a0a0a;
+  --studio-border: rgba(38, 38, 38, 0.9);
+  --studio-accent: #10b981;
+  --studio-accent-bg: rgba(16, 185, 129, 0.12);
+  --studio-accent-border: rgba(16, 185, 129, 0.4);
+  --studio-text: #f9fafb;
+}
+
+[data-studio-theme="deep-emerald"] {
+  --studio-bg: #021810;
+  --studio-panel: #04291c;
+  --studio-border: rgba(6, 78, 59, 0.85);
+  --studio-accent: #10b981;
+  --studio-accent-bg: rgba(16, 185, 129, 0.15);
+  --studio-accent-border: rgba(16, 185, 129, 0.45);
+  --studio-text: #ecfdf5;
+}
+
+[data-studio-theme="midnight-purple"] {
+  --studio-bg: #0c0418;
+  --studio-panel: #16082e;
+  --studio-border: rgba(88, 28, 135, 0.85);
+  --studio-accent: #c084fc;
+  --studio-accent-bg: rgba(192, 132, 252, 0.15);
+  --studio-accent-border: rgba(192, 132, 252, 0.45);
+  --studio-text: #faf5ff;
+}
+
+[data-studio-theme="ocean-blue"] {
+  --studio-bg: #021226;
+  --studio-panel: #041e40;
+  --studio-border: rgba(14, 116, 144, 0.85);
+  --studio-accent: #38bdf8;
+  --studio-accent-bg: rgba(56, 189, 248, 0.15);
+  --studio-accent-border: rgba(56, 189, 248, 0.45);
+  --studio-text: #f0f9ff;
+}
+
+[data-studio-theme="clean-light"] {
+  --studio-bg: #f8fafc;
+  --studio-panel: #ffffff;
+  --studio-border: rgba(203, 213, 225, 0.95);
+  --studio-accent: #0284c7;
+  --studio-accent-bg: rgba(2, 132, 199, 0.1);
+  --studio-accent-border: rgba(2, 132, 199, 0.4);
+  --studio-text: #0f172a;
+}
+
 
 @theme inline {
   --color-background: var(--background);

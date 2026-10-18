@@ -11,6 +11,8 @@ import {
   generateQuadMask,
   warpPerspectiveQuad,
   applyColorDehalo,
+  detectDominantBackgroundColor,
+  chokeAndFeatherAlphaMask,
   detectContainerAndContents,
   applyInteractivePromptsToMask,
   generateTrimap,
@@ -323,7 +325,9 @@ export async function refineAndDecontaminateImage(
         const enableDecontam = (params.decontaminationRadius ?? 1) > 0;
         const radius = Math.max(1, Math.min(2, Math.round(params.decontaminationRadius || 1)));
 
-        // Process boundary pixels with conservative local decontamination
+        const domBg = detectDominantBackgroundColor(sPixels, w, h, rawAlpha);
+
+        // Process boundary pixels with conservative local decontamination & chroma defringing
         for (let y = 0; y < h; y++) {
           const yOffset = y * w;
           for (let x = 0; x < w; x++) {
@@ -421,6 +425,29 @@ export async function refineAndDecontaminateImage(
               cleanB = Math.round(fgB / fgCount);
             }
 
+            // Automatic Chroma Spill Suppression (Defringe)
+            if (domBg.isChromaSpill) {
+              if (domBg.dominantChannel === "b") {
+                const maxAllowedB = Math.max(cleanR, cleanG) * 1.05 + 4;
+                if (cleanB > maxAllowedB) {
+                  const spill = cleanB - maxAllowedB;
+                  cleanB = Math.max(0, Math.min(255, Math.round(cleanB - spill * 0.92)));
+                }
+              } else if (domBg.dominantChannel === "g") {
+                const maxAllowedG = Math.max(cleanR, cleanB) * 1.05 + 4;
+                if (cleanG > maxAllowedG) {
+                  const spill = cleanG - maxAllowedG;
+                  cleanG = Math.max(0, Math.min(255, Math.round(cleanG - spill * 0.92)));
+                }
+              } else if (domBg.dominantChannel === "r") {
+                const maxAllowedR = Math.max(cleanG, cleanB) * 1.05 + 4;
+                if (cleanR > maxAllowedR) {
+                  const spill = cleanR - maxAllowedR;
+                  cleanR = Math.max(0, Math.min(255, Math.round(cleanR - spill * 0.92)));
+                }
+              }
+            }
+
             outPixels[pIdx] = cleanR;
             outPixels[pIdx + 1] = cleanG;
             outPixels[pIdx + 2] = cleanB;
@@ -428,7 +455,13 @@ export async function refineAndDecontaminateImage(
           }
         }
 
-        const alphaMaskDataUrl = createAlphaMaskDataUrl(refinedAlpha, w, h);
+        // Apply inward 1px–2px alpha choke and smooth boundary feathering
+        const finalAlpha = chokeAndFeatherAlphaMask(refinedAlpha, w, h, 1.2, 0.8);
+        for (let i = 0; i < totalPixels; i++) {
+          outPixels[i * 4 + 3] = finalAlpha[i];
+        }
+
+        const alphaMaskDataUrl = createAlphaMaskDataUrl(finalAlpha, w, h);
         const outImageData = new ImageData(outPixels, w, h);
         srcCtx.putImageData(outImageData, 0, 0);
 
@@ -439,7 +472,7 @@ export async function refineAndDecontaminateImage(
             resolve({
               refinedBlob: blob || rawMaskBlob,
               alphaMaskUrl: alphaMaskDataUrl,
-              alphaMaskBuffer: refinedAlpha,
+              alphaMaskBuffer: finalAlpha,
               sourceImageData: srcData,
               width: w,
               height: h,
@@ -1687,23 +1720,51 @@ export async function refineAlphaMattingWithMask(
     }
   );
 
-  // 3b. Controlled Color Decontamination & Dehalo pass on boundary band
+  // 3b. Automatic Background Color Decontamination & Alpha Choke/Erosion with smooth feathering
+  const isPortraitMode =
+    !options?.mode ||
+    options.mode === "person" ||
+    options.mode === "person_only" ||
+    options.mode === "person_text_only" ||
+    options.mode === "person_plus_text" ||
+    options.mode === "preserve_all_foreground";
+
+  let finalMask = safeMask;
+  if (isPortraitMode && !diagnostics.rollbackTriggered && options?.edgeQuality !== "fast" && quality !== "fast") {
+    finalMask = chokeAndFeatherAlphaMask(safeMask, w, h, 1.2, 0.8);
+    // Ensure positive manual keep selections strictly preserved at 255
+    if (options?.manualKeepMask) {
+      for (let i = 0; i < totalPixels; i++) {
+        if (options.manualKeepMask[i] > 128) {
+          finalMask[i] = 255;
+        }
+      }
+    }
+    // If person_text_only, keep text strokes intact
+    if (options?.mode === "person_text_only" || options?.mode === "person_plus_text") {
+      const textStrokes = extractTextStrokeMask(sourceImageData.data, w, h);
+      for (let i = 0; i < totalPixels; i++) {
+        if (textStrokes.textStrokeMask[i] > 128 && safeMask[i] > 0) {
+          finalMask[i] = safeMask[i];
+        }
+      }
+    }
+  } else if (options?.manualKeepMask) {
+    for (let i = 0; i < totalPixels; i++) {
+      if (options.manualKeepMask[i] > 128) {
+        finalMask[i] = 255;
+      }
+    }
+  }
+
+  // 3c. Controlled Color Decontamination & Dehalo pass on boundary band
   const decontaminatedRgb = applyColorDehalo(
     sourceImageData.data,
-    safeMask,
+    finalMask,
     w,
     h,
     trimapRadius
   );
-
-  // Ensure positive manual keep selections strictly preserved at 255
-  if (options?.manualKeepMask) {
-    for (let i = 0; i < totalPixels; i++) {
-      if (options.manualKeepMask[i] > 128) {
-        safeMask[i] = 255;
-      }
-    }
-  }
 
   const tEncStart = performance.now();
   let transparentBlob: Blob;
@@ -1723,7 +1784,7 @@ export async function refineAlphaMattingWithMask(
 
     for (let i = 0; i < totalPixels; i++) {
       const pIdx = i * 4;
-      const a = safeMask[i];
+      const a = finalMask[i];
       outPixels[pIdx] = decontaminatedRgb[pIdx];
       outPixels[pIdx + 1] = decontaminatedRgb[pIdx + 1];
       outPixels[pIdx + 2] = decontaminatedRgb[pIdx + 2];
@@ -1739,7 +1800,7 @@ export async function refineAlphaMattingWithMask(
     });
 
     transparentUrl = URL.createObjectURL(transparentBlob);
-    alphaMaskUrl = createAlphaMaskDataUrl(safeMask, w, h);
+    alphaMaskUrl = createAlphaMaskDataUrl(finalMask, w, h);
   } else {
     transparentBlob = new Blob([], { type: "image/png" });
   }
@@ -1752,7 +1813,7 @@ export async function refineAlphaMattingWithMask(
     transparentBlob,
     transparentUrl,
     alphaMaskUrl,
-    alphaMaskBuffer: safeMask,
+    alphaMaskBuffer: finalMask,
     sourceImageData,
     width: w,
     height: h,

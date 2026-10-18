@@ -34,7 +34,7 @@ import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import { recordExecutionTelemetry } from "@/lib/hardware-diagnostics";
-import { BgStudioNav } from "@/components/bg-remover/BgStudioNav";
+import { BgStudioNav, StudioFont, StudioTheme } from "@/components/bg-remover/BgStudioNav";
 import { BgStudioHero } from "@/components/bg-remover/BgStudioHero";
 import { BgStudioSettingsModal } from "@/components/bg-remover/BgStudioSettingsModal";
 import { BgStudioHelpModal } from "@/components/bg-remover/BgStudioHelpModal";
@@ -101,10 +101,48 @@ export default function BgRemoverPage() {
   const [audioMuted, setAudioMuted] = useState(() => cyberAudio.isMuted());
   const [audioVolume, setAudioVolume] = useState(() => cyberAudio.getVolume());
 
-  // Redesign UI State: Modals & Theme
+  // Redesign UI State: Modals, Theme & Fonts
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light" | "system">("dark");
+  const [studioFont, setStudioFont] = useState<StudioFont>("font-kantumruy");
+  const [studioTheme, setStudioTheme] = useState<StudioTheme>("cyber-dark");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedFont = localStorage.getItem("plp_studio_font") as StudioFont | null;
+        if (savedFont) setStudioFont(savedFont);
+        const savedTheme = localStorage.getItem("plp_studio_theme") as StudioTheme | null;
+        if (savedTheme) setStudioTheme(savedTheme);
+      } catch {}
+    }
+  }, []);
+
+  const handleChangeFont = (font: StudioFont) => {
+    setStudioFont(font);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("plp_studio_font", font);
+      } catch {}
+    }
+  };
+
+  const handleChangeStudioTheme = (newTheme: StudioTheme) => {
+    setStudioTheme(newTheme);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("plp_studio_theme", newTheme);
+      } catch {}
+      if (newTheme === "clean-light") {
+        setTheme("light");
+        document.documentElement.classList.remove("dark");
+      } else {
+        setTheme("dark");
+        document.documentElement.classList.add("dark");
+      }
+    }
+  };
 
   const handleToggleTheme = () => {
     setTheme((prev) => {
@@ -112,8 +150,10 @@ export default function BgRemoverPage() {
       if (typeof document !== "undefined") {
         if (next === "light") {
           document.documentElement.classList.remove("dark");
+          setStudioTheme("clean-light");
         } else {
           document.documentElement.classList.add("dark");
+          setStudioTheme("cyber-dark");
         }
       }
       return next;
@@ -802,7 +842,11 @@ export default function BgRemoverPage() {
   ];
 
   return (
-    <div className="relative space-y-5 font-mono text-slate-100" data-app-state={manualState}>
+    <div
+      className={`relative space-y-5 text-slate-100 transition-colors duration-300 ${studioFont}`}
+      data-app-state={manualState}
+      data-studio-theme={studioTheme}
+    >
       {/* ── Workstation Command Deck Instrument Header ── */}
       <div className="relative z-10">
         <BgStudioNav
@@ -813,6 +857,10 @@ export default function BgRemoverPage() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenHelp={() => setIsHelpOpen(true)}
           isProcessing={isProcessing}
+          activeFont={studioFont}
+          onChangeFont={handleChangeFont}
+          activeStudioTheme={studioTheme}
+          onChangeStudioTheme={handleChangeStudioTheme}
         />
       </div>
 
@@ -821,208 +869,6 @@ export default function BgRemoverPage() {
         <BgStudioHero />
       </div>
 
-      {/* ── Calibration & Pipeline Workflow Rail ── */}
-      <div
-        data-testid="workflow-breadcrumb"
-        className="relative z-10 w-full border border-slate-800/90 bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-950 p-3.5 font-mono text-xs shadow-xl"
-      >
-        {/* Corner mechanical brackets */}
-        <div className="pointer-events-none absolute top-0 left-0 h-2.5 w-2.5 border-t-2 border-l-2 border-cyan-400" />
-        <div className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 border-t-2 border-r-2 border-cyan-400" />
-        <div className="pointer-events-none absolute bottom-0 left-0 h-2.5 w-2.5 border-b-2 border-l-2 border-cyan-400" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-cyan-400" />
-
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2.5 text-[11px]">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 bg-cyan-400 animate-pulse" />
-            <span className="font-bold text-slate-300 uppercase tracking-wider font-mono">
-              {"//"} PIPELINE: 01.AI MASK → 02.USER CORRECTION → 03.PREVIEWS → 04.EDGE MATTING → 05.COLOR COMPOSITE → 06.EXPORT
-            </span>
-          </div>
-          <span
-            className="bg-cyan-950/90 border border-cyan-500/50 text-cyan-300 px-2.5 py-0.5 font-bold uppercase text-[10px] tracking-wider"
-            data-testid="current-state-badge"
-          >
-            CALIBRATION STATE: {manualState.toUpperCase()}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" data-testid="state-tracker-bar">
-          {/* Step 1: AI Initial Mask */}
-          <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
-              manualState === "generating_initial_mask"
-                ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
-                : cachedResult
-                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
-                : "border-slate-800 bg-slate-900/60 text-slate-400"
-            }`}
-          >
-            <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
-                manualState === "generating_initial_mask"
-                  ? "bg-amber-400 text-black animate-pulse"
-                  : cachedResult
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                  : "bg-slate-800 text-slate-400"
-              }`}
-            >
-              1
-            </span>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold leading-tight truncate">
-                AI Initial Mask
-              </div>
-              <div className="text-[9px] text-slate-400 truncate">
-                ម៉ាស់ដំបូងពី AI
-              </div>
-            </div>
-          </div>
-
-          {/* Step 2: Keep/Erase Correction */}
-          <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
-              manualState === "mask_editing"
-                ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
-                : cachedResult
-                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
-                : "border-slate-800 bg-slate-900/60 text-slate-400"
-            }`}
-          >
-            <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
-                manualState === "mask_editing"
-                  ? "bg-cyan-400 text-black animate-pulse"
-                  : cachedResult
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                  : "bg-slate-800 text-slate-400"
-              }`}
-            >
-              2
-            </span>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold leading-tight truncate">
-                Keep/Erase Edit
-              </div>
-              <div className="text-[9px] text-slate-400 truncate">
-                កែសម្រួលដោយដៃ
-              </div>
-            </div>
-          </div>
-
-          {/* Step 3: Mask Preview */}
-          <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
-              cachedResult
-                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
-                : "border-slate-800 bg-slate-900/60 text-slate-400"
-            }`}
-          >
-            <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
-                cachedResult
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                  : "bg-slate-800 text-slate-400"
-              }`}
-            >
-              3
-            </span>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold leading-tight truncate">
-                Mask Preview
-              </div>
-              <div className="text-[9px] text-slate-400 truncate">
-                មើលម៉ាស់ 7 របៀប
-              </div>
-            </div>
-          </div>
-
-          {/* Step 4: Optional Edge Matting */}
-          <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
-              manualState === "refining_edges"
-                ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
-                : cachedResult
-                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
-                : "border-slate-800 bg-slate-900/60 text-slate-400"
-            }`}
-          >
-            <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
-                manualState === "refining_edges"
-                  ? "bg-purple-400 text-black animate-pulse"
-                  : cachedResult
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                  : "bg-slate-800 text-slate-400"
-              }`}
-            >
-              4
-            </span>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold leading-tight truncate">
-                Optional Matting
-              </div>
-              <div className="text-[9px] text-slate-400 truncate">
-                សម្រួលគែម (Off ស្រេច)
-              </div>
-            </div>
-          </div>
-
-          {/* Step 5: Color Composite */}
-          <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
-              cachedResult
-                ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
-                : "border-slate-800 bg-slate-900/60 text-slate-400"
-            }`}
-          >
-            <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
-                cachedResult
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                  : "bg-slate-800 text-slate-400"
-              }`}
-            >
-              5
-            </span>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold leading-tight truncate">
-                Color Composite
-              </div>
-              <div className="text-[9px] text-slate-400 truncate">
-                ផ្គុំពណ៌ផ្ទៃខាងក្រោយ
-              </div>
-            </div>
-          </div>
-
-          {/* Step 6: Export */}
-          <div
-            className={`min-h-[44px] flex items-center gap-2 p-2 rounded-none border transition-all font-mono ${
-              manualState === "ready_to_export"
-                ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
-                : "border-slate-800 bg-slate-900/60 text-slate-400"
-            }`}
-          >
-            <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-none font-bold text-xs ${
-                manualState === "ready_to_export"
-                  ? "bg-emerald-400 text-black"
-                  : "bg-slate-800 text-slate-400"
-              }`}
-            >
-              6
-            </span>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold leading-tight truncate">
-                Export PNG
-              </div>
-              <div className="text-[9px] text-slate-400 truncate">
-                ទាញយករូបថ្លា/ពណ៌
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── Main Control Console ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

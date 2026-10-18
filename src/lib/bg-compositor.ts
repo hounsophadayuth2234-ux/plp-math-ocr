@@ -701,6 +701,112 @@ export function warpPerspectiveQuad(
  * - Only modifies the RGB color of edge pixels in the narrow boundary band.
  * - Alpha mask transparency values are NEVER modified.
  */
+export interface DominantBgColor {
+  r: number;
+  g: number;
+  b: number;
+  isChromaSpill: boolean;
+  dominantChannel: "r" | "g" | "b" | "none";
+  saturation: number;
+}
+
+/**
+ * Detects the dominant background color from image corners and perimeter borders.
+ * Highly sensitive to colored studio backdrops (e.g. solid blue, green screen, red studio).
+ */
+export function detectDominantBackgroundColor(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  alphaMask?: Uint8ClampedArray | Uint8Array | null
+): DominantBgColor {
+  let totalR = 0;
+  let totalG = 0;
+  let totalB = 0;
+  let count = 0;
+
+  const isMask4Ch = alphaMask ? alphaMask.length === width * height * 4 : false;
+  const cornerFraction = 0.08;
+  const cornerW = Math.max(3, Math.floor(width * cornerFraction));
+  const cornerH = Math.max(3, Math.floor(height * cornerFraction));
+
+  const samplePixel = (x: number, y: number) => {
+    const idx = y * width + x;
+    if (alphaMask) {
+      const a = isMask4Ch ? alphaMask[idx * 4 + 3] : alphaMask[idx];
+      if (a > 60) return;
+    }
+    const pIdx = idx * 4;
+    totalR += sourceRgba[pIdx];
+    totalG += sourceRgba[pIdx + 1];
+    totalB += sourceRgba[pIdx + 2];
+    count++;
+  };
+
+  // 1. Sample 4 corners
+  for (let y = 0; y < cornerH; y++) {
+    for (let x = 0; x < cornerW; x++) {
+      samplePixel(x, y); // Top-left
+      samplePixel(width - 1 - x, y); // Top-right
+      samplePixel(x, height - 1 - y); // Bottom-left
+      samplePixel(width - 1 - x, height - 1 - y); // Bottom-right
+    }
+  }
+
+  // 2. Sample top and bottom edge margins (3px)
+  const margin = Math.min(3, Math.floor(height / 10));
+  for (let y = 0; y < margin; y++) {
+    for (let x = 0; x < width; x += 2) {
+      samplePixel(x, y);
+      samplePixel(x, height - 1 - y);
+    }
+  }
+
+  if (count === 0) {
+    return { r: 0, g: 0, b: 0, isChromaSpill: false, dominantChannel: "none", saturation: 0 };
+  }
+
+  const avgR = Math.round(totalR / count);
+  const avgG = Math.round(totalG / count);
+  const avgB = Math.round(totalB / count);
+
+  const maxVal = Math.max(avgR, avgG, avgB);
+  const minVal = Math.min(avgR, avgG, avgB);
+  const saturation = maxVal - minVal;
+
+  let dominantChannel: "r" | "g" | "b" | "none" = "none";
+  let isChromaSpill = false;
+
+  // Studio blue backdrop detection (e.g. blue is significantly higher than R & G)
+  if (avgB > avgR + 15 && avgB > avgG + 12 && avgB > 50) {
+    dominantChannel = "b";
+    isChromaSpill = true;
+  } else if (avgG > avgR + 18 && avgG > avgB + 18 && avgG > 50) {
+    dominantChannel = "g";
+    isChromaSpill = true;
+  } else if (avgR > avgG + 22 && avgR > avgB + 22 && avgR > 50) {
+    dominantChannel = "r";
+    isChromaSpill = true;
+  } else if (saturation > 35) {
+    isChromaSpill = true;
+    dominantChannel = maxVal === avgB ? "b" : maxVal === avgG ? "g" : "r";
+  }
+
+  return {
+    r: avgR,
+    g: avgG,
+    b: avgB,
+    isChromaSpill,
+    dominantChannel,
+    saturation,
+  };
+}
+
+/**
+ * Controlled Color Decontamination & Chroma Spill Suppression (Defringe)
+ * Eliminates colored halos (especially blue studio spill) on hair, ears, and suit edges
+ * by neutralizing dominant chroma spill and alpha blending edge color toward nearest solid interior color.
+ */
 export function applyColorDehalo(
   sourceRgba: Uint8ClampedArray | Uint8Array,
   alphaMask: Uint8ClampedArray | Uint8Array,
@@ -713,6 +819,7 @@ export function applyColorDehalo(
   const decontaminated = new Uint8ClampedArray(sourceRgba);
 
   const safeRadius = Math.max(1, Math.min(6, Math.round(radius)));
+  const domBg = detectDominantBackgroundColor(sourceRgba, width, height, alphaMask);
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -721,6 +828,38 @@ export function applyColorDehalo(
 
       // Only process semi-transparent edge pixels
       if (alpha === 0 || alpha === 255) continue;
+
+      const pIdx = idx * 4;
+      let origR = sourceRgba[pIdx];
+      let origG = sourceRgba[pIdx + 1];
+      let origB = sourceRgba[pIdx + 2];
+
+      // Chroma spill suppression if colored backdrop detected (e.g. blue studio backdrop)
+      if (domBg.isChromaSpill) {
+        if (domBg.dominantChannel === "b") {
+          // Blue backdrop: clamp excess blue to max of red & green + slight tolerance
+          const maxAllowedB = Math.max(origR, origG) * 1.05 + 4;
+          if (origB > maxAllowedB) {
+            const spill = origB - maxAllowedB;
+            const spillFactor = 1 - alpha / 255;
+            origB = Math.max(0, Math.min(255, Math.round(origB - spill * (0.85 + 0.15 * spillFactor))));
+          }
+        } else if (domBg.dominantChannel === "g") {
+          const maxAllowedG = Math.max(origR, origB) * 1.05 + 4;
+          if (origG > maxAllowedG) {
+            const spill = origG - maxAllowedG;
+            const spillFactor = 1 - alpha / 255;
+            origG = Math.max(0, Math.min(255, Math.round(origG - spill * (0.85 + 0.15 * spillFactor))));
+          }
+        } else if (domBg.dominantChannel === "r") {
+          const maxAllowedR = Math.max(origG, origB) * 1.05 + 4;
+          if (origR > maxAllowedR) {
+            const spill = origR - maxAllowedR;
+            const spillFactor = 1 - alpha / 255;
+            origR = Math.max(0, Math.min(255, Math.round(origR - spill * (0.85 + 0.15 * spillFactor))));
+          }
+        }
+      }
 
       // Search for the nearest solid foreground pixel (alpha === 255)
       let nearestDistSq = Infinity;
@@ -755,21 +894,134 @@ export function applyColorDehalo(
       }
 
       if (foundFg) {
-        const pIdx = idx * 4;
-        const origR = sourceRgba[pIdx];
-        const origG = sourceRgba[pIdx + 1];
-        const origB = sourceRgba[pIdx + 2];
-
         // Alpha blend edge color toward nearest solid interior color
         const weight = alpha / 255;
         decontaminated[pIdx] = Math.round(origR * weight + fgR * (1 - weight));
         decontaminated[pIdx + 1] = Math.round(origG * weight + fgG * (1 - weight));
         decontaminated[pIdx + 2] = Math.round(origB * weight + fgB * (1 - weight));
+      } else {
+        decontaminated[pIdx] = origR;
+        decontaminated[pIdx + 1] = origG;
+        decontaminated[pIdx + 2] = origB;
       }
     }
   }
 
   return decontaminated;
+}
+
+/**
+ * Applies a 1px–2px inward Alpha Choke/Erosion with smooth feathering on boundary pixels.
+ * Neutralizes edge bleed and prevents fuzzy colored outlines on portraits against white backgrounds.
+ */
+export function chokeAndFeatherAlphaMask(
+  rawAlpha: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  chokeRadius: number = 1.2,
+  featherRadius: number = 1.0
+): Uint8ClampedArray {
+  const totalPixels = width * height;
+  const is4Ch = rawAlpha.length === totalPixels * 4;
+  const getAlpha = (i: number) => (is4Ch ? rawAlpha[i * 4 + 3] : rawAlpha[i]);
+
+  const choked = new Uint8ClampedArray(totalPixels);
+  const rChoke = Math.max(1, Math.min(2, Math.round(chokeRadius)));
+
+  for (let y = 0; y < height; y++) {
+    const yOff = y * width;
+    for (let x = 0; x < width; x++) {
+      const idx = yOff + x;
+      const a = getAlpha(idx);
+
+      if (a === 0) {
+        choked[idx] = 0;
+        continue;
+      }
+
+      // Check if pixel is on the outer boundary next to background
+      let hasBg = false;
+      let minVal = a;
+
+      for (let dy = -rChoke; dy <= rChoke; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -rChoke; dx <= rChoke; dx++) {
+          if (dx * dx + dy * dy > rChoke * rChoke) continue;
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          const val = getAlpha(ny * width + nx);
+          if (val === 0) hasBg = true;
+          if (val < minVal) minVal = val;
+        }
+        if (minVal === 0) break;
+      }
+
+      if (hasBg) {
+        // Boundary pixel: choke inward
+        if (a < 180) {
+          choked[idx] = Math.round(minVal * 0.7);
+        } else {
+          choked[idx] = Math.min(a, Math.round(a * 0.92));
+        }
+      } else {
+        choked[idx] = a;
+      }
+    }
+  }
+
+  // Feather transition pixels (0 < alpha < 255)
+  const feathered = new Uint8ClampedArray(totalPixels);
+  const rFeather = Math.max(1, Math.min(2, Math.round(featherRadius)));
+
+  for (let y = 0; y < height; y++) {
+    const yOff = y * width;
+    for (let x = 0; x < width; x++) {
+      const idx = yOff + x;
+      const ca = choked[idx];
+
+      if (ca === 0) {
+        feathered[idx] = 0;
+        continue;
+      }
+
+      let isEdge = ca < 250;
+      if (!isEdge) {
+        if (
+          (x > 0 && choked[idx - 1] < 250) ||
+          (x < width - 1 && choked[idx + 1] < 250) ||
+          (y > 0 && choked[idx - width] < 250) ||
+          (y < height - 1 && choked[idx + width] < 250)
+        ) {
+          isEdge = true;
+        }
+      }
+
+      if (!isEdge) {
+        feathered[idx] = ca;
+        continue;
+      }
+
+      let sum = 0;
+      let wSum = 0;
+
+      for (let dy = -rFeather; dy <= rFeather; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -rFeather; dx <= rFeather; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          const weight = 1 / (1 + dx * dx + dy * dy);
+          sum += choked[ny * width + nx] * weight;
+          wSum += weight;
+        }
+      }
+
+      feathered[idx] = Math.max(0, Math.min(255, Math.round(sum / wSum)));
+    }
+  }
+
+  return feathered;
 }
 
 /**
@@ -1724,11 +1976,8 @@ export function detectAndProtectTextAndLogos(
   const protectedMask = new Uint8ClampedArray(totalPixels);
   let textProtectedArea = 0;
 
-  if (existingMask) {
-    for (let i = 0; i < totalPixels; i++) {
-      protectedMask[i] = isExisting4Ch ? existingMask[i * 4 + 3] : existingMask[i];
-    }
-  }
+  // Detect dominant background to avoid classifying colored studio backdrops as text/logos
+  const domBg = detectDominantBackgroundColor(sourceRgba, width, height, existingMask);
 
   const textStrokes = new Uint8Array(totalPixels);
 
@@ -1741,6 +1990,17 @@ export function detectAndProtectTextAndLogos(
       const r = sourceRgba[p];
       const g = sourceRgba[p + 1];
       const b = sourceRgba[p + 2];
+
+      // Never treat dominant backdrop pixels as text strokes
+      if (
+        domBg.isChromaSpill &&
+        Math.abs(r - domBg.r) < 35 &&
+        Math.abs(g - domBg.g) < 35 &&
+        Math.abs(b - domBg.b) < 35
+      ) {
+        continue;
+      }
+
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
 
       const pL = (idx - 1) * 4;
@@ -1764,7 +2024,7 @@ export function detectAndProtectTextAndLogos(
       // Saturated logo stroke: e.g. yellow, blue, red graphic element
       const maxCh = Math.max(r, g, b);
       const minCh = Math.min(r, g, b);
-      const isSaturatedLogo = (maxCh - minCh) > 55 && maxGrad > 30;
+      const isSaturatedLogo = (maxCh - minCh) > 55 && maxGrad > 30 && !domBg.isChromaSpill;
 
       if (isTextContrast || isSaturatedLogo) {
         textStrokes[idx] = 1;
@@ -1793,6 +2053,16 @@ export function detectAndProtectTextAndLogos(
             }
           }
         }
+      }
+    }
+  }
+
+  // Preserve existing foreground core without dilating outer perimeter into background
+  if (existingMask) {
+    for (let i = 0; i < totalPixels; i++) {
+      const mVal = isExisting4Ch ? existingMask[i * 4 + 3] : existingMask[i];
+      if (mVal > 200) {
+        protectedMask[i] = 255;
       }
     }
   }
