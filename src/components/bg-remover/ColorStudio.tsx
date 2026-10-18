@@ -1775,110 +1775,116 @@ export function ColorStudio({
         </div>
       )}
 
-      {/* ── Mask Diagnostics & Telemetry HUD Panel ── */}
-      <div
+      {/* ── Mask Diagnostics & Telemetry HUD Panel (Collapsed by default) ── */}
+      <details
         data-testid="mask-diagnostics-panel"
-        className="rounded-none border border-slate-800 bg-slate-950/90 p-3 space-y-2 text-xs font-mono"
+        className="group rounded-none border border-slate-800 bg-slate-950/90 font-mono"
       >
-        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-          <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px]">
-            {"// HARDWARE ACCELERATION & ML RUNTIME TELEMETRY"}
-          </span>
-          <span
-            className={`text-[9px] px-2 py-0.5 font-bold uppercase ${
-              localDiagnostics?.rollbackTriggered
-                ? "bg-amber-950 border border-amber-500 text-amber-300"
-                : "bg-emerald-950 border border-emerald-500 text-emerald-300"
-            }`}
-          >
-            {localDiagnostics?.rollbackTriggered ? "ROLLBACK ENGAGED" : "SAFETY PASS"}
-          </span>
-        </div>
+        <summary className="cursor-pointer p-3 text-xs font-bold text-slate-400 hover:text-cyan-300 select-none flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Sliders className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Diagnostics & Hardware Telemetry / ការវិភាគប្រព័ន្ធ</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[9px] px-2 py-0.5 font-bold uppercase ${
+                localDiagnostics?.rollbackTriggered
+                  ? "bg-amber-950 border border-amber-500 text-amber-300"
+                  : "bg-emerald-950 border border-emerald-500 text-emerald-300"
+              }`}
+            >
+              {localDiagnostics?.rollbackTriggered ? "ROLLBACK ENGAGED" : "SAFETY PASS"}
+            </span>
+            <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">▼</span>
+          </div>
+        </summary>
 
-        {/* Hardware & Runtime Telemetry Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px]">
-          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
-            <div className="text-slate-500 text-[9px]">WEBGPU AVAILABLE</div>
-            <div data-testid="diag-webgpu-available" className={`font-bold ${telemetry.webGpuAvailable ? "text-emerald-400" : "text-slate-400"}`}>
-              {telemetry.webGpuAvailable ? "true" : "false"}
-            </div>
-          </div>
-          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
-            <div className="text-slate-500 text-[9px]">ACTUAL BACKEND</div>
-            <div data-testid="diag-actual-backend" className="font-bold text-cyan-300">
-              {telemetry.actualBackend}
-            </div>
-          </div>
-          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
-            <div className="text-slate-500 text-[9px]">COLD-START TIME</div>
-            <div data-testid="diag-cold-start" className="font-bold text-slate-200">
-              {telemetry.coldStartTimeMs ? `${telemetry.coldStartTimeMs} ms` : metrics?.totalMs ? `${metrics.totalMs} ms` : "N/A"}
-            </div>
-          </div>
-          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
-            <div className="text-slate-500 text-[9px]">CACHED MODEL-LOAD</div>
-            <div data-testid="diag-cached-load" className="font-bold text-slate-200">
-              {telemetry.cachedModelLoadTimeMs ? `${telemetry.cachedModelLoadTimeMs} ms` : metrics?.modelLoadMs ? `${metrics.modelLoadMs} ms` : "cached"}
-            </div>
-          </div>
-          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
-            <div className="text-slate-500 text-[9px]">INFERENCE TIME</div>
-            <div data-testid="diag-inference-time" className="font-bold text-cyan-300">
-              {telemetry.inferenceTimeMs ? `${telemetry.inferenceTimeMs} ms` : metrics?.inferenceMs ? `${metrics.inferenceMs} ms` : `${metrics?.segmentationMs || 0} ms`}
-            </div>
-          </div>
-          <div className="p-1.5 bg-slate-900/60 border border-slate-800">
-            <div className="text-slate-500 text-[9px]">INPUT DIMENSIONS</div>
-            <div data-testid="diag-input-dim" className="font-bold text-slate-200">
-              {sourceWidth || width}×{sourceHeight || height} px
-            </div>
-          </div>
-          <div className="p-1.5 bg-slate-900/60 border border-slate-800 col-span-2">
-            <div className="text-slate-500 text-[9px]">INFERENCE DIMENSIONS</div>
-            <div data-testid="diag-inference-dim" className="font-bold text-slate-200">
-              {width}×{height} px
-            </div>
-          </div>
-        </div>
-
-        {/* Safety & Retention Metrics */}
-        {localDiagnostics && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px] pt-1 border-t border-slate-800/80">
-            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
-              <div className="text-slate-500 text-[9px]">INITIAL AREA</div>
-              <div className="font-bold text-slate-200">{localDiagnostics.initialForegroundArea.toLocaleString()} px</div>
-            </div>
-            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
-              <div className="text-slate-500 text-[9px]">REFINED AREA</div>
-              <div className="font-bold text-slate-200">{localDiagnostics.refinedForegroundArea.toLocaleString()} px</div>
-            </div>
-            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
-              <div className="text-slate-500 text-[9px]">AREA RETENTION</div>
-              <div className={`font-bold ${(localDiagnostics.areaRetentionRatio < 0.8) ? "text-amber-400" : "text-emerald-400"}`}>
-                {(localDiagnostics.areaRetentionRatio * 100).toFixed(1)}%
+        <div className="p-3 pt-0 space-y-2 text-xs border-t border-slate-800/80 mt-2">
+          {/* Hardware & Runtime Telemetry Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px]">
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">WEBGPU AVAILABLE</div>
+              <div data-testid="diag-webgpu-available" className={`font-bold ${telemetry.webGpuAvailable ? "text-emerald-400" : "text-slate-400"}`}>
+                {telemetry.webGpuAvailable ? "true" : "false"}
               </div>
             </div>
-            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
-              <div className="text-slate-500 text-[9px]">REMOVED RATIO</div>
-              <div className="font-bold text-slate-200">{localDiagnostics.removedAreaPercentage.toFixed(1)}%</div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">ACTUAL BACKEND</div>
+              <div data-testid="diag-actual-backend" className="font-bold text-cyan-300">
+                {telemetry.actualBackend}
+              </div>
             </div>
-            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
-              <div className="text-slate-500 text-[9px]">COMPONENTS (&gt;20px)</div>
-              <div className="font-bold text-cyan-300">{localDiagnostics.connectedComponentCount}</div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">COLD-START TIME</div>
+              <div data-testid="diag-cold-start" className="font-bold text-slate-200">
+                {telemetry.coldStartTimeMs ? `${telemetry.coldStartTimeMs} ms` : metrics?.totalMs ? `${metrics.totalMs} ms` : "N/A"}
+              </div>
             </div>
-            <div className="p-1.5 bg-slate-900/40 border border-slate-800">
-              <div className="text-slate-500 text-[9px]">HOLES (&gt;50px)</div>
-              <div className="font-bold text-cyan-300">{localDiagnostics.interiorHoleCount}</div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">CACHED MODEL-LOAD</div>
+              <div data-testid="diag-cached-load" className="font-bold text-slate-200">
+                {telemetry.cachedModelLoadTimeMs ? `${telemetry.cachedModelLoadTimeMs} ms` : metrics?.modelLoadMs ? `${metrics.modelLoadMs} ms` : "cached"}
+              </div>
             </div>
-            <div className="p-1.5 bg-slate-900/40 border border-slate-800 col-span-2">
-              <div className="text-slate-500 text-[9px]">BOUNDING BOX</div>
-              <div className="font-bold text-slate-200">
-                {localDiagnostics.boundingBox.width}×{localDiagnostics.boundingBox.height} px ({localDiagnostics.boundingBoxArea.toLocaleString()} px²)
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">INFERENCE TIME</div>
+              <div data-testid="diag-inference-time" className="font-bold text-cyan-300">
+                {telemetry.inferenceTimeMs ? `${telemetry.inferenceTimeMs} ms` : metrics?.inferenceMs ? `${metrics.inferenceMs} ms` : `${metrics?.segmentationMs || 0} ms`}
+              </div>
+            </div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800">
+              <div className="text-slate-500 text-[9px]">INPUT DIMENSIONS</div>
+              <div data-testid="diag-input-dim" className="font-bold text-slate-200">
+                {sourceWidth || width}×{sourceHeight || height} px
+              </div>
+            </div>
+            <div className="p-1.5 bg-slate-900/60 border border-slate-800 col-span-2">
+              <div className="text-slate-500 text-[9px]">INFERENCE DIMENSIONS</div>
+              <div data-testid="diag-inference-dim" className="font-bold text-slate-200">
+                {width}×{height} px
               </div>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Safety & Retention Metrics */}
+          {localDiagnostics && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px] pt-1 border-t border-slate-800/80">
+              <div className="p-1.5 bg-slate-900/40 border border-slate-800">
+                <div className="text-slate-500 text-[9px]">INITIAL AREA</div>
+                <div className="font-bold text-slate-200">{localDiagnostics.initialForegroundArea.toLocaleString()} px</div>
+              </div>
+              <div className="p-1.5 bg-slate-900/40 border border-slate-800">
+                <div className="text-slate-500 text-[9px]">REFINED AREA</div>
+                <div className="font-bold text-slate-200">{localDiagnostics.refinedForegroundArea.toLocaleString()} px</div>
+              </div>
+              <div className="p-1.5 bg-slate-900/40 border border-slate-800">
+                <div className="text-slate-500 text-[9px]">AREA RETENTION</div>
+                <div className={`font-bold ${(localDiagnostics.areaRetentionRatio < 0.8) ? "text-amber-400" : "text-emerald-400"}`}>
+                  {(localDiagnostics.areaRetentionRatio * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div className="p-1.5 bg-slate-900/40 border border-slate-800">
+                <div className="text-slate-500 text-[9px]">REMOVED RATIO</div>
+                <div className="font-bold text-slate-200">{localDiagnostics.removedAreaPercentage.toFixed(1)}%</div>
+              </div>
+              <div className="p-1.5 bg-slate-900/40 border border-slate-800">
+                <div className="text-slate-500 text-[9px]">COMPONENTS (&gt;20px)</div>
+                <div className="font-bold text-cyan-300">{localDiagnostics.connectedComponentCount}</div>
+              </div>
+              <div className="p-1.5 bg-slate-900/40 border border-slate-800">
+                <div className="text-slate-500 text-[9px]">HOLES (&gt;50px)</div>
+                <div className="font-bold text-cyan-300">{localDiagnostics.interiorHoleCount}</div>
+              </div>
+              <div className="p-1.5 bg-slate-900/40 border border-slate-800 col-span-2">
+                <div className="text-slate-500 text-[9px]">BOUNDING BOX</div>
+                <div className="font-bold text-slate-200">
+                  {localDiagnostics.boundingBox.width}×{localDiagnostics.boundingBox.height} px ({localDiagnostics.boundingBoxArea.toLocaleString()} px²)
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </details>
 
       {/* ── 7 Explicit Preview Tabs ── */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-none border border-cyan-500/30 bg-slate-950 p-2 text-xs font-mono">
@@ -2355,7 +2361,7 @@ export function ColorStudio({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-              {"// របៀបជ្រើសរើសវត្ថុ (SELECTION MODE)"}
+              Selection mode / របៀបជ្រើសរើសវត្ថុ
             </span>
             <span className="text-[10px] bg-cyan-950 border border-cyan-500/40 text-cyan-300 px-1.5 py-0.5 font-bold uppercase">
               {selectionMode}
@@ -2378,7 +2384,7 @@ export function ColorStudio({
               }`}
             >
               <span className="h-2 w-2 rounded-none bg-emerald-400" />
-              <span>ម៉ាស់ (បៃតង/ក្រហម) OVERLAY</span>
+              <span>Mask overlay / ម៉ាស់វិភាគ</span>
             </button>
           </div>
         </div>
@@ -3010,7 +3016,7 @@ export function ColorStudio({
             className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-slate-800 bg-slate-950/80 px-3 py-1.5 text-slate-400 hover:text-rose-300 hover:border-rose-500/30 transition-colors tracking-wider uppercase"
           >
             <RefreshCw className="h-3 w-3" />
-            <span>កំណត់ឡើងវិញ (RESET HUD)</span>
+            <span>Start over / កំណត់ឡើងវិញ</span>
           </button>
         </div>
       </div>
@@ -3027,9 +3033,9 @@ export function ColorStudio({
         >
           <div className="flex items-center gap-2">
             <Sliders className="h-4 w-4 text-cyan-400" />
-            <span>កែគែមដោយដៃ និងឧបករណ៍កម្រិតខ្ពស់ (MANUAL EDGE CORRECTION &amp; ADVANCED TOOLS)</span>
+            <span>Edit mask & Advanced tools / កែសម្រួលម៉ាស់</span>
           </div>
-          <span className="text-[11px] text-cyan-400">{isAdvancedOpen ? "[-] បិទ (COLLAPSE)" : "[+] បើក (EXPAND)"}</span>
+          <span className="text-[11px] text-cyan-400">{isAdvancedOpen ? "[-] Close" : "[+] Open"}</span>
         </button>
 
         {isAdvancedOpen && (

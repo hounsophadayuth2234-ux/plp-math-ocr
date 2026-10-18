@@ -682,7 +682,7 @@ export async function removeBackgroundBrowser(
       rawCutoutBlob,
       {
         erosionRadius: options?.erosionRadius ?? 0,
-        featherRadius: options?.featherRadius ?? 0.75,
+        featherRadius: options?.featherRadius ?? (mode === "preview" ? 0.5 : 0.75),
         decontaminationRadius: options?.decontaminationRadius ?? (mode === "preview" ? 1 : 1.5),
         alphaMatting: options?.alphaMatting ?? true,
       }

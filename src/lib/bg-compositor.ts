@@ -2198,11 +2198,8 @@ export function detectContainerAndContents(
       contentsMask[i] = isMask4Ch ? initialMask[i * 4 + 3] : initialMask[i];
     }
 
-    // Protect text and logo regions in document-like or complex imagery
-    const { protectedMask } = detectAndProtectTextAndLogos(sourceRgba, width, height, contentsMask);
-
     // Preserve small components down to 2 pixels (hair strands, leaves, twigs, disconnected details)
-    const { preservedMask } = preserveSmallForegroundComponents(protectedMask, width, height, 2);
+    const { preservedMask } = preserveSmallForegroundComponents(contentsMask, width, height, 2);
 
     return {
       hasContainer: false,
