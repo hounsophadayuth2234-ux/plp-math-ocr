@@ -268,6 +268,12 @@ export default function BgRemoverPage() {
     const timer = setTimeout(() => {
       if (isMounted) {
         checkWorkerStatus(true);
+        // Preload in-browser Web Worker model session so first run is warm
+        try {
+          bgWorkerManager.preloadModel("isnet_fp16");
+        } catch {
+          // ignore in environments without worker support
+        }
       }
     }, 0);
 
@@ -488,7 +494,6 @@ export default function BgRemoverPage() {
       return;
     }
 
-    bgWorkerManager.terminateActiveWorker();
     if (activeAbortControllerRef.current) {
       console.log(`[bg-remover] ABORT TRIGGER: handleRunSegmentation starting new mode=${mode}`);
       activeAbortControllerRef.current.abort();
@@ -639,9 +644,12 @@ export default function BgRemoverPage() {
           output.metrics = { totalMs: elapsedTotal };
         }
       } else {
+        const effectiveDim =
+          targetMaxDim ??
+          (edgeQuality === "fast" ? 768 : edgeQuality === "balanced" ? 1024 : 1536);
         const segResult = await segmentObjectSelection(imageFile, {
           mode: activeSelectionMode,
-          targetMaxDimension: targetMaxDim,
+          targetMaxDimension: effectiveDim,
           signal: abortController.signal,
           onProgress: (p) => {
             setProgressInfo(p);

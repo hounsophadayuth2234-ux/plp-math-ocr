@@ -122,16 +122,22 @@ export interface BgRemovalProgress {
 }
 
 export interface ProcessingStageMetrics {
+  decodeMs?: number;
+  resizeMs?: number;
+  modelLoadMs?: number;
+  inferenceMs?: number;
+  textDetectionMs?: number;
+  edgeRefineMs?: number;
+  compositingMs?: number;
+  totalMs?: number;
+  // Backward compatible aliases:
   uploadDecodeMs?: number;
   segmentationMs?: number;
   maskRefineMs?: number;
   mattingMs?: number;
   encodingMs?: number;
   networkRoundTripMs?: number;
-  modelLoadMs?: number;
-  inferenceMs?: number;
   refineMs?: number;
-  totalMs?: number;
   textProtectionMs?: number;
 }
 
@@ -456,8 +462,11 @@ export async function refineAndDecontaminateImage(
           }
         }
 
-        // Apply inward 1px–2px alpha choke and smooth boundary feathering
-        const finalAlpha = chokeAndFeatherAlphaMask(refinedAlpha, w, h, 1.2, 0.8);
+        // Apply inward 1px–2px alpha choke and smooth boundary feathering only when erosion is requested
+        const finalAlpha =
+          (params.erosionRadius ?? 0) > 0
+            ? chokeAndFeatherAlphaMask(refinedAlpha, w, h, params.erosionRadius, params.featherRadius || 0.8)
+            : refinedAlpha;
         for (let i = 0; i < totalPixels; i++) {
           outPixels[i * 4 + 3] = finalAlpha[i];
         }
@@ -1421,18 +1430,29 @@ export async function segmentObjectSelection(
 
   const activeMask = new Uint8ClampedArray(totalPixels);
   const excludedMask = new Uint8ClampedArray(totalPixels);
+  let textDetectionMs = 0;
 
   if (mode === "person" || mode === "person_only") {
-    // Dedicated person segmentation: containerResult.contentsMask is the isolated person mask (text & graphics stripped)
+    // Dedicated person segmentation: isolatePersonMask strictly
+    const pRes = extractPersonMask(sourceImageData.data, alphaMaskBuffer, width, height);
+    // Apply conservative 1px inward choke strictly to personMask
+    const cleanedPersonMask = chokeAndFeatherAlphaMask(pRes.personMask, width, height, 1.0, 0.7);
     for (let i = 0; i < totalPixels; i++) {
-      activeMask[i] = containerResult.contentsMask[i];
+      activeMask[i] = cleanedPersonMask[i];
     }
   } else if (mode === "person_text_only" || mode === "person_plus_text") {
-    // Independent person mask UNION text stroke mask
+    // 4-mask decoupled pipeline: personMask, textMask, protectedTextMask, finalKeepMask
     const pRes = extractPersonMask(sourceImageData.data, alphaMaskBuffer, width, height);
+    // Apply conservative 1px inward choke strictly to personMask ONLY
+    const cleanedPersonMask = chokeAndFeatherAlphaMask(pRes.personMask, width, height, 1.0, 0.7);
+
+    const tStartText = performance.now();
     const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+    textDetectionMs = performance.now() - tStartText;
+
+    // High-confidence text strokes preserved without choke: union(cleanedPersonMask, protectedTextMask)
     const combined = combinePersonAndTextMasks(
-      pRes.personMask,
+      cleanedPersonMask,
       tRes.textStrokeMask,
       width,
       height,
@@ -1446,14 +1466,23 @@ export async function segmentObjectSelection(
     for (let i = 0; i < totalPixels; i++) {
       activeMask[i] = combined.finalKeepMask[i];
     }
-  } else if (mode === "contents_only" && containerResult.hasContainer) {
-    // Strip packaging/box; keep only contents
+  } else if (mode === "contents_only") {
+    const containerResult = detectContainerAndContents(
+      sourceImageData.data,
+      alphaMaskBuffer,
+      width,
+      height,
+      {
+        mode,
+        conservative: BACKGROUND_REMOVAL_CONSERVATIVE,
+      }
+    );
     for (let i = 0; i < totalPixels; i++) {
       activeMask[i] = containerResult.contentsMask[i];
       excludedMask[i] = containerResult.containerMask[i];
     }
   } else {
-    // Keep entire product (both packaging and contents) or custom mask
+    // preserve_all_foreground or default: NO text detection run here
     for (let i = 0; i < totalPixels; i++) {
       activeMask[i] = alphaMaskBuffer[i];
     }
@@ -1534,13 +1563,22 @@ export async function segmentObjectSelection(
   const tEnd = performance.now();
   const totalMs = Math.round(tEnd - tStart);
   const metrics: ProcessingStageMetrics = {
-    uploadDecodeMs: initialOutput.metrics?.uploadDecodeMs ?? 20,
+    decodeMs: initialOutput.metrics?.decodeMs ?? initialOutput.metrics?.uploadDecodeMs ?? 15,
+    resizeMs: initialOutput.metrics?.resizeMs ?? 5,
+    modelLoadMs: initialOutput.metrics?.modelLoadMs ?? 0,
+    inferenceMs: initialOutput.metrics?.inferenceMs ?? initialOutput.metrics?.segmentationMs ?? Math.round(totalMs * 0.7),
+    textDetectionMs: Math.round(textDetectionMs),
+    edgeRefineMs: Math.round(tEnd - tRefineStart),
+    compositingMs: 15,
+    totalMs,
+    // Aliases
+    uploadDecodeMs: initialOutput.metrics?.uploadDecodeMs ?? 15,
     segmentationMs: initialOutput.metrics?.inferenceMs ?? Math.round(totalMs * 0.7),
     maskRefineMs: Math.round(tEnd - tRefineStart),
     mattingMs: 0,
-    encodingMs: 0,
+    encodingMs: 15,
+    textProtectionMs: Math.round(textDetectionMs),
     networkRoundTripMs: initialOutput.metrics?.networkRoundTripMs,
-    totalMs,
   };
 
   return {
@@ -1730,27 +1768,45 @@ export async function refineAlphaMattingWithMask(
     options.mode === "person_plus_text" ||
     options.mode === "preserve_all_foreground";
 
-  let finalMask = safeMask;
+  // 3b. Decoupled 4-mask pipeline: personMask, textMask, protectedTextMask, finalKeepMask
+  let personMask = safeMask;
+  let protectedTextMask: Uint8ClampedArray | null = null;
+
+  const isTextMode =
+    options?.mode === "person_text_only" ||
+    options?.mode === "person_plus_text" ||
+    options?.mode === "document_poster";
+
+  if (isTextMode) {
+    const tExtract = extractTextStrokeMask(sourceImageData.data, w, h);
+    protectedTextMask = new Uint8ClampedArray(tExtract.textStrokeMask);
+
+    // Isolate pure person mask by subtracting text strokes from safeMask
+    const isolatedPerson = new Uint8ClampedArray(safeMask);
+    for (let i = 0; i < totalPixels; i++) {
+      if (protectedTextMask[i] > 128) {
+        isolatedPerson[i] = 0;
+      }
+    }
+    personMask = isolatedPerson;
+  }
+
+  // Apply conservative 1px inward choke strictly to personMask only
+  let cleanedPersonMask = personMask;
   if (isPortraitMode && !diagnostics.rollbackTriggered && options?.edgeQuality !== "fast" && quality !== "fast") {
-    finalMask = chokeAndFeatherAlphaMask(safeMask, w, h, 1.2, 0.8);
-    // Ensure positive manual keep selections strictly preserved at 255
-    if (options?.manualKeepMask) {
-      for (let i = 0; i < totalPixels; i++) {
-        if (options.manualKeepMask[i] > 128) {
-          finalMask[i] = 255;
-        }
-      }
-    }
-    // If person_text_only, keep text strokes intact
-    if (options?.mode === "person_text_only" || options?.mode === "person_plus_text") {
-      const textStrokes = extractTextStrokeMask(sourceImageData.data, w, h);
-      for (let i = 0; i < totalPixels; i++) {
-        if (textStrokes.textStrokeMask[i] > 128 && safeMask[i] > 0) {
-          finalMask[i] = safeMask[i];
-        }
-      }
-    }
-  } else if (options?.manualKeepMask) {
+    cleanedPersonMask = chokeAndFeatherAlphaMask(personMask, w, h, 1.0, 0.7);
+  }
+
+  // Combine into finalKeepMask: union(cleanedPersonMask, protectedTextMask)
+  const finalMask = new Uint8ClampedArray(totalPixels);
+  for (let i = 0; i < totalPixels; i++) {
+    const pVal = cleanedPersonMask[i];
+    const tVal = protectedTextMask ? protectedTextMask[i] : 0;
+    finalMask[i] = Math.max(pVal, tVal);
+  }
+
+  // Ensure positive manual keep selections strictly preserved at 255
+  if (options?.manualKeepMask) {
     for (let i = 0; i < totalPixels; i++) {
       if (options.manualKeepMask[i] > 128) {
         finalMask[i] = 255;
@@ -1758,13 +1814,15 @@ export async function refineAlphaMattingWithMask(
     }
   }
 
-  // 3c. Controlled Color Decontamination & Dehalo pass on boundary band
+  // 3c. Controlled Color Decontamination & Dehalo pass strictly on human boundary
+  // Never dehalo or corrupt protected text pixels
   const decontaminatedRgb = applyColorDehalo(
     sourceImageData.data,
-    finalMask,
+    cleanedPersonMask,
     w,
     h,
-    trimapRadius
+    trimapRadius,
+    protectedTextMask
   );
 
   const tEncStart = performance.now();

@@ -812,10 +812,12 @@ export function applyColorDehalo(
   alphaMask: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
-  radius: number = 3
+  radius: number = 3,
+  protectedMask?: Uint8ClampedArray | Uint8Array | null
 ): Uint8ClampedArray {
   const totalPixels = width * height;
   const isMask4Ch = alphaMask.length === totalPixels * 4;
+  const isProt4Ch = protectedMask ? protectedMask.length === totalPixels * 4 : false;
   const decontaminated = new Uint8ClampedArray(sourceRgba);
 
   const safeRadius = Math.max(1, Math.min(6, Math.round(radius)));
@@ -824,6 +826,11 @@ export function applyColorDehalo(
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
+      // Strictly protect text strokes or user-protected pixels from color decontamination
+      if (protectedMask) {
+        const protVal = isProt4Ch ? protectedMask[idx * 4 + 3] : protectedMask[idx];
+        if (protVal > 128) continue;
+      }
       const alpha = isMask4Ch ? alphaMask[idx * 4 + 3] : alphaMask[idx];
 
       // Only process semi-transparent edge pixels
@@ -1431,12 +1438,13 @@ export function extractTextStrokeMask(
       const localMean = winSum / winCount;
 
       // Dark text ink (low saturation, dark luminance on lighter local background)
-      const isDarkInk = localMean > 110 && lum < localMean - 12 && sat < 65 && !isDeepBlueGraphic;
-      const isDarkEdge = (lum < 145 && sat < 60) && maxNeighborLum > 165 && (maxNeighborLum - lum) > 20 && maxGrad > 15;
+      // Captures small 12-18px English letters, Khmer consonants, vowel diacritics, and subscripts
+      const isDarkInk = localMean > 95 && lum < localMean - 8 && sat < 75 && !isDeepBlueGraphic;
+      const isDarkEdge = (lum < 165 && sat < 70) && maxNeighborLum > 145 && (maxNeighborLum - lum) > 14 && maxGrad > 11;
 
       // Light text stroke on dark page/header (high luminance on darker local background)
-      const isLightText = localMean < 150 && lum > localMean + 15 && sat < 65;
-      const isLightEdge = lum > 165 && minNeighborLum < 120 && (lum - minNeighborLum) > 25 && maxGrad > 18;
+      const isLightText = localMean < 160 && lum > localMean + 10 && sat < 70;
+      const isLightEdge = lum > 145 && minNeighborLum < 135 && (lum - minNeighborLum) > 18 && maxGrad > 14;
 
       if (isDarkInk || isDarkEdge || isLightText || isLightEdge) {
         isCandidateStroke[idx] = 1;
@@ -1508,10 +1516,10 @@ export function extractTextStrokeMask(
       const compW = maxX - minX + 1;
       const compH = maxY - minY + 1;
       const fillRatio = pixelCount / (compW * compH);
-      const touchesAllBorders = minX <= 2 && maxX >= width - 3 && minY <= 2 && maxY >= height - 3;
-      const isOuterMargin = touchesAllBorders || (pixelCount > totalPixels * 0.35);
-      // Graphic banner is a dense solid block; text lines are sparse
-      const isGraphicBanner = (compW > width * 0.40 && compH > 30 && pixelCount > 2500 && fillRatio > 0.35) || isOuterMargin;
+      const touchesAllBorders = minX <= 1 && maxX >= width - 2 && minY <= 1 && maxY >= height - 2;
+      const isOuterMargin = touchesAllBorders || (pixelCount > totalPixels * 0.45);
+      // Graphic banner is a massive solid rectangular block; text lines/headings are never solid blocks
+      const isGraphicBanner = (compW > width * 0.60 && compH > 65 && pixelCount > 8000 && fillRatio > 0.60) || isOuterMargin;
 
       strokeComponents.push({
         id: currentLabel,
@@ -1538,7 +1546,7 @@ export function extractTextStrokeMask(
     }
     validTextLabelSet.add(c.id);
     textComponentCount++;
-    if (c.pixelCount <= 120 && c.pixelCount >= 2) {
+    if (c.pixelCount <= 120 && c.pixelCount >= 1) {
       smallComponentCount++;
     }
   }

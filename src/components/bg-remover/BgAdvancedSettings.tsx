@@ -483,44 +483,68 @@ export function BgAdvancedSettings({
               </div>
             </div>
 
-            {/* Phase Timing Breakdown Table */}
+            {/* Phase Timing Breakdown Table (8 Stages) */}
             <div className="p-2 bg-slate-950/80 border border-slate-800 space-y-1 text-[10.5px]">
               <div className="text-[9px] text-slate-400 font-bold uppercase pb-1 border-b border-slate-850 flex justify-between">
                 <span>Phase</span>
                 <span>Duration</span>
               </div>
-              <div className="flex justify-between text-slate-300">
-                <span>1. Decode & Resize:</span>
-                <span className="font-mono text-cyan-300">
-                  {metrics?.uploadDecodeMs ?? 20} ms
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-300">
-                <span>2. AI Inference:</span>
-                <span className="font-mono text-cyan-300">
-                  {metrics?.inferenceMs ?? metrics?.segmentationMs ?? 0} ms
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-300">
-                <span>3. Edge Refine:</span>
-                <span className="font-mono text-cyan-300">
-                  {metrics?.maskRefineMs ?? metrics?.refineMs ?? 0} ms
-                </span>
-              </div>
-              {metrics?.textProtectionMs !== undefined && metrics.textProtectionMs > 0 && (
-                <div className="flex justify-between text-slate-300">
-                  <span>4. Text Protect:</span>
-                  <span className="font-mono text-pink-300">
-                    {metrics.textProtectionMs} ms
-                  </span>
+              {!metrics || metrics.totalMs === undefined ? (
+                <div className="py-2 text-center text-slate-400 italic text-[11px]" data-testid="metrics-unmeasured">
+                  Not measured yet
                 </div>
+              ) : (
+                <>
+                  <div className="flex justify-between text-slate-300">
+                    <span>1. Decode:</span>
+                    <span className="font-mono text-cyan-300">
+                      {metrics.decodeMs ?? metrics.uploadDecodeMs ?? 0} ms
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>2. Resize:</span>
+                    <span className="font-mono text-cyan-300">
+                      {metrics.resizeMs ?? 0} ms
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>3. Model Load:</span>
+                    <span className="font-mono text-cyan-300">
+                      {metrics.modelLoadMs ?? 0} ms
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>4. AI Inference:</span>
+                    <span className="font-mono text-cyan-300">
+                      {metrics.inferenceMs ?? metrics.segmentationMs ?? 0} ms
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>5. Text Detection:</span>
+                    <span className="font-mono text-pink-300">
+                      {metrics.textDetectionMs ?? metrics.textProtectionMs ?? 0} ms
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>6. Edge Refinement:</span>
+                    <span className="font-mono text-cyan-300">
+                      {metrics.edgeRefineMs ?? metrics.maskRefineMs ?? 0} ms
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>7. Compositing:</span>
+                    <span className="font-mono text-cyan-300">
+                      {metrics.compositingMs ?? metrics.encodingMs ?? 0} ms
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-white font-bold pt-1 border-t border-slate-850">
+                    <span>8. Total Latency:</span>
+                    <span className="font-mono text-emerald-400">
+                      {metrics.totalMs} ms
+                    </span>
+                  </div>
+                </>
               )}
-              <div className="flex justify-between text-white font-bold pt-1 border-t border-slate-850">
-                <span>Total Latency:</span>
-                <span className="font-mono text-emerald-400">
-                  {metrics?.totalMs ?? 0} ms
-                </span>
-              </div>
             </div>
 
             {/* Mask Statistics if available */}

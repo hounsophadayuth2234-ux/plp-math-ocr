@@ -30,6 +30,32 @@ class BgWorkerManager {
     return this.worker;
   }
 
+  private isPreloaded = false;
+
+  /**
+   * Preloads AI model weights and WASM runtime into idle worker
+   */
+  public preloadModel(model: "isnet_fp16" | "isnet_quint8" | "isnet" = "isnet_fp16"): void {
+    if (this.isPreloaded) return;
+    try {
+      const worker = this.getWorker();
+      worker.postMessage({
+        type: "PRELOAD",
+        model,
+      });
+      this.isPreloaded = true;
+    } catch (err) {
+      console.warn("[bgWorkerManager] Preload postMessage skipped:", err);
+    }
+  }
+
+  /**
+   * Returns true if worker instance is active and warm in memory
+   */
+  public isModelCached(): boolean {
+    return this.worker !== null;
+  }
+
   /**
    * Terminate active worker to immediately abort running inference on CPU/WASM
    */
@@ -42,6 +68,7 @@ class BgWorkerManager {
       }
       this.worker = null;
       this.activeJobId = null;
+      this.isPreloaded = false;
     }
   }
 

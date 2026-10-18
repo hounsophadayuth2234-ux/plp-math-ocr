@@ -1,13 +1,18 @@
 // Application-owned Web Worker for @imgly/background-removal
 // Allows immediate cancellation via worker.terminate() without leaving heavy computation running.
 
-import { removeBackground } from "@imgly/background-removal";
+import { removeBackground, preload } from "@imgly/background-removal";
 
 export interface WorkerJobRequest {
   type: "START";
   jobId: string;
   imageBlob: Blob;
   model: "isnet_fp16" | "isnet_quint8" | "isnet";
+}
+
+export interface WorkerPreloadRequest {
+  type: "PRELOAD";
+  model?: "isnet_fp16" | "isnet_quint8" | "isnet";
 }
 
 export interface WorkerProgressMessage {
@@ -26,13 +31,39 @@ export interface WorkerCompleteMessage {
 
 export interface WorkerErrorMessage {
   type: "ERROR";
-  jobId: string;
+  jobId?: string;
   error: string;
 }
 
-self.onmessage = async (e: MessageEvent<WorkerJobRequest>) => {
-  const { type, jobId, imageBlob, model } = e.data;
-  if (type === "START") {
+export interface WorkerPreloadCompleteMessage {
+  type: "PRELOAD_COMPLETE";
+  model: string;
+}
+
+export type WorkerIncomingMessage = WorkerJobRequest | WorkerPreloadRequest;
+
+self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
+  const data = e.data;
+  if (data.type === "PRELOAD") {
+    try {
+      await preload({
+        model: data.model || "isnet_fp16",
+        fetchArgs: {
+          cache: "force-cache",
+        },
+      });
+      self.postMessage({
+        type: "PRELOAD_COMPLETE",
+        model: data.model || "isnet_fp16",
+      });
+    } catch (err: unknown) {
+      console.warn("[bg-remover-worker] Preload skipped or failed:", err);
+    }
+    return;
+  }
+
+  if (data.type === "START") {
+    const { jobId, imageBlob, model } = data;
     try {
       const resultBlob = await removeBackground(imageBlob, {
         model: model || "isnet_fp16",
@@ -71,3 +102,4 @@ self.onmessage = async (e: MessageEvent<WorkerJobRequest>) => {
     }
   }
 };
+
