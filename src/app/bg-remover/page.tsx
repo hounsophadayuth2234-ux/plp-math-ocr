@@ -848,7 +848,7 @@ export default function BgRemoverPage() {
       data-studio-theme={studioTheme}
     >
       {/* ── Workstation Command Deck Instrument Header ── */}
-      <div className="relative z-10">
+      <div className="relative z-30">
         <BgStudioNav
           theme={theme}
           onToggleTheme={handleToggleTheme}
