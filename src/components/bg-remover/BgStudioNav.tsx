@@ -260,7 +260,7 @@ export function BgStudioNav({
             </button>
 
             {openDropdown === "sound" && (
-              <div className="absolute right-0 top-full mt-1.5 w-64 rounded-none border border-cyan-500/40 bg-slate-950 p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute left-0 top-full mt-1.5 w-64 rounded-none border border-cyan-500/50 bg-[#030712] p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-1.5 text-[10px] text-slate-400">
                   <span className="font-bold text-cyan-400 uppercase tracking-wider">
                     {"//"} SOUND THEMES (សំឡេង)
@@ -332,7 +332,7 @@ export function BgStudioNav({
             </button>
 
             {openDropdown === "font" && (
-              <div className="absolute right-0 top-full mt-1.5 w-64 rounded-none border border-amber-500/40 bg-slate-950 p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 w-64 rounded-none border border-amber-500/50 bg-[#030712] p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="border-b border-slate-800 pb-1.5 mb-1.5 text-[10px] text-slate-400">
                   <span className="font-bold text-amber-400 uppercase tracking-wider">
                     {"//"} TYPOGRAPHY (ប្តូរពុម្ពអក្សរ)
@@ -393,7 +393,7 @@ export function BgStudioNav({
             </button>
 
             {openDropdown === "theme" && (
-              <div className="absolute right-0 top-full mt-1.5 w-64 rounded-none border border-sky-500/40 bg-slate-950 p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 top-full mt-1.5 w-64 rounded-none border border-sky-500/50 bg-[#030712] p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-1.5 text-[10px] text-slate-400">
                   <span className="font-bold text-sky-400 uppercase tracking-wider">
                     {"//"} WORKSPACE COLOR (ប្តូរពណ៌អេក្រង់)
