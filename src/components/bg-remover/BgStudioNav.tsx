@@ -254,7 +254,7 @@ export function BgStudioNav({
                 <Volume2 className="h-4 w-4 shrink-0" />
               )}
               <span className="hidden sm:inline font-mono text-[10px] font-bold">
-                {currentPresetInfo.nameEn}
+                {audioMuted ? "MUTED" : currentPresetInfo.nameEn}
               </span>
               <ChevronDown className="h-3 w-3 opacity-70" />
             </button>
