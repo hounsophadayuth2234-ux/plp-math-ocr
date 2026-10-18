@@ -13,8 +13,10 @@ import {
   Play,
   Check,
   ChevronDown,
+  Globe,
 } from "lucide-react";
 import { cyberAudio, SOUND_PRESETS, SoundPreset } from "@/lib/cyber-audio";
+import { StudioLocale, SUPPORTED_LOCALES } from "@/lib/i18n";
 
 export type StudioFont =
   | "font-kantumruy"
@@ -136,6 +138,8 @@ interface BgStudioNavProps {
   onChangeFont?: (font: StudioFont) => void;
   activeStudioTheme?: StudioTheme;
   onChangeStudioTheme?: (theme: StudioTheme) => void;
+  activeLocale?: StudioLocale;
+  onChangeLocale?: (locale: StudioLocale) => void;
 }
 
 export function BgStudioNav({
@@ -150,9 +154,11 @@ export function BgStudioNav({
   onChangeFont,
   activeStudioTheme = "cyber-dark",
   onChangeStudioTheme,
+  activeLocale = "km",
+  onChangeLocale,
 }: BgStudioNavProps) {
   const [activePreset, setActivePreset] = useState<SoundPreset>(() => cyberAudio.getPreset());
-  const [openDropdown, setOpenDropdown] = useState<"sound" | "font" | "theme" | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<"sound" | "font" | "theme" | "lang" | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -186,6 +192,7 @@ export function BgStudioNav({
   const currentPresetInfo = SOUND_PRESETS.find((p) => p.id === activePreset) || SOUND_PRESETS[0];
   const currentFontInfo = STUDIO_FONTS.find((f) => f.id === activeFont) || STUDIO_FONTS[0];
   const currentThemeInfo = STUDIO_THEMES.find((t) => t.id === activeStudioTheme) || STUDIO_THEMES[0];
+  const currentLocaleInfo = SUPPORTED_LOCALES.find((l) => l.code === (activeLocale || "km")) || SUPPORTED_LOCALES[0];
 
   return (
     <div
@@ -446,7 +453,66 @@ export function BgStudioNav({
             )}
           </div>
 
-          {/* 4. Guide & Shortcuts (?) */}
+          {/* 4. Language Selector */}
+          <div className="relative">
+            <button
+              type="button"
+              data-testid="language-selector-btn"
+              onClick={() => setOpenDropdown(openDropdown === "lang" ? null : "lang")}
+              className="min-h-[38px] flex items-center gap-1.5 border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-xs text-slate-300 hover:border-emerald-500/40 hover:text-white transition-colors cursor-pointer"
+              title="Change Language (ប្តូរភាសា)"
+              aria-label="Language selector"
+            >
+              <Globe className="h-4 w-4 text-emerald-400 shrink-0" />
+              <span className="hidden sm:inline font-mono text-[10px] font-bold">
+                {currentLocaleInfo.flag} {currentLocaleInfo.nativeName}
+              </span>
+              <span className="sm:hidden text-xs">
+                {currentLocaleInfo.flag}
+              </span>
+              <ChevronDown className="h-3 w-3 opacity-70" />
+            </button>
+
+            {openDropdown === "lang" && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 rounded-none border border-emerald-500/50 bg-[#030712] p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="border-b border-slate-800 pb-1.5 mb-1.5 text-[10px] text-slate-400">
+                  <span className="font-bold text-emerald-400 uppercase tracking-wider">
+                    {"//"} LANGUAGE (ជ្រើសរើសភាសា)
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  {SUPPORTED_LOCALES.map((loc) => {
+                    const isSelected = (activeLocale || "km") === loc.code;
+                    return (
+                      <div
+                        key={loc.code}
+                        onClick={() => {
+                          onChangeLocale?.(loc.code);
+                          cyberAudio.playClick();
+                          setOpenDropdown(null);
+                        }}
+                        className={`flex items-center justify-between p-1.5 text-xs transition-colors cursor-pointer border ${
+                          isSelected
+                            ? "border-emerald-500/60 bg-emerald-950/60 text-white font-bold"
+                            : "border-transparent bg-slate-900/40 text-slate-300 hover:bg-slate-900 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-sm">{loc.flag}</span>
+                          <span className="text-[11px] font-medium">{loc.nativeName}</span>
+                          <span className="text-[9.5px] text-slate-400">({loc.englishName})</span>
+                        </div>
+                        {isSelected && <Check className="h-3 w-3 text-emerald-400 shrink-0" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 5. Guide & Shortcuts (?) */}
           <button
             type="button"
             data-testid="help-modal-btn"

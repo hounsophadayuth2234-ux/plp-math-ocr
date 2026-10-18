@@ -132,6 +132,7 @@ export interface ProcessingStageMetrics {
   inferenceMs?: number;
   refineMs?: number;
   totalMs?: number;
+  textProtectionMs?: number;
 }
 
 export interface BgRemovalOutput {
