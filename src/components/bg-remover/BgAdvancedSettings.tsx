@@ -472,13 +472,13 @@ export function BgAdvancedSettings({
                 <div className="text-[9px] text-slate-500 uppercase">{t("advanced.modelStatus")}</div>
                 <div className="font-bold text-emerald-400 flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>Ready</span>
+                  <span>{isModelCached ? "Model: Warm" : "Ready"}</span>
                 </div>
               </div>
               <div className="p-2 bg-slate-950/60 border border-slate-800">
                 <div className="text-[9px] text-slate-500 uppercase">{t("advanced.cacheStatus")}</div>
                 <div className="font-bold text-cyan-400">
-                  {isModelCached ? "Cached (Warm)" : "Init (Cold)"}
+                  {isModelCached ? "Cached: Yes (Warm)" : "Cached: No (Cold)"}
                 </div>
               </div>
             </div>
@@ -497,45 +497,77 @@ export function BgAdvancedSettings({
                 <>
                   <div className="flex justify-between text-slate-300">
                     <span>1. Decode:</span>
-                    <span className="font-mono text-cyan-300">
-                      {metrics.decodeMs ?? metrics.uploadDecodeMs ?? 0} ms
-                    </span>
+                    {metrics.decodeMs !== undefined || metrics.uploadDecodeMs !== undefined ? (
+                      <span className="font-mono text-cyan-300">
+                        {metrics.decodeMs ?? metrics.uploadDecodeMs} ms
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 italic text-[10px]">Not measured yet</span>
+                    )}
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>2. Resize:</span>
-                    <span className="font-mono text-cyan-300">
-                      {metrics.resizeMs ?? 0} ms
-                    </span>
+                    {metrics.resizeMs !== undefined ? (
+                      metrics.resizeMs > 0 ? (
+                        <span className="font-mono text-cyan-300">{metrics.resizeMs} ms</span>
+                      ) : (
+                        <span className="text-slate-400 italic text-[10px]">0 ms (Original size)</span>
+                      )
+                    ) : (
+                      <span className="text-slate-500 italic text-[10px]">Not measured yet</span>
+                    )}
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>3. Model Load:</span>
-                    <span className="font-mono text-cyan-300">
-                      {metrics.modelLoadMs ?? 0} ms
-                    </span>
+                    {metrics.modelLoadMs !== undefined ? (
+                      metrics.modelLoadMs > 0 ? (
+                        <span className="font-mono text-cyan-300">{metrics.modelLoadMs} ms</span>
+                      ) : (
+                        <span className="text-emerald-400 italic text-[10px]">0 ms (Cached / Warm)</span>
+                      )
+                    ) : (
+                      <span className="text-slate-500 italic text-[10px]">Not measured yet</span>
+                    )}
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>4. AI Inference:</span>
-                    <span className="font-mono text-cyan-300">
-                      {metrics.inferenceMs ?? metrics.segmentationMs ?? 0} ms
-                    </span>
+                    {metrics.inferenceMs !== undefined || metrics.segmentationMs !== undefined ? (
+                      <span className="font-mono text-cyan-300">
+                        {metrics.inferenceMs ?? metrics.segmentationMs} ms
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 italic text-[10px]">Not measured yet</span>
+                    )}
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>5. Text Detection:</span>
-                    <span className="font-mono text-pink-300">
-                      {metrics.textDetectionMs ?? metrics.textProtectionMs ?? 0} ms
-                    </span>
+                    {metrics.textDetectionMs !== undefined || metrics.textProtectionMs !== undefined ? (
+                      <span className="font-mono text-pink-300">
+                        {metrics.textDetectionMs ?? metrics.textProtectionMs} ms
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 italic text-[10px]">Skipped (Not required)</span>
+                    )}
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>6. Edge Refinement:</span>
-                    <span className="font-mono text-cyan-300">
-                      {metrics.edgeRefineMs ?? metrics.maskRefineMs ?? 0} ms
-                    </span>
+                    {metrics.edgeRefineMs !== undefined || metrics.maskRefineMs !== undefined ? (
+                      <span className="font-mono text-cyan-300">
+                        {metrics.edgeRefineMs ?? metrics.maskRefineMs} ms
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 italic text-[10px]">Skipped (Fast mode)</span>
+                    )}
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>7. Compositing:</span>
-                    <span className="font-mono text-cyan-300">
-                      {metrics.compositingMs ?? metrics.encodingMs ?? 0} ms
-                    </span>
+                    {metrics.compositingMs !== undefined || metrics.encodingMs !== undefined ? (
+                      <span className="font-mono text-cyan-300">
+                        {metrics.compositingMs ?? metrics.encodingMs} ms
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 italic text-[10px]">Not measured yet</span>
+                    )}
                   </div>
                   <div className="flex justify-between text-white font-bold pt-1 border-t border-slate-850">
                     <span>8. Total Latency:</span>

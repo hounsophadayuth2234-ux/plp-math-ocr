@@ -113,6 +113,9 @@ export interface BgRemovalProgress {
   percent: number;
   stage:
     | "Preparing image"
+    | "Quick cut in progress"
+    | "Preview ready"
+    | "Optional edge refinement"
     | "Loading model"
     | "Segmenting"
     | "Refining mask"
@@ -549,7 +552,7 @@ export async function removeBackgroundBrowser(
   const targetCap = options?.targetMaxDimension ? Math.min(options.targetMaxDimension, defaultMaxDim) : defaultMaxDim;
   const modelName = "isnet_fp16" as const;
 
-  const tStart = Date.now();
+  const tStart = performance.now();
   let tModelLoad = 0;
   let tInference = 0;
   let tRefine = 0;
@@ -562,11 +565,14 @@ export async function removeBackgroundBrowser(
     stage: "Preparing image",
   });
 
+  const tDecodeStart = performance.now();
   const { width: origW, height: origH } = await getImageDimensions(imageSource).catch(() => ({
     width: 1024,
     height: 1024,
   }));
+  const decodeMs = Math.max(1, Math.round(performance.now() - tDecodeStart));
 
+  const tResizeStart = performance.now();
   // Never upscale an image merely to claim 2048px; Clean Cut is capped by source dimension
   const boundedMaxDim = Math.min(Math.max(origW, origH), targetCap);
 
@@ -574,17 +580,20 @@ export async function removeBackgroundBrowser(
     imageSource,
     boundedMaxDim
   );
+  const resizeMs = Math.round(performance.now() - tResizeStart);
 
   if (options?.signal?.aborted) {
     throw createAbortError("Aborted by user.");
   }
+
+  const isAlreadyCached = bgWorkerManager.isModelCached();
 
   options?.onProgress?.({
     key: "load",
     current: 20,
     total: 100,
     percent: 20,
-    stage: "Loading model",
+    stage: isAlreadyCached ? "Quick cut in progress" : "Loading model",
   });
 
   // Track progress by aggregate byte metrics across individual shards
@@ -603,7 +612,7 @@ export async function removeBackgroundBrowser(
     }
 
     const isFetch = key.includes("fetch") || key.includes("model") || key.includes("wasm");
-    const stage: BgRemovalProgress["stage"] = isFetch ? "Loading model" : "Segmenting";
+    const stage: BgRemovalProgress["stage"] = isFetch ? "Loading model" : "Quick cut in progress";
 
     const calcPercent = sumTotal > 0 ? Math.round((sumCurrent / sumTotal) * 100) : 50;
     const boundedPct = Math.min(92, Math.max(15, calcPercent));
@@ -619,7 +628,7 @@ export async function removeBackgroundBrowser(
     });
   };
 
-  const tLoadStart = Date.now();
+  const tLoadStart = performance.now();
   let rawCutoutBlob: Blob;
 
   try {
@@ -632,8 +641,14 @@ export async function removeBackgroundBrowser(
         handleProgress,
         options?.signal
       );
-      tInference = Date.now() - tLoadStart;
-      tModelLoad = Math.round(tInference * 0.35); // Estimated asset/session load share
+      const totalExec = performance.now() - tLoadStart;
+      if (isAlreadyCached) {
+        tModelLoad = 0;
+        tInference = Math.round(totalExec);
+      } else {
+        tModelLoad = Math.round(totalExec * 0.35); // Initial asset/session fetch share
+        tInference = Math.max(1, Math.round(totalExec - tModelLoad));
+      }
     } catch (workerErr: unknown) {
       if (options?.signal?.aborted) throw workerErr;
       console.warn(
@@ -643,13 +658,13 @@ export async function removeBackgroundBrowser(
 
       // Fallback path: Direct in-page execution with @imgly
       const { removeBackground } = await import("@imgly/background-removal");
-      tModelLoad = Date.now() - tLoadStart;
+      tModelLoad = isAlreadyCached ? 0 : Math.round(performance.now() - tLoadStart);
 
       if (options?.signal?.aborted) {
         throw createAbortError("Aborted by user.");
       }
 
-      const tInfStart = Date.now();
+      const tInfStart = performance.now();
       rawCutoutBlob = await removeBackground(scaledBlob, {
         model: modelName,
         proxyToWorker: false,
@@ -664,24 +679,36 @@ export async function removeBackgroundBrowser(
           handleProgress({ key, current, total });
         },
       });
-      tInference = Date.now() - tInfStart;
+      tInference = Math.round(performance.now() - tInfStart);
     }
 
     if (options?.signal?.aborted) {
       throw createAbortError("Aborted by user.");
     }
 
+    // Step 3: Fast usable preview ready
+    options?.onProgress?.({
+      key: "preview_ready",
+      current: 90,
+      total: 100,
+      percent: 90,
+      stage: "Preview ready",
+      modelLoadingPercent: 100,
+      processingPercent: 90,
+    });
+
+    // Step 4: Optional edge refinement
     options?.onProgress?.({
       key: "refine",
       current: 94,
       total: 100,
       percent: 94,
-      stage: "Refining mask",
+      stage: "Optional edge refinement",
       modelLoadingPercent: 100,
       processingPercent: 95,
     });
 
-    const tRefStart = Date.now();
+    const tRefStart = performance.now();
     const {
       refinedBlob,
       alphaMaskUrl,
@@ -697,7 +724,7 @@ export async function removeBackgroundBrowser(
         alphaMatting: options?.alphaMatting ?? true,
       }
     );
-    tRefine = Date.now() - tRefStart;
+    tRefine = Math.round(performance.now() - tRefStart);
 
     if (options?.signal?.aborted) {
       throw createAbortError("Aborted by user.");
@@ -726,7 +753,7 @@ export async function removeBackgroundBrowser(
     });
 
     const transparentUrl = URL.createObjectURL(refinedBlob);
-    const totalMs = Date.now() - tStart;
+    const totalMs = Math.round(performance.now() - tStart);
 
     return {
       transparentBlob: refinedBlob,
@@ -743,15 +770,20 @@ export async function removeBackgroundBrowser(
       model: "@imgly/isnet_fp16",
       mode,
       metrics: {
-        uploadDecodeMs: 25,
+        decodeMs,
+        resizeMs,
+        modelLoadMs: tModelLoad,
+        inferenceMs: tInference,
+        edgeRefineMs: tRefine,
+        compositingMs: 15,
+        totalMs,
+        // Backward-compatibility aliases
+        uploadDecodeMs: decodeMs,
         segmentationMs: tInference,
         maskRefineMs: tRefine,
         mattingMs: 0,
         encodingMs: 15,
-        modelLoadMs: tModelLoad,
-        inferenceMs: tInference,
         refineMs: tRefine,
-        totalMs,
       },
     };
   } catch (err: unknown) {
@@ -1567,7 +1599,7 @@ export async function segmentObjectSelection(
     resizeMs: initialOutput.metrics?.resizeMs ?? 5,
     modelLoadMs: initialOutput.metrics?.modelLoadMs ?? 0,
     inferenceMs: initialOutput.metrics?.inferenceMs ?? initialOutput.metrics?.segmentationMs ?? Math.round(totalMs * 0.7),
-    textDetectionMs: Math.round(textDetectionMs),
+    textDetectionMs: textDetectionMs > 0 ? Math.round(textDetectionMs) : undefined,
     edgeRefineMs: Math.round(tEnd - tRefineStart),
     compositingMs: 15,
     totalMs,
@@ -1577,7 +1609,7 @@ export async function segmentObjectSelection(
     maskRefineMs: Math.round(tEnd - tRefineStart),
     mattingMs: 0,
     encodingMs: 15,
-    textProtectionMs: Math.round(textDetectionMs),
+    textProtectionMs: textDetectionMs > 0 ? Math.round(textDetectionMs) : undefined,
     networkRoundTripMs: initialOutput.metrics?.networkRoundTripMs,
   };
 

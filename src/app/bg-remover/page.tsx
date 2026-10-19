@@ -223,6 +223,21 @@ export default function BgRemoverPage() {
     });
   }, []);
 
+  // Pre-warm AI model session during idle browser time
+  useEffect(() => {
+    if (typeof window !== "undefined" && selectedEngine === "browser") {
+      const idleTimer = setTimeout(() => {
+        try {
+          bgWorkerManager.preloadModel();
+          setIsModelCached(true);
+        } catch (err) {
+          console.warn("[bg-remover] Idle model preload skipped:", err);
+        }
+      }, 1200);
+      return () => clearTimeout(idleTimer);
+    }
+  }, [selectedEngine]);
+
   const checkWorkerStatus = async (forceHealthCheck = true) => {
     try {
       setWorkerStatus("checking");
@@ -1328,12 +1343,15 @@ export default function BgRemoverPage() {
                       <span>
                         {progressInfo?.stage === "Preparing image"
                           ? "Preparing image... / កំពុងរៀបចំរូបភាព..."
-                          : progressInfo?.stage === "Loading model"
-                          ? "Preparing AI... / កំពុងរៀបចំ AI..."
-                          : progressInfo?.stage === "Segmenting"
-                          ? "Removing background... / កំពុងលុបផ្ទៃខាងក្រោយ..."
-                          : progressInfo?.stage === "Refining mask"
-                          ? "Finishing edges... / កំពុងសម្រួលគែម..."
+                          : progressInfo?.stage === "Quick cut in progress" ||
+                            progressInfo?.stage === "Segmenting" ||
+                            progressInfo?.stage === "Loading model"
+                          ? "Quick cut in progress... / កំពុងកាត់រហ័ស..."
+                          : progressInfo?.stage === "Preview ready"
+                          ? "Preview ready / រូបភាពមើលសាកល្បងរួចរាល់"
+                          : progressInfo?.stage === "Optional edge refinement" ||
+                            progressInfo?.stage === "Refining mask"
+                          ? "Optional edge refinement... / សម្រួលគែមជម្រើស..."
                           : "Processing... / កំពុងដំណើរការ..."}
                       </span>
                     </div>
