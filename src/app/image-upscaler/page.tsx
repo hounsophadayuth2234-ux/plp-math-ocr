@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -11,62 +11,248 @@ import {
   ImageIcon,
   Wand2,
   Cpu,
-  Server,
   XCircle,
   CheckCircle2,
   HelpCircle,
-  Settings,
+  FileText,
+  User,
+  Zap,
+  Activity,
+  Maximize2,
+  Layers,
+  Clipboard,
 } from "lucide-react";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { BeforeAfterSlider } from "@/components/image-upscaler/BeforeAfterSlider";
+import { ImageDiagnosticsCard } from "@/components/image-upscaler/ImageDiagnosticsCard";
+import { UpscaleControls } from "@/components/image-upscaler/UpscaleControls";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
-import { enhanceImageBrowser } from "@/lib/browser-enhancer";
 import { cyberAudio } from "@/lib/cyber-audio";
-import { ProcessingStatusLabel } from "@/lib/types";
 import { ObjectUrlRegistry } from "@/lib/processing-utils";
-import type { UpscaleSuccess, UpscaleError } from "@/app/api/upscale/route";
-
-const SCALE_OPTIONS = [
-  { value: 2, label: "2× Upscale", desc: "Fast · recommended for quick bumps" },
-  { value: 4, label: "4× Upscale", desc: "HD/4K quality · maximum resolution" },
-];
+import {
+  upscaleImageStudio,
+  calculateImageDiagnostics,
+  UpscalePreset,
+  UpscaleProgress,
+  ImageDiagnostics,
+  UpscaleResult,
+} from "@/lib/image-upscale-client";
 
 export default function ImageUpscalerPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [scale, setScale] = useState(2);
-  const [engineMode, setEngineMode] = useState<"browser" | "ai">("browser");
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [inputDiagnostics, setInputDiagnostics] = useState<ImageDiagnostics | null>(null);
+
+  // Enhancement controls
+  const [scale, setScale] = useState<1 | 2 | 4>(2);
+  const [preset, setPreset] = useState<UpscalePreset>("general");
+  const [faceEnhance, setFaceEnhance] = useState(false);
+  const [sharpness, setSharpness] = useState(65);
+  const [denoise, setDenoise] = useState(35);
+  const [clarity, setClarity] = useState(45);
+
+  // Export settings
+  const [exportFormat, setExportFormat] = useState<"png" | "jpeg">("png");
+
+  // State management
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState<UpscaleProgress | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<{ message: string; suggestedAction?: string } | null>(null);
-  const [result, setResult] = useState<{
-    outputUrl: string;
-    model: string;
-    scale: number;
-    label: ProcessingStatusLabel;
-  } | null>(null);
+  const [result, setResult] = useState<UpscaleResult | null>(null);
 
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const urlRegistryRef = useRef<ObjectUrlRegistry>(new ObjectUrlRegistry());
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const registry = urlRegistryRef.current;
     return () => {
       registry.revokeAll();
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, []);
 
-  const handleFileSelect = (file: File | null) => {
+  // Handle Preset Changes & set optimal defaults
+  const handlePresetSelect = useCallback((selectedPreset: UpscalePreset) => {
+    cyberAudio.playClick();
+    setPreset(selectedPreset);
+    if (selectedPreset === "portrait") {
+      setFaceEnhance(true);
+      setSharpness(60);
+      setDenoise(45);
+      setClarity(55);
+    } else if (selectedPreset === "text") {
+      setFaceEnhance(false);
+      setSharpness(80);
+      setDenoise(30);
+      setClarity(60);
+    } else if (selectedPreset === "restore") {
+      setFaceEnhance(false);
+      setSharpness(50);
+      setDenoise(70);
+      setClarity(40);
+    } else if (selectedPreset === "custom") {
+      // Keep existing custom slider values
+    } else {
+      // General
+      setFaceEnhance(false);
+      setSharpness(65);
+      setDenoise(35);
+      setClarity(45);
+    }
+  }, []);
+
+  // Analyze image on upload for Stage 1 Diagnostics
+  const analyzeInputImage = useCallback(async (file: File) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Unable to decode uploaded image."));
+        img.src = url;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+
+      const diag = calculateImageDiagnostics(imgData);
+      setInputDiagnostics(diag);
+
+      // Auto-set recommended preset
+      handlePresetSelect(diag.recommendedPreset);
+    } catch (err) {
+      console.warn("[image-upscaler] Failed to run auto-diagnostics:", err);
+    }
+  }, [handlePresetSelect]);
+
+  const handleFileSelect = useCallback((file: File | null) => {
     urlRegistryRef.current.revokeAll();
     setImageFile(file);
     setResult(null);
     setError(null);
+    setInputDiagnostics(null);
+
     if (file) {
+      cyberAudio.playClick();
       const url = urlRegistryRef.current.create(file);
       setPreviewUrl(url);
+      analyzeInputImage(file);
     } else {
       setPreviewUrl(null);
     }
+  }, [analyzeInputImage]);
+
+  // Support clipboard paste (Ctrl+V)
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) {
+            handleFileSelect(file);
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [handleFileSelect]);
+
+  // Sample Image Generator for instant 1-click test
+  const handleLoadSample = () => {
+    cyberAudio.playClick();
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Dark cyber backdrop
+    const grad = ctx.createLinearGradient(0, 0, 640, 480);
+    grad.addColorStop(0, "#090d16");
+    grad.addColorStop(1, "#030712");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 640, 480);
+
+    // Grid pattern
+    ctx.strokeStyle = "rgba(0, 240, 255, 0.1)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < 640; x += 32) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 480);
+      ctx.stroke();
+    }
+    for (let y = 0; y < 480; y += 32) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(640, y);
+      ctx.stroke();
+    }
+
+    // Stylized Face Oval (for skin tone detection demo)
+    ctx.fillStyle = "rgb(215, 165, 135)";
+    ctx.beginPath();
+    ctx.ellipse(220, 240, 75, 105, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = "#1e293b";
+    ctx.beginPath();
+    ctx.arc(195, 220, 9, 0, Math.PI * 2);
+    ctx.arc(245, 220, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupils
+    ctx.fillStyle = "#00f0ff";
+    ctx.beginPath();
+    ctx.arc(195, 220, 4, 0, Math.PI * 2);
+    ctx.arc(245, 220, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Smile
+    ctx.strokeStyle = "#be123c";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(220, 265, 25, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+
+    // Document & Khmer text sample box
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(360, 140, 240, 200);
+    ctx.strokeStyle = "#00f0ff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(360, 140, 240, 200);
+
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 16px 'Kantumruy Pro', sans-serif";
+    ctx.fillText("គំរូអក្សរខ្មែរ (Khmer Text)", 375, 180);
+    ctx.font = "14px monospace";
+    ctx.fillText("x² + 5x + 6 = 0", 375, 215);
+    ctx.fillText("Super-Resolution 4X", 375, 250);
+    ctx.font = "12px 'Kantumruy Pro', sans-serif";
+    ctx.fillText("ធ្វើរូបឱ្យច្បាស់ studio", 375, 285);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], "sample-studio-test.png", { type: "image/png" });
+      handleFileSelect(file);
+    }, "image/png");
   };
 
   const handleCancel = () => {
@@ -74,484 +260,405 @@ export default function ImageUpscalerPage() {
       activeAbortControllerRef.current.abort();
       activeAbortControllerRef.current = null;
     }
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
     cyberAudio.stopScanningHum();
     cyberAudio.playClick();
     setIsLoading(false);
-    setError({ message: "Upscaling cancelled by user." });
+    setProgress(null);
+    setError({ message: "ការកែសម្រួលត្រូវបានបោះបង់ដោយអ្នកប្រើប្រាស់ (Upscaling cancelled by user)." });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleEnhance = async () => {
     if (!imageFile || isLoading) return;
 
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setProgress({
+      stage: 1,
+      totalStages: 5,
+      stageName: "Smart Image Diagnostics",
+      stageNameKh: "វិភាគកម្រិតគុណភាពរូបភាព",
+      percent: 10,
+    });
+    setElapsedSeconds(0);
+
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
+
+    const startTime = performance.now();
+    timerIntervalRef.current = setInterval(() => {
+      setElapsedSeconds(+((performance.now() - startTime) / 1000).toFixed(1));
+    }, 100);
 
     const abortController = new AbortController();
     activeAbortControllerRef.current = abortController;
 
     try {
-      if (engineMode === "browser") {
-        // Mode 1: Client-Side Algorithmic Enhancement
-        const res = await enhanceImageBrowser(imageFile, scale);
-        if (abortController.signal.aborted) return;
+      const res = await upscaleImageStudio(imageFile, {
+        scale,
+        preset,
+        faceEnhance,
+        sharpness,
+        denoise,
+        clarity,
+        signal: abortController.signal,
+        onProgress: (p) => {
+          setProgress(p);
+        },
+      });
 
-        setResult({
-          outputUrl: res.outputUrl,
-          model: res.model,
-          scale: res.scale,
-          label: res.label,
-        });
-        cyberAudio.playSuccessChime();
-      } else {
-        // Mode 2: Real-ESRGAN (Worker or Cloud or Demo)
-        const formData = new FormData();
-        formData.append("image", imageFile);
-        formData.append("scale", scale.toString());
-        if (isDemoMode) formData.append("isDemo", "true");
+      if (abortController.signal.aborted) return;
 
-        const response = await fetch("/api/upscale", {
-          method: "POST",
-          body: formData,
-          signal: abortController.signal,
-        });
-
-        const data: UpscaleSuccess | UpscaleError = await response.json();
-        if (abortController.signal.aborted) return;
-
-        if (!response.ok || "error" in data) {
-          const errData = data as UpscaleError;
-          setError({
-            message: errData.error,
-            suggestedAction: errData.suggestedAction,
-          });
-          cyberAudio.stopScanningHum();
-          return;
-        }
-
-        const successData = data as UpscaleSuccess;
-        setResult({
-          outputUrl: successData.outputUrl,
-          model: successData.model,
-          scale: successData.scale,
-          label: successData.label,
-        });
-        cyberAudio.playSuccessChime();
-      }
+      const registeredUrl = urlRegistryRef.current.create(res.blob);
+      res.outputUrl = registeredUrl;
+      setResult(res);
+      setInputDiagnostics(res.diagnostics);
+      cyberAudio.stopScanningHum();
+      cyberAudio.playSuccessChime();
     } catch (err: unknown) {
       cyberAudio.stopScanningHum();
       if (err instanceof Error && err.name === "AbortError") {
         return;
       }
       setError({
-        message: err instanceof Error ? err.message : "Upscaling failed.",
+        message: err instanceof Error ? err.message : "Upscaling processing failed.",
       });
     } finally {
-      cyberAudio.stopScanningHum();
-      activeAbortControllerRef.current = null;
       setIsLoading(false);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
     }
   };
 
+  // Export & Download
   const handleDownload = async () => {
     if (!result) return;
     cyberAudio.playClick();
-    try {
-      const response = await fetch(result.outputUrl);
-      const blob = await response.blob();
-      const a = document.createElement("a");
-      const objUrl = URL.createObjectURL(blob);
-      a.href = objUrl;
-      a.download = `upscaled-${result.scale}x-${Date.now()}.png`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
-    } catch (err) {
-      console.error("Download error:", err);
-    }
-  };
 
-  const getBadgeStyle = (label: ProcessingStatusLabel) => {
-    switch (label) {
-      case "Enhanced resize — not AI super-resolution":
-        return "border-amber-500/40 bg-amber-950/60 text-amber-300 ring-1 ring-amber-500/30";
-      case "Browser AI result":
-        return "border-emerald-500/40 bg-emerald-950/60 text-emerald-300 ring-1 ring-emerald-500/30";
-      case "Local worker result":
-        return "border-cyan-500/40 bg-cyan-950/60 text-cyan-300 ring-1 ring-cyan-500/30";
-      case "Cloud API result":
-        return "border-indigo-500/40 bg-indigo-950/60 text-indigo-300 ring-1 ring-indigo-500/30";
-      case "Demo preview":
-        return "border-purple-500/40 bg-purple-950/60 text-purple-300 ring-1 ring-purple-500/30";
-      default:
-        return "border-slate-700 bg-slate-900 text-slate-300";
+    let downloadBlob = result.blob;
+    let extension = "png";
+
+    if (exportFormat === "jpeg") {
+      extension = "jpg";
+      // Convert to JPG 95%
+      const img = new Image();
+      img.src = result.outputUrl;
+      await new Promise((res) => {
+        img.onload = res;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = result.outputWidth;
+      canvas.height = result.outputHeight;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        const jpegBlob = await new Promise<Blob | null>((res) =>
+          canvas.toBlob(res, "image/jpeg", 0.95)
+        );
+        if (jpegBlob) downloadBlob = jpegBlob;
+      }
     }
+
+    const downloadUrl = URL.createObjectURL(downloadBlob);
+    const link = document.createElement("a");
+    const baseName = imageFile?.name.replace(/\.[^/.]+$/, "") || "enhanced-image";
+    link.href = downloadUrl;
+    link.download = `${baseName}_enhanced_${result.scale}x.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
   };
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/"
-        onClick={() => cyberAudio.playClick()}
-        className="inline-flex items-center gap-2 text-xs font-mono text-cyan-400 hover:text-cyan-300 transition"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> SYS://RETURN_DASHBOARD
-      </Link>
-
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/60 p-6 sm:p-8 shadow-[0_0_35px_rgba(245,158,11,0.1)]">
-        <div className="pointer-events-none absolute inset-0 cyber-grid-bg opacity-25" />
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between relative z-10">
-          <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400">
-              <span className="rounded bg-amber-950/80 px-2 py-0.5 border border-amber-500/40">
-                MODULE 03
-              </span>
-              <span>·</span>
-              <span>Resolution Enhancement &amp; Real-ESRGAN</span>
-            </div>
-            <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-              ធ្វើរូបឱ្យច្បាស់ // RESOLUTION MATRIX
-            </h2>
-            <p className="text-sm leading-relaxed text-slate-300">
-              បង្កើនកម្រិតភាពច្បាស់នៃរូបភាពតាមរយៈ{" "}
-              <span className="font-semibold text-amber-400">
-                Browser High-Pass Unsharp Enhancer (Zero Cost)
-              </span>{" "}
-              ឬ{" "}
-              <span className="font-semibold text-orange-400">
-                Real-ESRGAN Neural Super-Resolution
-              </span>{" "}
-              និងផ្ទៀងផ្ទាត់ដោយផ្ទាល់ជាមួយ Before/After Comparison Slider។
-            </p>
-          </div>
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/20">
-            <Sparkles className="h-7 w-7" />
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3 relative z-10 font-mono">
-          {[
-            {
-              label: "Browser 2× Enhancer",
-              desc: "Zero-cost client-side unsharp masking",
-            },
-            {
-              label: "Real-ESRGAN (AI)",
-              desc: "Neural super-resolution via local worker or cloud",
-            },
-            {
-              label: "Before/After Slider",
-              desc: "Interactive split-screen comparison",
-            },
-          ].map((c) => (
-            <div
-              key={c.label}
-              className="rounded-xl border border-amber-500/20 bg-slate-950/70 p-3 text-xs shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-cyan-500/20 pb-5">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-500/30 bg-slate-900/80 text-cyan-400 hover:bg-slate-800 transition-colors"
+              title="ត្រឡប់ទៅទំព័រដើម (Back to Home)"
             >
-              <span className="font-bold text-amber-300">{c.label}</span>
-              <p className="mt-0.5 text-slate-400 font-sans">{c.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Layout */}
-      <div className="grid gap-6 lg:grid-cols-5">
-        {/* Left: Controls */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5 lg:col-span-2">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-5">
-            <h3 className="text-sm font-semibold text-white flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-[11px] font-bold text-amber-400">
-                  1
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded bg-amber-500/15 px-2 py-0.5 font-mono text-xs font-bold text-amber-400 border border-amber-500/30">
+                  MODULE 03
                 </span>
-                Enhancement Configuration
-              </span>
-              <span className="font-mono text-[10px] text-amber-400">
-                CONTROL_HUD
-              </span>
-            </h3>
-
-            {/* Engine Selection */}
-            <div className="space-y-1.5 font-mono">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                SELECT PROCESSING ENGINE
-              </span>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isLoading) return;
-                    cyberAudio.playClick();
-                    setEngineMode("browser");
-                  }}
-                  disabled={isLoading}
-                  className={`flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all ${
-                    engineMode === "browser"
-                      ? "border-amber-500 bg-amber-950/40 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
-                      : "border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700"
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5 font-bold text-white text-[11px]">
-                    <Cpu className="h-3.5 w-3.5 text-amber-400" />
-                    Browser 2× Enhancer
-                  </span>
-                  <span className="text-[10px] text-amber-400/80">
-                    Zero Cost · Client-Side
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isLoading) return;
-                    cyberAudio.playClick();
-                    setEngineMode("ai");
-                  }}
-                  disabled={isLoading}
-                  className={`flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all ${
-                    engineMode === "ai"
-                      ? "border-orange-500 bg-orange-950/40 text-orange-200 shadow-[0_0_15px_rgba(249,115,22,0.2)]"
-                      : "border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700"
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5 font-bold text-white text-[11px]">
-                    <Server className="h-3.5 w-3.5 text-orange-400" />
-                    Real-ESRGAN (AI)
-                  </span>
-                  <span className="text-[10px] text-orange-400/80">
-                    Worker / Cloud GPU
-                  </span>
-                </button>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                  ធ្វើរូបឱ្យច្បាស់ (AI Image Enhancer & Super-Resolution Studio)
+                </h1>
               </div>
-            </div>
-
-            {/* Upload Zone */}
-            <BgUploadZone
-              onFileSelect={handleFileSelect}
-              selectedFile={imageFile}
-              disabled={isLoading}
-              label="Source Input"
-              hint="PNG, JPG, WEBP · max 15 MB"
-            />
-
-            {/* Scale Selector */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Enhancement Factor
+              <p className="mt-0.5 text-xs text-slate-400">
+                Multi-Stage Pixel Restoration & Lanczos-3 Super-Resolution · 100% Client-Side Web Worker
               </p>
-              <div className="grid grid-cols-2 gap-2">
-                {SCALE_OPTIONS.map((opt) => (
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="rounded-xl border border-cyan-500/30 bg-slate-900/80 px-3 py-1.5 font-mono text-xs font-semibold text-cyan-300 shadow-[0_0_15px_rgba(0,240,255,0.1)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              STUDIO 4X ENGINE READY
+            </span>
+          </div>
+        </div>
+
+        {/* Main 2-Column Studio Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Upload, Diagnostics, Controls (5 cols) */}
+          <div className="flex flex-col gap-5 lg:col-span-5">
+            {/* Upload Zone */}
+            <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-4 shadow-lg backdrop-blur-md">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                  <ImageIcon className="h-3.5 w-3.5 text-cyan-400" />
+                  បញ្ចូលរូបភាព (Upload Image)
+                </span>
+                <div className="flex items-center gap-2">
                   <button
-                    key={opt.value}
                     type="button"
-                    onClick={() => {
-                      cyberAudio.playClick();
-                      setScale(opt.value);
-                    }}
-                    disabled={isLoading}
-                    className={`rounded-xl border p-3 text-left text-xs transition-all ${
-                      scale === opt.value
-                        ? "border-amber-500/60 bg-amber-500/10 text-white ring-1 ring-amber-500/40"
-                        : "border-slate-700 bg-slate-950/50 text-slate-300 hover:border-slate-600"
-                    }`}
+                    onClick={handleLoadSample}
+                    className="flex items-center gap-1 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-2 py-1 text-[11px] font-mono font-bold text-cyan-300 hover:bg-cyan-900/50 transition-colors cursor-pointer"
+                    title="សាកល្បងជាមួយរូបភាពគំរូ"
                   >
-                    <div className="font-semibold">{opt.label}</div>
-                    <div className="text-slate-500 text-[11px]">{opt.desc}</div>
+                    <Zap className="h-3 w-3" />
+                    <span>សាកល្បងរូបគំរូ (Sample)</span>
                   </button>
-                ))}
+                </div>
+              </div>
+
+              <BgUploadZone
+                onFileSelect={handleFileSelect}
+                selectedFile={imageFile}
+                disabled={isLoading}
+              />
+
+              <div className="mt-2 flex items-center justify-between px-1 text-[11px] font-mono text-slate-500">
+                <span>គាំទ្រ: PNG, JPG, WEBP (រហូតដល់ 4096px)</span>
+                <span className="flex items-center gap-1">
+                  <Clipboard className="h-3 w-3" />
+                  ចុច Ctrl+V ដើម្បី Paste
+                </span>
               </div>
             </div>
 
-            {/* Engine Description Note */}
-            {engineMode === "browser" ? (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200/80">
-                <p className="font-medium text-amber-300 mb-1 flex items-center gap-1.5">
-                  <HelpCircle className="h-3.5 w-3.5 text-amber-400" />
-                  Browser High-Pass Processing
-                </p>
-                Runs 100% in your browser using bicubic resampling and high-pass
-                unsharp masking. Results will be explicitly tagged as{" "}
-                <span className="font-mono text-amber-300 font-semibold">
-                  &quot;Enhanced resize — not AI super-resolution&quot;
-                </span>
-                .
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-3 text-xs text-orange-200/80">
-                  <p className="font-medium text-orange-300 mb-1 flex items-center gap-1.5">
-                    <Server className="h-3.5 w-3.5 text-orange-400" />
-                    Deep Learning Super-Resolution
-                  </p>
-                  Requires a connected Local Worker (e.g. ComfyUI / Real-ESRGAN API) or
-                  Replicate API token in Settings.
-                </div>
+            {/* Smart Image Diagnostics (Stage 1) */}
+            {inputDiagnostics && (
+              <ImageDiagnosticsCard
+                diagnostics={inputDiagnostics}
+                fileSize={imageFile?.size}
+                selectedPreset={preset}
+                onApplyPreset={handlePresetSelect}
+              />
+            )}
 
-                {/* Explicit Demo Mode Checkbox */}
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pt-1 font-mono">
-                  <input
-                    type="checkbox"
-                    checked={isDemoMode}
-                    onChange={(e) => setIsDemoMode(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500/50"
-                  />
-                  <span>Enable Demo Preview Mode (Simulate UI flow)</span>
-                </label>
+            {/* Enhancement Controls */}
+            <UpscaleControls
+              scale={scale}
+              onChangeScale={(s) => {
+                cyberAudio.playClick();
+                setScale(s);
+              }}
+              preset={preset}
+              onChangePreset={handlePresetSelect}
+              faceEnhance={faceEnhance}
+              onToggleFaceEnhance={(f) => {
+                cyberAudio.playClick();
+                setFaceEnhance(f);
+              }}
+              sharpness={sharpness}
+              onChangeSharpness={setSharpness}
+              denoise={denoise}
+              onChangeDenoise={setDenoise}
+              clarity={clarity}
+              onChangeClarity={setClarity}
+              isLoading={isLoading}
+              progress={progress}
+              elapsedSeconds={elapsedSeconds}
+              onEnhance={handleEnhance}
+              onCancel={handleCancel}
+              disabled={!imageFile}
+            />
+          </div>
+
+          {/* Right Column: Comparison Workspace & Export Deck (7 cols) */}
+          <div className="flex flex-col gap-5 lg:col-span-7">
+            {/* Error Message */}
+            {error && (
+              <div className="flex flex-col gap-2 rounded-2xl border border-rose-500/40 bg-rose-950/40 p-4 font-mono text-xs text-rose-300 shadow-lg">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                  <div>
+                    <p className="font-bold text-rose-200">Execution Error</p>
+                    <p className="mt-0.5 leading-relaxed">{error.message}</p>
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Submit & Cancel Buttons */}
-            <div className="space-y-2">
-              <button
-                type="submit"
-                disabled={!imageFile || isLoading}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-amber-900/30 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Enhancing…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="h-4 w-4" /> Enhance Image ({scale}×)
-                  </>
-                )}
-              </button>
-
-              {isLoading && (
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-950/40 py-2 text-xs font-mono text-rose-300 hover:bg-rose-900/50 transition-colors"
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                  Cancel Processing
-                </button>
-              )}
-            </div>
-          </div>
-        </form>
-
-        {/* Right: Output */}
-        <div className="flex flex-col gap-4 lg:col-span-3">
-          {/* Error Message with Suggested Action */}
-          {error && (
-            <div className="flex flex-col gap-3 rounded-xl border border-rose-500/30 bg-rose-950/40 p-4 text-sm text-rose-300 font-mono">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
-                <div>
-                  <p className="font-semibold text-rose-200">Execution Error</p>
-                  <p className="mt-1 text-xs opacity-90 leading-relaxed">
-                    {error.message}
-                  </p>
-                </div>
-              </div>
-
-              {error.suggestedAction === "SWITCH_TO_BROWSER" && (
-                <div className="flex items-center gap-2 pt-2 border-t border-rose-500/20">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEngineMode("browser");
-                      setError(null);
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-950/60 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-900/60 transition-colors"
-                  >
-                    <Cpu className="h-3.5 w-3.5 text-amber-400" />
-                    Switch to Browser 2× Enhancer (Free)
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* High-Tech Robotic Scanner */}
-          {isLoading && (
-            <RoboticScanner
-              active={true}
-              moduleName={
-                engineMode === "browser"
-                  ? "BROWSER ENHANCER // [HIGH-PASS FILTER]"
-                  : "REAL-ESRGAN // [NEURAL SUPER-RESOLUTION]"
-              }
-              steps={[
-                engineMode === "browser"
-                  ? "INITIALIZING OFFSCREEN CANVAS BUFFERS..."
-                  : "DISPATCHING INFERENCE TO NEURAL WORKER...",
-                engineMode === "browser"
-                  ? "EXECUTING MULTI-PASS BICUBIC RESAMPLING..."
-                  : "LOADING REAL-ESRGAN 4X WEIGHT TENSORS...",
-                engineMode === "browser"
-                  ? "APPLYING HIGH-PASS UNSHARP EDGE FILTER..."
-                  : "SUPER-RESOLUTION SUB-PIXEL SAMPLING PASS...",
-                "SYNTHESIZING FINAL HIGH-RESOLUTION OUTPUT...",
-              ]}
-              subtext={
-                engineMode === "browser"
-                  ? "Client-side algorithmic unsharp filter enhancing image edges without deep learning"
-                  : "Real-ESRGAN neural model reconstructing high-frequency details"
-              }
-            />
-          )}
-
-          {/* Result Output with Transparency Badge & Slider */}
-          {result && previewUrl && !isLoading && (
-            <div className="space-y-4">
-              {/* Transparency Status Badge */}
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-2.5 font-mono text-xs">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${getBadgeStyle(
-                      result.label
-                    )}`}
-                  >
-                    <CheckCircle2 className="h-3 w-3" />
-                    {result.label}
-                  </span>
-                  <span className="text-slate-400 text-[11px]">
-                    {result.model}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition-all"
-                >
-                  <Download className="h-3.5 w-3.5" /> Download {result.scale}× PNG
-                </button>
-              </div>
-
-              {/* Before / After Comparison Slider */}
-              <BeforeAfterSlider
-                beforeSrc={previewUrl}
-                afterSrc={result.outputUrl}
-                beforeLabel="Original"
-                afterLabel={`${result.scale}× Enhanced`}
+            {/* Live Progress Scanner HUD */}
+            {isLoading && (
+              <RoboticScanner
+                active={true}
+                moduleName="STUDIO SUPER-RESOLUTION // [LANCZOS-3 & BILATERAL & USM]"
+                steps={[
+                  "STAGE 1/5: SMART IMAGE DIAGNOSTICS & NOISE ESTIMATE...",
+                  `STAGE 2/5: HIGH-ORDER EDGE-DIRECTED RESAMPLING (${scale}X)...`,
+                  "STAGE 3/5: BILATERAL SURFACE DENOISING & ARTIFACT FILTER...",
+                  faceEnhance
+                    ? "STAGE 4/5: YCbCr PORTRAIT FACE & EYE CLARITY HARMONIZATION..."
+                    : "STAGE 4/5: TONE MAPPING & CLARITY HARMONIZATION...",
+                  preset === "text"
+                    ? "STAGE 5/5: KHMER TEXT & FORMULA STROKE CRISPNESS BOOSTER..."
+                    : "STAGE 5/5: ADAPTIVE LUMINANCE UNSHARP MASKING PASS...",
+                ]}
+                subtext="Multi-stage deterministic super-resolution running in Web Worker with zero cloud lag"
               />
-            </div>
-          )}
+            )}
 
-          {!result && !isLoading && !error && (
-            <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-12 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800">
-                <ImageIcon className="h-7 w-7 text-amber-400" />
+            {/* Comparison Workspace (Active when result is ready) */}
+            {result && previewUrl && !isLoading && (
+              <div className="flex flex-col gap-4">
+                {/* Before / After Slider Workspace */}
+                <BeforeAfterSlider
+                  beforeSrc={previewUrl}
+                  afterSrc={result.outputUrl}
+                  beforeLabel="BEFORE (រូបដើម - ស្រពិចស្រពិល)"
+                  afterLabel={`AFTER (ក្រោយកែ - ច្បាស់ ${result.scale}X)`}
+                  srcWidth={result.srcWidth}
+                  srcHeight={result.srcHeight}
+                  outputWidth={result.outputWidth}
+                  outputHeight={result.outputHeight}
+                />
+
+                {/* Export & Download Deck */}
+                <div className="rounded-2xl border border-cyan-500/30 bg-slate-950/80 p-5 shadow-[0_0_25px_rgba(0,240,255,0.1)] backdrop-blur-md">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-cyan-500/20 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        <span className="font-mono text-xs font-bold text-white uppercase tracking-wider">
+                          លទ្ធផលកែសម្រួលរួចរាល់ (Enhancement Complete)
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-slate-400">
+                        <span className="rounded bg-emerald-500/10 px-2 py-0.5 font-bold text-emerald-300 border border-emerald-500/30">
+                          {result.label}
+                        </span>
+                        <span>·</span>
+                        <span>{result.model}</span>
+                        <span>·</span>
+                        <span className="text-cyan-400 font-bold">{result.elapsedMs} ms</span>
+                      </div>
+                    </div>
+
+                    {/* Resolution Transformation Badge */}
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 font-mono text-xs">
+                      <span className="text-slate-400">{result.srcWidth}×{result.srcHeight} px</span>
+                      <span className="mx-2 text-cyan-400 font-bold">➔</span>
+                      <span className="text-white font-bold">{result.outputWidth}×{result.outputHeight} px</span>
+                    </div>
+                  </div>
+
+                  {/* Export Options & Download Button */}
+                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    {/* Format Selector */}
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-slate-400">ទម្រង់ File:</span>
+                      <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setExportFormat("png")}
+                          className={`px-3 py-1 rounded-lg font-mono text-xs font-bold transition-all ${
+                            exportFormat === "png"
+                              ? "bg-cyan-500 text-slate-950 shadow-sm"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          PNG (Lossless)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExportFormat("jpeg")}
+                          className={`px-3 py-1 rounded-lg font-mono text-xs font-bold transition-all ${
+                            exportFormat === "jpeg"
+                              ? "bg-cyan-500 text-slate-950 shadow-sm"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          JPG (95% Web)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Download Button */}
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-6 py-3 font-mono text-xs font-bold text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.35)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] transition-all cursor-pointer"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>ទាញយករូបច្បាស់ (Export {exportFormat.toUpperCase()})</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <h3 className="mt-4 text-sm font-semibold text-white font-mono">
-                BEFORE / AFTER COMPARISON STANDBY
-              </h3>
-              <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-slate-400">
-                Upload an image and select{" "}
-                <span className="font-semibold text-amber-400">
-                  &quot;Browser 2× Enhancer&quot;
-                </span>{" "}
-                for instant zero-cost results, or Real-ESRGAN for neural super-resolution.
-              </p>
-            </div>
-          )}
+            )}
+
+            {/* Standby Placeholder when no result and not loading */}
+            {!result && !isLoading && !error && (
+              <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-cyan-500/20 bg-slate-950/40 p-10 text-center min-h-[420px]">
+                {previewUrl ? (
+                  <div className="flex flex-col items-center max-w-sm">
+                    <div className="relative mb-4 h-48 w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50 flex items-center justify-center">
+                      <img
+                        src={previewUrl}
+                        alt="Selected source"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                      <div className="absolute top-2 right-2 rounded bg-slate-950/80 px-2 py-0.5 font-mono text-[10px] text-cyan-400 border border-cyan-500/30">
+                        រូបដើម (SOURCE LOADED)
+                      </div>
+                    </div>
+                    <h3 className="font-mono text-sm font-bold text-white">
+                      ត្រៀមកែសម្រួល (READY FOR ENHANCEMENT)
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-400 leading-relaxed">
+                      ជ្រើសរើស Preset ឬចុចប៊ូតុង{" "}
+                      <span className="text-amber-400 font-bold">&quot;ធ្វើឱ្យច្បាស់ (ENHANCE NOW)&quot;</span>{" "}
+                      ដើម្បីដំណើរការ Stage 1 ដល់ 5។
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center max-w-sm">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-900 border border-cyan-500/20 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.15)]">
+                      <Sparkles className="h-8 w-8" />
+                    </div>
+                    <h3 className="mt-4 font-mono text-sm font-bold text-white uppercase tracking-wider">
+                      SUPER-RESOLUTION COMPARISON STANDBY
+                    </h3>
+                    <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+                      សូមបញ្ចូលរូបភាព ឬចុចប៊ូតុង{" "}
+                      <span className="text-cyan-400 font-semibold">&quot;សាកល្បងរូបគំរូ (Sample)&quot;</span>{" "}
+                      ដើម្បីពិនិត្យផ្ទាំងប្រៀបធៀប Before/After Slider និង Loupe Magnifier 200%។
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

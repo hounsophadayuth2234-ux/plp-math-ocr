@@ -1,0 +1,355 @@
+"use client";
+
+import React from "react";
+import {
+  Sparkles,
+  User,
+  FileText,
+  History,
+  SlidersHorizontal,
+  Check,
+  XCircle,
+  Loader2,
+} from "lucide-react";
+import type { UpscalePreset, UpscaleProgress } from "@/lib/image-upscale-client";
+
+interface UpscaleControlsProps {
+  scale: 1 | 2 | 4;
+  onChangeScale: (scale: 1 | 2 | 4) => void;
+  preset: UpscalePreset;
+  onChangePreset: (preset: UpscalePreset) => void;
+  faceEnhance: boolean;
+  onToggleFaceEnhance: (val: boolean) => void;
+  sharpness: number;
+  onChangeSharpness: (val: number) => void;
+  denoise: number;
+  onChangeDenoise: (val: number) => void;
+  clarity: number;
+  onChangeClarity: (val: number) => void;
+  isLoading: boolean;
+  progress: UpscaleProgress | null;
+  elapsedSeconds: number;
+  onEnhance: () => void;
+  onCancel: () => void;
+  disabled?: boolean;
+}
+
+const PRESET_CONFIGS: {
+  id: UpscalePreset;
+  titleKh: string;
+  titleEn: string;
+  desc: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  {
+    id: "portrait",
+    titleKh: "រូបមនុស្ស & ផ្ទៃមុខ",
+    titleEn: "Portrait & Face HD",
+    desc: "សម្រួលសម្បុរស្បែក បង្កើនពន្លឺភ្នែក និងសរសៃសក់",
+    icon: User,
+  },
+  {
+    id: "text",
+    titleKh: "អក្សរខ្មែរ & ឯកសារ",
+    titleEn: "Khmer Text & Doc Crisp",
+    desc: "បង្កើនភាពដិតច្បាស់នៃតួអក្សរ ជើង និងរូបមន្ត",
+    icon: FileText,
+  },
+  {
+    id: "restore",
+    titleKh: "រូបចាស់ & បែកគ្រាប់",
+    titleEn: "Denoise & Restore",
+    desc: "លុបគ្រាប់អុជ JPEG grain និងស្តារព័ត៌មានលម្អិត",
+    icon: History,
+  },
+  {
+    id: "custom",
+    titleKh: "កំណត់ដោយខ្លួនឯង",
+    titleEn: "Custom Pro",
+    desc: "កែសម្រួលកម្រិតច្បាស់ គ្រាប់អុជ និងពន្លឺតាមចិត្ត",
+    icon: SlidersHorizontal,
+  },
+];
+
+export function UpscaleControls({
+  scale,
+  onChangeScale,
+  preset,
+  onChangePreset,
+  faceEnhance,
+  onToggleFaceEnhance,
+  sharpness,
+  onChangeSharpness,
+  denoise,
+  onChangeDenoise,
+  clarity,
+  onChangeClarity,
+  isLoading,
+  progress,
+  elapsedSeconds,
+  onEnhance,
+  onCancel,
+  disabled = false,
+}: UpscaleControlsProps) {
+  return (
+    <div className="flex flex-col gap-6 rounded-2xl border border-cyan-500/25 bg-slate-950/80 p-5 shadow-[0_0_20px_rgba(0,240,255,0.06)] backdrop-blur-md">
+      {/* 1. Mode Presets */}
+      <div>
+        <label className="mb-2 block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+          1. ជ្រើសរើសទម្រង់កែសម្រួល (Enhancement Mode Preset)
+        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {PRESET_CONFIGS.map((item) => {
+            const Icon = item.icon;
+            const isSelected = preset === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onChangePreset(item.id)}
+                disabled={isLoading || disabled}
+                className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-all cursor-pointer ${
+                  isSelected
+                    ? "border-cyan-400 bg-cyan-950/40 text-white shadow-[0_0_15px_rgba(0,240,255,0.2)]"
+                    : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                <div
+                  className={`mt-0.5 rounded-lg p-2 ${
+                    isSelected
+                      ? "bg-cyan-500 text-slate-950 shadow-sm"
+                      : "bg-slate-800 text-slate-400"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-mono text-xs font-bold text-slate-100">
+                      {item.titleKh}
+                    </p>
+                    {isSelected && (
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-cyan-500 text-slate-950">
+                        <Check className="h-3 w-3 stroke-[3]" />
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-mono text-[10px] text-cyan-400/80">
+                    {item.titleEn}
+                  </p>
+                  <p className="mt-1 line-clamp-1 text-[11px] text-slate-400">
+                    {item.desc}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. Upscale Factor & Face Enhancement Toggle */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Upscale Factor Selector */}
+        <div>
+          <label className="mb-2 block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+            2. កម្រិតពង្រីកទំហំ (Upscale Factor)
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { val: 1, labelKh: "1x ស្តាររូប", labelEn: "Restore Only" },
+              { val: 2, labelKh: "2x HD", labelEn: "លឿនល្មម" },
+              { val: 4, labelKh: "4x Ultra", labelEn: "ច្បាស់បំផុត" },
+            ].map((opt) => (
+              <button
+                key={opt.val}
+                type="button"
+                onClick={() => onChangeScale(opt.val as 1 | 2 | 4)}
+                disabled={isLoading || disabled}
+                className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all cursor-pointer ${
+                  scale === opt.val
+                    ? "border-amber-400 bg-amber-950/40 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)]"
+                    : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                <span className="font-mono text-sm font-bold">{opt.labelKh}</span>
+                <span className="font-mono text-[10px] opacity-75">{opt.labelEn}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Face Enhancement Mode Toggle */}
+        <div>
+          <label className="mb-2 block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+            3. កែសម្រួលផ្ទៃមុខ (Face Enhancement)
+          </label>
+          <button
+            type="button"
+            onClick={() => onToggleFaceEnhance(!faceEnhance)}
+            disabled={isLoading || disabled}
+            className={`flex w-full items-center justify-between rounded-xl border p-3 transition-all cursor-pointer ${
+              faceEnhance
+                ? "border-indigo-400 bg-indigo-950/40 text-white shadow-[0_0_15px_rgba(99,102,241,0.25)]"
+                : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+            } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`rounded-lg p-2 ${
+                  faceEnhance
+                    ? "bg-indigo-500 text-white"
+                    : "bg-slate-800 text-slate-400"
+                }`}
+              >
+                <User className="h-4 w-4" />
+              </div>
+              <div className="text-left">
+                <p className="font-mono text-xs font-bold text-slate-100">
+                  {faceEnhance ? "បើកដំណើរការ (FACE ON)" : "បិទ (FACE OFF)"}
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  {faceEnhance
+                    ? "សម្រួលស្បែក + ពន្លឺភ្នែក & សក់ (YCbCr)"
+                    : "កែសម្រួលរូបភាពទូទៅធម្មតា"}
+                </p>
+              </div>
+            </div>
+
+            {/* Custom Switch pill */}
+            <div
+              className={`h-6 w-11 rounded-full p-1 transition-colors ${
+                faceEnhance ? "bg-indigo-500" : "bg-slate-800"
+              }`}
+            >
+              <div
+                className={`h-4 w-4 rounded-full bg-white transition-transform ${
+                  faceEnhance ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Fine-Tune Sliders */}
+      <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+            4. បន្ស៊ីកម្រិតលម្អិត (Fine-Tuning Sliders)
+          </span>
+          <span className="font-mono text-[10px] text-slate-400">0% – 100% Range</span>
+        </div>
+
+        <div className="space-y-4">
+          {/* Sharpness Slider */}
+          <div>
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-slate-300">
+                កម្រិតភាពច្បាស់ (Sharpness / Deblur)
+              </span>
+              <span className="font-bold text-cyan-400">{sharpness}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={sharpness}
+              onChange={(e) => onChangeSharpness(Number(e.target.value))}
+              disabled={isLoading || disabled}
+              className="mt-1.5 h-1.5 w-full appearance-none rounded-lg bg-slate-800 accent-cyan-400 cursor-pointer disabled:opacity-50"
+            />
+          </div>
+
+          {/* Denoise Slider */}
+          <div>
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-slate-300">
+                កាត់បន្ថយគ្រាប់អុជ (Denoise / Smooth)
+              </span>
+              <span className="font-bold text-emerald-400">{denoise}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={denoise}
+              onChange={(e) => onChangeDenoise(Number(e.target.value))}
+              disabled={isLoading || disabled}
+              className="mt-1.5 h-1.5 w-full appearance-none rounded-lg bg-slate-800 accent-emerald-400 cursor-pointer disabled:opacity-50"
+            />
+          </div>
+
+          {/* Clarity & Contrast Boost Slider */}
+          <div>
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-slate-300">
+                ពន្លឺ និងពណ៌ (Clarity & Contrast Boost)
+              </span>
+              <span className="font-bold text-amber-400">{clarity}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={clarity}
+              onChange={(e) => onChangeClarity(Number(e.target.value))}
+              disabled={isLoading || disabled}
+              className="mt-1.5 h-1.5 w-full appearance-none rounded-lg bg-slate-800 accent-amber-400 cursor-pointer disabled:opacity-50"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Live Progress / Action Deck */}
+      <div>
+        {isLoading && progress ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-cyan-500/40 bg-cyan-950/30 p-4 shadow-[0_0_20px_rgba(0,240,255,0.15)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 text-cyan-400 animate-spin" />
+                <span className="font-mono text-xs font-bold text-cyan-300">
+                  {progress.stageNameKh} ({progress.stageName})
+                </span>
+              </div>
+              <span className="font-mono text-xs font-bold text-cyan-400">
+                {progress.percent}% · {elapsedSeconds.toFixed(1)}s
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 via-cyan-400 to-emerald-400 transition-all duration-300"
+                style={{ width: `${Math.max(5, progress.percent)}%` }}
+              />
+            </div>
+
+            <div className="mt-2 flex items-center justify-between">
+              <span className="font-mono text-[10px] text-slate-400">
+                Stage {progress.stage} of {progress.totalStages} · Multi-Stage Pixel Engine
+              </span>
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-950/40 px-2.5 py-1 text-xs font-mono font-bold text-rose-300 hover:bg-rose-900/60 transition-all cursor-pointer"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                <span>បោះបង់ (Cancel)</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onEnhance}
+            disabled={disabled || isLoading}
+            className={`w-full flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 px-6 py-4 font-mono text-sm font-bold text-white shadow-[0_0_25px_rgba(245,158,11,0.35)] hover:shadow-[0_0_35px_rgba(245,158,11,0.5)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <Sparkles className="h-5 w-5" />
+            <span>ធ្វើឱ្យច្បាស់ (ENHANCE NOW · {scale}X HD)</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
