@@ -5,6 +5,10 @@ import {
   sanitizeJoditHtml,
   validateMathML,
 } from "@/lib/math-ocr-utils";
+import {
+  normalizeKhmerText,
+  validateMathematicalSyntax,
+} from "@/lib/khmer-grapheme-normalizer";
 
 export const maxDuration = 45;
 
@@ -522,8 +526,19 @@ export async function POST(req: NextRequest) {
       // HTML and SVG sanitization
       parsed.joditHtml = sanitizeJoditHtml(parsed.joditHtml);
 
+      // Normalize Khmer text using Unicode NFC & grapheme-safe rules
       if (!parsed.transcription) {
         parsed.transcription = parsed.latex;
+      }
+      parsed.transcription = normalizeKhmerText(parsed.transcription);
+
+      // Verify mathematical syntax & structure (balanced parens/braces, frac, radicals, matrix)
+      const syntaxValidation = validateMathematicalSyntax(parsed.latex, parsed.mathml);
+      if (!syntaxValidation.valid && syntaxValidation.errors.length > 0) {
+        parsed.uncertainParts = [
+          ...(parsed.uncertainParts || []),
+          ...syntaxValidation.errors,
+        ];
       }
 
       if (!parsed.mathml) {
