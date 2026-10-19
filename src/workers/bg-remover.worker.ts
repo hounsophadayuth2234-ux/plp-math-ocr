@@ -1,5 +1,5 @@
 // Application-owned Web Worker for @imgly/background-removal
-// Allows immediate cancellation via worker.terminate() without leaving heavy computation running.
+// Supports safe WebGPU detection with non-crashing fallback to WASM (SIMD + multi-threading).
 
 import { removeBackground, preload } from "@imgly/background-removal";
 
@@ -8,6 +8,7 @@ export interface WorkerJobRequest {
   jobId: string;
   imageBlob: Blob;
   model: "isnet_fp16" | "isnet_quint8" | "isnet";
+  preferWebGpu?: boolean;
 }
 
 export interface WorkerPreloadRequest {
@@ -27,6 +28,11 @@ export interface WorkerCompleteMessage {
   type: "COMPLETE";
   jobId: string;
   resultBlob: Blob;
+  backend: "WebGPU" | "WASM";
+  webGpuAvailable: boolean;
+  fallbackReason?: string;
+  wasmSimd?: boolean;
+  wasmThreads?: number;
 }
 
 export interface WorkerErrorMessage {
@@ -63,43 +69,122 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
   }
 
   if (data.type === "START") {
-    const { jobId, imageBlob, model } = data;
-    try {
-      const resultBlob = await removeBackground(imageBlob, {
-        model: model || "isnet_fp16",
-        output: {
-          format: "image/png",
-          quality: 1.0,
-        },
-        fetchArgs: {
-          cache: "force-cache",
-        },
-        progress: (key: string, current: number, total: number) => {
-          const msg: WorkerProgressMessage = {
-            type: "PROGRESS",
-            jobId,
-            key,
-            current,
-            total,
-          };
-          self.postMessage(msg);
-        },
-      });
+    const { jobId, imageBlob, model, preferWebGpu } = data;
+    let resultBlob: Blob | null = null;
+    let actualBackend: "WebGPU" | "WASM" = "WASM";
+    let webGpuAvailable = false;
+    let fallbackReason: string | undefined = undefined;
 
-      const msg: WorkerCompleteMessage = {
-        type: "COMPLETE",
-        jobId,
-        resultBlob,
-      };
-      self.postMessage(msg);
-    } catch (err: unknown) {
-      const msg: WorkerErrorMessage = {
-        type: "ERROR",
-        jobId,
-        error: err instanceof Error ? err.message : String(err),
-      };
-      self.postMessage(msg);
+    // Check if worker environment has navigator.gpu
+    const hasWorkerGpu =
+      typeof navigator !== "undefined" &&
+      "gpu" in navigator &&
+      Boolean((navigator as unknown as { gpu?: unknown }).gpu);
+
+    const tryWebGpu = preferWebGpu !== false && hasWorkerGpu;
+
+    // 1. Attempt WebGPU execution if supported
+    if (tryWebGpu) {
+      try {
+        resultBlob = await removeBackground(imageBlob, {
+          model: model || "isnet_fp16",
+          device: "gpu",
+          output: {
+            format: "image/png",
+            quality: 1.0,
+          },
+          fetchArgs: {
+            cache: "force-cache",
+          },
+          progress: (key: string, current: number, total: number) => {
+            const msg: WorkerProgressMessage = {
+              type: "PROGRESS",
+              jobId,
+              key,
+              current,
+              total,
+            };
+            self.postMessage(msg);
+          },
+        });
+        actualBackend = "WebGPU";
+        webGpuAvailable = true;
+      } catch (gpuErr: unknown) {
+        console.warn("[bg-remover-worker] WebGPU execution failed; safely falling back to WASM:", gpuErr);
+        const errMsg = gpuErr instanceof Error ? gpuErr.message : String(gpuErr);
+        if (errMsg.includes("Adapter") || errMsg.includes("adapter")) {
+          fallbackReason = "Adapter unavailable";
+        } else if (errMsg.includes("device") || errMsg.includes("Device")) {
+          fallbackReason = "Device creation failed";
+        } else if (errMsg.includes("session") || errMsg.includes("Session")) {
+          fallbackReason = "WebGPU session initialization failed";
+        } else {
+          fallbackReason = "Model/runtime does not support WebGPU";
+        }
+      }
+    } else if (!hasWorkerGpu) {
+      fallbackReason = "WebGPU API unavailable";
     }
+
+    // 2. Safe WASM fallback
+    if (!resultBlob || actualBackend !== "WebGPU") {
+      try {
+        resultBlob = await removeBackground(imageBlob, {
+          model: model || "isnet_fp16",
+          device: "cpu",
+          output: {
+            format: "image/png",
+            quality: 1.0,
+          },
+          fetchArgs: {
+            cache: "force-cache",
+          },
+          progress: (key: string, current: number, total: number) => {
+            const msg: WorkerProgressMessage = {
+              type: "PROGRESS",
+              jobId,
+              key,
+              current,
+              total,
+            };
+            self.postMessage(msg);
+          },
+        });
+        actualBackend = "WASM";
+        if (!fallbackReason) {
+          fallbackReason = "WASM fallback selected";
+        }
+      } catch (wasmErr: unknown) {
+        const msg: WorkerErrorMessage = {
+          type: "ERROR",
+          jobId,
+          error: wasmErr instanceof Error ? wasmErr.message : String(wasmErr),
+        };
+        self.postMessage(msg);
+        return;
+      }
+    }
+
+    const isIsolated = typeof self !== "undefined" ? Boolean((self as unknown as { crossOriginIsolated?: boolean }).crossOriginIsolated) : false;
+    const hw = typeof navigator !== "undefined" && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4;
+    const wasmThreads = isIsolated ? Math.min(4, Math.max(1, hw > 2 ? hw - 1 : 1)) : 1;
+    const wasmSimd =
+      typeof WebAssembly !== "undefined" && typeof WebAssembly.validate === "function"
+        ? WebAssembly.validate(
+            new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 26, 11])
+          )
+        : false;
+
+    const completeMsg: WorkerCompleteMessage = {
+      type: "COMPLETE",
+      jobId,
+      resultBlob,
+      backend: actualBackend,
+      webGpuAvailable,
+      fallbackReason,
+      wasmSimd,
+      wasmThreads,
+    };
+    self.postMessage(completeMsg);
   }
 };
-

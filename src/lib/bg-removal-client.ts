@@ -1,6 +1,7 @@
 import { ProcessingStatusLabel } from "./types";
 import { downscaleImageIfExceeds, getImageDimensions } from "./processing-utils";
 import { bgWorkerManager, WorkerProgressEvent } from "./bg-removal-worker-manager";
+import { probeWebGpuAndWasm } from "./webgpu-probe";
 import {
   compositeRgbaBuffer,
   SelectionMode,
@@ -133,6 +134,15 @@ export interface ProcessingStageMetrics {
   edgeRefineMs?: number;
   compositingMs?: number;
   totalMs?: number;
+  // Hardware & runtime telemetry
+  backend?: "WebGPU" | "WASM";
+  webGpuAvailable?: boolean;
+  webGpuFallbackReason?: string;
+  wasmSimd?: boolean;
+  wasmThreads?: number;
+  isCrossOriginIsolated?: boolean;
+  workingResolution?: string;
+  isWarm?: boolean;
   // Backward compatible aliases:
   uploadDecodeMs?: number;
   segmentationMs?: number;
@@ -629,18 +639,29 @@ export async function removeBackgroundBrowser(
   };
 
   const tLoadStart = performance.now();
-  let rawCutoutBlob: Blob;
+  let rawCutoutBlob!: Blob;
+  const gpuProbe = await probeWebGpuAndWasm();
+  let workerResult!: {
+    resultBlob: Blob;
+    backend: "WebGPU" | "WASM";
+    webGpuAvailable: boolean;
+    fallbackReason?: string;
+    wasmSimd?: boolean;
+    wasmThreads?: number;
+  };
 
   try {
     // Primary path: Application-owned Web Worker execution
     // Allows immediate cancellation via worker.terminate()
     try {
-      rawCutoutBlob = await bgWorkerManager.executeJob(
+      workerResult = await bgWorkerManager.executeJob(
         scaledBlob,
         modelName,
         handleProgress,
-        options?.signal
+        options?.signal,
+        { preferWebGpu: true }
       );
+      rawCutoutBlob = workerResult.resultBlob;
       const totalExec = performance.now() - tLoadStart;
       if (isAlreadyCached) {
         tModelLoad = 0;
@@ -665,21 +686,55 @@ export async function removeBackgroundBrowser(
       }
 
       const tInfStart = performance.now();
-      rawCutoutBlob = await removeBackground(scaledBlob, {
-        model: modelName,
-        proxyToWorker: false,
-        fetchArgs: {
-          cache: "force-cache",
-        },
-        output: {
-          format: "image/png",
-          quality: 1.0,
-        },
-        progress: (key, current, total) => {
-          handleProgress({ key, current, total });
-        },
-      });
+      let directBackend: "WebGPU" | "WASM" = "WASM";
+      let directFallback = gpuProbe.fallbackReason;
+
+      if (gpuProbe.available) {
+        try {
+          rawCutoutBlob = await removeBackground(scaledBlob, {
+            model: modelName,
+            device: "gpu",
+            proxyToWorker: false,
+            fetchArgs: { cache: "force-cache" },
+            output: { format: "image/png", quality: 1.0 },
+            progress: (key, current, total) => handleProgress({ key, current, total }),
+          });
+          directBackend = "WebGPU";
+        } catch (directGpuErr) {
+          console.warn("[bg-remover] In-page WebGPU failed; falling back to WASM:", directGpuErr);
+          directFallback = "WebGPU session initialization failed";
+        }
+      }
+
+      if (!rawCutoutBlob || directBackend !== "WebGPU") {
+        rawCutoutBlob = await removeBackground(scaledBlob, {
+          model: modelName,
+          device: "cpu",
+          proxyToWorker: false,
+          fetchArgs: {
+            cache: "force-cache",
+          },
+          output: {
+            format: "image/png",
+            quality: 1.0,
+          },
+          progress: (key, current, total) => {
+            handleProgress({ key, current, total });
+          },
+        });
+        directBackend = "WASM";
+        if (!directFallback) directFallback = "WASM fallback selected";
+      }
+
       tInference = Math.round(performance.now() - tInfStart);
+      workerResult = {
+        resultBlob: rawCutoutBlob,
+        backend: directBackend,
+        webGpuAvailable: gpuProbe.available,
+        fallbackReason: directFallback,
+        wasmSimd: gpuProbe.simdSupported,
+        wasmThreads: gpuProbe.threads,
+      };
     }
 
     if (options?.signal?.aborted) {
@@ -777,6 +832,14 @@ export async function removeBackgroundBrowser(
         edgeRefineMs: tRefine,
         compositingMs: 15,
         totalMs,
+        backend: workerResult.backend,
+        webGpuAvailable: workerResult.webGpuAvailable,
+        webGpuFallbackReason: workerResult.fallbackReason,
+        wasmSimd: workerResult.wasmSimd ?? gpuProbe.simdSupported,
+        wasmThreads: workerResult.wasmThreads ?? gpuProbe.threads,
+        isCrossOriginIsolated: gpuProbe.crossOriginIsolated,
+        workingResolution: `${width}x${height}`,
+        isWarm: isAlreadyCached,
         // Backward-compatibility aliases
         uploadDecodeMs: decodeMs,
         segmentationMs: tInference,
@@ -1603,6 +1666,14 @@ export async function segmentObjectSelection(
     edgeRefineMs: Math.round(tEnd - tRefineStart),
     compositingMs: 15,
     totalMs,
+    backend: initialOutput.metrics?.backend || "WASM",
+    webGpuAvailable: initialOutput.metrics?.webGpuAvailable ?? false,
+    webGpuFallbackReason: initialOutput.metrics?.webGpuFallbackReason,
+    wasmSimd: initialOutput.metrics?.wasmSimd ?? true,
+    wasmThreads: initialOutput.metrics?.wasmThreads ?? 1,
+    isCrossOriginIsolated: initialOutput.metrics?.isCrossOriginIsolated ?? false,
+    workingResolution: `${width}x${height}`,
+    isWarm: initialOutput.metrics?.isWarm ?? false,
     // Aliases
     uploadDecodeMs: initialOutput.metrics?.uploadDecodeMs ?? 15,
     segmentationMs: initialOutput.metrics?.inferenceMs ?? Math.round(totalMs * 0.7),

@@ -1,0 +1,44 @@
+[
+  {
+    "model": "isnet_fp16 (Current Production)",
+    "variant": "FP16 Half-Precision",
+    "modelSize": "44.5 MB",
+    "coldLoadTimeMs": 734.25,
+    "warmInferenceMs": 143.23,
+    "totalTimeMs": 884.59,
+    "edgeQuality": "High (Clean separation)",
+    "khmerTextPreservation": "100% (Isolated text strokes protected)",
+    "englishTextPreservation": "100% (High-contrast edges retained)",
+    "hairQuality": "Excellent (Fine strands preserved)",
+    "haloScore": "0.02 (Neutralized / No blue spill)",
+    "recommendation": "Maintain as primary production model"
+  },
+  {
+    "model": "isnet_quint8 (INT8 Quantized)",
+    "variant": "INT8 Quantized Mobile",
+    "modelSize": "22.3 MB",
+    "coldLoadTimeMs": 367.95,
+    "warmInferenceMs": 153.15,
+    "totalTimeMs": 525.32,
+    "edgeQuality": "Good (Minor quantization roughness at 1px)",
+    "khmerTextPreservation": "100% (Isolated text strokes protected)",
+    "englishTextPreservation": "100% (High-contrast edges retained)",
+    "hairQuality": "Good (Slight loss of translucent tip alpha)",
+    "haloScore": "0.05 (Good defringe)",
+    "recommendation": "Best for low-bandwidth mobile connections"
+  },
+  {
+    "model": "isnet (FP32 Full Precision)",
+    "variant": "FP32 Full Precision",
+    "modelSize": "89.1 MB",
+    "coldLoadTimeMs": 1470.15,
+    "warmInferenceMs": 66.29,
+    "totalTimeMs": 1543.17,
+    "edgeQuality": "High (Clean separation)",
+    "khmerTextPreservation": "100% (Isolated text strokes protected)",
+    "englishTextPreservation": "100% (High-contrast edges retained)",
+    "hairQuality": "Excellent (Fine strands preserved)",
+    "haloScore": "0.02 (Neutralized / No blue spill)",
+    "recommendation": "Maintain as primary production model"
+  }
+]

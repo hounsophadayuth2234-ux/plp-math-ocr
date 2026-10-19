@@ -483,6 +483,42 @@ export function BgAdvancedSettings({
               </div>
             </div>
 
+            {/* Hardware & Runtime Telemetry Deck */}
+            <div className="p-2 bg-slate-950/70 border border-slate-800 space-y-1 text-[10px] font-mono">
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">Actual Backend:</span>
+                <span className={`font-bold px-1.5 py-0.5 text-[10px] ${
+                  metrics?.backend === "WebGPU"
+                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
+                    : "bg-cyan-950/80 text-cyan-300 border border-cyan-500/40"
+                }`}>
+                  {metrics?.backend || (typeof WebAssembly !== "undefined" ? "WASM" : "WASM (Fallback)")}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">WebGPU Status:</span>
+                <span className={`text-[10px] ${metrics?.webGpuAvailable ? "text-emerald-400 font-bold" : "text-amber-400"}`}>
+                  {metrics?.webGpuAvailable
+                    ? "Available (Active)"
+                    : metrics?.webGpuFallbackReason || "API Unavailable (WASM Selected)"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">WASM Runtime:</span>
+                <span className="text-slate-300 text-[10px]">
+                  SIMD: {metrics?.wasmSimd !== false ? "Enabled" : "Disabled"} · Threads: {metrics?.wasmThreads ?? 1}
+                </span>
+              </div>
+              {metrics?.workingResolution && (
+                <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-1">
+                  <span className="text-slate-400 uppercase text-[9px]">Working Resolution:</span>
+                  <span className="text-cyan-300 text-[10px] font-bold">
+                    {metrics.workingResolution}
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Phase Timing Breakdown Table (8 Stages) */}
             <div className="p-2 bg-slate-950/80 border border-slate-800 space-y-1 text-[10.5px]">
               <div className="text-[9px] text-slate-400 font-bold uppercase pb-1 border-b border-slate-850 flex justify-between">

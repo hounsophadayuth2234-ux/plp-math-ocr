@@ -1,12 +1,21 @@
 /**
  * Application-Owned Web Worker Lifecycle Manager
- * Handles job dispatch, progress forwarding, and hard cancellation via worker.terminate()
+ * Handles job dispatch, progress forwarding, WebGPU/WASM negotiation, and hard cancellation via worker.terminate()
  */
 
 export interface WorkerProgressEvent {
   key: string;
   current: number;
   total: number;
+}
+
+export interface WorkerExecutionResult {
+  resultBlob: Blob;
+  backend: "WebGPU" | "WASM";
+  webGpuAvailable: boolean;
+  fallbackReason?: string;
+  wasmSimd?: boolean;
+  wasmThreads?: number;
 }
 
 class BgWorkerManager {
@@ -73,14 +82,15 @@ class BgWorkerManager {
   }
 
   /**
-   * Run background removal inference inside the application worker
+   * Run background removal inference inside the application worker with WebGPU detection and WASM fallback
    */
   public async executeJob(
     imageBlob: Blob,
     model: "isnet_fp16" | "isnet_quint8" | "isnet",
     onProgress?: (event: WorkerProgressEvent) => void,
-    signal?: AbortSignal
-  ): Promise<Blob> {
+    signal?: AbortSignal,
+    options?: { preferWebGpu?: boolean }
+  ): Promise<WorkerExecutionResult> {
     if (signal?.aborted) {
       const err = new Error("Aborted by user.");
       err.name = "AbortError";
@@ -97,7 +107,7 @@ class BgWorkerManager {
 
     const worker = this.getWorker();
 
-    return new Promise<Blob>((resolve, reject) => {
+    return new Promise<WorkerExecutionResult>((resolve, reject) => {
       let settled = false;
 
       const cleanup = () => {
@@ -136,7 +146,14 @@ class BgWorkerManager {
           });
         } else if (data.type === "COMPLETE") {
           cleanup();
-          resolve(data.resultBlob);
+          resolve({
+            resultBlob: data.resultBlob,
+            backend: data.backend || "WASM",
+            webGpuAvailable: Boolean(data.webGpuAvailable),
+            fallbackReason: data.fallbackReason,
+            wasmSimd: data.wasmSimd ?? true,
+            wasmThreads: data.wasmThreads ?? 1,
+          });
         } else if (data.type === "ERROR") {
           cleanup();
           this.terminateActiveWorker();
@@ -157,6 +174,7 @@ class BgWorkerManager {
         jobId,
         imageBlob,
         model,
+        preferWebGpu: options?.preferWebGpu !== false,
       });
     });
   }
