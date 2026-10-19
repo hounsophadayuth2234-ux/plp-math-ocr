@@ -1,13 +1,14 @@
 /**
  * Web Worker for Studio Image Super-Resolution & Restoration Pipeline
  * Runs heavy pixel array math off the main thread with transferable ArrayBuffers.
+ * Imports ONLY pure algorithms from image-upscale-engine with zero circular dependencies.
  */
 
 import {
   runImageUpscalePipeline,
   UpscaleOptions,
   UpscaleProgress,
-} from "../lib/image-upscale-client";
+} from "../lib/image-upscale-engine";
 
 let isAborted = false;
 
