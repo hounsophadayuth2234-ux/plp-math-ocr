@@ -133,18 +133,18 @@ describe("Mechanical Cyber Technology Background & Control Transparency Suite", 
     const sidebarContent = fs.readFileSync(sidebarPath, "utf-8");
     const shellContent = fs.readFileSync(shellPath, "utf-8");
 
-    // CSS defines sidebar-module-glass with rgba(7, 19, 38, 0.26), blur(8px) saturate(130%), and 0.28 cyan border
+    // CSS defines sidebar-module-glass with rgba(7, 19, 38, 0.18), blur(10px) saturate(140%), and 0.34 cyan border
     expect(freshCssContent).toContain(".sidebar-module-glass");
-    expect(freshCssContent).toContain("rgba(7, 19, 38, 0.26)");
-    expect(freshCssContent).toContain("blur(8px) saturate(130%)");
-    expect(freshCssContent).toContain("rgba(0, 240, 255, 0.28)");
+    expect(freshCssContent).toContain("rgba(7, 19, 38, 0.18)");
+    expect(freshCssContent).toContain("blur(10px) saturate(140%)");
+    expect(freshCssContent).toContain("rgba(0, 240, 255, 0.34)");
     expect(freshCssContent).toContain(".sidebar-module-glass:hover");
     expect(freshCssContent).toContain(".sidebar-module-glass.is-active");
-    expect(freshCssContent).toContain("@supports not (backdrop-filter: blur(8px))");
 
-    // Sidebar maps all tools to .sidebar-module-glass
+    // Sidebar maps all tools to .sidebar-module-glass with direct backdropFilter style
     expect(sidebarContent).toContain("sidebar-module-glass");
     expect(sidebarContent).toContain("sidebar-module-glass is-active");
+    expect(sidebarContent).toContain("backdropFilter: \"blur(10px) saturate(140%)\"");
     expect(sidebarContent).toContain("focus-visible:ring-cyan-400");
 
     // DashboardShell places MechanicalCyberBackground at root shell level

@@ -57,7 +57,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar container */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-cyan-500/20 bg-[rgba(3,7,18,0.40)] backdrop-blur-[8px] text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shadow-[4px_0_30px_rgba(0,0,0,0.7)] ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-cyan-500/20 bg-[rgba(3,7,18,0.25)] backdrop-blur-[8px] text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shadow-[4px_0_30px_rgba(0,0,0,0.7)] ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -144,6 +144,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     key={tool.id}
                     href={tool.href}
                     onClick={onClose}
+                    style={{
+                      WebkitBackdropFilter: "blur(10px) saturate(140%)",
+                      backdropFilter: "blur(10px) saturate(140%)",
+                    }}
                     className={`group relative flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950 ${
                       isActive
                         ? "sidebar-module-glass is-active text-white"

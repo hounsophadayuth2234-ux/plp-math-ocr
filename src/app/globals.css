@@ -475,30 +475,24 @@ body {
 
 /* 9. Sidebar Active Modules Cyber-Glass Cards */
 .sidebar-module-glass {
-  background: rgba(7, 19, 38, 0.26);
-  backdrop-filter: blur(8px) saturate(130%);
-  -webkit-backdrop-filter: blur(8px) saturate(130%);
-  border: 1px solid rgba(0, 240, 255, 0.28);
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.08);
+  background: rgba(7, 19, 38, 0.18);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  border: 1px solid rgba(0, 240, 255, 0.34);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.10);
   transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 180ms ease;
 }
 
 .sidebar-module-glass:hover {
-  background: rgba(7, 19, 38, 0.34);
-  border-color: rgba(0, 240, 255, 0.68);
-  box-shadow: 0 0 16px rgba(0, 240, 255, 0.18);
+  background: rgba(7, 19, 38, 0.28);
+  border-color: rgba(0, 240, 255, 0.70);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.22);
 }
 
 .sidebar-module-glass.is-active {
-  background: rgba(7, 19, 38, 0.40);
-  border-color: rgba(0, 240, 255, 0.75);
-  box-shadow: 0 0 18px rgba(0, 240, 255, 0.24);
-}
-
-@supports not (backdrop-filter: blur(8px)) {
-  .sidebar-module-glass {
-    background: rgba(7, 19, 38, 0.45);
-  }
+  background: rgba(7, 19, 38, 0.38);
+  border-color: rgba(0, 240, 255, 0.78);
+  box-shadow: 0 0 22px rgba(0, 240, 255, 0.28);
 }
 
 
