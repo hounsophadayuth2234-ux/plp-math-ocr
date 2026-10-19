@@ -8,6 +8,7 @@ import {
 import {
   normalizeKhmerText,
   validateMathematicalSyntax,
+  computeLineConfidences,
 } from "@/lib/khmer-grapheme-normalizer";
 
 export const maxDuration = 45;
@@ -15,6 +16,13 @@ export const maxDuration = 45;
 // -----------------------------------------------------------
 // Response and Error Interfaces
 // -----------------------------------------------------------
+export interface MathOcrLineRegion {
+  id: string;
+  line: string;
+  type: "khmer_text" | "formula" | "mixed";
+  confidence: number;
+}
+
 export interface MathOcrResponse {
   transcription: string;
   latex: string;
@@ -25,6 +33,9 @@ export interface MathOcrResponse {
   confidence?: number;
   uncertainParts?: string[];
   isDemoMode?: boolean;
+  regions?: MathOcrLineRegion[];
+  inferenceProvider?: string;
+  serverElapsedMs?: number;
 }
 
 export interface MathOcrError {
@@ -86,16 +97,17 @@ function validateImageMagicBytes(buffer: ArrayBuffer): {
 // -----------------------------------------------------------
 // Strict Image-to-Code Transcription Engine Prompt
 // -----------------------------------------------------------
-const SYSTEM_PROMPT = `You are a mathematical image transcription engine.
+const SYSTEM_PROMPT = `You are a mathematical and educational document transcription engine specializing in bilingual Khmer-language and mathematical notation.
 
-Your ONLY task is to copy the visible mathematical content from the uploaded image and convert the same content into three code formats:
+Your ONLY task is to faithfully transcribe ALL visible content (both Khmer educational text and mathematical notation) from the uploaded image and convert that same content into three standard code formats:
 1. LaTeX
 2. Jodit-compatible HTML with strict inline CSS
 3. Standard MathML
 
 This is image-to-code transcription only, NOT problem solving.
 
-STRICT RULES:
+STRICT TRANSCRIPTION RULES:
+- Transcribe BOTH Khmer educational text (such as exercise titles, problem numbers like "លំហាត់ទី១", prompts like "ចូរគណនា", instructions, notes) AND mathematical equations/expressions.
 - Do NOT solve any equation or problem.
 - Do NOT calculate any result or answer.
 - Do NOT factor, simplify, rearrange, or transform the expression.
@@ -106,6 +118,18 @@ STRICT RULES:
 - Do NOT replace a visible symbol with another symbol.
 - Do NOT guess unclear content. Mark unclear content in "uncertainParts".
 - The three outputs must represent exactly the same transcription.
+
+CRITICAL KHMER & BILINGUAL HANDLING:
+1. IN LATEX:
+   - Wrap Khmer text in \\text{...} (e.g. \\text{លំហាត់ទី១៖ ចូរគណនា} \\\\ 2 + 3 = 5). Never output raw unwrapped Khmer inside math mode.
+   - KaTeX renders Khmer text inside \\text{...} via system Unicode fonts. Never report valid Khmer Unicode as "broken/unsupported glyphs".
+2. IN JODIT HTML:
+   - Wrap in: <div style="font-family: 'Kantumruy Pro', 'Khmer OS Battambang', 'Hanuman', 'Times New Roman', serif; font-size: 22px; line-height: 1.8; color: #000;">
+   - Preserve Khmer text inside styled <p> or <span>.
+3. IN MATHML:
+   - Wrap Khmer words in <mtext>...</mtext>.
+4. IN RAW TRANSCRIPTION:
+   - Provide the complete raw literal transcription with exact Khmer Unicode NFC normalization.
 
 CRITICAL LATEX FORMATTING RULES:
 1. STRICT KATEX (0.19.0) COMPATIBILITY:
@@ -122,17 +146,15 @@ CRITICAL JODIT HTML FORMATTING RULES:
 1. ABSOLUTE STRICT INLINE CSS ONLY:
    - NO <style> tags, NO CSS classes, NO external stylesheets.
    - EVERY single element MUST use inline style="..." attributes.
-2. WRAPPER:
-   - Wrap in: <div style="font-family: 'Times New Roman', serif; font-size: 24px; line-height: 1.8; color: #000;">
-3. VERTICAL ARITHMETIC:
+2. VERTICAL ARITHMETIC:
    - Never output calculated answers. If the bottom line has a blank or [___], output literal text [___].
    - Table structure: <table style="border-collapse: collapse; font-family: 'Times New Roman', serif; font-size: 28px; border: none; margin: 10px auto; text-align: right;">
    - Fixed-width columns for place values: <td style="border: none; width: 40px; padding: 4px;">...</td>
    - Answer line separator: style="border-top: 2px solid black;"
-4. FRACTIONS:
+3. FRACTIONS:
    - Vertical flex: <span style="display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 5px;">
    - Numerator must have: style="border-bottom: 2px solid black;"
-5. GEOMETRY (SVG):
+4. GEOMETRY (SVG):
    - If shapes/diagrams are present, generate clean self-contained <svg> with stroke-width="3" and legible font-size="24".
 
 CRITICAL MATHML FORMATTING RULES:
@@ -141,13 +163,13 @@ CRITICAL MATHML FORMATTING RULES:
 
 Return a valid JSON object with EXACTLY this structure:
 {
-  "transcription": "literal raw text of the transcription",
-  "detectedType": "short descriptive type (e.g., Quadratic Equation, Vertical Addition, Fraction)",
+  "transcription": "literal raw text of the transcription (including Khmer and math)",
+  "detectedType": "short descriptive type (e.g., Bilingual Khmer Math Problem, Quadratic Equation, Vertical Addition)",
   "rawDescription": "brief description of the transcribed mathematical content (without solving)",
-  "latex": "valid, compilable LaTeX code representing the exact expression",
+  "latex": "valid, compilable LaTeX code with \\text{...} for Khmer",
   "joditHtml": "Jodit HTML with strict inline CSS only",
   "mathml": "valid W3C MathML markup representing the exact expression",
-  "confidence": 1.0,
+  "confidence": 0.98,
   "uncertainParts": []
 }`;
 
@@ -162,11 +184,10 @@ export function getCandidateModels(): string[] {
     if (list.length > 0) return list;
   }
   return [
-    "gemini-3.5-flash",
-    "gemini-3.8-flash",
     "gemini-flash-lite-latest",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
+    "gemini-flash-latest",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash",
   ];
 }
 
@@ -359,7 +380,7 @@ export async function POST(req: NextRequest) {
     const attemptedModels: string[] = [];
     const candidateModels = getCandidateModels();
     const OVERALL_BUDGET_MS = 38000;
-    const PER_MODEL_TIMEOUT_MS = 10000;
+    const PER_MODEL_TIMEOUT_MS = 8000;
 
     for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
       const modelName = candidateModels[mIdx];
@@ -547,15 +568,16 @@ export async function POST(req: NextRequest) {
         const mathmlValidation = validateMathML(parsed.mathml);
         parsed.mathml = mathmlValidation.normalized;
       }
-
       if (!parsed.detectedType) {
-        parsed.detectedType = "Mathematical Expression";
+        parsed.detectedType = "Bilingual Math Problem";
       }
-
       if (!parsed.rawDescription) {
         parsed.rawDescription = parsed.transcription;
       }
 
+      parsed.regions = computeLineConfidences(parsed.transcription, parsed.confidence ?? 0.98);
+      parsed.inferenceProvider = `Serverless Gemini Vision (${selectedModel})`;
+      parsed.serverElapsedMs = Date.now() - overallStartTime;
       parsed.isDemoMode = false;
 
       return NextResponse.json<MathOcrResponse>(parsed, { status: 200 });

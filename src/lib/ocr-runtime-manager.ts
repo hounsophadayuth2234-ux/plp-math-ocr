@@ -403,7 +403,6 @@ export class OcrSessionManager {
         throw new Error("Job cancelled by superseding request");
       }
 
-      const _totalMs = Math.round(performance.now() - overallStart);
       const message = err instanceof Error ? err.message : String(err);
       const isCancelled = message.includes("cancelled") || abortController.signal.aborted;
 

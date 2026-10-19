@@ -26,6 +26,8 @@ interface OcrDiagnosticsDeckProps {
   regions?: OcrRegionResult[];
   onUpdateTranscription?: (newText: string) => void;
   rawTranscription?: string;
+  onRetryLowConfidence?: () => void;
+  inferenceProvider?: string;
 }
 
 export function OcrDiagnosticsDeck({
@@ -36,6 +38,8 @@ export function OcrDiagnosticsDeck({
   regions,
   onUpdateTranscription,
   rawTranscription,
+  onRetryLowConfidence,
+  inferenceProvider = "Serverless Gemini Vision (gemini-flash-lite-latest)",
 }: OcrDiagnosticsDeckProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(rawTranscription || "");
@@ -78,35 +82,36 @@ export function OcrDiagnosticsDeck({
             <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
               <Cpu className="h-4 w-4 text-cyan-400 shrink-0" />
               <h4 className="text-[11px] font-bold text-white uppercase tracking-wider">
-                Browser Runtime & Execution Provider
+                Execution Provider & Browser Runtime
               </h4>
             </div>
 
             <div className="space-y-1.5 text-[10px]">
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">Selected Provider:</span>
-                <span className="font-bold px-1.5 py-0.5 bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
-                  {capabilities?.selectedProvider === "webgpu"
-                    ? "WebGPU Hardware"
-                    : capabilities?.selectedProvider === "wasm_simd_threads"
-                    ? "WASM SIMD (Multi-threaded)"
-                    : capabilities?.selectedProvider === "wasm_simd_single"
-                    ? "WASM SIMD (Single-threaded)"
-                    : "WASM / CPU Baseline"}
+                <span className="text-slate-400 uppercase text-[9px]">Inference Provider:</span>
+                <span className="font-bold px-1.5 py-0.5 bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 truncate max-w-[60%]">
+                  {inferenceProvider}
                 </span>
               </div>
 
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">WASM SIMD Status:</span>
+                <span className="text-slate-400 uppercase text-[9px]">Client Preprocessing:</span>
+                <span className="text-emerald-400 font-bold">
+                  Browser Web Worker (Local)
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">WASM SIMD Capability:</span>
                 <span className={`font-bold ${capabilities?.wasmSimd ? "text-emerald-400" : "text-slate-400"}`}>
-                  {capabilities?.wasmSimd ? "Supported (Enabled)" : "Disabled / Unavailable"}
+                  {capabilities?.wasmSimd ? "Available (Hardware Accelerated)" : "Unavailable / CPU"}
                 </span>
               </div>
 
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">WASM Threads / SAB:</span>
-                <span className="text-slate-300">
-                  {capabilities?.wasmThreads ? `Enabled (${capabilities.threadsCount} threads)` : "Single-threaded"}
+                <span className="text-slate-400 uppercase text-[9px]">WebGPU Capability:</span>
+                <span className={capabilities?.webGpuAvailable ? "text-emerald-400 font-bold" : "text-slate-400"}>
+                  {capabilities?.webGpuAvailable ? "Detected" : "Not Present / Software"}
                 </span>
               </div>
 
@@ -117,15 +122,8 @@ export function OcrDiagnosticsDeck({
                 </span>
               </div>
 
-              <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-1">
-                <span className="text-slate-400 uppercase text-[9px]">Session State:</span>
-                <span className="text-cyan-300">
-                  {timings?.isWarmSession
-                    ? "Warm Session Reuse"
-                    : timings?.isColdStart
-                    ? "Cold Start (First initialization)"
-                    : "Active Session"}
-                </span>
+              <div className="border-t border-slate-900 pt-1 text-[9.5px] text-slate-400 leading-tight">
+                ℹ️ Image decode, quality assessment, and region cropping run locally in browser worker. Full multimodal Khmer + Math transcription executes via high-speed serverless engine.
               </div>
             </div>
           </div>
@@ -262,22 +260,63 @@ export function OcrDiagnosticsDeck({
 
         {/* Card 5: User Correction & Region Confidence */}
         <div className="border border-slate-850 bg-slate-900/50 p-3 space-y-2">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Edit2 className="h-4 w-4 text-cyan-400 shrink-0" />
               <h4 className="text-[11px] font-bold text-white uppercase tracking-wider">
-                User Correction & Region Confidence // ការផ្ទៀងផ្ទាត់
+                Region Confidence & Correction // ការផ្ទៀងផ្ទាត់
               </h4>
             </div>
-            {regions && regions.length > 0 && (
-              <span className="text-[10px] text-emerald-400 font-bold">
-                Confidence: {Math.round(regions[0].confidence * 100)}%
-              </span>
+            {onRetryLowConfidence && (
+              <button
+                type="button"
+                onClick={onRetryLowConfidence}
+                className="inline-flex items-center gap-1 border border-cyan-500/50 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 px-2 py-0.5 text-[9.5px] uppercase font-bold transition-colors"
+              >
+                <span>⚡ Re-run Low-Confidence Khmer</span>
+              </button>
             )}
           </div>
 
+          {/* Region-by-Region Breakdown */}
+          {regions && regions.length > 0 && (
+            <div className="space-y-1.5 border-b border-slate-800 pb-2">
+              <div className="text-[9px] text-slate-400 uppercase font-bold">
+                Recognized Regions ({regions.length}):
+              </div>
+              <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                {regions.map((reg, idx) => (
+                  <div
+                    key={reg.regionId || idx}
+                    className="flex items-center justify-between text-[10px] bg-slate-950/60 border border-slate-800/80 px-2 py-1 gap-2"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`px-1 py-0.2 text-[8.5px] font-bold uppercase rounded ${
+                        reg.kind === "khmer_text"
+                          ? "bg-purple-950 text-purple-300 border border-purple-500/40"
+                          : reg.kind === "formula"
+                          ? "bg-indigo-950 text-indigo-300 border border-indigo-500/40"
+                          : "bg-cyan-950 text-cyan-300 border border-cyan-500/40"
+                      }`}>
+                        {reg.kind === "khmer_text" ? "Khmer Text" : reg.kind === "formula" ? "Formula" : "Other"}
+                      </span>
+                      <span className="text-slate-300 truncate max-w-[220px]">
+                        {reg.normalizedText || reg.rawText}
+                      </span>
+                    </div>
+                    <span className={`font-bold shrink-0 ${
+                      reg.confidence >= 0.90 ? "text-emerald-400" : "text-amber-400"
+                    }`}>
+                      {Math.round(reg.confidence * 100)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p className="text-[10px] text-slate-400">
-            You can directly edit the recognized mathematical transcription below. Edits are preserved and will not be overwritten by downstream re-renders.
+            You can directly edit the recognized transcription below. Edits are preserved and will not be overwritten by downstream re-renders.
           </p>
 
           {isEditing ? (

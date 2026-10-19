@@ -49,7 +49,7 @@ describe("Math OCR Resilient Provider, Fallback & Security Suite", () => {
     delete process.env.GEMINI_MODEL_PRIORITY;
     const defaultModels = getCandidateModels();
     expect(defaultModels).toContain("gemini-3.5-flash");
-    expect(defaultModels[0]).toBe("gemini-3.5-flash");
+    expect(defaultModels[0]).toBe("gemini-flash-lite-latest");
 
     process.env.GEMINI_MODEL_PRIORITY = "gemini-custom-1, gemini-custom-2, gemini-custom-3";
     const customModels = getCandidateModels();

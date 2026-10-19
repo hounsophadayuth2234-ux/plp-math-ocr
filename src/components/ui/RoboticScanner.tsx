@@ -9,6 +9,7 @@ interface RoboticScannerProps {
   steps?: string[];
   subtext?: string;
   elapsedSeconds?: number;
+  providerLabel?: string;
 }
 
 const DEFAULT_STEPS = [
@@ -25,36 +26,50 @@ export function RoboticScanner({
   steps = DEFAULT_STEPS,
   subtext = "High-precision AI processing underway",
   elapsedSeconds,
+  providerLabel = "SERVERLESS VISION API",
 }: RoboticScannerProps) {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [liveElapsed, setLiveElapsed] = useState<number>(0);
 
+  const startTimeRef = React.useRef<number | null>(null);
+  const stepsRef = React.useRef(steps);
+
+  useEffect(() => {
+    stepsRef.current = steps;
+  }, [steps]);
+
   useEffect(() => {
     if (!active) {
+      startTimeRef.current = null;
       return;
     }
 
-    const start = performance.now();
-    const initTimer = setTimeout(() => {
+    if (startTimeRef.current === null) {
+      startTimeRef.current = performance.now();
       setCurrentStepIdx(0);
       setLogs([`[0.00s] >> SYSTEM ONLINE: Connecting to ${moduleName}`]);
       setLiveElapsed(0);
-    }, 0);
+    }
 
     const timerInterval = setInterval(() => {
-      setLiveElapsed((performance.now() - start) / 1000);
+      if (startTimeRef.current !== null) {
+        setLiveElapsed((performance.now() - startTimeRef.current) / 1000);
+      }
     }, 100);
 
     const stepInterval = setInterval(() => {
+      const currentSteps = stepsRef.current;
       setCurrentStepIdx((prev) => {
-        if (prev >= steps.length - 1) {
+        if (prev >= currentSteps.length - 1) {
           // Reached the last step, do NOT keep advancing or appending duplicate steps
           return prev;
         }
         const next = prev + 1;
-        const nowSec = ((performance.now() - start) / 1000).toFixed(2);
-        const nextStep = steps[next];
+        const nowSec = startTimeRef.current !== null
+          ? ((performance.now() - startTimeRef.current) / 1000).toFixed(2)
+          : "0.00";
+        const nextStep = currentSteps[next];
         setLogs((prevLogs) => {
           // Deduplicate consecutive identical messages
           if (prevLogs.length > 0 && prevLogs[prevLogs.length - 1].includes(nextStep)) {
@@ -67,15 +82,18 @@ export function RoboticScanner({
     }, 1200);
 
     return () => {
-      clearTimeout(initTimer);
       clearInterval(stepInterval);
       clearInterval(timerInterval);
     };
-  }, [active, moduleName, steps]);
+  }, [active, moduleName]);
 
   if (!active) return null;
 
   const displayedElapsed = elapsedSeconds !== undefined ? elapsedSeconds : liveElapsed;
+  const progressPct = Math.min(
+    95,
+    Math.round(((currentStepIdx + 1) / (steps.length || 1)) * 90)
+  );
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-cyan-500/40 bg-slate-950/90 p-6 shadow-[0_0_35px_rgba(0,240,255,0.15)] backdrop-blur-xl">
@@ -101,18 +119,18 @@ export function RoboticScanner({
                 {moduleName}
               </span>
               <span className="rounded bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[10px] text-cyan-300 ring-1 ring-cyan-500/30">
-                LIVE COMPUTE
+                {providerLabel}
               </span>
             </div>
             <p className="text-xs text-slate-400">{subtext}</p>
           </div>
         </div>
 
-        {/* Telemetry metrics with truthful real elapsed time */}
+        {/* Telemetry metrics with truthful real elapsed time and dynamic progress */}
         <div className="hidden sm:flex items-center gap-4 font-mono text-[11px] text-slate-400">
           <div className="flex items-center gap-1.5 text-cyan-300">
             <Activity className="h-3.5 w-3.5 text-cyan-400 animate-pulse" aria-hidden="true" />
-            <span>NEURAL: 100%</span>
+            <span>NEURAL: {progressPct}% [STAGE {currentStepIdx + 1}/{steps.length}]</span>
           </div>
           <div className="flex items-center gap-1.5 text-emerald-400" data-testid="robotic-scanner-elapsed">
             <Zap className="h-3.5 w-3.5" aria-hidden="true" />

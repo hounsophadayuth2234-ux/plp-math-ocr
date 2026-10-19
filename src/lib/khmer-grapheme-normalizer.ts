@@ -504,3 +504,86 @@ export function validateMathematicalSyntax(
     mathmlValid,
   };
 }
+
+/**
+ * Grapheme-safe slice that NEVER slices through Khmer combining vowels or Coeng clusters.
+ * Uses Intl.Segmenter cluster boundaries rather than plain JavaScript code unit indexing.
+ */
+export function graphemeSafeSlice(text: string, start: number, end?: number): string {
+  if (!text) return "";
+  const clusters = splitGraphemes(text);
+  return clusters.slice(start, end).join("");
+}
+
+/**
+ * Returns the exact grapheme-cluster count of a string, honoring Khmer orthographic units.
+ */
+export function countKhmerGraphemes(text: string): number {
+  if (!text) return 0;
+  return splitGraphemes(text).length;
+}
+
+/**
+ * Detects whether a string has orphaned or illegal leading Khmer combining marks (e.g. vowel or coeng without base).
+ */
+export function hasOrphanedKhmerCombiningMarks(text: string): boolean {
+  if (!text) return false;
+  // If the very first character is a dependent vowel (\u17B6-\u17C5), Coeng (\u17D2), or diacritic (\u17C6-\u17D3)
+  const firstCharCode = text.charCodeAt(0);
+  return (
+    (firstCharCode >= 0x17b6 && firstCharCode <= 0x17d3) ||
+    firstCharCode === 0x17d2
+  );
+}
+
+/**
+ * Checks whether a text contains any Khmer Unicode characters (\u1780 - \u17FF).
+ */
+export function containsKhmerScript(text: string): boolean {
+  if (!text) return false;
+  return /[\u1780-\u17FF]/.test(text);
+}
+
+/**
+ * Computes per-line confidence scores and semantic classifications (Khmer text vs mathematical formula).
+ */
+export function computeLineConfidences(
+  text: string,
+  baseConfidence: number = 0.95
+): {
+  id: string;
+  line: string;
+  type: "khmer_text" | "formula" | "mixed";
+  confidence: number;
+}[] {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+
+  return lines.map((line, idx) => {
+    const hasKhmer = containsKhmerScript(line);
+    const hasMath = /[0-9=+\-*/^_{}\\]|\\frac|\\sqrt|\\sum|\\int/.test(line);
+
+    let type: "khmer_text" | "formula" | "mixed" = "mixed";
+    if (hasKhmer && !hasMath) type = "khmer_text";
+    else if (!hasKhmer && hasMath) type = "formula";
+
+    // Deduct slightly for orphaned marks or unclosed delimiters
+    let confidence = baseConfidence;
+    if (hasOrphanedKhmerCombiningMarks(line)) {
+      confidence = Math.max(0.5, confidence - 0.25);
+    }
+    const openP = (line.match(/\(/g) || []).length;
+    const closeP = (line.match(/\)/g) || []).length;
+    if (openP !== closeP) {
+      confidence = Math.max(0.6, confidence - 0.15);
+    }
+
+    return {
+      id: `line_${idx + 1}`,
+      line: normalizeKhmerText(line),
+      type,
+      confidence: Math.round(confidence * 100) / 100,
+    };
+  });
+}
+

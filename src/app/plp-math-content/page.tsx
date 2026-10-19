@@ -187,6 +187,16 @@ export default function PlpMathContentPage() {
     });
   };
 
+  const handleRetryLowConfidenceKhmer = async () => {
+    if (!imageFile && !rawText.trim()) return;
+    const lowConfLines = detectedRegions.filter((r) => r.confidence < 0.90 || r.kind === "khmer_text");
+    const retryNote = lowConfLines.length > 0
+      ? `Re-read and verify Khmer text lines carefully: ${lowConfLines.map((l) => l.rawText).join("; ")}`
+      : "Carefully re-verify and transcribe all visible Khmer text and mathematical formulas.";
+    setCustomInstructions(retryNote);
+    await submitData(true);
+  };
+
   const canSubmit = (imageFile !== null || rawText.trim().length > 0) && !isLoading && !isRefining;
 
   const submitData = async (isRefine: boolean) => {
@@ -271,7 +281,9 @@ export default function PlpMathContentPage() {
       }
 
       if (!response.ok) {
-        setIsResultStale(result !== null);
+        // Clear result completely so no misleading previous result is displayed as if it belongs to the failed request
+        setResult(null);
+        setIsResultStale(false);
         setFailedDuration(measuredDuration);
 
         const is413 =
@@ -348,21 +360,35 @@ export default function PlpMathContentPage() {
       };
       setStageTimings(timings);
 
-      setDetectedRegions([
-        {
-          regionId: "region_1",
-          kind: (data as MathOcrResponse).detectedType?.toLowerCase().includes("diagram")
-            ? "diagram"
-            : (data as MathOcrResponse).detectedType?.toLowerCase().includes("table")
-            ? "table"
-            : "formula",
-          rawText: (data as MathOcrResponse).transcription || (data as MathOcrResponse).latex,
-          normalizedText: normTranscription,
-          confidence: (data as MathOcrResponse).confidence ?? 0.98,
-          bbox: { x: 0, y: 0, width: 800, height: 600 },
-          sourceRevision: currentRequestId,
-        },
-      ]);
+      if ((data as MathOcrResponse).regions && (data as MathOcrResponse).regions!.length > 0) {
+        setDetectedRegions(
+          (data as MathOcrResponse).regions!.map((r, i) => ({
+            regionId: r.id || `line_${i + 1}`,
+            kind: r.type === "khmer_text" ? "khmer_text" : r.type === "formula" ? "formula" : "unknown",
+            rawText: r.line,
+            normalizedText: r.line,
+            confidence: r.confidence,
+            bbox: { x: 20, y: 35 * (i + 1), width: 760, height: 30 },
+            sourceRevision: currentRequestId,
+          }))
+        );
+      } else {
+        setDetectedRegions([
+          {
+            regionId: "region_1",
+            kind: (data as MathOcrResponse).detectedType?.toLowerCase().includes("diagram")
+              ? "diagram"
+              : (data as MathOcrResponse).detectedType?.toLowerCase().includes("table")
+              ? "table"
+              : "formula",
+            rawText: (data as MathOcrResponse).transcription || (data as MathOcrResponse).latex,
+            normalizedText: normTranscription,
+            confidence: (data as MathOcrResponse).confidence ?? 0.98,
+            bbox: { x: 0, y: 0, width: 800, height: 600 },
+            sourceRevision: currentRequestId,
+          },
+        ]);
+      }
 
       (data as MathOcrResponse).transcription = normTranscription;
       setResult(data as MathOcrResponse);
@@ -381,8 +407,9 @@ export default function PlpMathContentPage() {
       }
 
       const measuredDuration = (performance.now() - startTime) / 1000;
+      setResult(null);
       setFailedDuration(measuredDuration);
-      setIsResultStale(result !== null);
+      setIsResultStale(false);
 
       const isNetworkError =
         err instanceof TypeError || (err instanceof Error && /network|fetch|connect/i.test(err.message));
@@ -697,13 +724,14 @@ export default function PlpMathContentPage() {
             <RoboticScanner
               active={true}
               moduleName="PLP MATH CONTENT // RECOGNITION CORE"
+              providerLabel="SERVERLESS GEMINI VISION"
               steps={[
-                "PARSING MATHEMATICAL FORMULAS & SYMBOLS...",
-                "VALIDATING VERTICAL ARITHMETIC & PLACE-VALUE COLUMNS...",
-                "SYNTHESIZING LATEX, MATHML & JODIT INLINE CSS...",
-                "CHECKING KATEX 0.19.0 & SHORTCODE COMPLIANCE...",
+                "LOCAL IMAGE DECODE & GRAPHEME PREPROCESSING...",
+                "DETECTING KHMER TEXT & FORMULA REGIONS...",
+                "TRANSCRIBING BILINGUAL KHMER-MATH TOKENS...",
+                "VALIDATING KATEX, JODIT CSS & MATHML OUTPUT...",
               ]}
-              subtext="Analyzing mathematical structure and formatting code"
+              subtext="Bilingual Khmer educational text and mathematical structure transcription"
             />
           )}
 
@@ -732,6 +760,8 @@ export default function PlpMathContentPage() {
                 regions={detectedRegions}
                 onUpdateTranscription={handleUpdateTranscription}
                 rawTranscription={result.transcription || result.latex}
+                onRetryLowConfidence={handleRetryLowConfidenceKhmer}
+                inferenceProvider={result.inferenceProvider || "Serverless Gemini Vision (gemini-flash-lite-latest)"}
               />
 
               {/* ── 8. Copy and Refine Actions ── */}
@@ -846,6 +876,7 @@ export default function PlpMathContentPage() {
                 regions={detectedRegions}
                 onUpdateTranscription={handleUpdateTranscription}
                 rawTranscription={undefined}
+                onRetryLowConfidence={handleRetryLowConfidenceKhmer}
               />
             </>
           )}
