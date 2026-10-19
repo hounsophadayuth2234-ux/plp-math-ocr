@@ -128,7 +128,6 @@ body {
   background: linear-gradient(90deg, transparent 0%, #00f0ff 25%, #ffffff 50%, #00f0ff 75%, transparent 100%);
   box-shadow: 0 0 15px #00f0ff, 0 0 30px #00f0ff, 0 0 45px #00f0ff;
   animation: laserSweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  will-change: transform;
   pointer-events: none;
   z-index: 30;
 }
@@ -151,22 +150,6 @@ body {
   animation: radarRotate 6s linear infinite reverse;
 }
 
-/* Pulse Neon Glow */
-@keyframes cyberPulse {
-  0%, 100% {
-    box-shadow: 0 0 10px rgba(0, 240, 255, 0.2), inset 0 0 10px rgba(0, 240, 255, 0.05);
-    border-color: rgba(0, 240, 255, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 25px rgba(0, 240, 255, 0.45), inset 0 0 15px rgba(0, 240, 255, 0.15);
-    border-color: rgba(0, 240, 255, 0.6);
-  }
-}
-
-.cyber-pulse-glow {
-  animation: cyberPulse 2.8s ease-in-out infinite;
-}
-
 /* Cyber Grid Background Pattern */
 .cyber-grid-bg {
   background-color: #030712;
@@ -186,19 +169,6 @@ body {
     transparent 2px
   );
   pointer-events: none;
-}
-
-/* Futuristic Tech Glass Panel */
-.cyber-panel {
-  background: rgba(8, 14, 28, 0.75);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 240, 255, 0.15);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 0 1px 1px rgba(255, 255, 255, 0.05);
-}
-
-.cyber-panel:hover {
-  border-color: rgba(0, 240, 255, 0.35);
-  box-shadow: 0 12px 40px 0 rgba(0, 240, 255, 0.1), inset 0 0 1px 1px rgba(0, 240, 255, 0.15);
 }
 
 /* Cyber Terminal Scrollbar */
@@ -267,9 +237,8 @@ body {
   background: linear-gradient(90deg, transparent 0%, rgba(0, 240, 255, 0.3) 15%, #00f0ff 50%, rgba(0, 240, 255, 0.3) 85%, transparent 100%);
   box-shadow: 0 0 20px #00f0ff, 0 0 40px rgba(0, 240, 255, 0.6);
   animation: industrialScanBeam 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  will-change: transform;
   pointer-events: none;
-  z-index: 10;
+  z-index: 0;
 }
 
 .animate-industrial-scan-intense {
@@ -281,9 +250,8 @@ body {
   background: linear-gradient(90deg, transparent 0%, rgba(245, 158, 11, 0.3) 15%, #00f0ff 50%, rgba(0, 240, 255, 0.3) 85%, transparent 100%);
   box-shadow: 0 0 25px #00f0ff, 0 0 50px rgba(0, 240, 255, 0.8), 0 0 10px #ffffff;
   animation: industrialScanBeam 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  will-change: transform;
   pointer-events: none;
-  z-index: 10;
+  z-index: 0;
 }
 
 /* Secondary Horizontal Industrial Scanning Beam */
@@ -296,9 +264,8 @@ body {
   background: linear-gradient(90deg, transparent 0%, rgba(168, 85, 247, 0.25) 20%, #a855f7 50%, rgba(56, 189, 248, 0.25) 80%, transparent 100%);
   box-shadow: 0 0 15px #a855f7, 0 0 30px rgba(168, 85, 247, 0.4);
   animation: industrialScanBeam 13s cubic-bezier(0.4, 0, 0.2, 1) 4.5s infinite;
-  will-change: transform;
   pointer-events: none;
-  z-index: 10;
+  z-index: 0;
 }
 
 .animate-industrial-scan-secondary-intense {
@@ -310,9 +277,8 @@ body {
   background: linear-gradient(90deg, transparent 0%, rgba(168, 85, 247, 0.4) 20%, #c084fc 50%, rgba(0, 240, 255, 0.4) 80%, transparent 100%);
   box-shadow: 0 0 25px #c084fc, 0 0 45px rgba(168, 85, 247, 0.7);
   animation: industrialScanBeam 4.5s cubic-bezier(0.4, 0, 0.2, 1) 1.5s infinite;
-  will-change: transform;
   pointer-events: none;
-  z-index: 10;
+  z-index: 0;
 }
 
 /* Perspective Engineering Floor Grid */
@@ -362,25 +328,25 @@ body {
   transform-origin: center center;
 }
 
-/* 4. Particle Float & Status Blink */
+/* 4. Particle Float & Status Blink (GPU-Accelerated translate3d) */
 @keyframes particleFloatA {
   0%, 100% {
-    transform: translateY(0px) translateX(0px);
+    transform: translate3d(0, 0, 0);
     opacity: 0.25;
   }
   50% {
-    transform: translateY(-20px) translateX(12px);
+    transform: translate3d(12px, -20px, 0);
     opacity: 0.75;
   }
 }
 
 @keyframes particleFloatB {
   0%, 100% {
-    transform: translateY(0px) translateX(0px);
+    transform: translate3d(0, 0, 0);
     opacity: 0.4;
   }
   50% {
-    transform: translateY(-30px) translateX(-15px);
+    transform: translate3d(-15px, -30px, 0);
     opacity: 0.9;
   }
 }
@@ -540,17 +506,6 @@ body {
   box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 25px rgba(0, 240, 255, 0.08);
 }
 
-.cyber-glass-card {
-  background: rgba(8, 16, 34, 0.45);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(0, 240, 255, 0.22);
-}
-
-.cyber-glass-card:hover {
-  border-color: rgba(0, 240, 255, 0.4);
-}
-
 /* 9. Sidebar Active Modules Cyber-Glass Cards */
 .sidebar-module-glass {
   background: rgba(7, 19, 38, 0.18);
@@ -579,6 +534,7 @@ body {
   .formula-stream {
     animation: none !important;
     transform: none !important;
+    will-change: auto !important;
   }
   .animate-grid-drift,
   .animate-industrial-scan,
@@ -598,5 +554,6 @@ body {
   .animate-formula-ltr {
     animation: none !important;
     transform: none !important;
+    will-change: auto !important;
   }
 }

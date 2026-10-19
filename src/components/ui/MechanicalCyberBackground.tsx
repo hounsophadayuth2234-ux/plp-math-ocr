@@ -289,17 +289,24 @@ export function MechanicalCyberBackground({
         data-testid="math-formula-streams"
         className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
       >
-        {FORMULA_STREAMS.map((row) => {
+        {FORMULA_STREAMS.map((row, idx) => {
           const isRTL = row.direction === "rtl";
           const directionClass = isRTL ? "animate-formula-rtl" : "animate-formula-ltr";
+          // Responsive row distribution:
+          // Mobile (<768px): 5 rows (stream-01 to stream-05)
+          // Tablet (768px-1024px): 7 rows (stream-01 to stream-07)
+          // Desktop (>=1024px): 10 rows (stream-01 to stream-10)
+          const responsiveVisibility = !row.desktopOnly
+            ? "flex"
+            : idx < 7
+            ? "hidden md:flex"
+            : "hidden lg:flex";
           return (
             <div
               key={row.id}
               data-testid="formula-stream-row"
               data-direction={row.direction}
-              className={`absolute left-0 w-full overflow-hidden whitespace-nowrap pointer-events-none select-none ${row.opacity} ${
-                row.desktopOnly ? "hidden md:flex" : "flex"
-              }`}
+              className={`absolute left-0 w-full overflow-hidden whitespace-nowrap pointer-events-none select-none ${row.opacity} ${responsiveVisibility}`}
               style={{ top: row.top }}
             >
               <div
@@ -342,13 +349,13 @@ export function MechanicalCyberBackground({
             : "animate-industrial-scan"
         }
       />
-      {/* Secondary Scanning Beam (Staggered Offset) */}
+      {/* Secondary Scanning Beam (Staggered Offset, hidden on mobile) */}
       <div
-        className={
+        className={`hidden md:block ${
           activeProcessing
             ? "animate-industrial-scan-secondary-intense"
             : "animate-industrial-scan-secondary"
-        }
+        }`}
       />
 
       {/* ── Layer 4: Two Slowly Rotating Mechanical Radar Rings ── */}
@@ -433,14 +440,14 @@ export function MechanicalCyberBackground({
         </svg>
       </div>
 
-      {/* ── Layer 5: Floating Telemetry Particles ── */}
+      {/* ── Layer 5: Floating Telemetry Particles (3 on Mobile, 6 on Tablet/Desktop) ── */}
       <div className="absolute inset-0">
         <div className="absolute top-[15%] left-[10%] h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#00f0ff] animate-particle-a" />
         <div className="absolute top-[32%] right-[14%] h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b] animate-particle-b" />
         <div className="absolute top-[65%] left-[18%] h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_#38bdf8] animate-particle-b" />
-        <div className="absolute top-[80%] right-[24%] h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_#00f0ff] animate-particle-a" />
-        <div className="absolute top-[45%] left-[42%] h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_#a855f7] animate-particle-a" />
-        <div className="absolute top-[25%] right-[38%] h-1 w-1 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981] animate-particle-b" />
+        <div className="hidden sm:block absolute top-[80%] right-[24%] h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_#00f0ff] animate-particle-a" />
+        <div className="hidden sm:block absolute top-[45%] left-[42%] h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_#a855f7] animate-particle-a" />
+        <div className="hidden sm:block absolute top-[25%] right-[38%] h-1 w-1 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981] animate-particle-b" />
       </div>
 
       {/* ── Layer 6: Animated Circuit Traces with Pulsing Nodes ── */}
@@ -492,7 +499,7 @@ export function MechanicalCyberBackground({
 
       {/* ── Layer 7: Subtle Cyan, Blue, Purple & Amber Ambient Glows ── */}
       <div
-        className={`absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] rounded-full blur-3xl transition-all duration-700 pointer-events-none ${
+        className={`absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[300px] sm:w-[700px] sm:h-[500px] rounded-full blur-2xl sm:blur-3xl transition-all duration-700 pointer-events-none ${
           activeProcessing
             ? "bg-amber-500/20 animate-ambient-glow"
             : hasResult
@@ -500,12 +507,12 @@ export function MechanicalCyberBackground({
             : "bg-cyan-500/10 animate-ambient-glow"
         }`}
       />
-      {/* Ambient Blue Glow */}
-      <div className="absolute bottom-10 right-10 w-[420px] h-[420px] rounded-full bg-blue-600/10 blur-3xl pointer-events-none" />
-      {/* Ambient Purple / Indigo Glow */}
-      <div className="absolute top-10 left-10 w-[380px] h-[380px] rounded-full bg-purple-600/10 blur-3xl pointer-events-none" />
-      {/* Ambient Amber Accent Glow */}
-      <div className="absolute bottom-20 left-1/3 w-[300px] h-[300px] rounded-full bg-amber-600/5 blur-3xl pointer-events-none" />
+      {/* Ambient Blue Glow (Desktop / Tablet) */}
+      <div className="hidden sm:block absolute bottom-10 right-10 w-[420px] h-[420px] rounded-full bg-blue-600/10 blur-3xl pointer-events-none" />
+      {/* Ambient Purple / Indigo Glow (Desktop / Tablet) */}
+      <div className="hidden sm:block absolute top-10 left-10 w-[380px] h-[380px] rounded-full bg-purple-600/10 blur-3xl pointer-events-none" />
+      {/* Ambient Amber Accent Glow (Desktop / Tablet) */}
+      <div className="hidden md:block absolute bottom-20 left-1/3 w-[300px] h-[300px] rounded-full bg-amber-600/5 blur-3xl pointer-events-none" />
     </div>
   );
 }

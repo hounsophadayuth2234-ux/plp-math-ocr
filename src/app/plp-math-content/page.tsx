@@ -828,11 +828,11 @@ export default function PlpMathContentPage() {
                 <div className="pointer-events-none absolute bottom-0 right-0 h-3.5 w-3.5 border-b-2 border-r-2 border-cyan-400" />
 
                 {/* Status Header Badges */}
-                <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/80 backdrop-blur-[4px] px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+                <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/80 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
                   <span className="text-slate-500">CHAMBER:</span>
                   <span className="font-bold">MATH SYNTHESIZER // OUTPUT</span>
                 </div>
-                <div className="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 border border-emerald-500/40 bg-slate-950/80 backdrop-blur-[4px] px-2 py-0.5 text-[10px] text-emerald-400 font-mono">
+                <div className="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 border border-emerald-500/40 bg-slate-950/80 px-2 py-0.5 text-[10px] text-emerald-400 font-mono">
                   <span className="h-1.5 w-1.5 bg-emerald-400 animate-pulse" />
                   <span className="text-slate-500">STATUS:</span>
                   <span className="font-bold">STANDBY</span>
@@ -848,19 +848,19 @@ export default function PlpMathContentPage() {
                   Upload a math problem or enter formula text on the left, then click &quot;Generate formats&quot; to inspect LaTeX, Jodit HTML, and MathML.
                 </p>
                 <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left w-full max-w-md font-mono text-[11px] text-slate-300">
-                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/50 backdrop-blur-[4px] px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/70 px-2.5 py-1.5">
                     <span className="h-1.5 w-1.5 bg-emerald-400 shrink-0" />
                     <span className="truncate">Option 1: Standard LaTeX</span>
                   </div>
-                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/50 backdrop-blur-[4px] px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/70 px-2.5 py-1.5">
                     <span className="h-1.5 w-1.5 bg-amber-400 shrink-0" />
                     <span className="truncate">Option 2: Jodit HTML (CSS)</span>
                   </div>
-                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/50 backdrop-blur-[4px] px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/70 px-2.5 py-1.5">
                     <span className="h-1.5 w-1.5 bg-cyan-400 shrink-0" />
                     <span className="truncate">Option 3: W3C MathML</span>
                   </div>
-                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/50 backdrop-blur-[4px] px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/70 px-2.5 py-1.5">
                     <span className="h-1.5 w-1.5 bg-indigo-400 shrink-0" />
                     <span className="truncate">WYSIWYG Visual Render</span>
                   </div>
