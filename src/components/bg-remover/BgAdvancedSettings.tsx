@@ -559,6 +559,41 @@ export function BgAdvancedSettings({
                   </span>
                 </div>
               )}
+              {metrics?.autoQualityResolution && (
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-400 uppercase text-[9px]">Auto-Quality Target:</span>
+                  <span className={`text-[10px] font-bold ${metrics.autoQualityTriggered ? "text-amber-300" : "text-emerald-400"}`}>
+                    {metrics.autoQualityResolution}px {metrics.autoQualityTriggered ? "(Auto-upgraded)" : "(Standard)"}
+                  </span>
+                </div>
+              )}
+              {metrics?.khmerDiagnostics && (
+                <div className="border-t border-slate-900 pt-1 space-y-0.5">
+                  <div className="flex justify-between items-center text-slate-300">
+                    <span className="text-slate-400 uppercase text-[9px]">Khmer Typography:</span>
+                    <span className="text-[10px] font-mono text-cyan-300">
+                      {metrics.khmerDiagnostics.hasSmallKhmerText
+                        ? "Small/Stacked Scripts"
+                        : metrics.khmerDiagnostics.hasTextStrokes
+                        ? "Normal Typography"
+                        : "No Text"}
+                    </span>
+                  </div>
+                  {metrics.khmerDiagnostics.hasTextStrokes && (
+                    <div className="flex justify-between items-center text-[9px] text-slate-400">
+                      <span>Strokes / Islands:</span>
+                      <span className="text-slate-300 font-mono">
+                        {metrics.khmerDiagnostics.textComponentCount} comp ({metrics.khmerDiagnostics.smallComponentCount} small)
+                      </span>
+                    </div>
+                  )}
+                  {metrics.khmerDiagnostics.textNearPersonSilhouette && (
+                    <div className="text-[9px] text-amber-300/90 italic">
+                      Text near silhouette protected from choke/feathering
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Phase Timing Breakdown Table (8 Stages) */}

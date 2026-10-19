@@ -40,6 +40,7 @@ import { BgStudioSettingsModal } from "@/components/bg-remover/BgStudioSettingsM
 import { BgStudioHelpModal } from "@/components/bg-remover/BgStudioHelpModal";
 import { BgAdvancedSettings } from "@/components/bg-remover/BgAdvancedSettings";
 import { StudioLocale, getSavedLocale, saveLocale, getTranslation } from "@/lib/i18n";
+import { resolveAutoQualityWorkingResolution } from "@/lib/khmer-text-analyzer";
 
 export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -659,13 +660,11 @@ export default function BgRemoverPage() {
           output.metrics = { totalMs: elapsedTotal };
         }
       } else {
-        const effectiveDim =
-          targetMaxDim ??
-          (edgeQuality === "fast"
-            ? (activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text" ? 768 : 640)
-            : edgeQuality === "balanced"
-            ? 1024
-            : 1536);
+        const autoRes = resolveAutoQualityWorkingResolution({
+          mode: activeSelectionMode,
+          edgeQuality,
+        });
+        const effectiveDim = targetMaxDim ?? autoRes.resolution;
         const segResult = await segmentObjectSelection(imageFile, {
           mode: activeSelectionMode,
           targetMaxDimension: effectiveDim,

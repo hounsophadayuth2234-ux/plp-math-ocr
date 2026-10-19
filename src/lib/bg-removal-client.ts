@@ -3,6 +3,10 @@ import { downscaleImageIfExceeds, getImageDimensions } from "./processing-utils"
 import { bgWorkerManager, WorkerProgressEvent } from "./bg-removal-worker-manager";
 import { probeWebGpuAndWasm } from "./webgpu-probe";
 import {
+  KhmerImageFeatures,
+  detectKhmerImageTypographicalFeatures,
+} from "./khmer-text-analyzer";
+import {
   compositeRgbaBuffer,
   SelectionMode,
   ContentMode,
@@ -153,6 +157,11 @@ export interface ProcessingStageMetrics {
   workerProcessingMs?: number;
   uiResponsiveness?: string;
   longTaskCount?: number;
+  // Khmer typographical & Auto-quality telemetry
+  khmerDiagnostics?: KhmerImageFeatures;
+  autoQualityResolution?: number;
+  autoQualityReason?: string;
+  autoQualityTriggered?: boolean;
   // Backward compatible aliases:
   uploadDecodeMs?: number;
   segmentationMs?: number;
@@ -1567,6 +1576,7 @@ export async function segmentObjectSelection(
   const activeMask = new Uint8ClampedArray(totalPixels);
   const excludedMask = new Uint8ClampedArray(totalPixels);
   let textDetectionMs = 0;
+  let khmerFeatures: KhmerImageFeatures | undefined = undefined;
 
   if (mode === "person" || mode === "person_only") {
     // Dedicated person segmentation: isolatePersonMask strictly
@@ -1586,6 +1596,14 @@ export async function segmentObjectSelection(
     const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
     textDetectionMs = performance.now() - tStartText;
 
+    // Detect typographical Khmer features (subscripts, diacritics, small islands, proximity to hair/shoulders)
+    khmerFeatures = detectKhmerImageTypographicalFeatures(
+      tRes.textStrokeMask,
+      cleanedPersonMask,
+      width,
+      height
+    );
+
     // High-confidence text strokes preserved without choke: union(cleanedPersonMask, protectedTextMask)
     const combined = combinePersonAndTextMasks(
       cleanedPersonMask,
@@ -1601,6 +1619,21 @@ export async function segmentObjectSelection(
     );
     for (let i = 0; i < totalPixels; i++) {
       activeMask[i] = combined.finalKeepMask[i];
+    }
+  } else if (mode === "document_text") {
+    const tStartText = performance.now();
+    const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+    textDetectionMs = performance.now() - tStartText;
+
+    khmerFeatures = detectKhmerImageTypographicalFeatures(
+      tRes.textStrokeMask,
+      null,
+      width,
+      height
+    );
+
+    for (let i = 0; i < totalPixels; i++) {
+      activeMask[i] = tRes.textStrokeMask[i] > 10 ? 255 : alphaMaskBuffer[i];
     }
   } else if (mode === "contents_only") {
     const containerResult = detectContainerAndContents(
@@ -1724,6 +1757,11 @@ export async function segmentObjectSelection(
     workerProcessingMs: initialOutput.metrics?.workerProcessingMs ?? initialOutput.metrics?.inferenceMs ?? Math.round(totalMs * 0.7),
     uiResponsiveness: initialOutput.metrics?.uiResponsiveness ?? "Responsive (<16ms main thread lag)",
     longTaskCount: initialOutput.metrics?.longTaskCount ?? 0,
+    // Khmer typographical & Auto-quality telemetry
+    khmerDiagnostics: khmerFeatures,
+    autoQualityResolution: khmerFeatures?.recommendedResolution,
+    autoQualityReason: khmerFeatures?.reason,
+    autoQualityTriggered: khmerFeatures?.autoQualityTriggered,
     // Aliases
     uploadDecodeMs: initialOutput.metrics?.uploadDecodeMs ?? 15,
     segmentationMs: initialOutput.metrics?.inferenceMs ?? Math.round(totalMs * 0.7),
