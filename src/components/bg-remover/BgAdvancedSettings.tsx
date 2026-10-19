@@ -602,7 +602,7 @@ export function BgAdvancedSettings({
                 <span>Phase</span>
                 <span>Duration</span>
               </div>
-              {!metrics || metrics.totalMs === undefined ? (
+              {!metrics ? (
                 <div className="py-2 text-center text-slate-400 italic text-[11px]" data-testid="metrics-unmeasured">
                   Not measured yet
                 </div>

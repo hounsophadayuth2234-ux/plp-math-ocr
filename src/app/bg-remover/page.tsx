@@ -698,6 +698,7 @@ export default function BgRemoverPage() {
 
         if (precomputedTextDetection && precomputedTextDetection.status === "completed") {
           setLiveStageMetrics({
+            totalMs: precomputedTextDetection.durationMs,
             textDetectionMs: precomputedTextDetection.durationMs,
             textDetectionStatus: "completed",
             textDetectionDurationMs: precomputedTextDetection.durationMs,
