@@ -38,6 +38,7 @@ import {
   UpscaleResult,
   UpscaleScale,
 } from "@/lib/image-upscale-client";
+import { generateUpscaleSmartName } from "@/lib/smart-naming";
 
 export default function ImageUpscalerPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -54,6 +55,7 @@ export default function ImageUpscalerPage() {
 
   // Export settings
   const [exportFormat, setExportFormat] = useState<"png" | "jpeg">("png");
+  const [customFilename, setCustomFilename] = useState<string>("");
 
   // State management
   const [isLoading, setIsLoading] = useState(false);
@@ -329,6 +331,19 @@ export default function ImageUpscalerPage() {
       res.outputUrl = registeredUrl;
       setResult(res);
       setInputDiagnostics(res.diagnostics);
+
+      const autoName = generateUpscaleSmartName({
+        originalName: imageFile?.name,
+        preset,
+        isSmoothObject: res.diagnostics.isSmoothObjectLikely,
+        isDocument: res.diagnostics.isDocumentLikely,
+        skinToneRatio: res.diagnostics.skinToneRatio,
+        scale: res.scale,
+        outputWidth: res.outputWidth,
+        outputHeight: res.outputHeight,
+      });
+      setCustomFilename(autoName);
+
       cyberAudio.stopScanningHum();
       cyberAudio.playSuccessChime();
     } catch (err: unknown) {
@@ -382,9 +397,21 @@ export default function ImageUpscalerPage() {
 
     const downloadUrl = URL.createObjectURL(downloadBlob);
     const link = document.createElement("a");
-    const baseName = imageFile?.name.replace(/\.[^/.]+$/, "") || "enhanced-image";
+    const sanitizedBase = customFilename.trim().replace(/\.[a-zA-Z0-9]+$/i, "");
+    const finalStem =
+      sanitizedBase ||
+      generateUpscaleSmartName({
+        originalName: imageFile?.name,
+        preset,
+        isSmoothObject: result.diagnostics.isSmoothObjectLikely,
+        isDocument: result.diagnostics.isDocumentLikely,
+        skinToneRatio: result.diagnostics.skinToneRatio,
+        scale: result.scale,
+        outputWidth: result.outputWidth,
+        outputHeight: result.outputHeight,
+      });
     link.href = downloadUrl;
-    link.download = `${baseName}_enhanced_${result.scale}x.${extension}`;
+    link.download = `${finalStem}.${extension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -583,6 +610,48 @@ export default function ImageUpscalerPage() {
                       <span className="mx-2 text-cyan-400 font-bold">➔</span>
                       <span className="text-white font-bold">{result.outputWidth}×{result.outputHeight} px</span>
                     </div>
+                  </div>
+
+                  {/* Smart Editable Filename Deck */}
+                  <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                    <div className="flex-1 flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-slate-300 shrink-0">
+                        ឈ្មោះឯកសារ (File Name):
+                      </span>
+                      <input
+                        type="text"
+                        value={customFilename}
+                        onChange={(e) => setCustomFilename(e.target.value)}
+                        placeholder="plp-enhanced-image"
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 font-mono text-xs text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                      />
+                      <span className="font-mono text-xs font-bold text-cyan-400 shrink-0">
+                        .{exportFormat === "jpeg" ? "jpg" : "png"}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cyberAudio.playClick();
+                        const freshAutoName = generateUpscaleSmartName({
+                          originalName: imageFile?.name,
+                          preset,
+                          isSmoothObject: result.diagnostics.isSmoothObjectLikely,
+                          isDocument: result.diagnostics.isDocumentLikely,
+                          skinToneRatio: result.diagnostics.skinToneRatio,
+                          scale: result.scale,
+                          outputWidth: result.outputWidth,
+                          outputHeight: result.outputHeight,
+                        });
+                        setCustomFilename(freshAutoName);
+                      }}
+                      className="shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-950/40 px-3 py-1.5 text-xs font-mono font-bold text-amber-300 hover:bg-amber-900/60 transition-colors cursor-pointer"
+                      title="បង្កើតឈ្មោះស្វ័យប្រវត្តិតាមទំហំ និងប្រភេទរូបភាព"
+                    >
+                      <Zap className="h-3.5 w-3.5 text-amber-400" />
+                      <span>⚡ បង្កើតឈ្មោះស្វ័យប្រវត្តិ (Auto-Name)</span>
+                    </button>
                   </div>
 
                   {/* Export Options & Download Button */}

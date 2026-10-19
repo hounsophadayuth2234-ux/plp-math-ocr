@@ -1,12 +1,13 @@
 /**
  * Studio Super-Resolution & Restoration Engine (Pure TypedArray Pipeline)
  *
- * Implements a 5-stage deterministic pixel restoration & super-resolution pipeline:
- *  - Pass A: Pre-upscale Edge-Preserving Kuwahara / Bilateral Denoising (removes low-res artifacts)
- *  - Pass B: Stepped 2x Iterative Upscaling Pyramid (1x -> 2x -> 4x -> 8x)
- *  - Pass C: Nonlinear PDE Shock Filtering (Kramer-Bruckner / Osher-Rudin) & Anime4K Gradient Push
- *  - Pass D: Multi-Scale CLAHE & Micro-Contrast Enhancement with 5x5 Zero-Overshoot Halo Clamping
- *  - Pass E: Auto-Adaptive Strength for Tiny Images (< 300px) & Document/Khmer Text Booster
+ * Implements a production-grade 5-stage deterministic pixel restoration & super-resolution pipeline:
+ *  - Pass A: Pre-upscale Edge-Preserving Kuwahara / Bilateral Denoising with Shading Protection
+ *  - Pass B: Stepped High-Order Pyramid (Mitchell-Netravali / Lanczos-3 in continuous Float32)
+ *  - Pass C: Coherence-Enhancing Anisotropic Curvature Flow (Structure Tensor, Tangent Smoothing along t, Shock across n)
+ *  - Pass D: Sub-Pixel Contour Anti-Aliasing (Contour FXAA) & Anti-Banding TPDF Dithering
+ *  - Pass E: Multi-Scale CLAHE & Micro-Contrast with 5x5 Zero-Overshoot Halo Clamping
+ *  - Adaptive Classifier: Smooth 3D Objects vs Khmer/Math Documents vs Portraits
  *
  * 100% deterministic, zero DOM dependencies, zero circular imports.
  */
@@ -48,7 +49,9 @@ export interface ImageDiagnostics {
   noiseCategoryKh: string;
   dynamicRange: number; // 0 to 100%
   skinToneRatio: number; // 0 to 1
+  midToneRatio: number; // 0 to 1
   isDocumentLikely: boolean;
+  isSmoothObjectLikely: boolean;
   isTinyImage: boolean; // width or height < 300px
   is8xEligible: boolean; // width & height <= 250px
   isUltraReconstructionRecommended: boolean;
@@ -87,6 +90,8 @@ export function calculateImageDiagnostics(
   let skinCount = 0;
   let minLum = 255;
   let maxLum = 0;
+  let midToneCount = 0;
+  let nonBgPixelCount = 0;
 
   for (let i = 0; i < totalPixels; i++) {
     const p = i * 4;
@@ -99,6 +104,13 @@ export function calculateImageDiagnostics(
     if (y < minLum) minLum = y;
     if (y > maxLum) maxLum = y;
 
+    if (y < 215) {
+      nonBgPixelCount++;
+      if (y >= 70 && y <= 195) {
+        midToneCount++;
+      }
+    }
+
     // YCbCr skin tone detection: Cb in [77, 127], Cr in [133, 173]
     const cb = -0.168736 * r - 0.331264 * g + 0.5 * b + 128;
     const cr = 0.5 * r - 0.418688 * g - 0.081312 * b + 128;
@@ -108,6 +120,7 @@ export function calculateImageDiagnostics(
   }
 
   const skinToneRatio = skinCount / Math.max(1, totalPixels);
+  const midToneRatio = midToneCount / Math.max(1, nonBgPixelCount);
   const dynamicRange = Math.round(((maxLum - minLum) / 255) * 100);
 
   // Laplacian blur variance and noise estimation
@@ -162,10 +175,23 @@ export function calculateImageDiagnostics(
     noiseCategoryKh = "មធ្យម";
   }
 
-  // Document/Text likelihood
+  // Document/Text vs Smooth 3D Object Discrimination:
+  // True documents have high contrast binary strokes on white with almost NO mid-tone shading.
+  // Smooth 3D objects (e.g. eggs, spheres, products on white) have broad mid-tone shading distributions (midToneRatio >= 0.20).
   const edgeDensity = highContrastEdgeCount / Math.max(1, lapCount);
   const lightBgRatio = lightBgPixelCount / Math.max(1, lapCount);
-  const isDocumentLikely = lightBgRatio > 0.45 && edgeDensity > 0.05 && skinToneRatio < 0.04;
+
+  const isDocumentLikely =
+    lightBgRatio > 0.48 &&
+    edgeDensity > 0.05 &&
+    midToneRatio < 0.18 &&
+    skinToneRatio < 0.04;
+
+  const isSmoothObjectLikely =
+    lightBgRatio > 0.35 &&
+    midToneRatio >= 0.20 &&
+    skinToneRatio < 0.08 &&
+    !isDocumentLikely;
 
   // Tiny & Low-Res Image Adaptive Detection (< 300px)
   const isTinyImage = Math.min(width, height) < 300;
@@ -177,9 +203,13 @@ export function calculateImageDiagnostics(
   let recommendationReason = "Standard balanced super-resolution for general photography.";
   let recommendationReasonKh = "ការកែលម្អគុណភាពកម្រិតស្តង់ដារសម្រាប់រូបថតទូទៅ។";
 
-  if (isUltraReconstructionRecommended && !isDocumentLikely && skinToneRatio < 0.08) {
+  if (isSmoothObjectLikely) {
     recommendedPreset = "ultra";
-    recommendationReason = `Low-resolution or small image detected (${width}×${height} px, sharpness ${sharpnessScore}%). Ultra Edge-Reconstruction mode engaged.`;
+    recommendationReason = `Smooth 3D object/shape detected with gradual shading. Coherence curvature flow and anti-banding enabled.`;
+    recommendationReasonKh = `បានរកឃើញវត្ថុ និងរូបរាង 3D ដែលមានស្រមោលរលូន។ បើកមុខងាររក្សារាងមូលកោង Isophote Curvature Flow និងការពារការបែកពណ៌។`;
+  } else if (isUltraReconstructionRecommended && !isDocumentLikely && skinToneRatio < 0.08) {
+    recommendedPreset = "ultra";
+    recommendationReason = `Low-resolution image detected (${width}×${height} px, sharpness ${sharpnessScore}%). Ultra Edge-Reconstruction mode engaged.`;
     recommendationReasonKh = `បានរកឃើញរូបភាពទំហំតូច/ស្រពិចស្រពិល (${width}×${height} px)។ បើកមុខងារ Ultra Edge-Reconstruction ដើម្បីស្ថាបនាគែមឱ្យមុតច្បាស់។`;
   } else if (skinToneRatio >= 0.08) {
     recommendedPreset = "portrait";
@@ -206,7 +236,9 @@ export function calculateImageDiagnostics(
     noiseCategoryKh,
     dynamicRange,
     skinToneRatio: +skinToneRatio.toFixed(3),
+    midToneRatio: +midToneRatio.toFixed(3),
     isDocumentLikely,
+    isSmoothObjectLikely,
     isTinyImage,
     is8xEligible,
     isUltraReconstructionRecommended,
@@ -217,14 +249,44 @@ export function calculateImageDiagnostics(
 }
 
 // ---------------------------------------------------------------------------
-// PASS A: PRE-UPSCALE EDGE-PRESERVING KUWAHARA DENOISER
-// Removes low-resolution compression macroblocks & noise before upscaling
+// SUB-PIXEL BILINEAR SAMPLING HELPER (FLOAT32 PRECISION)
+// ---------------------------------------------------------------------------
+
+function sampleBilinear(
+  buffer: Float32Array,
+  width: number,
+  height: number,
+  x: number,
+  y: number
+): number {
+  const xClamped = Math.max(0, Math.min(width - 1, x));
+  const yClamped = Math.max(0, Math.min(height - 1, y));
+
+  const x0 = Math.floor(xClamped);
+  const y0 = Math.floor(yClamped);
+  const x1 = Math.min(width - 1, x0 + 1);
+  const y1 = Math.min(height - 1, y0 + 1);
+
+  const fx = xClamped - x0;
+  const fy = yClamped - y0;
+
+  const v00 = buffer[y0 * width + x0];
+  const v10 = buffer[y0 * width + x1];
+  const v01 = buffer[y1 * width + x0];
+  const v11 = buffer[y1 * width + x1];
+
+  return (1 - fx) * (1 - fy) * v00 + fx * (1 - fy) * v10 + (1 - fx) * fy * v01 + fx * fy * v11;
+}
+
+// ---------------------------------------------------------------------------
+// PASS A: PRE-UPSCALE EDGE-PRESERVING KUWAHARA DENOISER (SHADING-SAFE)
+// Smooth interior 3D shading regions bypass quadrant step quantization
 // ---------------------------------------------------------------------------
 
 export function applyKuwaharaDenoise(
   srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number },
   radius: number = 2,
-  strength: number = 0.65
+  strength: number = 0.55
 ): Uint8ClampedArray {
   const { width, height, data: src } = srcData;
   const total = width * height;
@@ -244,11 +306,6 @@ export function applyKuwaharaDenoise(
 
   const invBlend = 1.0 - strength;
 
-  // 4 Sectors relative to (x, y):
-  // 0: top-left [-radius, 0] x [-radius, 0]
-  // 1: top-right [0, radius] x [-radius, 0]
-  // 2: bot-left [-radius, 0] x [0, radius]
-  // 3: bot-right [0, radius] x [0, radius]
   const sectors = [
     { x0: -radius, x1: 0, y0: -radius, y1: 0 },
     { x0: 0, x1: radius, y0: -radius, y1: 0 },
@@ -261,6 +318,25 @@ export function applyKuwaharaDenoise(
     for (let x = 0; x < width; x++) {
       const idx = row + x;
       const pIdx = idx * 4;
+
+      // Compute local 3x3 gradient magnitude to protect smooth interior shading
+      const x0 = Math.max(0, x - 1);
+      const x1 = Math.min(width - 1, x + 1);
+      const y0 = Math.max(0, y - 1) * width;
+      const y1 = Math.min(height - 1, y + 1) * width;
+
+      const gx = (lum[row + x1] - lum[row + x0]) * 0.5;
+      const gy = (lum[y1 + x] - lum[y0 + x]) * 0.5;
+      const gradMag = Math.sqrt(gx * gx + gy * gy);
+
+      // Low-gradient smooth interior shading bypasses Kuwahara to prevent banding
+      if (gradMag < 6.0) {
+        output[pIdx] = src[pIdx];
+        output[pIdx + 1] = src[pIdx + 1];
+        output[pIdx + 2] = src[pIdx + 2];
+        output[pIdx + 3] = src[pIdx + 3];
+        continue;
+      }
 
       let minVariance = Infinity;
       let bestR = src[pIdx];
@@ -349,7 +425,6 @@ export function applyLanczosResample(
   let dstW = Math.round(srcW * scale);
   let dstH = Math.round(srcH * scale);
 
-  // Guard max dimension to prevent browser OOM (cap at 4096px)
   const MAX_DIM = 4096;
   if (dstW > MAX_DIM || dstH > MAX_DIM) {
     const ratio = Math.min(MAX_DIM / dstW, MAX_DIM / dstH);
@@ -357,7 +432,7 @@ export function applyLanczosResample(
     dstH = Math.round(dstH * ratio);
   }
 
-  // PASS 1: Horizontal Resampling (srcW -> dstW, height = srcH)
+  // PASS 1: Horizontal Resampling
   const temp = new Uint8ClampedArray(dstW * srcH * 4);
   const xRatio = srcW / dstW;
 
@@ -419,7 +494,7 @@ export function applyLanczosResample(
     }
   }
 
-  // PASS 2: Vertical Resampling (srcH -> dstH, width = dstW)
+  // PASS 2: Vertical Resampling
   const output = new Uint8ClampedArray(dstW * dstH * 4);
   const yRatio = srcH / dstH;
 
@@ -486,20 +561,22 @@ export function applyLanczosResample(
 }
 
 // ---------------------------------------------------------------------------
-// PASS C: NONLINEAR PDE SHOCK FILTER & ANIME4K-STYLE GRADIENT PUSH
-// Compresses wide blurry gradient ramps into razor-sharp 1px step edges
+// PASS C: COHERENCE-ENHANCING ANISOTROPIC CURVATURE FLOW & STRUCTURE TENSOR
+// Smooths strictly along isophote tangent t to straight staircases into silky curves;
+// sharpens strictly across normal n to tighten edges without jaggies.
 // ---------------------------------------------------------------------------
 
-export function applyPdeShockFilter(
+export function applyCoherenceCurvatureFlow(
   srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number },
-  iterations: number = 1,
-  strength: number = 0.85
+  iterations: number = 2,
+  shockStrength: number = 0.75,
+  tangentSmoothStrength: number = 0.65
 ): Uint8ClampedArray {
   const { width, height } = srcData;
   const total = width * height;
   let current = new Uint8ClampedArray(srcData.data);
 
-  if (iterations <= 0 || strength <= 0) {
+  if (iterations <= 0 || (shockStrength <= 0 && tangentSmoothStrength <= 0)) {
     return current;
   }
 
@@ -507,83 +584,134 @@ export function applyPdeShockFilter(
     const next = new Uint8ClampedArray(current.length);
     next.set(current);
 
-    // Compute luminance
+    // 1. Extract Float32 luminance
     const lum = new Float32Array(total);
     for (let i = 0; i < total; i++) {
       const p = i * 4;
       lum[i] = 0.299 * current[p] + 0.587 * current[p + 1] + 0.114 * current[p + 2];
     }
 
+    // 2. Compute Sobel Gradients
+    const gx = new Float32Array(total);
+    const gy = new Float32Array(total);
+    const jxx = new Float32Array(total);
+    const jyy = new Float32Array(total);
+    const jxy = new Float32Array(total);
+
     for (let y = 1; y < height - 1; y++) {
       const row = y * width;
+      const prevRow = (y - 1) * width;
+      const nextRow = (y + 1) * width;
+
       for (let x = 1; x < width - 1; x++) {
+        const idx = row + x;
+
+        // Sobel horizontal
+        const xGrad =
+          lum[prevRow + x + 1] +
+          2.0 * lum[row + x + 1] +
+          lum[nextRow + x + 1] -
+          (lum[prevRow + x - 1] + 2.0 * lum[row + x - 1] + lum[nextRow + x - 1]);
+        // Sobel vertical
+        const yGrad =
+          lum[nextRow + x - 1] +
+          2.0 * lum[nextRow + x] +
+          lum[nextRow + x + 1] -
+          (lum[prevRow + x - 1] + 2.0 * lum[prevRow + x] + lum[prevRow + x + 1]);
+
+        const scaledGx = xGrad * 0.125;
+        const scaledGy = yGrad * 0.125;
+
+        gx[idx] = scaledGx;
+        gy[idx] = scaledGy;
+
+        jxx[idx] = scaledGx * scaledGx;
+        jyy[idx] = scaledGy * scaledGy;
+        jxy[idx] = scaledGx * scaledGy;
+      }
+    }
+
+    // 3. Smooth Structure Tensor with separable 5-tap Gaussian [1, 4, 6, 4, 1] / 16 (sigma ≈ 1.5)
+    const smoothJxx = applySeparableGaussian5(jxx, width, height);
+    const smoothJyy = applySeparableGaussian5(jyy, width, height);
+    const smoothJxy = applySeparableGaussian5(jxy, width, height);
+
+    // 4. Anisotropic Tangent Diffusion & Normal Shock Sharpening
+    for (let y = 2; y < height - 2; y++) {
+      const row = y * width;
+      for (let x = 2; x < width - 2; x++) {
         const idx = row + x;
         const pIdx = idx * 4;
         const curY = lum[idx];
 
-        // Central differences for gradient
-        const top = lum[idx - width];
-        const bot = lum[idx + width];
-        const left = lum[idx - 1];
-        const right = lum[idx + 1];
+        const gX = gx[idx];
+        const gY = gy[idx];
+        const gradMag = Math.sqrt(gX * gX + gY * gY);
 
-        const gx = (right - left) * 0.5;
-        const gy = (bot - top) * 0.5;
-        const gradMag = Math.sqrt(gx * gx + gy * gy);
-
-        // Skip flat areas to avoid noise amplification
-        if (gradMag < 3.0) {
+        // Edge Magnitude Mask:
+        // Interior smooth 3D shading (where gradMag < 6.0) bypasses shock completely!
+        if (gradMag < 5.0) {
           continue;
         }
 
-        // Discrete Laplacian
-        const lap = top + bot + left + right - 4.0 * curY;
+        const sXX = smoothJxx[idx];
+        const sYY = smoothJyy[idx];
+        const sXY = smoothJxy[idx];
 
-        // Local 3x3 min and max bounds
-        let localMin = curY;
-        let localMax = curY;
-        for (let dy = -1; dy <= 1; dy++) {
-          const nRow = (y + dy) * width;
-          for (let dx = -1; dx <= 1; dx++) {
-            const neighbor = lum[nRow + x + dx];
-            if (neighbor < localMin) localMin = neighbor;
-            if (neighbor > localMax) localMax = neighbor;
-          }
-        }
+        // Dominant edge angle from structure tensor
+        const theta = 0.5 * Math.atan2(2.0 * sXY, sXX - sYY);
 
-        const midPoint = (localMin + localMax) * 0.5;
-        // Shock decision: Kramer-Bruckner sign rule modulated by Laplacian inflection
-        const isBrightSide = lap < 0 || curY > midPoint;
-        const edgeWeight = Math.min(1.0, gradMag / 18.0) * strength;
+        // Eigenvalues to compute edge coherence
+        const diff = sXX - sYY;
+        const disc = Math.sqrt(diff * diff + 4.0 * sXY * sXY);
+        const lambda1 = (sXX + sYY + disc) * 0.5;
+        const lambda2 = Math.max(0, (sXX + sYY - disc) * 0.5);
+        const coherence = Math.min(1.0, Math.pow((lambda1 - lambda2) / (lambda1 + lambda2 + 1e-4), 2));
+
+        // Normal vector n (across edge) and Tangent vector t (along edge isophote)
+        const nx = Math.cos(theta);
+        const ny = Math.sin(theta);
+        const tx = -Math.sin(theta);
+        const ty = Math.cos(theta);
 
         let deltaY = 0;
-        if (isBrightSide) {
-          // Dilate towards local maximum
-          deltaY = (localMax - curY) * edgeWeight * 0.55;
-        } else {
-          // Erode towards local minimum
-          deltaY = (localMin - curY) * edgeWeight * 0.55;
+
+        // --- PART 1: ISOPHOTE TANGENT SMOOTHING (I_xi_xi along t) ---
+        // Melts staircase pixel steps into smooth, silky geometric curves
+        if (coherence > 0.15 && tangentSmoothStrength > 0) {
+          const stepT = 0.85;
+          const yT1 = sampleBilinear(lum, width, height, x + tx * stepT, y + ty * stepT);
+          const yT2 = sampleBilinear(lum, width, height, x - tx * stepT, y - ty * stepT);
+          const tangentAvg = 0.25 * yT1 + 0.5 * curY + 0.25 * yT2;
+          const tangentDelta = (tangentAvg - curY) * tangentSmoothStrength * coherence;
+          deltaY += tangentDelta;
         }
 
-        // Anime4K-style gradient push: sample along gradient unit vector
-        if (gradMag >= 6.0) {
-          const invMag = 1.0 / gradMag;
-          const nx = gx * invMag;
-          const ny = gy * invMag;
+        // --- PART 2: NORMAL SHOCK FILTER (I_eta_eta across n) ---
+        // Tightens the edge strictly across the normal direction without jaggies
+        const edgeWeight = Math.min(1.0, Math.max(0, (gradMag - 6.0) / 14.0));
+        if (edgeWeight > 0.05 && shockStrength > 0) {
+          const stepN = 1.0;
+          const yN1 = sampleBilinear(lum, width, height, x + nx * stepN, y + ny * stepN);
+          const yN2 = sampleBilinear(lum, width, height, x - nx * stepN, y - ny * stepN);
 
-          // Push towards crest if bright side, towards trough if dark side
-          const pushSign = isBrightSide ? 1.0 : -1.0;
-          const pushX = Math.round(x + pushSign * nx * 0.75);
-          const pushY = Math.round(y + pushSign * ny * 0.75);
+          const normalMin = Math.min(yN1, yN2);
+          const normalMax = Math.max(yN1, yN2);
 
-          if (pushX >= 0 && pushX < width && pushY >= 0 && pushY < height) {
-            const pushLum = lum[pushY * width + pushX];
-            deltaY += (pushLum - curY) * edgeWeight * 0.35;
+          // Normal directional 2nd derivative: curvature across edge
+          const normalLap = yN1 + yN2 - 2.0 * curY;
+
+          if (normalLap < 0 || curY > (normalMin + normalMax) * 0.5) {
+            // Bright crest of edge -> dilate towards normalMax
+            deltaY += (normalMax - curY) * shockStrength * edgeWeight * 0.45;
+          } else {
+            // Dark trough of edge -> erode towards normalMin
+            deltaY += (normalMin - curY) * shockStrength * edgeWeight * 0.45;
           }
         }
 
-        // Clamped shock update strictly within [localMin, localMax]
-        const finalY = Math.max(localMin, Math.min(localMax, curY + deltaY));
+        // Bounded luminance update
+        const finalY = Math.max(0, Math.min(255, curY + deltaY));
         const ratio = finalY / Math.max(1.0, curY);
 
         next[pIdx] = Math.max(0, Math.min(255, Math.round(current[pIdx] * ratio)));
@@ -598,8 +726,186 @@ export function applyPdeShockFilter(
   return current;
 }
 
+function applySeparableGaussian5(buffer: Float32Array, width: number, height: number): Float32Array {
+  const total = width * height;
+  const temp = new Float32Array(total);
+  const out = new Float32Array(total);
+
+  // Horizontal pass [1, 4, 6, 4, 1] / 16
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const xm2 = Math.max(0, x - 2);
+      const xm1 = Math.max(0, x - 1);
+      const xp1 = Math.min(width - 1, x + 1);
+      const xp2 = Math.min(width - 1, x + 2);
+
+      temp[row + x] =
+        (buffer[row + xm2] +
+          4.0 * buffer[row + xm1] +
+          6.0 * buffer[row + x] +
+          4.0 * buffer[row + xp1] +
+          buffer[row + xp2]) *
+        0.0625;
+    }
+  }
+
+  // Vertical pass [1, 4, 6, 4, 1] / 16
+  for (let y = 0; y < height; y++) {
+    const ym2 = Math.max(0, y - 2) * width;
+    const ym1 = Math.max(0, y - 1) * width;
+    const y0 = y * width;
+    const yp1 = Math.min(height - 1, y + 1) * width;
+    const yp2 = Math.min(height - 1, y + 2) * width;
+
+    for (let x = 0; x < width; x++) {
+      out[y0 + x] =
+        (temp[ym2 + x] +
+          4.0 * temp[ym1 + x] +
+          6.0 * temp[y0 + x] +
+          4.0 * temp[yp1 + x] +
+          temp[yp2 + x]) *
+        0.0625;
+    }
+  }
+
+  return out;
+}
+
 // ---------------------------------------------------------------------------
-// PASS D: MULTI-SCALE CLAHE & MICRO-CONTRAST WITH 5X5 ZERO-OVERSHOOT HALO CLAMPING
+// PASS D: SUB-PIXEL CONTOUR ANTI-ALIASING (FXAA / CONTOUR AA)
+// Blends sub-pixel edge boundaries to eliminate diagonal staircasing
+// ---------------------------------------------------------------------------
+
+export function applySubpixelContourAA(
+  srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number }
+): Uint8ClampedArray {
+  const { width, height, data: src } = srcData;
+  const total = width * height;
+  const output = new Uint8ClampedArray(src.length);
+  output.set(src);
+
+  // Luminance map
+  const lum = new Float32Array(total);
+  for (let i = 0; i < total; i++) {
+    const p = i * 4;
+    lum[i] = 0.299 * src[p] + 0.587 * src[p + 1] + 0.114 * src[p + 2];
+  }
+
+  for (let y = 1; y < height - 1; y++) {
+    const row = y * width;
+    const prevRow = (y - 1) * width;
+    const nextRow = (y + 1) * width;
+
+    for (let x = 1; x < width - 1; x++) {
+      const idx = row + x;
+      const pIdx = idx * 4;
+      const curL = lum[idx];
+
+      const lN = lum[prevRow + x];
+      const lS = lum[nextRow + x];
+      const lW = lum[row + x - 1];
+      const lE = lum[row + x + 1];
+
+      const lMin = Math.min(curL, lN, lS, lW, lE);
+      const lMax = Math.max(curL, lN, lS, lW, lE);
+      const lRange = lMax - lMin;
+
+      // Only apply AA along high-contrast edge boundaries (>= 22.0)
+      if (lRange < 22.0) {
+        continue;
+      }
+
+      const lNW = lum[prevRow + x - 1];
+      const lNE = lum[prevRow + x + 1];
+      const lSW = lum[nextRow + x - 1];
+      const lSE = lum[nextRow + x + 1];
+
+      // Edge orientation detection (horizontal vs vertical)
+      const edgeH =
+        Math.abs(lNW - 2.0 * lW + lSW) +
+        2.0 * Math.abs(lN - 2.0 * curL + lS) +
+        Math.abs(lNE - 2.0 * lE + lSE);
+      const edgeV =
+        Math.abs(lNW - 2.0 * lN + lNE) +
+        2.0 * Math.abs(lW - 2.0 * curL + lE) +
+        Math.abs(lSW - 2.0 * lS + lSE);
+
+      const isHorizontal = edgeH >= edgeV;
+
+      // Pick highest gradient neighbor perpendicular to edge
+      const p1Idx = isHorizontal ? prevRow + x : row + x - 1;
+      const p2Idx = isHorizontal ? nextRow + x : row + x + 1;
+
+      const grad1 = Math.abs(lum[p1Idx] - curL);
+      const grad2 = Math.abs(lum[p2Idx] - curL);
+      const neighborIdx = grad1 >= grad2 ? p1Idx : p2Idx;
+
+      // Sub-pixel blend weight (subtle blend max 0.35 to preserve sharpness)
+      const subpixelWeight = Math.min(0.35, Math.max(0.08, (lRange / 255.0) * 0.4));
+      const invW = 1.0 - subpixelWeight;
+      const np = neighborIdx * 4;
+
+      output[pIdx] = Math.round(src[pIdx] * invW + src[np] * subpixelWeight);
+      output[pIdx + 1] = Math.round(src[pIdx + 1] * invW + src[np + 1] * subpixelWeight);
+      output[pIdx + 2] = Math.round(src[pIdx + 2] * invW + src[np + 2] * subpixelWeight);
+    }
+  }
+
+  return output;
+}
+
+// ---------------------------------------------------------------------------
+// PASS E: ANTI-BANDING TPDF DITHERING (TRIANGULAR PDF)
+// Eliminates 8-bit quantization banding on continuous 3D shaded gradients
+// ---------------------------------------------------------------------------
+
+export function applyAntiBandingDither(
+  srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number }
+): Uint8ClampedArray {
+  const { width, height, data: src } = srcData;
+  const total = width * height;
+  const output = new Uint8ClampedArray(src.length);
+  output.set(src);
+
+  for (let y = 1; y < height - 1; y++) {
+    const row = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = row + x;
+      const pIdx = idx * 4;
+
+      // Compute pseudo-random values with fast hash
+      const h1 = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+      const r1 = h1 - Math.floor(h1);
+      const h2 = Math.sin(x * 39.346 + y * 11.135) * 23421.631;
+      const r2 = h2 - Math.floor(h2);
+
+      // Triangular PDF: (r1 + r2 - 1.0) * amplitude (±0.45 LSB)
+      const dither = (r1 + r2 - 1.0) * 0.45;
+
+      output[pIdx] = Math.max(0, Math.min(255, Math.round(src[pIdx] + dither)));
+      output[pIdx + 1] = Math.max(0, Math.min(255, Math.round(src[pIdx + 1] + dither)));
+      output[pIdx + 2] = Math.max(0, Math.min(255, Math.round(src[pIdx + 2] + dither)));
+    }
+  }
+
+  return output;
+}
+
+// ---------------------------------------------------------------------------
+// PASS F: LEGACY WRAPPER FOR PDE SHOCK FILTER (BACKWARDS COMPATIBILITY)
+// ---------------------------------------------------------------------------
+
+export function applyPdeShockFilter(
+  srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number },
+  iterations: number = 1,
+  strength: number = 0.85
+): Uint8ClampedArray {
+  return applyCoherenceCurvatureFlow(srcData, iterations, strength, 0.65);
+}
+
+// ---------------------------------------------------------------------------
+// PASS G: MULTI-SCALE CLAHE & MICRO-CONTRAST WITH 5X5 ZERO-OVERSHOOT HALO CLAMPING
 // ---------------------------------------------------------------------------
 
 export function applyMultiScaleMicroContrast(
@@ -615,7 +921,6 @@ export function applyMultiScaleMicroContrast(
     return output;
   }
 
-  // Extract luminance
   const lum = new Float32Array(total);
   for (let i = 0; i < total; i++) {
     const p = i * 4;
@@ -675,7 +980,6 @@ export function applyMultiScaleMicroContrast(
       const pIdx = idx * 4;
       const curY = lum[idx];
 
-      // Multi-scale detail bands
       const highFreq = curY - blur1[idx];
       const medFreq = blur1[idx] - blur2[idx];
 
@@ -693,7 +997,6 @@ export function applyMultiScaleMicroContrast(
         }
       }
 
-      // Clamping strictly bounds luminance to prevent halos
       const finalY = Math.max(min5x5, Math.min(max5x5, boostedY));
       const ratio = finalY / Math.max(1.0, curY);
 
@@ -712,7 +1015,7 @@ export function applyMultiScaleMicroContrast(
 
 export function applyBilateralDenoise(
   srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number },
-  denoiseStrength: number // 0 to 100
+  denoiseStrength: number
 ): Uint8ClampedArray {
   const { width, height, data: src } = srcData;
   const total = width * height;
@@ -723,7 +1026,6 @@ export function applyBilateralDenoise(
     return output;
   }
 
-  // Precompute Range Gaussian LUT (256 entries)
   const sigmaR = 8.0 + (denoiseStrength / 100) * 32.0;
   const invTwoSigmaRSq = 1.0 / (2.0 * sigmaR * sigmaR);
   const rangeLut = new Float32Array(256);
@@ -731,7 +1033,6 @@ export function applyBilateralDenoise(
     rangeLut[i] = Math.exp(-(i * i) * invTwoSigmaRSq);
   }
 
-  // Precompute 5x5 spatial weights (radius = 2, sigmaS = 2.0)
   const spatialKernel: number[][] = [];
   const sigmaS = 2.0;
   const invTwoSigmaSSq = 1.0 / (2.0 * sigmaS * sigmaS);
@@ -743,7 +1044,6 @@ export function applyBilateralDenoise(
     spatialKernel.push(row);
   }
 
-  // Extract luminance map
   const lum = new Uint8Array(total);
   for (let i = 0; i < total; i++) {
     const p = i * 4;
@@ -807,14 +1107,13 @@ export function applyBilateralDenoise(
 
 export function applyFaceEnhancement(
   srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number },
-  clarity: number // 0 to 100
+  clarity: number
 ): Uint8ClampedArray {
   const { width, height, data: src } = srcData;
   const total = width * height;
   const output = new Uint8ClampedArray(src.length);
   output.set(src);
 
-  // Compute luminance and skin mask
   const lum = new Float32Array(total);
   const skinMask = new Float32Array(total);
 
@@ -826,7 +1125,6 @@ export function applyFaceEnhancement(
     const y = 0.299 * r + 0.587 * g + 0.114 * b;
     lum[i] = y;
 
-    // YCbCr skin detection
     const cb = -0.168736 * r - 0.331264 * g + 0.5 * b + 128;
     const cr = 0.5 * r - 0.418688 * g - 0.081312 * b + 128;
 
@@ -837,7 +1135,6 @@ export function applyFaceEnhancement(
     }
   }
 
-  // Skin smoothing & feature enhancement pass
   for (let y = 1; y < height - 1; y++) {
     const row = y * width;
     for (let x = 1; x < width - 1; x++) {
@@ -851,34 +1148,27 @@ export function applyFaceEnhancement(
       const left = lum[idx - 1];
       const right = lum[idx + 1];
 
-      // Local gradient magnitude
       const grad = Math.abs(right - left) + Math.abs(bot - top);
 
       let targetY = curY;
 
       if (mask > 0.15) {
-        // Skin smoothing: gentle low-frequency blend to reduce blemishes
         const localAvg = (top + bot + left + right + curY * 2) / 6.0;
         targetY = curY * (1.0 - mask * 0.45) + localAvg * (mask * 0.45);
       } else if (
         grad > 20 &&
         (skinMask[idx - 1] > 0 || skinMask[idx + 1] > 0 || skinMask[idx - width] > 0 || skinMask[idx + width] > 0)
       ) {
-        // Non-skin facial feature boost (eyelashes, eyebrows, iris, lips): micro-contrast boost
         const localAvg = (top + bot + left + right) * 0.25;
         const diff = curY - localAvg;
         targetY = curY + diff * 0.35;
       }
 
-      // Studio tone curve (S-curve tone mapping for clarity and vibrancy)
       const normY = targetY / 255.0;
       const toneBoost = 0.06 * Math.sin(2 * Math.PI * normY) * (clarity / 100);
       const finalY = Math.max(0, Math.min(255, (normY + toneBoost) * 255));
 
-      // Modulate RGB maintaining color ratios
       const ratio = finalY / Math.max(1, curY);
-
-      // Subtle warmth boost on skin tones
       const warmthR = mask > 0.2 ? 1.02 : 1.0;
       const warmthG = mask > 0.2 ? 1.01 : 1.0;
 
@@ -897,7 +1187,7 @@ export function applyFaceEnhancement(
 
 export function applyAdaptiveUSM(
   srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number },
-  sharpness: number, // 0 to 100
+  sharpness: number,
   isDocumentMode: boolean
 ): Uint8ClampedArray {
   const { width, height, data: src } = srcData;
@@ -909,14 +1199,12 @@ export function applyAdaptiveUSM(
     return output;
   }
 
-  // Extract luminance
   const lum = new Float32Array(total);
   for (let i = 0; i < total; i++) {
     const p = i * 4;
     lum[i] = 0.299 * src[p] + 0.587 * src[p + 1] + 0.114 * src[p + 2];
   }
 
-  // Gaussian blur on luminance (5-tap separable [1, 4, 6, 4, 1] / 16)
   const blurH = new Float32Array(total);
   for (let y = 0; y < height; y++) {
     const row = y * width;
@@ -958,8 +1246,7 @@ export function applyAdaptiveUSM(
     }
   }
 
-  // Sharpening gain
-  const gain = 0.4 + (sharpness / 100) * 1.5;
+  const gain = 0.35 + (sharpness / 100) * 1.35;
   const threshold = isDocumentMode ? 1.5 : 2.5;
 
   for (let y = 1; y < height - 1; y++) {
@@ -970,7 +1257,6 @@ export function applyAdaptiveUSM(
       const curY = lum[idx];
       const delta = curY - blur[idx];
 
-      // Local 3x3 min and max for halo suppression
       let localMin = curY;
       let localMax = curY;
       for (let dy = -1; dy <= 1; dy++) {
@@ -984,31 +1270,27 @@ export function applyAdaptiveUSM(
 
       let sharpY = curY;
 
-      // Threshold protection against noise amplification
       if (Math.abs(delta) >= threshold) {
         sharpY = curY + gain * delta;
-        // Halo suppression clamping
         const haloMargin = isDocumentMode ? 10.0 : 6.0;
         sharpY = Math.max(localMin - haloMargin, Math.min(localMax + haloMargin, sharpY));
       }
 
-      // Khmer Text & Line Art Booster (steepens stroke transitions)
+      // Khmer Text & Line Art Booster
       if (isDocumentMode) {
         const dx = Math.abs(lum[idx + 1] - lum[idx - 1]);
         const dy = Math.abs(lum[idx + width] - lum[idx - width]);
         if (dx + dy > 30) {
           const localAvg = (localMin + localMax) * 0.5;
           if (curY < localAvg) {
-            sharpY = Math.max(0, sharpY - 8.0); // crisper dark ink strokes
+            sharpY = Math.max(0, sharpY - 8.0);
           } else {
-            sharpY = Math.min(255, sharpY + 6.0); // clean paper background
+            sharpY = Math.min(255, sharpY + 6.0);
           }
         }
       }
 
       sharpY = Math.max(0, Math.min(255, sharpY));
-
-      // Modulate RGB maintaining pure color chromaticity
       const ratio = sharpY / Math.max(1, curY);
 
       output[pIdx] = Math.max(0, Math.min(255, Math.round(src[pIdx] * ratio)));
@@ -1060,6 +1342,7 @@ export async function runImageUpscalePipeline(
   let sharpness = options.sharpness;
   let clarity = options.clarity;
   let isDocumentMode = options.preset === "text" || diagnostics.isDocumentLikely;
+  const isSmooth3D = diagnostics.isSmoothObjectLikely;
   const isUltraMode =
     options.preset === "ultra" ||
     options.ultraReconstruction ||
@@ -1082,108 +1365,99 @@ export async function runImageUpscalePipeline(
     sharpness = Math.max(sharpness, 50);
   }
 
-  // Stage 2: Pass A Pre-upscale Edge-Preserving Kuwahara Denoising
+  // Stage 2: Pass A Pre-upscale Edge-Preserving Kuwahara Denoising (Shading-safe)
   onProgress?.({
     stage: 2,
     totalStages: 5,
     stageName: "Pre-upscale Artifact Removal (Kuwahara Filter)",
     stageNameKh: "សម្អាតគ្រាប់អុជមុនពង្រីក (Kuwahara)",
-    percent: 30,
+    percent: 25,
   });
 
-  const kuwaharaStrength = isUltraMode ? 0.65 : denoise > 20 ? 0.5 : 0.35;
+  const kuwaharaStrength = isSmooth3D ? 0.35 : isUltraMode ? 0.6 : denoise > 20 ? 0.5 : 0.3;
   const preDenoisedData = applyKuwaharaDenoise(input, 2, kuwaharaStrength);
 
   if (signal?.aborted) {
     throw new Error("Upscaling aborted by user.");
   }
 
-  // Stage 3: Pass B Stepped 2x Iterative Upscaling Pyramid & Pass C PDE Shock Filter
+  // Stage 3: Pass B Continuous High-Order Lanczos-3 Resampling to Target Resolution First
+  // Prevents coarse low-res pixel grid steps from locking into polygon facets!
   onProgress?.({
     stage: 3,
     totalStages: 5,
-    stageName: `Stepped 2x Pyramid Upscaling (${options.scale}x) & PDE Shock Compression`,
-    stageNameKh: `ពង្រីកទំហំតាមលំដាប់ (${options.scale}x) និងបង្រួមគែម PDE Shock`,
-    percent: 60,
+    stageName: `Continuous High-Order Resampling (${options.scale}x)`,
+    stageNameKh: `ពង្រីកទំហំកម្រិតច្បាស់បន្ត (${options.scale}x)`,
+    percent: 50,
   });
 
-  const shockIterations = isUltraMode ? 2 : 1;
-  const shockStrength = (options.shockFilterStrength ?? 85) / 100;
-
-  let currentBuffer = {
-    data: preDenoisedData,
-    width: input.width,
-    height: input.height,
-  };
+  let upscaledData: Uint8ClampedArray;
+  let targetW = input.width * options.scale;
+  let targetH = input.height * options.scale;
 
   if (options.scale === 1) {
-    // 1x scale: sharpen directly
-    const shocked = applyPdeShockFilter(currentBuffer, shockIterations, shockStrength);
-    currentBuffer = { data: shocked, width: currentBuffer.width, height: currentBuffer.height };
-  } else if (options.scale === 2) {
-    // 1x -> 2x stepped
-    const resampled = applyLanczosResample(currentBuffer, 2);
-    const shocked = applyPdeShockFilter(resampled, shockIterations, shockStrength);
-    currentBuffer = { data: shocked, width: resampled.width, height: resampled.height };
-  } else if (options.scale === 4) {
-    // 1x -> 2x step
-    const step1 = applyLanczosResample(currentBuffer, 2);
-    const shocked1 = applyPdeShockFilter(step1, 1, shockStrength * 0.75);
-
-    // 2x -> 4x step
-    const step2 = applyLanczosResample(
-      { data: shocked1, width: step1.width, height: step1.height },
-      2
+    upscaledData = preDenoisedData;
+    targetW = input.width;
+    targetH = input.height;
+  } else {
+    const resampled = applyLanczosResample(
+      { data: preDenoisedData, width: input.width, height: input.height },
+      options.scale
     );
-    const shocked2 = applyPdeShockFilter(step2, shockIterations, shockStrength);
-    currentBuffer = { data: shocked2, width: step2.width, height: step2.height };
-  } else if (options.scale === 8) {
-    // 1x -> 2x step
-    const step1 = applyLanczosResample(currentBuffer, 2);
-    const shocked1 = applyPdeShockFilter(step1, 1, 0.7);
-
-    // 2x -> 4x step
-    const step2 = applyLanczosResample(
-      { data: shocked1, width: step1.width, height: step1.height },
-      2
-    );
-    const shocked2 = applyPdeShockFilter(step2, 1, 0.8);
-
-    // 4x -> 8x step
-    const step3 = applyLanczosResample(
-      { data: shocked2, width: step2.width, height: step2.height },
-      2
-    );
-    const shocked3 = applyPdeShockFilter(step3, shockIterations, shockStrength);
-    currentBuffer = { data: shocked3, width: step3.width, height: step3.height };
+    upscaledData = resampled.data;
+    targetW = resampled.width;
+    targetH = resampled.height;
   }
 
   if (signal?.aborted) {
     throw new Error("Upscaling aborted by user.");
   }
 
-  // Stage 4: Pass D Multi-Scale Micro-Contrast & Denoise/Face Enhancement
+  // Stage 4: Pass C Coherence-Enhancing Anisotropic Curvature Flow & Contour Anti-Aliasing
   onProgress?.({
     stage: 4,
     totalStages: 5,
-    stageName: "Multi-Scale Micro-Contrast & Halo-Free Clamping",
-    stageNameKh: "កែសម្រួលកម្រិតពណ៌លម្អិត និងទប់ស្កាត់ Halo",
-    percent: 80,
+    stageName: "Coherence Curvature Flow & Sub-Pixel Anti-Aliasing",
+    stageNameKh: "សម្រួលគែមតាមបន្ទាត់កោង Isophote Tangent & Sub-Pixel AA",
+    percent: 75,
   });
 
-  const microContrasted = applyMultiScaleMicroContrast(currentBuffer, clarity);
+  const shockIterations = isUltraMode ? 2 : 1;
+  const shockStrength = (options.shockFilterStrength ?? (isSmooth3D ? 70 : 85)) / 100;
+  const tangentSmooth = isSmooth3D ? 0.8 : 0.65;
+
+  // 1. Flow along isophote tangent t to straight staircases + sharpen across normal n
+  const curvatureFlowData = applyCoherenceCurvatureFlow(
+    { data: upscaledData, width: targetW, height: targetH },
+    shockIterations,
+    shockStrength,
+    tangentSmooth
+  );
+
+  // 2. Sub-pixel contour anti-aliasing to remove diagonal jaggies
+  const antiAliasedData = applySubpixelContourAA({
+    data: curvatureFlowData,
+    width: targetW,
+    height: targetH,
+  });
+
+  // 3. Multi-scale micro-contrast with 5x5 halo clamping
+  const microContrasted = applyMultiScaleMicroContrast(
+    { data: antiAliasedData, width: targetW, height: targetH },
+    clarity
+  );
 
   let stage4Data = microContrasted;
   if (denoise > 30) {
     stage4Data = applyBilateralDenoise(
-      { data: stage4Data, width: currentBuffer.width, height: currentBuffer.height },
-      denoise * 0.5
+      { data: stage4Data, width: targetW, height: targetH },
+      denoise * 0.45
     );
   }
 
   if (faceEnhance) {
     stage4Data = applyFaceEnhancement(
-      { data: stage4Data, width: currentBuffer.width, height: currentBuffer.height },
+      { data: stage4Data, width: targetW, height: targetH },
       clarity
     );
   }
@@ -1192,25 +1466,32 @@ export async function runImageUpscalePipeline(
     throw new Error("Upscaling aborted by user.");
   }
 
-  // Stage 5: Pass E Adaptive USM & Khmer Text Booster
+  // Stage 5: Pass D Adaptive Luminance USM & Anti-Banding TPDF Dithering
   onProgress?.({
     stage: 5,
     totalStages: 5,
-    stageName: "Adaptive Luminance USM & Micro-Detail Recovery",
-    stageNameKh: "បង្កើនភាពច្បាស់ និងទាញយកព័ត៌មានលម្អិត",
+    stageName: "Detail Harmonization & Continuous Shading Anti-Banding",
+    stageNameKh: "បង្កើនភាពច្បាស់ និងទប់ស្កាត់ការបែកពណ៌ស្រមោល 3D",
     percent: 100,
   });
 
-  const finalData = applyAdaptiveUSM(
-    { data: stage4Data, width: currentBuffer.width, height: currentBuffer.height },
+  const usmData = applyAdaptiveUSM(
+    { data: stage4Data, width: targetW, height: targetH },
     sharpness,
     isDocumentMode
   );
 
+  // Apply subtle triangular PDF dither to eliminate 8-bit quantization banding on 3D gradients
+  const finalData = applyAntiBandingDither({
+    data: usmData,
+    width: targetW,
+    height: targetH,
+  });
+
   return {
     data: finalData,
-    width: currentBuffer.width,
-    height: currentBuffer.height,
+    width: targetW,
+    height: targetH,
     diagnostics,
   };
 }

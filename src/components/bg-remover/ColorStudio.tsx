@@ -24,6 +24,7 @@ import {
   Feather,
   Square,
   Trash2,
+  Zap,
 } from "lucide-react";
 import {
   compositeWithSolidColor,
@@ -59,6 +60,7 @@ import {
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ProcessingStatusLabel } from "@/lib/types";
 import { BeforeAfterSlider } from "@/components/image-upscaler/BeforeAfterSlider";
+import { generateBgRemoverSmartName } from "@/lib/smart-naming";
 import {
   getTelemetrySnapshot,
   getTelemetrySnapshotSync,
@@ -224,6 +226,7 @@ export function ColorStudio({
   // ── Edge Refinement Mode (Default: "off") & Auto-Crop Option ──
   const [edgeRefinementMode, setEdgeRefinementMode] = useState<"off" | "balanced" | "fine">("off");
   const [autoCropExport, setAutoCropExport] = useState<boolean>(false);
+  const [customExportFilename, setCustomExportFilename] = useState<string>("");
   const [foregroundAreaPercent, setForegroundAreaPercent] = useState<number>(0);
 
   // ── Rectangle Selection Box & Cursor State ──
@@ -447,6 +450,20 @@ export function ColorStudio({
     initialCompositeUrl,
     originalUrl,
   ]);
+
+  // Auto-generate smart download filename when image or channel updates
+  useEffect(() => {
+    if (originalFile?.name) {
+      const autoName = generateBgRemoverSmartName({
+        originalName: originalFile.name,
+        channel: activeChannel === "custom" ? "custom" : (activeChannel as "transparent" | "white" | "pink" | "mask"),
+        mode,
+        width: originalFile && (sourceWidth || sourceHeight) ? (sourceWidth || width) : width,
+        height: originalFile && (sourceWidth || sourceHeight) ? (sourceHeight || height) : height,
+      });
+      setCustomExportFilename(autoName);
+    }
+  }, [originalFile, activeChannel, mode, width, height, sourceWidth, sourceHeight]);
 
   // Instant Channel Selection (< 5ms, zero model rerun)
   const handleSelectChannel = (channel: ViewChannel) => {
@@ -1601,13 +1618,18 @@ export function ColorStudio({
     }
 
     if (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink" || targetChannel === "custom") {
-      filename = generateExportFilename(
-        originalFile?.name || "image",
-        targetChannel === "custom" ? "white" : targetChannel,
-        width,
-        height,
-        mode
-      );
+      const sanitizedBase = customExportFilename.trim().replace(/\.[a-zA-Z0-9]+$/i, "");
+      if (sanitizedBase) {
+        filename = `${sanitizedBase}.png`;
+      } else {
+        filename = `${generateBgRemoverSmartName({
+          originalName: originalFile?.name || "image",
+          channel: targetChannel,
+          mode,
+          width: originalFile && (sourceWidth || sourceHeight) ? (sourceWidth || width) : width,
+          height: originalFile && (sourceWidth || sourceHeight) ? (sourceHeight || height) : height,
+        })}.png`;
+      }
     } else {
       filename = `PLP-AlphaMask-Debug-${width}x${height}-${mode}-${timestamp}.png`;
     }
@@ -1635,6 +1657,9 @@ export function ColorStudio({
     activeChannel,
     width,
     height,
+    sourceWidth,
+    sourceHeight,
+    customExportFilename,
     mode,
     currentTransparentUrl,
     transparentUrl,
@@ -1643,6 +1668,9 @@ export function ColorStudio({
     currentAlphaMaskUrl,
     initialAlphaMaskUrl,
     whiteCompositeUrl,
+    customColor,
+    autoCropExport,
+    transparentBlob,
   ]);
 
   // "Export Transparent PNG": Full resolution composite with genuine alpha channel
@@ -2894,6 +2922,47 @@ export function ColorStudio({
               Export: <strong className="text-white">{originalFile && (sourceWidth || sourceHeight) ? `${sourceWidth || width}×${sourceHeight || height}px` : `${width}×${height}px`}</strong>
             </span>
           </div>
+        </div>
+
+        {/* Smart Editable Filename Deck */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-none border border-slate-800 bg-slate-900/60 p-2.5 font-mono">
+          <div className="flex-1 flex items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-300 shrink-0">
+              ឈ្មោះឯកសារ (File Name):
+            </span>
+            <input
+              type="text"
+              data-testid="bg-remover-custom-filename"
+              value={customExportFilename}
+              onChange={(e) => setCustomExportFilename(e.target.value)}
+              placeholder="plp-cutout-transparent"
+              className="w-full rounded-none border border-slate-700 bg-slate-950 px-2.5 py-1 text-xs text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+            />
+            <span className="text-xs font-bold text-cyan-400 shrink-0">
+              .png
+            </span>
+          </div>
+
+          <button
+            type="button"
+            data-testid="bg-remover-auto-name-btn"
+            onClick={() => {
+              cyberAudio.playClick();
+              const freshAutoName = generateBgRemoverSmartName({
+                originalName: originalFile?.name || "image",
+                channel: activeChannel === "custom" ? "custom" : (activeChannel as "transparent" | "white" | "pink" | "mask"),
+                mode,
+                width: originalFile && (sourceWidth || sourceHeight) ? (sourceWidth || width) : width,
+                height: originalFile && (sourceWidth || sourceHeight) ? (sourceHeight || height) : height,
+              });
+              setCustomExportFilename(freshAutoName);
+            }}
+            className="shrink-0 flex items-center justify-center gap-1.5 border border-amber-500/40 bg-amber-950/40 px-2.5 py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-900/60 transition-colors cursor-pointer"
+            title="បង្កើតឈ្មោះស្វ័យប្រវត្តិតាមរូបភាព និងប្រភេទពណ៌"
+          >
+            <Zap className="h-3.5 w-3.5 text-amber-400" />
+            <span>⚡ បង្កើតឈ្មោះស្វ័យប្រវត្តិ (Auto-Name)</span>
+          </button>
         </div>
 
         {/* Primary Download Button for Current View */}

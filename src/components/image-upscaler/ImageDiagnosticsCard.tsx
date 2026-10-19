@@ -127,6 +127,8 @@ export function ImageDiagnosticsCard({
           <span className="text-[10px] font-mono text-slate-400">
             {diagnostics.skinToneRatio > 0.05
               ? `Face: ${(diagnostics.skinToneRatio * 100).toFixed(0)}%`
+              : diagnostics.isSmoothObjectLikely
+              ? "Smooth 3D / Object (វត្ថុ 3D)"
               : diagnostics.isDocumentLikely
               ? "Doc / Text Edge"
               : "Photo Balance"}

@@ -7,6 +7,9 @@ import {
   applyAdaptiveUSM,
   applyKuwaharaDenoise,
   applyPdeShockFilter,
+  applyCoherenceCurvatureFlow,
+  applySubpixelContourAA,
+  applyAntiBandingDither,
   applyMultiScaleMicroContrast,
   runImageUpscalePipeline,
 } from "../src/lib/image-upscale-client";
@@ -16,7 +19,7 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
   function createTestPattern(
     width: number,
     height: number,
-    type: "sharp" | "noisy" | "portrait" | "document" | "blurry-ramp"
+    type: "sharp" | "noisy" | "portrait" | "document" | "blurry-ramp" | "3d-egg"
   ) {
     const data = new Uint8ClampedArray(width * height * 4);
 
@@ -72,6 +75,25 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
           data[idx + 1] = val;
           data[idx + 2] = val;
           data[idx + 3] = 255;
+        } else if (type === "3d-egg") {
+          // White background with smooth 3D shaded egg in center
+          const dx = (x - width / 2) / (width * 0.35);
+          const dy = (y - height / 2) / (height * 0.45);
+          const rSq = dx * dx + dy * dy;
+          if (rSq <= 1.0) {
+            const z = Math.sqrt(Math.max(0, 1.0 - rSq));
+            const dot = Math.max(0, -dx * 0.4 - dy * 0.4 + z * 0.82);
+            const val = Math.round(80 + dot * 130);
+            data[idx] = val;
+            data[idx + 1] = val;
+            data[idx + 2] = val;
+            data[idx + 3] = 255;
+          } else {
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = 255;
+          }
         }
       }
     }
@@ -334,5 +356,54 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
         signal: abortCtrl.signal,
       })
     ).rejects.toThrow("Upscaling aborted by user.");
+  });
+
+  it("accurately classifies 3D shaded egg/sphere shapes as isSmoothObjectLikely and avoids false-positive document classification", () => {
+    const eggImg = createTestPattern(87, 90, "3d-egg");
+    const diag = calculateImageDiagnostics(eggImg);
+
+    expect(diag.width).toBe(87);
+    expect(diag.height).toBe(90);
+    expect(diag.isTinyImage).toBe(true);
+    expect(diag.is8xEligible).toBe(true);
+    expect(diag.isSmoothObjectLikely).toBe(true);
+    expect(diag.isDocumentLikely).toBe(false);
+    expect(diag.recommendedPreset).toBe("ultra");
+    expect(diag.recommendationReasonKh).toContain("3D");
+  });
+
+  it("applies Coherence Curvature Flow (tangent isophote diffusion) to smooth contours without corrupting pixels", () => {
+    const eggImg = createTestPattern(48, 48, "3d-egg");
+    const flowResult = applyCoherenceCurvatureFlow(eggImg, 2, 0.45, 0.5);
+
+    expect(flowResult.length).toBe(eggImg.data.length);
+    for (let i = 0; i < flowResult.length; i++) {
+      expect(flowResult[i]).toBeGreaterThanOrEqual(0);
+      expect(flowResult[i]).toBeLessThanOrEqual(255);
+    }
+  });
+
+  it("applies Sub-pixel Contour Anti-Aliasing (Contour FXAA) across high contrast stepped boundaries", () => {
+    const sharpImg = createTestPattern(32, 32, "sharp");
+    const aaResult = applySubpixelContourAA(sharpImg);
+
+    expect(aaResult.length).toBe(sharpImg.data.length);
+    for (let i = 0; i < aaResult.length; i++) {
+      expect(aaResult[i]).toBeGreaterThanOrEqual(0);
+      expect(aaResult[i]).toBeLessThanOrEqual(255);
+    }
+  });
+
+  it("applies Anti-Banding TPDF Dithering without altering dynamic range", () => {
+    const rampImg = createTestPattern(32, 32, "blurry-ramp");
+    const dithered = applyAntiBandingDither(rampImg);
+
+    expect(dithered.length).toBe(rampImg.data.length);
+    for (let i = 0; i < dithered.length; i++) {
+      expect(dithered[i]).toBeGreaterThanOrEqual(0);
+      expect(dithered[i]).toBeLessThanOrEqual(255);
+      // Dither amplitude must not change pixel values by more than 2 levels
+      expect(Math.abs(dithered[i] - rampImg.data[i])).toBeLessThanOrEqual(2);
+    }
   });
 });
