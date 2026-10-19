@@ -239,6 +239,7 @@ body {
   animation: industrialScanBeam 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   pointer-events: none;
   z-index: 0;
+  will-change: transform, opacity;
 }
 
 .animate-industrial-scan-intense {
@@ -252,6 +253,7 @@ body {
   animation: industrialScanBeam 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   pointer-events: none;
   z-index: 0;
+  will-change: transform, opacity;
 }
 
 /* Secondary Horizontal Industrial Scanning Beam */
@@ -266,6 +268,7 @@ body {
   animation: industrialScanBeam 13s cubic-bezier(0.4, 0, 0.2, 1) 4.5s infinite;
   pointer-events: none;
   z-index: 0;
+  will-change: transform, opacity;
 }
 
 .animate-industrial-scan-secondary-intense {
@@ -279,6 +282,7 @@ body {
   animation: industrialScanBeam 4.5s cubic-bezier(0.4, 0, 0.2, 1) 1.5s infinite;
   pointer-events: none;
   z-index: 0;
+  will-change: transform, opacity;
 }
 
 /* Perspective Engineering Floor Grid */
@@ -321,11 +325,13 @@ body {
 .animate-radar-slow {
   animation: radarSpinSlow 45s linear infinite;
   transform-origin: center center;
+  will-change: transform;
 }
 
 .animate-radar-reverse-slow {
   animation: radarSpinReverse 32s linear infinite;
   transform-origin: center center;
+  will-change: transform;
 }
 
 /* 4. Particle Float & Status Blink (GPU-Accelerated translate3d) */
@@ -531,11 +537,14 @@ body {
 
 /* Accessible reduced motion override */
 @media (prefers-reduced-motion: reduce) {
+  /* Stop formula marquee streams */
   .formula-stream {
     animation: none !important;
     transform: none !important;
     will-change: auto !important;
   }
+
+  /* Stop all decorative background animations */
   .animate-grid-drift,
   .animate-industrial-scan,
   .animate-industrial-scan-intense,
@@ -555,5 +564,35 @@ body {
     animation: none !important;
     transform: none !important;
     will-change: auto !important;
+  }
+
+  /* Stop Tailwind utility animations (animate-pulse, animate-ping, animate-spin)
+     used in RoboticScanner and other UI elements */
+  .animate-pulse {
+    animation: none !important;
+  }
+  .animate-ping {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+  .animate-spin {
+    animation: none !important;
+  }
+
+  /* Remove decorative CSS transitions on hover-only elements */
+  .sidebar-module-glass,
+  .machine-module,
+  .cyber-glass-panel {
+    transition: none !important;
+  }
+
+  /* Hide scanning beam elements entirely so they don't paint at all */
+  .animate-industrial-scan,
+  .animate-industrial-scan-intense,
+  .animate-industrial-scan-secondary,
+  .animate-industrial-scan-secondary-intense,
+  .animate-laser-scan {
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 }
