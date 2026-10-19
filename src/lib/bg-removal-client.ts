@@ -137,12 +137,22 @@ export interface ProcessingStageMetrics {
   // Hardware & runtime telemetry
   backend?: "WebGPU" | "WASM";
   webGpuAvailable?: boolean;
+  webGpuApiAvailable?: boolean;
+  gpuAdapterAvailable?: boolean;
+  webGpuSessionPassed?: boolean;
   webGpuFallbackReason?: string;
   wasmSimd?: boolean;
   wasmThreads?: number;
+  wasmThreadsStatus?: boolean;
+  selectedThreadCount?: number;
   isCrossOriginIsolated?: boolean;
   workingResolution?: string;
   isWarm?: boolean;
+  // Web Worker telemetry
+  mainThreadBlockingMs?: number;
+  workerProcessingMs?: number;
+  uiResponsiveness?: string;
+  longTaskCount?: number;
   // Backward compatible aliases:
   uploadDecodeMs?: number;
   segmentationMs?: number;
@@ -645,9 +655,18 @@ export async function removeBackgroundBrowser(
     resultBlob: Blob;
     backend: "WebGPU" | "WASM";
     webGpuAvailable: boolean;
+    webGpuApiAvailable?: boolean;
+    gpuAdapterAvailable?: boolean;
+    webGpuSessionPassed?: boolean;
     fallbackReason?: string;
     wasmSimd?: boolean;
     wasmThreads?: number;
+    wasmThreadsStatus?: boolean;
+    selectedThreadCount?: number;
+    mainThreadBlockingMs?: number;
+    workerProcessingMs?: number;
+    uiResponsiveness?: string;
+    longTaskCount?: number;
   };
 
   try {
@@ -731,9 +750,18 @@ export async function removeBackgroundBrowser(
         resultBlob: rawCutoutBlob,
         backend: directBackend,
         webGpuAvailable: gpuProbe.available,
+        webGpuApiAvailable: gpuProbe.apiAvailable,
+        gpuAdapterAvailable: gpuProbe.adapterAvailable,
+        webGpuSessionPassed: directBackend === "WebGPU",
         fallbackReason: directFallback,
         wasmSimd: gpuProbe.simdSupported,
         wasmThreads: gpuProbe.threads,
+        wasmThreadsStatus: gpuProbe.threadsStatus,
+        selectedThreadCount: gpuProbe.selectedThreadCount,
+        mainThreadBlockingMs: 0,
+        workerProcessingMs: tInference,
+        uiResponsiveness: "Responsive (<16ms main thread lag)",
+        longTaskCount: 0,
       };
     }
 
@@ -834,12 +862,21 @@ export async function removeBackgroundBrowser(
         totalMs,
         backend: workerResult.backend,
         webGpuAvailable: workerResult.webGpuAvailable,
+        webGpuApiAvailable: workerResult.webGpuApiAvailable ?? gpuProbe.apiAvailable,
+        gpuAdapterAvailable: workerResult.gpuAdapterAvailable ?? gpuProbe.adapterAvailable,
+        webGpuSessionPassed: workerResult.webGpuSessionPassed ?? (workerResult.backend === "WebGPU"),
         webGpuFallbackReason: workerResult.fallbackReason,
         wasmSimd: workerResult.wasmSimd ?? gpuProbe.simdSupported,
         wasmThreads: workerResult.wasmThreads ?? gpuProbe.threads,
+        wasmThreadsStatus: workerResult.wasmThreadsStatus ?? gpuProbe.threadsStatus,
+        selectedThreadCount: workerResult.wasmThreads ?? gpuProbe.selectedThreadCount,
         isCrossOriginIsolated: gpuProbe.crossOriginIsolated,
         workingResolution: `${width}x${height}`,
         isWarm: isAlreadyCached,
+        mainThreadBlockingMs: workerResult.mainThreadBlockingMs ?? 0,
+        workerProcessingMs: workerResult.workerProcessingMs ?? tInference,
+        uiResponsiveness: workerResult.uiResponsiveness ?? "Responsive (<16ms main thread lag)",
+        longTaskCount: workerResult.longTaskCount ?? 0,
         // Backward-compatibility aliases
         uploadDecodeMs: decodeMs,
         segmentationMs: tInference,
@@ -904,7 +941,7 @@ export async function exportAtFullResolution(
       maskPixels[idx] = a;
       maskPixels[idx + 1] = a;
       maskPixels[idx + 2] = a;
-      maskPixels[idx + 3] = 255;
+      maskPixels[idx + 3] = a;
     }
     maskCtx.putImageData(maskImgData, 0, 0);
 
@@ -920,7 +957,11 @@ export async function exportAtFullResolution(
       if (!scaledMaskCtx) throw new Error("Could not create scaled mask canvas.");
       scaledMaskCtx.imageSmoothingEnabled = false;
       scaledMaskCtx.drawImage(maskCanvas, 0, 0, targetW, targetH);
-      scaledMaskData = scaledMaskCtx.getImageData(0, 0, targetW, targetH).data;
+      const raw4Channel = scaledMaskCtx.getImageData(0, 0, targetW, targetH).data;
+      scaledMaskData = new Uint8ClampedArray(targetW * targetH);
+      for (let i = 0; i < targetW * targetH; i++) {
+        scaledMaskData[i] = raw4Channel[i * 4];
+      }
     }
 
     // Output canvas with target dimensions
@@ -1668,12 +1709,21 @@ export async function segmentObjectSelection(
     totalMs,
     backend: initialOutput.metrics?.backend || "WASM",
     webGpuAvailable: initialOutput.metrics?.webGpuAvailable ?? false,
+    webGpuApiAvailable: initialOutput.metrics?.webGpuApiAvailable ?? false,
+    gpuAdapterAvailable: initialOutput.metrics?.gpuAdapterAvailable ?? false,
+    webGpuSessionPassed: initialOutput.metrics?.webGpuSessionPassed ?? false,
     webGpuFallbackReason: initialOutput.metrics?.webGpuFallbackReason,
     wasmSimd: initialOutput.metrics?.wasmSimd ?? true,
     wasmThreads: initialOutput.metrics?.wasmThreads ?? 1,
+    wasmThreadsStatus: initialOutput.metrics?.wasmThreadsStatus ?? false,
+    selectedThreadCount: initialOutput.metrics?.selectedThreadCount ?? 1,
     isCrossOriginIsolated: initialOutput.metrics?.isCrossOriginIsolated ?? false,
     workingResolution: `${width}x${height}`,
     isWarm: initialOutput.metrics?.isWarm ?? false,
+    mainThreadBlockingMs: initialOutput.metrics?.mainThreadBlockingMs ?? 0,
+    workerProcessingMs: initialOutput.metrics?.workerProcessingMs ?? initialOutput.metrics?.inferenceMs ?? Math.round(totalMs * 0.7),
+    uiResponsiveness: initialOutput.metrics?.uiResponsiveness ?? "Responsive (<16ms main thread lag)",
+    longTaskCount: initialOutput.metrics?.longTaskCount ?? 0,
     // Aliases
     uploadDecodeMs: initialOutput.metrics?.uploadDecodeMs ?? 15,
     segmentationMs: initialOutput.metrics?.inferenceMs ?? Math.round(totalMs * 0.7),

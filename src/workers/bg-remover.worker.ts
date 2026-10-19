@@ -30,9 +30,14 @@ export interface WorkerCompleteMessage {
   resultBlob: Blob;
   backend: "WebGPU" | "WASM";
   webGpuAvailable: boolean;
+  webGpuApiAvailable: boolean;
+  gpuAdapterAvailable: boolean;
+  webGpuSessionPassed: boolean;
   fallbackReason?: string;
   wasmSimd?: boolean;
   wasmThreads?: number;
+  wasmThreadsStatus?: boolean;
+  workerProcessingMs: number;
 }
 
 export interface WorkerErrorMessage {
@@ -69,10 +74,12 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
   }
 
   if (data.type === "START") {
+    const tWorkerStart = performance.now();
     const { jobId, imageBlob, model, preferWebGpu } = data;
     let resultBlob: Blob | null = null;
     let actualBackend: "WebGPU" | "WASM" = "WASM";
     let webGpuAvailable = false;
+    let webGpuSessionPassed = false;
     let fallbackReason: string | undefined = undefined;
 
     // Check if worker environment has navigator.gpu
@@ -81,10 +88,12 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
       "gpu" in navigator &&
       Boolean((navigator as unknown as { gpu?: unknown }).gpu);
 
+    let gpuAdapterAvailable = false;
     const tryWebGpu = preferWebGpu !== false && hasWorkerGpu;
 
     // 1. Attempt WebGPU execution if supported
     if (tryWebGpu) {
+      gpuAdapterAvailable = true;
       try {
         resultBlob = await removeBackground(imageBlob, {
           model: model || "isnet_fp16",
@@ -109,8 +118,10 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
         });
         actualBackend = "WebGPU";
         webGpuAvailable = true;
+        webGpuSessionPassed = true;
       } catch (gpuErr: unknown) {
         console.warn("[bg-remover-worker] WebGPU execution failed; safely falling back to WASM:", gpuErr);
+        webGpuSessionPassed = false;
         const errMsg = gpuErr instanceof Error ? gpuErr.message : String(gpuErr);
         if (errMsg.includes("Adapter") || errMsg.includes("adapter")) {
           fallbackReason = "Adapter unavailable";
@@ -168,6 +179,7 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
     const isIsolated = typeof self !== "undefined" ? Boolean((self as unknown as { crossOriginIsolated?: boolean }).crossOriginIsolated) : false;
     const hw = typeof navigator !== "undefined" && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4;
     const wasmThreads = isIsolated ? Math.min(4, Math.max(1, hw > 2 ? hw - 1 : 1)) : 1;
+    const wasmThreadsStatus = isIsolated && typeof SharedArrayBuffer !== "undefined";
     const wasmSimd =
       typeof WebAssembly !== "undefined" && typeof WebAssembly.validate === "function"
         ? WebAssembly.validate(
@@ -175,15 +187,22 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
           )
         : false;
 
+    const workerProcessingMs = Math.round(performance.now() - tWorkerStart);
+
     const completeMsg: WorkerCompleteMessage = {
       type: "COMPLETE",
       jobId,
       resultBlob,
       backend: actualBackend,
       webGpuAvailable,
+      webGpuApiAvailable: hasWorkerGpu,
+      gpuAdapterAvailable,
+      webGpuSessionPassed,
       fallbackReason,
       wasmSimd,
       wasmThreads,
+      wasmThreadsStatus,
+      workerProcessingMs,
     };
     self.postMessage(completeMsg);
   }

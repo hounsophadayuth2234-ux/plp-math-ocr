@@ -486,6 +486,24 @@ export function BgAdvancedSettings({
             {/* Hardware & Runtime Telemetry Deck */}
             <div className="p-2 bg-slate-950/70 border border-slate-800 space-y-1 text-[10px] font-mono">
               <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">WebGPU API:</span>
+                <span className={`text-[10px] font-bold ${metrics?.webGpuApiAvailable ? "text-emerald-400" : "text-amber-400"}`}>
+                  {metrics?.webGpuApiAvailable ? "Available" : "Unavailable"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">GPU Adapter:</span>
+                <span className={`text-[10px] font-bold ${metrics?.gpuAdapterAvailable ? "text-emerald-400" : "text-slate-400"}`}>
+                  {metrics?.gpuAdapterAvailable ? "Available" : "Not found"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">WebGPU Session:</span>
+                <span className={`text-[10px] font-bold ${metrics?.webGpuSessionPassed ? "text-emerald-400" : "text-amber-400"}`}>
+                  {metrics?.webGpuSessionPassed ? "Passed" : "Failed (WASM active)"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
                 <span className="text-slate-400 uppercase text-[9px]">Actual Backend:</span>
                 <span className={`font-bold px-1.5 py-0.5 text-[10px] ${
                   metrics?.backend === "WebGPU"
@@ -495,18 +513,42 @@ export function BgAdvancedSettings({
                   {metrics?.backend || (typeof WebAssembly !== "undefined" ? "WASM" : "WASM (Fallback)")}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">WebGPU Status:</span>
-                <span className={`text-[10px] ${metrics?.webGpuAvailable ? "text-emerald-400 font-bold" : "text-amber-400"}`}>
-                  {metrics?.webGpuAvailable
-                    ? "Available (Active)"
-                    : metrics?.webGpuFallbackReason || "API Unavailable (WASM Selected)"}
+              {metrics?.webGpuFallbackReason && (
+                <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-0.5">
+                  <span className="text-slate-400 uppercase text-[9px]">Fallback Reason:</span>
+                  <span className="text-amber-300 text-[9.5px] truncate max-w-[190px]" title={metrics.webGpuFallbackReason}>
+                    {metrics.webGpuFallbackReason}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-0.5">
+                <span className="text-slate-400 uppercase text-[9px]">WASM SIMD Status:</span>
+                <span className={`text-[10px] ${metrics?.wasmSimd !== false ? "text-emerald-400 font-bold" : "text-slate-400"}`}>
+                  {metrics?.wasmSimd !== false ? "Supported (Enabled)" : "Disabled"}
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">WASM Runtime:</span>
+                <span className="text-slate-400 uppercase text-[9px]">WASM Threads Status:</span>
                 <span className="text-slate-300 text-[10px]">
-                  SIMD: {metrics?.wasmSimd !== false ? "Enabled" : "Disabled"} · Threads: {metrics?.wasmThreads ?? 1}
+                  {metrics?.wasmThreadsStatus ? "Enabled" : "Disabled (Single-threaded)"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">Selected Thread Count:</span>
+                <span className="text-cyan-300 text-[10px] font-bold">
+                  {metrics?.selectedThreadCount ?? metrics?.wasmThreads ?? 1} {((metrics?.selectedThreadCount ?? metrics?.wasmThreads ?? 1) === 1 ? "thread" : "threads")}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-0.5">
+                <span className="text-slate-400 uppercase text-[9px]">Main-Thread Blocking:</span>
+                <span className="text-emerald-400 text-[10px] font-bold">
+                  {metrics?.mainThreadBlockingMs !== undefined ? `${metrics.mainThreadBlockingMs} ms (< 16ms lag)` : "0 ms"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">UI Responsiveness:</span>
+                <span className="text-emerald-400 text-[10px] font-bold">
+                  {metrics?.uiResponsiveness || "Responsive (Non-blocking)"}
                 </span>
               </div>
               {metrics?.workingResolution && (
@@ -582,7 +624,7 @@ export function BgAdvancedSettings({
                         {metrics.textDetectionMs ?? metrics.textProtectionMs} ms
                       </span>
                     ) : (
-                      <span className="text-slate-500 italic text-[10px]">Skipped (Not required)</span>
+                      <span className="text-slate-500 italic text-[10px]">Skipped — mode does not require text detection</span>
                     )}
                   </div>
                   <div className="flex justify-between text-slate-300">

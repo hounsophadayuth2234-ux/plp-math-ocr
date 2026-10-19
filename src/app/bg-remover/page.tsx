@@ -661,7 +661,11 @@ export default function BgRemoverPage() {
       } else {
         const effectiveDim =
           targetMaxDim ??
-          (edgeQuality === "fast" ? 640 : edgeQuality === "balanced" ? 1024 : 1536);
+          (edgeQuality === "fast"
+            ? (activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text" ? 768 : 640)
+            : edgeQuality === "balanced"
+            ? 1024
+            : 1536);
         const segResult = await segmentObjectSelection(imageFile, {
           mode: activeSelectionMode,
           targetMaxDimension: effectiveDim,
