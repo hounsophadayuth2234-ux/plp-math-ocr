@@ -57,12 +57,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar container */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-cyan-500/20 bg-slate-950/75 backdrop-blur-[10px] text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shadow-[4px_0_30px_rgba(0,0,0,0.7)] ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-cyan-500/20 bg-[rgba(3,7,18,0.40)] backdrop-blur-[8px] text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shadow-[4px_0_30px_rgba(0,0,0,0.7)] ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between border-b border-cyan-500/20 px-5 bg-slate-950/60 backdrop-blur-sm">
+        <div className="flex h-16 items-center justify-between border-b border-cyan-500/20 px-5 bg-slate-950/40 backdrop-blur-sm">
           <Link href="/" className="flex items-center gap-3" onClick={onClose}>
             <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 via-indigo-600 to-violet-600 text-white shadow-[0_0_15px_rgba(0,240,255,0.4)]">
               <Cpu className="h-5 w-5" />
@@ -146,8 +146,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     onClick={onClose}
                     className={`group relative flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950 ${
                       isActive
-                        ? "sidebar-module-glass is-active text-white ring-1 ring-cyan-400/40"
-                        : "sidebar-module-glass text-slate-300 hover:text-white"
+                        ? "sidebar-module-glass is-active text-white"
+                        : "sidebar-module-glass text-slate-100 hover:text-white"
                     }`}
                   >
                     <div className="flex min-w-0 items-center gap-3">
@@ -156,8 +156,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                           tool.accentColor
                         } ${
                           isActive
-                            ? "text-white shadow-[0_0_10px_rgba(0,240,255,0.35)]"
-                            : "opacity-85 group-hover:opacity-100 text-white"
+                            ? "text-white shadow-[0_0_12px_rgba(0,240,255,0.40)]"
+                            : "text-white group-hover:shadow-[0_0_8px_rgba(0,240,255,0.25)]"
                         }`}
                       >
                         <Icon className="h-4 w-4" />
@@ -177,7 +177,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             className={`truncate font-medium transition-colors ${
                               isActive
                                 ? "text-white"
-                                : "text-slate-200 group-hover:text-white"
+                                : "text-slate-100 group-hover:text-white"
                             }`}
                           >
                             {tool.shortTitle}
