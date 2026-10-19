@@ -654,12 +654,18 @@ export function BgAdvancedSettings({
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>5. Text Detection:</span>
-                    {metrics.textDetectionMs !== undefined || metrics.textProtectionMs !== undefined ? (
-                      <span className="font-mono text-pink-300">
-                        {metrics.textDetectionMs ?? metrics.textProtectionMs} ms
+                    {metrics.textDetectionStatus === "failed" ? (
+                      <span className="font-mono text-rose-400 font-bold text-xs" data-testid="text-detection-failed">
+                        Required but failed
+                      </span>
+                    ) : metrics.textDetectionStatus === "skipped" || (metrics.textDetectionMs === undefined && metrics.textProtectionMs === undefined) ? (
+                      <span className="text-slate-500 italic text-[10px]" data-testid="text-detection-skipped">
+                        {metrics.textDetectionReason || "Skipped — mode does not require text detection"}
                       </span>
                     ) : (
-                      <span className="text-slate-500 italic text-[10px]">Skipped — mode does not require text detection</span>
+                      <span className="font-mono text-pink-300" data-testid="text-detection-completed">
+                        Completed — {metrics.textDetectionMs ?? metrics.textProtectionMs} ms
+                      </span>
                     )}
                   </div>
                   <div className="flex justify-between text-slate-300">

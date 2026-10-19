@@ -51,3 +51,6 @@ test-portrait-downloads/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated benchmark JSONs
+benchmark-*.json

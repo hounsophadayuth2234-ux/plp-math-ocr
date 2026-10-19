@@ -135,6 +135,9 @@ export interface ProcessingStageMetrics {
   modelLoadMs?: number;
   inferenceMs?: number;
   textDetectionMs?: number;
+  textDetectionStatus?: "completed" | "skipped" | "failed";
+  textDetectionReason?: string;
+  textDetectionDurationMs?: number;
   edgeRefineMs?: number;
   compositingMs?: number;
   totalMs?: number;
@@ -1376,6 +1379,177 @@ export async function removeBackgroundRemote(
 // Two-Stage Pipeline: Semantic/Interactive Selection & Alpha Matting
 // ─────────────────────────────────────────────────────────────────────────────
 
+export type KeepMode = SelectionMode;
+
+export function requiresTextDetection(keepMode?: SelectionMode | string): boolean {
+  return (
+    keepMode === "person_text_only" ||
+    keepMode === "person_plus_text" ||
+    keepMode === "document_text"
+  );
+}
+
+export interface TextRegion {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  confidence?: number;
+  lineType?: "khmer" | "latin" | "caption" | "heading" | "math" | "other";
+  isSmallOrUncertain?: boolean;
+}
+
+export interface TextDetectionExecutionResult {
+  regions: TextRegion[];
+  durationMs: number;
+  status: "completed" | "skipped" | "failed";
+  reason?: string;
+  retryCount?: number;
+  khmerFeatures?: KhmerImageFeatures;
+  hasSmallOrUncertainKhmer?: boolean;
+}
+
+export async function runRequiredTextDetection(args: {
+  keepMode: SelectionMode | string;
+  image: Blob;
+  detectText: (image: Blob) => Promise<TextRegion[]>;
+  signal?: AbortSignal;
+}): Promise<TextDetectionExecutionResult> {
+  const required = requiresTextDetection(args.keepMode);
+
+  if (!required) {
+    return {
+      regions: [],
+      durationMs: 0,
+      status: "skipped" as const,
+      reason: "Selected mode does not require text detection",
+    };
+  }
+
+  const started = performance.now();
+  let retryCount = 0;
+
+  // Run detection with 1 automatic retry on detector failure (max 2 attempts)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      args.signal?.throwIfAborted?.();
+      const regions = await args.detectText(args.image);
+      args.signal?.throwIfAborted?.();
+
+      return {
+        regions,
+        durationMs: Math.max(1, Math.round(performance.now() - started)),
+        status: "completed" as const,
+        retryCount,
+      };
+    } catch (error) {
+      if (args.signal?.aborted) {
+        throw error;
+      }
+      retryCount++;
+    }
+  }
+
+  return {
+    regions: [],
+    durationMs: Math.max(1, Math.round(performance.now() - started)),
+    status: "failed" as const,
+    reason: "Required but failed",
+    retryCount,
+  };
+}
+
+export async function detectTextRegionsFromBlob(
+  image: Blob,
+  signal?: AbortSignal
+): Promise<TextRegion[]> {
+  signal?.throwIfAborted?.();
+
+  let rgbaData: Uint8ClampedArray | Uint8Array;
+  let imgW: number;
+  let imgH: number;
+
+  const mockTarget = image as unknown as {
+    _mockImageData?: { data: Uint8ClampedArray; width: number; height: number };
+    width?: number;
+    height?: number;
+  };
+
+  if (mockTarget._mockImageData) {
+    const m = mockTarget._mockImageData;
+    rgbaData = m.data;
+    imgW = m.width;
+    imgH = m.height;
+  } else if (typeof window !== "undefined" && typeof createImageBitmap === "function") {
+    const bmp = await createImageBitmap(image);
+    imgW = bmp.width;
+    imgH = bmp.height;
+    const canvas = document.createElement("canvas");
+    canvas.width = imgW;
+    canvas.height = imgH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not initialize 2D canvas context for text detection.");
+    ctx.drawImage(bmp, 0, 0);
+    const imgData = ctx.getImageData(0, 0, imgW, imgH);
+    rgbaData = imgData.data;
+  } else if (typeof window !== "undefined") {
+    const img = new Image();
+    const objUrl = URL.createObjectURL(image);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = reject;
+        img.src = objUrl;
+      });
+      imgW = img.naturalWidth || img.width;
+      imgH = img.naturalHeight || img.height;
+      const canvas = document.createElement("canvas");
+      canvas.width = imgW;
+      canvas.height = imgH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Could not initialize 2D canvas context for text detection.");
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, imgW, imgH);
+      rgbaData = imgData.data;
+    } finally {
+      URL.revokeObjectURL(objUrl);
+    }
+  } else {
+    // Node / Vitest mock fallback
+    imgW = mockTarget.width || 640;
+    imgH = mockTarget.height || 480;
+    rgbaData = new Uint8ClampedArray(imgW * imgH * 4);
+  }
+
+  signal?.throwIfAborted?.();
+  const tRes = extractTextStrokeMask(rgbaData, imgW, imgH);
+  const khmerFeatures = detectKhmerImageTypographicalFeatures(tRes.textStrokeMask, null, imgW, imgH);
+
+  const regions: TextRegion[] = (tRes.detectedTextLines || []).map((line) => ({
+    minX: line.minX,
+    maxX: line.maxX,
+    minY: line.minY,
+    maxY: line.maxY,
+    confidence: tRes.lowConfidence ? 0.75 : 0.95,
+    lineType: line.lineType || "khmer",
+    isSmallOrUncertain: khmerFeatures.hasSmallKhmerText || khmerFeatures.confidence === "uncertain",
+  }));
+
+  if (regions.length === 0 && tRes.textArea > 0) {
+    regions.push({
+      minX: 0,
+      maxX: imgW - 1,
+      minY: 0,
+      maxY: imgH - 1,
+      confidence: 0.8,
+      lineType: "khmer",
+      isSmallOrUncertain: khmerFeatures.hasSmallKhmerText,
+    });
+  }
+
+  return regions;
+}
+
 export interface SegmentSelectionOptions {
   mode?: SelectionMode;
   positivePoints?: [number, number][];
@@ -1391,6 +1565,7 @@ export interface SegmentSelectionOptions {
   quality?: "fast" | "balanced" | "fine_details" | "quality";
   manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
   secondaryProposalMask?: Uint8ClampedArray | Uint8Array | null;
+  precomputedTextDetection?: TextDetectionExecutionResult;
 }
 
 export interface SegmentSelectionResult {
@@ -1591,10 +1766,15 @@ export async function segmentObjectSelection(
     const pRes = extractPersonMask(sourceImageData.data, alphaMaskBuffer, width, height);
     // Apply conservative 1px inward choke strictly to personMask ONLY
     const cleanedPersonMask = chokeAndFeatherAlphaMask(pRes.personMask, width, height, 1.0, 0.7);
-
-    const tStartText = performance.now();
-    const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
-    textDetectionMs = performance.now() - tStartText;
+    let tRes: TextStrokeMaskResult;
+    if (options?.precomputedTextDetection && options.precomputedTextDetection.durationMs > 0) {
+      textDetectionMs = options.precomputedTextDetection.durationMs;
+      tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+    } else {
+      const tStartText = performance.now();
+      tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+      textDetectionMs = Math.max(1, Math.round(performance.now() - tStartText));
+    }
 
     // Detect typographical Khmer features (subscripts, diacritics, small islands, proximity to hair/shoulders)
     khmerFeatures = detectKhmerImageTypographicalFeatures(
@@ -1736,7 +1916,14 @@ export async function segmentObjectSelection(
     resizeMs: initialOutput.metrics?.resizeMs ?? 5,
     modelLoadMs: initialOutput.metrics?.modelLoadMs ?? 0,
     inferenceMs: initialOutput.metrics?.inferenceMs ?? initialOutput.metrics?.segmentationMs ?? Math.round(totalMs * 0.7),
-    textDetectionMs: textDetectionMs > 0 ? Math.round(textDetectionMs) : undefined,
+    textDetectionMs: requiresTextDetection(mode) ? Math.max(1, Math.round(textDetectionMs)) : undefined,
+    textDetectionStatus: requiresTextDetection(mode)
+      ? (options?.precomputedTextDetection?.status ?? "completed")
+      : "skipped",
+    textDetectionReason: requiresTextDetection(mode)
+      ? undefined
+      : "Selected mode does not require text detection",
+    textDetectionDurationMs: requiresTextDetection(mode) ? Math.max(1, Math.round(textDetectionMs)) : 0,
     edgeRefineMs: Math.round(tEnd - tRefineStart),
     compositingMs: 15,
     totalMs,

@@ -25,6 +25,11 @@ import {
   BgRemovalProgress,
   STAGE_DEADLINES,
   DOCUMENT_SAFE_MODE,
+  requiresTextDetection,
+  runRequiredTextDetection,
+  detectTextRegionsFromBlob,
+  TextDetectionExecutionResult,
+  ProcessingStageMetrics,
 } from "@/lib/bg-removal-client";
 import { SelectionMode } from "@/lib/bg-compositor";
 import { bgWorkerManager } from "@/lib/bg-removal-worker-manager";
@@ -81,6 +86,7 @@ export default function BgRemoverPage() {
   const [selectedEngine, setSelectedEngine] = useState<"browser" | "worker">("browser");
   const [edgeQuality, setEdgeQuality] = useState<"fast" | "balanced" | "quality" | "fine_details">("fast");
   const [directWorkerUrl, setDirectWorkerUrl] = useState<string | null>(null);
+  const [failedMetrics, setFailedMetrics] = useState<ProcessingStageMetrics | null>(null);
 
   // Explicit Manual-Assisted Background Remover State Machine:
   // idle -> image_loaded -> generating_initial_mask -> mask_editing -> previewing -> refining_edges -> ready_to_export -> error
@@ -522,6 +528,7 @@ export default function BgRemoverPage() {
     setIsProcessing(true);
     setWorkflowStep("detecting");
     setError(null);
+    setFailedMetrics(null);
     setSlowNotice(null);
     setProgressInfo(null);
     setProcessingMode(mode);
@@ -660,14 +667,44 @@ export default function BgRemoverPage() {
           output.metrics = { totalMs: elapsedTotal };
         }
       } else {
+        let precomputedTextDetection: TextDetectionExecutionResult | undefined = undefined;
+
+        if (requiresTextDetection(activeSelectionMode)) {
+          precomputedTextDetection = await runRequiredTextDetection({
+            keepMode: activeSelectionMode,
+            image: imageFile,
+            detectText: async (blob) => detectTextRegionsFromBlob(blob, abortController.signal),
+            signal: abortController.signal,
+          });
+
+          if (precomputedTextDetection.status === "failed") {
+            cyberAudio.stopScanningHum();
+            if (activeAbortControllerRef.current === abortController) {
+              setIsProcessing(false);
+              isProcessingRef.current = false;
+              setError("Text Detection: Required but failed. Could not detect text regions for Person + Text mode.");
+              setFailedMetrics({
+                totalMs: precomputedTextDetection.durationMs,
+                textDetectionMs: precomputedTextDetection.durationMs,
+                textDetectionStatus: "failed",
+                textDetectionReason: "Required but failed",
+              });
+            }
+            return;
+          }
+        }
+
         const autoRes = resolveAutoQualityWorkingResolution({
           mode: activeSelectionMode,
           edgeQuality,
+          hasSmallKhmerText: precomputedTextDetection?.hasSmallOrUncertainKhmer,
+          textConfidence: precomputedTextDetection?.hasSmallOrUncertainKhmer ? "uncertain" : "high",
         });
         const effectiveDim = targetMaxDim ?? autoRes.resolution;
         const segResult = await segmentObjectSelection(imageFile, {
           mode: activeSelectionMode,
           targetMaxDimension: effectiveDim,
+          precomputedTextDetection,
           signal: abortController.signal,
           onProgress: (p) => {
             setProgressInfo(p);
@@ -1702,7 +1739,7 @@ export default function BgRemoverPage() {
                 hasImage={Boolean(imageFile)}
                 isProcessing={isProcessing}
                 isModelCached={isModelCached}
-                metrics={cachedResult?.metrics}
+                metrics={cachedResult?.metrics || failedMetrics || undefined}
                 diagnostics={cachedResult?.diagnostics}
                 onResetAdvanced={handleResetAdvanced}
               />
