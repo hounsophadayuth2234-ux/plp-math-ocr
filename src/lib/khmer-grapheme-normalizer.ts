@@ -236,17 +236,18 @@ export function validateBalancedDelimiters(latex: string): {
     const char = latex[i];
     const prevChar = i > 0 ? latex[i - 1] : "";
 
-    // Ignore escaped braces \{ and \}
-    if (char === "{" && prevChar !== "\\") braceDepth++;
-    else if (char === "}" && prevChar !== "\\") {
+    const isEscaped = prevChar === "\\" && (i < 2 || latex[i - 2] !== "\\");
+
+    if (char === "{" && !isEscaped) braceDepth++;
+    else if (char === "}" && !isEscaped) {
       braceDepth--;
       if (braceDepth < 0) errors.push("Unmatched closing brace '}' at position " + i);
-    } else if (char === "(" && prevChar !== "\\") parenDepth++;
-    else if (char === ")" && prevChar !== "\\") {
+    } else if (char === "(" && !isEscaped) parenDepth++;
+    else if (char === ")" && !isEscaped) {
       parenDepth--;
       if (parenDepth < 0) errors.push("Unmatched closing parenthesis ')' at position " + i);
-    } else if (char === "[" && prevChar !== "\\") bracketDepth++;
-    else if (char === "]" && prevChar !== "\\") {
+    } else if (char === "[" && !isEscaped) bracketDepth++;
+    else if (char === "]" && !isEscaped) {
       bracketDepth--;
       if (bracketDepth < 0) errors.push("Unmatched closing bracket ']' at position " + i);
     }
