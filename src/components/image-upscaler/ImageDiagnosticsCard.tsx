@@ -146,10 +146,16 @@ export function ImageDiagnosticsCard({
                 ការណែនាំស្វ័យប្រវត្តិ (AI Recommendation):
               </span>
               <span className="rounded bg-indigo-500/20 px-2 py-0.5 font-mono text-xs font-bold text-indigo-200 border border-indigo-400/40">
+                {diagnostics.recommendedPreset === "ultra" && "ស្ថាបនាគែម & រូបតូច (Ultra Reconstruct)"}
                 {diagnostics.recommendedPreset === "portrait" && "រូបមនុស្ស & ផ្ទៃមុខ (Portrait)"}
                 {diagnostics.recommendedPreset === "text" && "អក្សរខ្មែរ & ឯកសារ (Khmer Text)"}
                 {diagnostics.recommendedPreset === "restore" && "រូបចាស់ & បែកគ្រាប់ (Restore)"}
                 {diagnostics.recommendedPreset === "general" && "រូបទូទៅ (General HD)"}
+                {diagnostics.isTinyImage && (
+                  <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-amber-300 border border-amber-500/30">
+                    TINY &lt;300px
+                  </span>
+                )}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-300">

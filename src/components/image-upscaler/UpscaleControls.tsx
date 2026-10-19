@@ -10,12 +10,13 @@ import {
   Check,
   XCircle,
   Loader2,
+  Zap,
 } from "lucide-react";
-import type { UpscalePreset, UpscaleProgress } from "@/lib/image-upscale-client";
+import type { UpscalePreset, UpscaleProgress, UpscaleScale } from "@/lib/image-upscale-client";
 
 interface UpscaleControlsProps {
-  scale: 1 | 2 | 4;
-  onChangeScale: (scale: 1 | 2 | 4) => void;
+  scale: UpscaleScale;
+  onChangeScale: (scale: UpscaleScale) => void;
   preset: UpscalePreset;
   onChangePreset: (preset: UpscalePreset) => void;
   faceEnhance: boolean;
@@ -26,6 +27,8 @@ interface UpscaleControlsProps {
   onChangeDenoise: (val: number) => void;
   clarity: number;
   onChangeClarity: (val: number) => void;
+  is8xEligible?: boolean;
+  isTinyImage?: boolean;
   isLoading: boolean;
   progress: UpscaleProgress | null;
   elapsedSeconds: number;
@@ -41,6 +44,13 @@ const PRESET_CONFIGS: {
   desc: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
+  {
+    id: "ultra",
+    titleKh: "ស្ថាបនាគែម & រូបតូច",
+    titleEn: "Ultra Edge-Reconstruct",
+    desc: "PDE Shock + Gradient Push បង្រួមគែមព្រិលឱ្យមុតស្រួច (រូបតូច <300px)",
+    icon: Sparkles,
+  },
   {
     id: "portrait",
     titleKh: "រូបមនុស្ស & ផ្ទៃមុខ",
@@ -84,6 +94,8 @@ export function UpscaleControls({
   onChangeDenoise,
   clarity,
   onChangeClarity,
+  is8xEligible = false,
+  isTinyImage = false,
   isLoading,
   progress,
   elapsedSeconds,
@@ -93,6 +105,21 @@ export function UpscaleControls({
 }: UpscaleControlsProps) {
   return (
     <div className="flex flex-col gap-6 rounded-2xl border border-cyan-500/25 bg-slate-950/80 p-5 shadow-[0_0_20px_rgba(0,240,255,0.06)] backdrop-blur-md">
+      {/* Tiny Image / Ultra Reconstruction Notification Banner */}
+      {isTinyImage && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 text-xs font-mono text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
+          <Zap className="h-4 w-4 text-amber-400 shrink-0 animate-pulse" />
+          <div className="min-w-0 flex-1">
+            <span className="font-bold text-amber-200 uppercase tracking-wide">
+              ⚡ ULTRA RECONSTRUCTION ACTIVE:
+            </span>{" "}
+            <span>
+              បានរកឃើញរូបភាពតូច (&lt;300px)។ ប្រព័ន្ធនឹងប្រើ PDE Shock Filtering & Stepped Pyramid ដើម្បីស្ថាបនាគែមឱ្យមុតស្រួច ជំនួសឱ្យការពង្រីកព្រិល Lanczos ធម្មតា។
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 1. Mode Presets */}
       <div>
         <label className="mb-2 block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
@@ -151,23 +178,33 @@ export function UpscaleControls({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Upscale Factor Selector */}
         <div>
-          <label className="mb-2 block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
-            2. កម្រិតពង្រីកទំហំ (Upscale Factor)
-          </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="mb-2 flex items-center justify-between">
+            <label className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+              2. កម្រិតពង្រីកទំហំ (Upscale Factor)
+            </label>
+            {is8xEligible && (
+              <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-mono font-bold text-rose-300 border border-rose-500/30">
+                8X UNLOCKED (&le;250px)
+              </span>
+            )}
+          </div>
+          <div className={`grid ${is8xEligible ? "grid-cols-4" : "grid-cols-3"} gap-2`}>
             {[
-              { val: 1, labelKh: "1x ស្តាររូប", labelEn: "Restore Only" },
-              { val: 2, labelKh: "2x HD", labelEn: "លឿនល្មម" },
-              { val: 4, labelKh: "4x Ultra", labelEn: "ច្បាស់បំផុត" },
+              { val: 1 as UpscaleScale, labelKh: "1x ស្តាររូប", labelEn: "Restore Only" },
+              { val: 2 as UpscaleScale, labelKh: "2x HD", labelEn: "លឿនល្មម" },
+              { val: 4 as UpscaleScale, labelKh: "4x Ultra", labelEn: "ច្បាស់បំផុត" },
+              ...(is8xEligible
+                ? [{ val: 8 as UpscaleScale, labelKh: "8x Micro", labelEn: "Micro-HD" }]
+                : []),
             ].map((opt) => (
               <button
                 key={opt.val}
                 type="button"
-                onClick={() => onChangeScale(opt.val as 1 | 2 | 4)}
+                onClick={() => onChangeScale(opt.val)}
                 disabled={isLoading || disabled}
                 className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all cursor-pointer ${
                   scale === opt.val
-                    ? "border-amber-400 bg-amber-950/40 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)]"
+                    ? "border-amber-400 bg-amber-950/40 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)] font-bold"
                     : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
                 } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
@@ -283,7 +320,7 @@ export function UpscaleControls({
           <div>
             <div className="flex items-center justify-between text-xs font-mono">
               <span className="text-slate-300">
-                ពន្លឺ និងពណ៌ (Clarity & Contrast Boost)
+                ពន្លឺ និងពណ៌ (Clarity & Micro-Contrast)
               </span>
               <span className="font-bold text-amber-400">{clarity}%</span>
             </div>

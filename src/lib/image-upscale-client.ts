@@ -124,7 +124,7 @@ export async function upscaleImageStudio(
     diagnostics: diagnostics || calculateImageDiagnostics(srcImageData),
     elapsedMs,
     label: "Studio Super-Resolution Engine",
-    model: `Studio Super-Resolution (${options.scale}x · Lanczos-3 · USM)`,
+    model: `Studio Super-Resolution (${options.scale}x · PDE Shock · Stepped Pyramid)`,
   };
 }
 
@@ -219,6 +219,8 @@ function executeInWorker(
           sharpness: options.sharpness,
           denoise: options.denoise,
           clarity: options.clarity,
+          shockFilterStrength: options.shockFilterStrength,
+          ultraReconstruction: options.ultraReconstruction,
         },
       },
       [buffer]

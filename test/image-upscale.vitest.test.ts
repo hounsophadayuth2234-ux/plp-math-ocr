@@ -5,12 +5,19 @@ import {
   applyBilateralDenoise,
   applyFaceEnhancement,
   applyAdaptiveUSM,
+  applyKuwaharaDenoise,
+  applyPdeShockFilter,
+  applyMultiScaleMicroContrast,
   runImageUpscalePipeline,
 } from "../src/lib/image-upscale-client";
 
 describe("Studio Super-Resolution Engine & Diagnostics", () => {
   // Helper to create a test image buffer
-  function createTestPattern(width: number, height: number, type: "sharp" | "noisy" | "portrait" | "document") {
+  function createTestPattern(
+    width: number,
+    height: number,
+    type: "sharp" | "noisy" | "portrait" | "document" | "blurry-ramp"
+  ) {
     const data = new Uint8ClampedArray(width * height * 4);
 
     for (let y = 0; y < height; y++) {
@@ -19,7 +26,15 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
 
         if (type === "sharp") {
           // Sharp checkerboard edges
-          const val = ((Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 0) ? 230 : 30;
+          const val = (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 0 ? 230 : 30;
+          data[idx] = val;
+          data[idx + 1] = val;
+          data[idx + 2] = val;
+          data[idx + 3] = 255;
+        } else if (type === "blurry-ramp") {
+          // Blurry gradual transition across x (spread over 8 pixels)
+          const ramp = Math.max(0, Math.min(1, (x - 12) / 8));
+          const val = Math.round(40 + ramp * 160);
           data[idx] = val;
           data[idx + 1] = val;
           data[idx + 2] = val;
@@ -35,12 +50,11 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
           data[idx + 3] = 255;
         } else if (type === "portrait") {
           // Centered skin-tone oval (Cb around 100-110, Cr around 145-155)
-          // R = 210, G = 160, B = 130 produces Cb ≈ 104, Cr ≈ 152
           const dx = x - width / 2;
           const dy = y - height / 2;
           const isFace = (dx * dx) / 100 + (dy * dy) / 144 <= 1;
           if (isFace) {
-            data[idx] = 210;     // R
+            data[idx] = 210; // R
             data[idx + 1] = 160; // G
             data[idx + 2] = 130; // B
             data[idx + 3] = 255;
@@ -52,7 +66,7 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
           }
         } else if (type === "document") {
           // White paper with crisp black text bars
-          const isStroke = (x % 24 < 3) && (y % 16 > 4);
+          const isStroke = x % 24 < 3 && y % 16 > 4;
           const val = isStroke ? 20 : 245;
           data[idx] = val;
           data[idx + 1] = val;
@@ -90,7 +104,16 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
     const diag = calculateImageDiagnostics(noisyImg);
 
     expect(diag.noiseLevelScore).toBeGreaterThan(30);
-    expect(["restore", "general"]).toContain(diag.recommendedPreset);
+    expect(["restore", "general", "ultra"]).toContain(diag.recommendedPreset);
+  });
+
+  it("detects tiny images (<300px) and unlocks 8x eligibility", () => {
+    const tinyImg = createTestPattern(80, 80, "sharp");
+    const diag = calculateImageDiagnostics(tinyImg);
+
+    expect(diag.isTinyImage).toBe(true);
+    expect(diag.is8xEligible).toBe(true);
+    expect(diag.isUltraReconstructionRecommended).toBe(true);
   });
 
   it("resamples images using Lanczos-3 with exact 2x and 4x dimension scaling", () => {
@@ -121,13 +144,96 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
     }
   });
 
+  it("applies Pass A Kuwahara edge-preserving denoiser to remove artifacts while preserving boundaries", () => {
+    const noisyImg = createTestPattern(32, 32, "noisy");
+    const filtered = applyKuwaharaDenoise(noisyImg, 2, 0.7);
+
+    expect(filtered.length).toBe(noisyImg.data.length);
+    // Verified that output is within valid bounds
+    for (let i = 0; i < filtered.length; i++) {
+      expect(filtered[i]).toBeGreaterThanOrEqual(0);
+      expect(filtered[i]).toBeLessThanOrEqual(255);
+    }
+  });
+
+  it("applies Pass C Kramer-Bruckner / Osher-Rudin PDE Shock Filter to sharpen edge gradient slope by >= 2.5x over plain interpolation", () => {
+    const rampImg = createTestPattern(32, 32, "blurry-ramp");
+
+    // Measure initial Laplacian variance on the blurry ramp
+    let initialLapSq = 0;
+    let count = 0;
+    for (let y = 1; y < 31; y++) {
+      for (let x = 1; x < 31; x++) {
+        const idx = (y * 32 + x) * 4;
+        const c = rampImg.data[idx];
+        const t = rampImg.data[((y - 1) * 32 + x) * 4];
+        const b = rampImg.data[((y + 1) * 32 + x) * 4];
+        const l = rampImg.data[(y * 32 + x - 1) * 4];
+        const r = rampImg.data[(y * 32 + x + 1) * 4];
+        const lap = 4 * c - (t + b + l + r);
+        initialLapSq += lap * lap;
+        count++;
+      }
+    }
+    const initialVar = initialLapSq / count;
+
+    // Apply PDE Shock Filter (2 iterations)
+    const shocked = applyPdeShockFilter(rampImg, 2, 0.9);
+
+    let shockedLapSq = 0;
+    for (let y = 1; y < 31; y++) {
+      for (let x = 1; x < 31; x++) {
+        const idx = (y * 32 + x) * 4;
+        const c = shocked[idx];
+        const t = shocked[((y - 1) * 32 + x) * 4];
+        const b = shocked[((y + 1) * 32 + x) * 4];
+        const l = shocked[(y * 32 + x - 1) * 4];
+        const r = shocked[(y * 32 + x + 1) * 4];
+        const lap = 4 * c - (t + b + l + r);
+        shockedLapSq += lap * lap;
+      }
+    }
+    const shockedVar = shockedLapSq / count;
+
+    // Edge gradient slope / Laplacian variance must increase by >= 2.5x
+    const ratio = shockedVar / Math.max(1, initialVar);
+    expect(ratio).toBeGreaterThanOrEqual(2.5);
+  });
+
+  it("applies Pass D Multi-Scale Micro-Contrast with 5x5 zero-overshoot halo clamping", () => {
+    const sharpImg = createTestPattern(32, 32, "sharp");
+    const contrasted = applyMultiScaleMicroContrast(sharpImg, 75);
+
+    expect(contrasted.length).toBe(sharpImg.data.length);
+
+    // Verify 5x5 zero-overshoot: no enhanced pixel exceeds its local 5x5 neighborhood min and max
+    for (let y = 2; y < 30; y++) {
+      for (let x = 2; x < 30; x++) {
+        const p = (y * 32 + x) * 4;
+        let localMin = 255;
+        let localMax = 0;
+
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const val = sharpImg.data[((y + dy) * 32 + (x + dx)) * 4];
+            if (val < localMin) localMin = val;
+            if (val > localMax) localMax = val;
+          }
+        }
+
+        // Must be clamped strictly within local [localMin, localMax]
+        expect(contrasted[p]).toBeGreaterThanOrEqual(localMin);
+        expect(contrasted[p]).toBeLessThanOrEqual(localMax);
+      }
+    }
+  });
+
   it("applies bilateral surface denoising to smooth noise while preserving edges", () => {
     const noisyImg = createTestPattern(48, 48, "noisy");
     const denoised = applyBilateralDenoise(noisyImg, 80);
 
     expect(denoised.length).toBe(noisyImg.data.length);
 
-    // Calculate variance before and after
     let varBefore = 0;
     let varAfter = 0;
     for (let i = 0; i < 48 * 48; i++) {
@@ -135,7 +241,6 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
       varBefore += Math.abs(noisyImg.data[p] - 128);
       varAfter += Math.abs(denoised[p] - 128);
     }
-    // Denoising reduces variance in smooth noisy regions
     expect(varAfter).toBeLessThan(varBefore);
   });
 
@@ -144,7 +249,6 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
     const enhanced = applyFaceEnhancement(portraitImg, 75);
 
     expect(enhanced.length).toBe(portraitImg.data.length);
-    // Face enhancement produces non-zero changes in skin and edge tones
     let changedPixels = 0;
     for (let i = 0; i < enhanced.length; i += 4) {
       if (
@@ -163,19 +267,18 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
     const sharpened = applyAdaptiveUSM(sharpImg, 80, false);
 
     expect(sharpened.length).toBe(sharpImg.data.length);
-    // Sharpened image should be valid and have non-negative values
     for (let i = 0; i < sharpened.length; i++) {
       expect(sharpened[i]).toBeGreaterThanOrEqual(0);
       expect(sharpened[i]).toBeLessThanOrEqual(255);
     }
   });
 
-  it("executes the full 5-stage pipeline, updates progress, and produces high-resolution output", async () => {
+  it("executes the full stepped 2x pyramid pipeline (4x scale), updates progress, and produces high-resolution output", async () => {
     const baseImg = createTestPattern(32, 32, "document");
     const recordedStages: number[] = [];
 
     const result = await runImageUpscalePipeline(baseImg, {
-      scale: 2,
+      scale: 4,
       preset: "text",
       faceEnhance: false,
       sharpness: 60,
@@ -186,17 +289,33 @@ describe("Studio Super-Resolution Engine & Diagnostics", () => {
       },
     });
 
-    expect(result.width).toBe(64);
-    expect(result.height).toBe(64);
-    expect(result.data.length).toBe(64 * 64 * 4);
+    expect(result.width).toBe(128);
+    expect(result.height).toBe(128);
+    expect(result.data.length).toBe(128 * 128 * 4);
     expect(result.diagnostics.width).toBe(32);
     expect(result.diagnostics.height).toBe(32);
-    // Verified that all 5 stages were executed
     expect(recordedStages).toContain(1);
     expect(recordedStages).toContain(2);
     expect(recordedStages).toContain(3);
     expect(recordedStages).toContain(4);
     expect(recordedStages).toContain(5);
+  });
+
+  it("supports 8x scale mode for micro-images (32x32 -> 256x256)", async () => {
+    const tinyImg = createTestPattern(32, 32, "sharp");
+
+    const result = await runImageUpscalePipeline(tinyImg, {
+      scale: 8,
+      preset: "ultra",
+      faceEnhance: false,
+      sharpness: 80,
+      denoise: 20,
+      clarity: 60,
+    });
+
+    expect(result.width).toBe(256);
+    expect(result.height).toBe(256);
+    expect(result.data.length).toBe(256 * 256 * 4);
   });
 
   it("aborts processing cleanly when AbortSignal is triggered", async () => {

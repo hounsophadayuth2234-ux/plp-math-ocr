@@ -8,6 +8,8 @@ import {
   Eye,
   ZoomIn,
   ZoomOut,
+  Grid,
+  Sparkles,
 } from "lucide-react";
 
 export type ComparisonViewMode = "split" | "side-by-side" | "after-only";
@@ -21,11 +23,14 @@ interface BeforeAfterSliderProps {
   srcHeight?: number;
   outputWidth?: number;
   outputHeight?: number;
+  isTinyImage?: boolean;
 }
 
 /**
  * Interactive Before/After Studio Comparison Workspace:
  *  - Modes: Split Slider, Side-by-Side, After Only.
+ *  - Equal visual bounding box dimensions across Before and After views.
+ *  - Toggle: "Pixelated (ភីកសែលដើម)" vs "Smooth (រលូនធម្មតា)".
  *  - Zoom: 100% Fit & 200% Micro-Inspection Loupe.
  *  - Draggable handle with smooth touch & mouse responsiveness.
  *  - Bilingual Cyber badges.
@@ -33,16 +38,18 @@ interface BeforeAfterSliderProps {
 export function BeforeAfterSlider({
   beforeSrc,
   afterSrc,
-  beforeLabel = "BEFORE (រូបដើម - ស្រពិចស្រពិល)",
-  afterLabel = "AFTER (ក្រោយកែ - ច្បាស់ស្តង់ដារ)",
+  beforeLabel = "BEFORE (រូបដើម)",
+  afterLabel = "AFTER (ក្រោយកែ - Super-Resolution)",
   srcWidth,
   srcHeight,
   outputWidth,
   outputHeight,
+  isTinyImage = false,
 }: BeforeAfterSliderProps) {
   const [position, setPosition] = useState(50); // 0–100%
   const [viewMode, setViewMode] = useState<ComparisonViewMode>("split");
   const [zoomLevel, setZoomLevel] = useState<1 | 2>(1); // 1 = 100%, 2 = 200%
+  const [beforeRendering, setBeforeRendering] = useState<"pixelated" | "auto">("pixelated");
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -137,7 +144,7 @@ export function BeforeAfterSlider({
     <div className="flex flex-col gap-3 w-full">
       {/* Workspace View Mode & Zoom Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-        <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-cyan-500/20 shadow-inner">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-cyan-500/20 shadow-inner">
           <button
             type="button"
             onClick={() => setViewMode("split")}
@@ -181,38 +188,73 @@ export function BeforeAfterSlider({
           </button>
         </div>
 
-        {/* Zoom Magnifier Controls */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-cyan-500/20">
-          <button
-            type="button"
-            onClick={() => {
-              setZoomLevel(1);
-              setPanOffset({ x: 0, y: 0 });
-            }}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
-              zoomLevel === 1
-                ? "bg-indigo-600 text-white font-bold"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="100% Fit View"
-          >
-            <ZoomOut className="h-3.5 w-3.5" />
-            <span>100%</span>
-          </button>
+        {/* Right side controls: Pixelated Toggle & Zoom Magnifier */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Before View Pixelated vs Smooth Bilinear Toggle */}
+          <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-amber-500/25">
+            <span className="px-2 text-[10px] font-mono font-semibold text-amber-400 hidden sm:inline">
+              BEFORE:
+            </span>
+            <button
+              type="button"
+              onClick={() => setBeforeRendering("pixelated")}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+                beforeRendering === "pixelated"
+                  ? "bg-amber-500 text-slate-950 font-bold shadow-[0_0_10px_rgba(245,158,11,0.4)]"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Show raw original pixels (Nearest-Neighbor grid)"
+            >
+              <Grid className="h-3 w-3" />
+              <span>ភីកសែលដើម (Pixelated)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBeforeRendering("auto")}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+                beforeRendering === "auto"
+                  ? "bg-amber-500 text-slate-950 font-bold shadow-[0_0_10px_rgba(245,158,11,0.4)]"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Show standard bilinear blur"
+            >
+              <span>រលូន (Smooth)</span>
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setZoomLevel(2)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
-              zoomLevel === 2
-                ? "bg-indigo-600 text-white font-bold shadow-[0_0_8px_rgba(99,102,241,0.5)]"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="200% Loupe Magnifier for Micro-Detail Inspection"
-          >
-            <ZoomIn className="h-3.5 w-3.5" />
-            <span>200% Loupe</span>
-          </button>
+          {/* Zoom Magnifier Controls */}
+          <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-cyan-500/20">
+            <button
+              type="button"
+              onClick={() => {
+                setZoomLevel(1);
+                setPanOffset({ x: 0, y: 0 });
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+                zoomLevel === 1
+                  ? "bg-indigo-600 text-white font-bold"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="100% Fit View"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+              <span>100%</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setZoomLevel(2)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+                zoomLevel === 2
+                  ? "bg-indigo-600 text-white font-bold shadow-[0_0_8px_rgba(99,102,241,0.5)]"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="200% Loupe Magnifier for Micro-Detail Inspection"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+              <span>200% Loupe</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -252,7 +294,7 @@ export function BeforeAfterSlider({
               draggable={false}
             />
 
-            {/* BEFORE image — clipped to left portion */}
+            {/* BEFORE image — clipped to left portion with EXACT same visual dimension */}
             <div
               className="absolute inset-0 overflow-hidden"
               style={{ width: `${position}%` }}
@@ -260,8 +302,12 @@ export function BeforeAfterSlider({
               <img
                 src={beforeSrc}
                 alt="Before enhancement"
-                className="h-full object-contain"
-                style={{ width: containerWidth ? `${containerWidth}px` : "100%" }}
+                className="absolute inset-0 h-full w-full object-contain"
+                style={{
+                  imageRendering: beforeRendering,
+                  width: containerWidth ? `${containerWidth}px` : "100%",
+                  maxWidth: "none",
+                }}
                 draggable={false}
               />
             </div>
@@ -299,10 +345,18 @@ export function BeforeAfterSlider({
               <span className="text-[10px] text-cyan-400/80">({outputWidth}×{outputHeight} px)</span>
             )}
           </div>
+
+          {/* Tiny image indicator badge */}
+          {isTinyImage && (
+            <div className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-lg bg-amber-950/85 px-2.5 py-1 text-[11px] font-mono font-bold text-amber-300 border border-amber-500/40 backdrop-blur-md">
+              <Sparkles className="h-3 w-3 text-amber-400" />
+              <span>Ultra Super-Resolution Active (រូបតូច &lt;300px)</span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Side-by-Side View */}
+      {/* Side-by-Side View — EXACT EQUAL VISUAL BOX DIMENSIONS */}
       {viewMode === "side-by-side" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
           {/* Before Column */}
@@ -313,18 +367,23 @@ export function BeforeAfterSlider({
                 {beforeLabel}
               </span>
               {srcWidth && srcHeight && (
-                <span className="text-[11px] font-mono text-slate-400">{srcWidth}×{srcHeight} px</span>
+                <span className="text-[11px] font-mono text-slate-400">
+                  {srcWidth}×{srcHeight} px ({beforeRendering === "pixelated" ? "Pixelated" : "Smooth"})
+                </span>
               )}
             </div>
             <div
-              className="relative w-full flex items-center justify-center p-2 overflow-hidden"
-              style={{ aspectRatio: "16/10", minHeight: "280px" }}
+              className="relative w-full flex items-center justify-center p-3 overflow-hidden bg-slate-950"
+              style={{ aspectRatio: "16/10", minHeight: "320px" }}
             >
               <img
                 src={beforeSrc}
                 alt="Before enhancement"
-                className="max-h-full max-w-full object-contain"
-                style={{ transform: `scale(${zoomLevel})` }}
+                className="h-full w-full object-contain"
+                style={{
+                  imageRendering: beforeRendering,
+                  transform: `scale(${zoomLevel})`,
+                }}
               />
             </div>
           </div>
@@ -337,17 +396,19 @@ export function BeforeAfterSlider({
                 {afterLabel}
               </span>
               {outputWidth && outputHeight && (
-                <span className="text-[11px] font-mono text-cyan-400 font-bold">{outputWidth}×{outputHeight} px</span>
+                <span className="text-[11px] font-mono text-cyan-400 font-bold">
+                  {outputWidth}×{outputHeight} px (Studio HD)
+                </span>
               )}
             </div>
             <div
-              className="relative w-full flex items-center justify-center p-2 overflow-hidden"
-              style={{ aspectRatio: "16/10", minHeight: "280px" }}
+              className="relative w-full flex items-center justify-center p-3 overflow-hidden bg-slate-950"
+              style={{ aspectRatio: "16/10", minHeight: "320px" }}
             >
               <img
                 src={afterSrc}
                 alt="After enhancement"
-                className="max-h-full max-w-full object-contain"
+                className="h-full w-full object-contain"
                 style={{ transform: `scale(${zoomLevel})` }}
               />
             </div>
@@ -364,17 +425,19 @@ export function BeforeAfterSlider({
               {afterLabel}
             </span>
             {outputWidth && outputHeight && (
-              <span className="text-[11px] font-mono text-cyan-400 font-bold">{outputWidth}×{outputHeight} px (Studio Super-Resolution)</span>
+              <span className="text-[11px] font-mono text-cyan-400 font-bold">
+                {outputWidth}×{outputHeight} px (Studio Super-Resolution)
+              </span>
             )}
           </div>
           <div
-            className="relative w-full flex items-center justify-center p-3 overflow-hidden"
+            className="relative w-full flex items-center justify-center p-3 overflow-hidden bg-slate-950"
             style={{ aspectRatio: "16/10", minHeight: "360px" }}
           >
             <img
               src={afterSrc}
               alt="After enhancement full view"
-              className="max-h-full max-w-full object-contain"
+              className="h-full w-full object-contain"
               style={{ transform: `scale(${zoomLevel})` }}
             />
           </div>

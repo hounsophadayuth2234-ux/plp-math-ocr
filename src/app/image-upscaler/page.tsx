@@ -36,6 +36,7 @@ import {
   UpscaleProgress,
   ImageDiagnostics,
   UpscaleResult,
+  UpscaleScale,
 } from "@/lib/image-upscale-client";
 
 export default function ImageUpscalerPage() {
@@ -44,7 +45,7 @@ export default function ImageUpscalerPage() {
   const [inputDiagnostics, setInputDiagnostics] = useState<ImageDiagnostics | null>(null);
 
   // Enhancement controls
-  const [scale, setScale] = useState<1 | 2 | 4>(2);
+  const [scale, setScale] = useState<UpscaleScale>(2);
   const [preset, setPreset] = useState<UpscalePreset>("general");
   const [faceEnhance, setFaceEnhance] = useState(false);
   const [sharpness, setSharpness] = useState(65);
@@ -77,7 +78,13 @@ export default function ImageUpscalerPage() {
   const handlePresetSelect = useCallback((selectedPreset: UpscalePreset) => {
     cyberAudio.playClick();
     setPreset(selectedPreset);
-    if (selectedPreset === "portrait") {
+    if (selectedPreset === "ultra") {
+      setFaceEnhance(false);
+      setSharpness(85);
+      setDenoise(30);
+      setClarity(65);
+      setScale((prev) => (prev < 4 ? 4 : prev));
+    } else if (selectedPreset === "portrait") {
       setFaceEnhance(true);
       setSharpness(60);
       setDenoise(45);
@@ -129,6 +136,11 @@ export default function ImageUpscalerPage() {
 
       const diag = calculateImageDiagnostics(imgData);
       setInputDiagnostics(diag);
+
+      // Auto-set recommended scale for tiny image
+      if (diag.isTinyImage) {
+        setScale(diag.is8xEligible ? 8 : 4);
+      }
 
       // Auto-set recommended preset
       handlePresetSelect(diag.recommendedPreset);
@@ -484,6 +496,8 @@ export default function ImageUpscalerPage() {
               onChangeDenoise={setDenoise}
               clarity={clarity}
               onChangeClarity={setClarity}
+              is8xEligible={inputDiagnostics?.is8xEligible}
+              isTinyImage={inputDiagnostics?.isTinyImage}
               isLoading={isLoading}
               progress={progress}
               elapsedSeconds={elapsedSeconds}
@@ -512,14 +526,12 @@ export default function ImageUpscalerPage() {
             {isLoading && (
               <RoboticScanner
                 active={true}
-                moduleName="STUDIO SUPER-RESOLUTION // [LANCZOS-3 & BILATERAL & USM]"
+                moduleName="STUDIO SUPER-RESOLUTION // [PDE SHOCK & STEPPED PYRAMID]"
                 steps={[
                   "STAGE 1/5: SMART IMAGE DIAGNOSTICS & NOISE ESTIMATE...",
-                  `STAGE 2/5: HIGH-ORDER EDGE-DIRECTED RESAMPLING (${scale}X)...`,
-                  "STAGE 3/5: BILATERAL SURFACE DENOISING & ARTIFACT FILTER...",
-                  faceEnhance
-                    ? "STAGE 4/5: YCbCr PORTRAIT FACE & EYE CLARITY HARMONIZATION..."
-                    : "STAGE 4/5: TONE MAPPING & CLARITY HARMONIZATION...",
+                  "STAGE 2/5: PRE-UPSCALE ARTIFACT REMOVAL (KUWAHARA FILTER)...",
+                  `STAGE 3/5: STEPPED 2X PYRAMID RESAMPLING (${scale}X) & PDE SHOCK...`,
+                  "STAGE 4/5: MULTI-SCALE MICRO-CONTRAST & HALO-FREE CLAMPING...",
                   preset === "text"
                     ? "STAGE 5/5: KHMER TEXT & FORMULA STROKE CRISPNESS BOOSTER..."
                     : "STAGE 5/5: ADAPTIVE LUMINANCE UNSHARP MASKING PASS...",
@@ -535,12 +547,13 @@ export default function ImageUpscalerPage() {
                 <BeforeAfterSlider
                   beforeSrc={previewUrl}
                   afterSrc={result.outputUrl}
-                  beforeLabel="BEFORE (រូបដើម - ស្រពិចស្រពិល)"
+                  beforeLabel="BEFORE (រូបដើម)"
                   afterLabel={`AFTER (ក្រោយកែ - ច្បាស់ ${result.scale}X)`}
                   srcWidth={result.srcWidth}
                   srcHeight={result.srcHeight}
                   outputWidth={result.outputWidth}
                   outputHeight={result.outputHeight}
+                  isTinyImage={inputDiagnostics?.isTinyImage}
                 />
 
                 {/* Export & Download Deck */}
