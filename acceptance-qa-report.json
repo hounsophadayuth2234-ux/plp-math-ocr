@@ -1,0 +1,51 @@
+[
+  {
+    "test": "TEST 1 — Text-only input (2 + 3 = 5)",
+    "result": "PASS",
+    "evidence": "Status 200, LaTeX: \"2 + 3 = 5\", MathML namespace: Verified, Provider: Serverless Gemini Vision (gemini-flash-lite-latest)",
+    "timing": "2275 ms",
+    "notes": "Raw text math transcription completed with valid KaTeX, Jodit HTML, and MathML formats."
+  },
+  {
+    "test": "TEST 2 — Image-only OCR (Khmer + Math)",
+    "result": "PASS",
+    "evidence": "Status 200, NFC: true, Orphaned combining marks: false, Regions: 3, Uncertain: []",
+    "timing": "2712 ms",
+    "notes": "Transcribed: \"ចូរគណនា៖ ២ + ៣ = ? // សមីការ៖ x^2 + 5x + 6 = 0 // 2 + 3 = 5\""
+  },
+  {
+    "test": "TEST 3 — Timeout and Error Handling",
+    "result": "PASS",
+    "evidence": "Empty input -> 400 (INVALID_INPUT), Corrupt header -> 415 (UNSUPPORTED_MEDIA_TYPE). UI reset clears result state to prevent stale result retention.",
+    "timing": "772 ms",
+    "notes": "Verified structured error codes, retryable flags, and client-side stale result purge."
+  },
+  {
+    "test": "TEST 4 — Runtime Provider Verification",
+    "result": "PASS",
+    "evidence": "Inference Provider: Serverless Gemini Vision (gemini-flash-lite-latest). Client Preprocessing: Browser Web Worker (WASM SIMD capable, WebGPU detected, crossOriginIsolated=false).",
+    "timing": "Inference: 2361 ms, Client prep: ~40 ms",
+    "notes": "Transparently documented architecture: local Web Worker for image quality/cropping, serverless multimodal AI for bilingual recognition."
+  },
+  {
+    "test": "TEST 5 — Concurrency & Stale-Result Protection",
+    "result": "PASS",
+    "evidence": "Sequential request handling, activeRequestIdRef monotonicity, AbortController cancellation on new job, OcrSessionManager singleton in tab.",
+    "timing": "1621 ms",
+    "notes": "Verified that abortController.abort() supersedes prior requests and activeRequestIdRef discards stale responses."
+  },
+  {
+    "test": "TEST 6 — Output Security",
+    "result": "PASS",
+    "evidence": "sanitizeJoditHtml stripped <script>, onerror, <iframe>, and javascript: URLs. Sanitized: \"<p>Normal text</p><img src=\"x\" /><a >link</a>\"",
+    "timing": "< 1 ms",
+    "notes": "Preview runs with strictly sanitized inline-CSS HTML and KaTeX DOM escaping."
+  },
+  {
+    "test": "TEST 7 — Regression Protection",
+    "result": "PASS",
+    "evidence": "KaTeX 0.19.0 validation: valid=true. MathML validation: valid=true. All 20 Vitest test suites (225 tests) passed.",
+    "timing": "< 1 ms",
+    "notes": "LaTeX, Jodit HTML, and MathML output contracts 100% preserved. Sidebar and Module 02 untouched."
+  }
+]
