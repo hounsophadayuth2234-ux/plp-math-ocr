@@ -47,6 +47,8 @@ test-portrait-downloads/
 *.png
 !public/**
 !tests/fixtures/**
+!test/fixtures/**
+
 
 # typescript
 *.tsbuildinfo
