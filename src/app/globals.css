@@ -103,30 +103,32 @@ body {
  * High-Tech Cyberpunk & Robotics HUD Animations & Utilities
  * ----------------------------------------------------------- */
 
-/* Laser Scanner Bar Keyframes */
+/* Laser Scanner Bar Keyframes (GPU-Accelerated) */
 @keyframes laserSweep {
   0% {
-    top: 0%;
+    transform: translate3d(0, 0, 0);
     opacity: 0.9;
   }
   50% {
-    top: 96%;
+    transform: translate3d(0, calc(100% - 4px), 0);
     opacity: 1;
   }
   100% {
-    top: 0%;
+    transform: translate3d(0, 0, 0);
     opacity: 0.9;
   }
 }
 
 .animate-laser-scan {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
   height: 3px;
   background: linear-gradient(90deg, transparent 0%, #00f0ff 25%, #ffffff 50%, #00f0ff 75%, transparent 100%);
   box-shadow: 0 0 15px #00f0ff, 0 0 30px #00f0ff, 0 0 45px #00f0ff;
   animation: laserSweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
   pointer-events: none;
   z-index: 30;
 }
@@ -238,10 +240,10 @@ body {
   animation: gridDrift 20s linear infinite;
 }
 
-/* 2. Mechanical Industrial Scanning Beam */
+/* 2. Mechanical Industrial Scanning Beam (GPU-Accelerated) */
 @keyframes industrialScanBeam {
   0% {
-    top: -8%;
+    transform: translate3d(0, -8vh, 0);
     opacity: 0.1;
   }
   12% {
@@ -251,31 +253,35 @@ body {
     opacity: 0.8;
   }
   100% {
-    top: 108%;
+    transform: translate3d(0, 108vh, 0);
     opacity: 0.1;
   }
 }
 
 .animate-industrial-scan {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
   height: 4px;
   background: linear-gradient(90deg, transparent 0%, rgba(0, 240, 255, 0.3) 15%, #00f0ff 50%, rgba(0, 240, 255, 0.3) 85%, transparent 100%);
   box-shadow: 0 0 20px #00f0ff, 0 0 40px rgba(0, 240, 255, 0.6);
   animation: industrialScanBeam 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
   pointer-events: none;
   z-index: 10;
 }
 
 .animate-industrial-scan-intense {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
   height: 5px;
   background: linear-gradient(90deg, transparent 0%, rgba(245, 158, 11, 0.3) 15%, #00f0ff 50%, rgba(0, 240, 255, 0.3) 85%, transparent 100%);
   box-shadow: 0 0 25px #00f0ff, 0 0 50px rgba(0, 240, 255, 0.8), 0 0 10px #ffffff;
   animation: industrialScanBeam 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
   pointer-events: none;
   z-index: 10;
 }
@@ -283,24 +289,28 @@ body {
 /* Secondary Horizontal Industrial Scanning Beam */
 .animate-industrial-scan-secondary {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
   height: 3px;
   background: linear-gradient(90deg, transparent 0%, rgba(168, 85, 247, 0.25) 20%, #a855f7 50%, rgba(56, 189, 248, 0.25) 80%, transparent 100%);
   box-shadow: 0 0 15px #a855f7, 0 0 30px rgba(168, 85, 247, 0.4);
   animation: industrialScanBeam 13s cubic-bezier(0.4, 0, 0.2, 1) 4.5s infinite;
+  will-change: transform;
   pointer-events: none;
   z-index: 10;
 }
 
 .animate-industrial-scan-secondary-intense {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
   height: 4px;
   background: linear-gradient(90deg, transparent 0%, rgba(168, 85, 247, 0.4) 20%, #c084fc 50%, rgba(0, 240, 255, 0.4) 80%, transparent 100%);
   box-shadow: 0 0 25px #c084fc, 0 0 45px rgba(168, 85, 247, 0.7);
   animation: industrialScanBeam 4.5s cubic-bezier(0.4, 0, 0.2, 1) 1.5s infinite;
+  will-change: transform;
   pointer-events: none;
   z-index: 10;
 }
@@ -417,6 +427,46 @@ body {
 }
 
 /* 7. Mathematical Formula Stream Marquee Animations (GPU-Accelerated) */
+:root {
+  --formula-speed-slow: 52s;
+  --formula-speed-normal: 34s;
+  --formula-speed-fast: 20s;
+}
+
+/* User-selectable Motion Speed Overrides via data-motion-speed */
+[data-motion-speed="slow"] {
+  --formula-speed-slow: 75s;
+  --formula-speed-normal: 52s;
+  --formula-speed-fast: 32s;
+}
+
+[data-motion-speed="normal"] {
+  --formula-speed-slow: 52s;
+  --formula-speed-normal: 34s;
+  --formula-speed-fast: 20s;
+}
+
+[data-motion-speed="fast"] {
+  --formula-speed-slow: 36s;
+  --formula-speed-normal: 22s;
+  --formula-speed-fast: 14s;
+}
+
+[data-motion-speed="paused"] .formula-stream,
+[data-motion-speed="paused"] .animate-grid-drift,
+[data-motion-speed="paused"] .animate-industrial-scan,
+[data-motion-speed="paused"] .animate-industrial-scan-intense,
+[data-motion-speed="paused"] .animate-industrial-scan-secondary,
+[data-motion-speed="paused"] .animate-industrial-scan-secondary-intense,
+[data-motion-speed="paused"] .animate-radar-slow,
+[data-motion-speed="paused"] .animate-radar-reverse-slow,
+[data-motion-speed="paused"] .animate-particle-a,
+[data-motion-speed="paused"] .animate-particle-b,
+[data-motion-speed="paused"] .animate-circuit-pulse,
+[data-motion-speed="paused"] .animate-ambient-glow {
+  animation-play-state: paused !important;
+}
+
 @keyframes formulaMarqueeRTL {
   0% {
     transform: translate3d(0, 0, 0);
@@ -435,13 +485,41 @@ body {
   }
 }
 
-.animate-formula-rtl {
-  animation: formulaMarqueeRTL 32s linear infinite;
+.formula-stream {
+  --formula-speed: var(--formula-speed-normal);
+  animation-duration: var(--formula-speed);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
   will-change: transform;
 }
 
+.formula-stream[data-speed="slow"] {
+  --formula-speed: var(--formula-speed-slow);
+}
+
+.formula-stream[data-speed="normal"] {
+  --formula-speed: var(--formula-speed-normal);
+}
+
+.formula-stream[data-speed="fast"] {
+  --formula-speed: var(--formula-speed-fast);
+}
+
+.formula-stream.animate-formula-rtl,
+.animate-formula-rtl {
+  animation-name: formulaMarqueeRTL;
+  animation-duration: var(--formula-speed, 32s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+.formula-stream.animate-formula-ltr,
 .animate-formula-ltr {
-  animation: formulaMarqueeLTR 34s linear infinite;
+  animation-name: formulaMarqueeLTR;
+  animation-duration: var(--formula-speed, 34s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
   will-change: transform;
 }
 
@@ -498,6 +576,10 @@ body {
 
 /* Accessible reduced motion override */
 @media (prefers-reduced-motion: reduce) {
+  .formula-stream {
+    animation: none !important;
+    transform: none !important;
+  }
   .animate-grid-drift,
   .animate-industrial-scan,
   .animate-industrial-scan-intense,
@@ -509,8 +591,12 @@ body {
   .animate-particle-b,
   .animate-circuit-pulse,
   .animate-ambient-glow,
+  .animate-laser-scan,
+  .animate-radar,
+  .animate-radar-reverse,
   .animate-formula-rtl,
   .animate-formula-ltr {
     animation: none !important;
+    transform: none !important;
   }
 }

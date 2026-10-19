@@ -12,8 +12,8 @@ const FORMULA_STREAMS = [
   {
     id: "stream-01",
     direction: "rtl" as const,
-    duration: "28s",
-    delay: "-6s",
+    speed: "slow" as const,
+    delay: "-8s",
     opacity: "opacity-[0.24]",
     top: "4%",
     desktopOnly: false,
@@ -31,8 +31,8 @@ const FORMULA_STREAMS = [
   {
     id: "stream-02",
     direction: "ltr" as const,
-    duration: "34s",
-    delay: "-14s",
+    speed: "normal" as const,
+    delay: "-18s",
     opacity: "opacity-[0.18]",
     top: "14%",
     desktopOnly: false,
@@ -50,8 +50,8 @@ const FORMULA_STREAMS = [
   {
     id: "stream-03",
     direction: "rtl" as const,
-    duration: "25s",
-    delay: "-3s",
+    speed: "fast" as const,
+    delay: "-5s",
     opacity: "opacity-[0.24]",
     top: "24%",
     desktopOnly: false,
@@ -69,8 +69,8 @@ const FORMULA_STREAMS = [
   {
     id: "stream-04",
     direction: "ltr" as const,
-    duration: "40s",
-    delay: "-20s",
+    speed: "slow" as const,
+    delay: "-22s",
     opacity: "opacity-[0.16]",
     top: "34%",
     desktopOnly: false,
@@ -88,7 +88,7 @@ const FORMULA_STREAMS = [
   {
     id: "stream-05",
     direction: "rtl" as const,
-    duration: "30s",
+    speed: "normal" as const,
     delay: "-9s",
     opacity: "opacity-[0.25]",
     top: "44%",
@@ -107,8 +107,8 @@ const FORMULA_STREAMS = [
   {
     id: "stream-06",
     direction: "ltr" as const,
-    duration: "44s",
-    delay: "-18s",
+    speed: "fast" as const,
+    delay: "-16s",
     opacity: "opacity-[0.19]",
     top: "54%",
     desktopOnly: true,
@@ -126,7 +126,7 @@ const FORMULA_STREAMS = [
   {
     id: "stream-07",
     direction: "rtl" as const,
-    duration: "27s",
+    speed: "slow" as const,
     delay: "-7s",
     opacity: "opacity-[0.23]",
     top: "64%",
@@ -145,8 +145,8 @@ const FORMULA_STREAMS = [
   {
     id: "stream-08",
     direction: "ltr" as const,
-    duration: "38s",
-    delay: "-16s",
+    speed: "normal" as const,
+    delay: "-25s",
     opacity: "opacity-[0.17]",
     top: "74%",
     desktopOnly: true,
@@ -164,7 +164,7 @@ const FORMULA_STREAMS = [
   {
     id: "stream-09",
     direction: "rtl" as const,
-    duration: "32s",
+    speed: "fast" as const,
     delay: "-11s",
     opacity: "opacity-[0.26]",
     top: "84%",
@@ -183,8 +183,8 @@ const FORMULA_STREAMS = [
   {
     id: "stream-10",
     direction: "ltr" as const,
-    duration: "42s",
-    delay: "-24s",
+    speed: "slow" as const,
+    delay: "-20s",
     opacity: "opacity-[0.18]",
     top: "93%",
     desktopOnly: true,
@@ -282,7 +282,7 @@ export function MechanicalCyberBackground({
       </div>
 
       {/* ── Layer 2: Perspective Engineering Floor Grid ── */}
-      <div className="perspective-floor-grid opacity-50" />
+      <div className="perspective-floor-grid opacity-50 hidden sm:block" />
 
       {/* ── Layer 2.5: Horizontal Mathematical Formula Streams (10 Desktop, 5 Mobile) ── */}
       <div
@@ -303,9 +303,9 @@ export function MechanicalCyberBackground({
               style={{ top: row.top }}
             >
               <div
-                className={`flex shrink-0 items-center gap-10 ${directionClass}`}
+                data-speed={row.speed}
+                className={`formula-stream flex shrink-0 items-center gap-10 ${directionClass}`}
                 style={{
-                  animationDuration: row.duration,
                   animationDelay: row.delay,
                 }}
               >
@@ -352,7 +352,7 @@ export function MechanicalCyberBackground({
       />
 
       {/* ── Layer 4: Two Slowly Rotating Mechanical Radar Rings ── */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[760px] h-[760px] opacity-30 pointer-events-none">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[760px] sm:h-[760px] opacity-30 pointer-events-none">
         {/* Outer Ring: Rotating Clockwise */}
         <svg
           viewBox="0 0 760 760"

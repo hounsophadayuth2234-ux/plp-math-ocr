@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { Menu, KeyRound } from "lucide-react";
 import { CORE_TOOLS } from "@/config/tools";
 
+import { MotionSpeedControl } from "@/components/layout/MotionSpeedControl";
+
 interface HeaderProps {
   onOpenSidebar: () => void;
   onOpenSettings: () => void;
@@ -52,8 +54,10 @@ export function Header({ onOpenSidebar, onOpenSettings }: HeaderProps) {
         )}
       </div>
 
-      {/* Settings Button */}
-      <div className="flex items-center gap-3">
+      {/* Motion Speed & Settings Controls */}
+      <div className="flex items-center gap-2.5 sm:gap-3">
+        <MotionSpeedControl compact={true} />
+
         <button
           type="button"
           data-testid="open-settings-modal-btn"

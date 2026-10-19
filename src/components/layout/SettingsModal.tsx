@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Info,
 } from "lucide-react";
+import { MotionSpeedControl } from "@/components/layout/MotionSpeedControl";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -405,6 +406,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <p className="text-[10px] text-slate-400 font-sans">
               Powers Module 01 (Math OCR &amp; LaTeX). Usage limits and quotas depend on your Google AI Studio plan and tier.
             </p>
+          </div>
+
+          {/* Background Motion Speed Preference */}
+          <div className="pt-2 border-t border-slate-800/80">
+            <MotionSpeedControl compact={false} />
           </div>
 
           {/* Footer actions */}

@@ -39,19 +39,18 @@ describe("Mechanical Cyber Technology Background & Control Transparency Suite", 
     expect(mobileMatches.length).toBe(5);
   });
 
-  // ── 3. Alternating Direction (Odd RTL, Even LTR) & Realistic Durations ──
-  it("3. enforces alternating direction (Odd=RTL, Even=LTR) and 24s-46s durations", () => {
+  // ── 3. Alternating Direction (Odd RTL, Even LTR) & Row Speeds ──
+  it("3. enforces alternating direction (Odd=RTL, Even=LTR) and row-based speed tiers", () => {
     expect(bgContent).toContain('direction: "rtl"');
     expect(bgContent).toContain('direction: "ltr"');
 
-    // Check durations are within 24s-46s
-    const durationMatches = bgContent.match(/duration:\s*"(\d+)s"/g) || [];
-    expect(durationMatches.length).toBe(10);
-    durationMatches.forEach((d) => {
-      const sec = parseInt(d.replace(/\D/g, ""), 10);
-      expect(sec).toBeGreaterThanOrEqual(24);
-      expect(sec).toBeLessThanOrEqual(46);
-    });
+    // Check speeds: Rows 1, 4, 7, 10 = slow; Rows 2, 5, 8 = normal; Rows 3, 6, 9 = fast
+    const slowMatches = bgContent.match(/speed:\s*"slow"/g) || [];
+    const normalMatches = bgContent.match(/speed:\s*"normal"/g) || [];
+    const fastMatches = bgContent.match(/speed:\s*"fast"/g) || [];
+    expect(slowMatches.length).toBe(4);
+    expect(normalMatches.length).toBe(3);
+    expect(fastMatches.length).toBe(3);
 
     // Check staggered negative delays
     const delayMatches = bgContent.match(/delay:\s*"(-\d+)s"/g) || [];
@@ -150,6 +149,61 @@ describe("Mechanical Cyber Technology Background & Control Transparency Suite", 
     // DashboardShell places MechanicalCyberBackground at root shell level
     expect(shellContent).toContain("<MechanicalCyberBackground />");
     expect(shellContent).toContain("<Sidebar");
+  });
+
+  // ── 10. CSS Speed Custom Properties & Formula Stream Selectors ──
+  it("10. defines --formula-speed variables and data-speed selectors in CSS", () => {
+    const freshCssContent = fs.readFileSync(cssPath, "utf-8");
+
+    // :root speed definitions
+    expect(freshCssContent).toContain("--formula-speed-slow: 52s");
+    expect(freshCssContent).toContain("--formula-speed-normal: 34s");
+    expect(freshCssContent).toContain("--formula-speed-fast: 20s");
+
+    // .formula-stream rule
+    expect(freshCssContent).toContain(".formula-stream");
+    expect(freshCssContent).toContain("animation-duration: var(--formula-speed)");
+
+    // data-speed overrides
+    expect(freshCssContent).toContain('.formula-stream[data-speed="slow"]');
+    expect(freshCssContent).toContain('.formula-stream[data-speed="normal"]');
+    expect(freshCssContent).toContain('.formula-stream[data-speed="fast"]');
+
+    // Paused state
+    expect(freshCssContent).toContain('[data-motion-speed="paused"]');
+    expect(freshCssContent).toContain("animation-play-state: paused !important");
+  });
+
+  // ── 11. Background Motion Speed Control Integration ──
+  it("11. implements motion speed control manager and UI components", () => {
+    const motionSpeedLibPath = path.resolve(
+      __dirname,
+      "../src/lib/motion-speed.ts"
+    );
+    const motionControlPath = path.resolve(
+      __dirname,
+      "../src/components/layout/MotionSpeedControl.tsx"
+    );
+    const headerPath = path.resolve(
+      __dirname,
+      "../src/components/layout/Header.tsx"
+    );
+    const settingsModalPath = path.resolve(
+      __dirname,
+      "../src/components/layout/SettingsModal.tsx"
+    );
+
+    const motionSpeedLib = fs.readFileSync(motionSpeedLibPath, "utf-8");
+    const motionControl = fs.readFileSync(motionControlPath, "utf-8");
+    const headerContent = fs.readFileSync(headerPath, "utf-8");
+    const settingsContent = fs.readFileSync(settingsModalPath, "utf-8");
+
+    expect(motionSpeedLib).toContain("data-motion-speed");
+    expect(motionSpeedLib).toContain("motion-speed-change");
+    expect(motionControl).toContain("MotionSpeedControl");
+    expect(motionControl).toContain("prefers-reduced-motion");
+    expect(headerContent).toContain("<MotionSpeedControl");
+    expect(settingsContent).toContain("<MotionSpeedControl");
   });
 });
 
