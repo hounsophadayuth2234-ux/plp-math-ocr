@@ -87,6 +87,7 @@ export default function BgRemoverPage() {
   const [edgeQuality, setEdgeQuality] = useState<"fast" | "balanced" | "quality" | "fine_details">("fast");
   const [directWorkerUrl, setDirectWorkerUrl] = useState<string | null>(null);
   const [failedMetrics, setFailedMetrics] = useState<ProcessingStageMetrics | null>(null);
+  const [liveStageMetrics, setLiveStageMetrics] = useState<ProcessingStageMetrics | null>(null);
 
   // Explicit Manual-Assisted Background Remover State Machine:
   // idle -> image_loaded -> generating_initial_mask -> mask_editing -> previewing -> refining_edges -> ready_to_export -> error
@@ -529,6 +530,7 @@ export default function BgRemoverPage() {
     setWorkflowStep("detecting");
     setError(null);
     setFailedMetrics(null);
+    setLiveStageMetrics(null);
     setSlowNotice(null);
     setProgressInfo(null);
     setProcessingMode(mode);
@@ -692,6 +694,14 @@ export default function BgRemoverPage() {
             }
             return;
           }
+        }
+
+        if (precomputedTextDetection && precomputedTextDetection.status === "completed") {
+          setLiveStageMetrics({
+            textDetectionMs: precomputedTextDetection.durationMs,
+            textDetectionStatus: "completed",
+            textDetectionDurationMs: precomputedTextDetection.durationMs,
+          });
         }
 
         const autoRes = resolveAutoQualityWorkingResolution({
@@ -1739,7 +1749,7 @@ export default function BgRemoverPage() {
                 hasImage={Boolean(imageFile)}
                 isProcessing={isProcessing}
                 isModelCached={isModelCached}
-                metrics={cachedResult?.metrics || failedMetrics || undefined}
+                metrics={cachedResult?.metrics || liveStageMetrics || failedMetrics || undefined}
                 diagnostics={cachedResult?.diagnostics}
                 onResetAdvanced={handleResetAdvanced}
               />
