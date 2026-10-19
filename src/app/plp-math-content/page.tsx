@@ -472,7 +472,7 @@ export default function PlpMathContentPage() {
       </Link>
 
       {/* ── 1. Page Heading and One-Sentence Explanation ── */}
-      <div className="relative overflow-hidden border border-slate-800/90 bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-950 p-6 sm:p-7 shadow-2xl min-w-0 max-w-full w-full">
+      <div className="cyber-glass-panel relative z-10 overflow-hidden border border-cyan-500/30 p-6 sm:p-7 shadow-[0_10px_35px_rgba(0,0,0,0.7)] min-w-0 max-w-full w-full">
         {/* Corner mechanical brackets */}
         <div className="pointer-events-none absolute top-0 left-0 h-3 w-3 border-t-2 border-l-2 border-cyan-400" />
         <div className="pointer-events-none absolute top-0 right-0 h-3 w-3 border-t-2 border-r-2 border-cyan-400" />
@@ -511,7 +511,7 @@ export default function PlpMathContentPage() {
           onSubmit={handleSubmit}
           className="flex flex-col gap-5 lg:col-span-2 min-w-0 max-w-full w-full"
         >
-          <div className="machine-module relative border border-slate-800/90 bg-slate-950/85 p-5 space-y-5 min-w-0 max-w-full shadow-2xl">
+          <div className="machine-module relative z-10 border border-cyan-500/30 p-5 space-y-5 min-w-0 max-w-full shadow-[0_10px_35px_rgba(0,0,0,0.7)]">
             {/* Corner brackets */}
             <div className="pointer-events-none absolute top-0 left-0 h-2.5 w-2.5 border-t-2 border-l-2 border-cyan-400" />
             <div className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 border-t-2 border-r-2 border-cyan-400" />
@@ -581,19 +581,19 @@ export default function PlpMathContentPage() {
                 rows={4}
                 aria-label="Raw mathematical text or equation"
                 placeholder={`e.g.  684\n+ 257\n-----\n[___]\n\nor: x² + 5x + 6 = 0`}
-                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 font-mono text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 disabled:opacity-50 min-w-0"
+                className="w-full resize-none rounded-xl border border-cyan-500/30 bg-slate-950/40 backdrop-blur-[6px] px-4 py-3 font-mono text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 disabled:opacity-50 min-w-0 shadow-inner transition-colors"
               />
             </div>
 
             {/* ── 5. Optional Examples in a Compact Accordion ── */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950/40 overflow-hidden min-w-0">
+            <div className="rounded-xl border border-cyan-500/25 bg-slate-950/40 backdrop-blur-[6px] overflow-hidden min-w-0">
               <button
                 type="button"
                 onClick={() => setShowExamples((p) => !p)}
                 aria-expanded={showExamples}
                 aria-label={showExamples ? "Hide Examples" : "Show Examples"}
                 title={showExamples ? "Hide Examples" : "Show Examples"}
-                className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium text-slate-300 hover:bg-slate-900 transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none min-h-[44px]"
+                className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium text-slate-300 hover:bg-cyan-950/30 transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none min-h-[44px]"
               >
                 <span className="flex items-center gap-2">
                   <Lightbulb className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
@@ -606,7 +606,7 @@ export default function PlpMathContentPage() {
                 )}
               </button>
               {showExamples && (
-                <div className="border-t border-slate-800 p-2 space-y-1">
+                <div className="border-t border-cyan-500/20 p-2 space-y-1">
                   {EXAMPLE_PROMPTS.map((ex) => (
                     <button
                       key={ex.label}
@@ -615,10 +615,10 @@ export default function PlpMathContentPage() {
                       onClick={() => setRawText(ex.text)}
                       aria-label={`Use example: ${ex.label}`}
                       title={`Use example: ${ex.label}`}
-                      className="w-full rounded-lg px-3 py-2.5 text-left text-xs hover:bg-slate-800 transition-colors disabled:opacity-50 focus:ring-2 focus:ring-cyan-400 focus:outline-none min-h-[44px] flex flex-col justify-center"
+                      className="w-full rounded-lg px-3 py-2.5 text-left text-xs hover:bg-cyan-950/40 transition-colors disabled:opacity-50 focus:ring-2 focus:ring-cyan-400 focus:outline-none min-h-[44px] flex flex-col justify-center"
                     >
                       <span className="font-semibold text-cyan-300">{ex.label}</span>
-                      <span className="mt-0.5 block text-slate-500">{ex.hint}</span>
+                      <span className="mt-0.5 block text-slate-400">{ex.hint}</span>
                     </button>
                   ))}
                 </div>
@@ -632,7 +632,7 @@ export default function PlpMathContentPage() {
               disabled={!canSubmit}
               aria-label="Generate formats"
               title="Generate formats"
-              className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-indigo-600 to-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none focus:ring-2 focus:ring-cyan-400 focus:outline-none min-w-0 min-h-[44px]"
+              className="relative z-10 flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-cyan-600/90 via-indigo-600/90 to-violet-600/90 backdrop-blur-[6px] border border-cyan-400/40 px-5 py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,240,255,0.25)] transition-all hover:brightness-110 hover:shadow-[0_0_25px_rgba(0,240,255,0.4)] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none focus:ring-2 focus:ring-cyan-400 focus:outline-none min-w-0 min-h-[44px]"
             >
               {isLoading ? (
                 <>
@@ -765,7 +765,7 @@ export default function PlpMathContentPage() {
               />
 
               {/* ── 8. Copy and Refine Actions ── */}
-              <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/80 p-5 space-y-4 shadow-[0_0_20px_rgba(0,0,0,0.5)] min-w-0 max-w-full">
+              <div className="cyber-glass-panel relative z-10 rounded-2xl border border-cyan-500/30 p-5 space-y-4 shadow-[0_10px_35px_rgba(0,0,0,0.6)] min-w-0 max-w-full">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-bold text-cyan-400 font-mono">
                     2
@@ -797,7 +797,7 @@ export default function PlpMathContentPage() {
                       disabled={isRefining}
                       rows={3}
                       placeholder="e.g. Make font-size: 32px, or align columns to the right..."
-                      className="w-full resize-none rounded-xl border border-cyan-500/30 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 disabled:opacity-50 font-mono min-w-0"
+                      className="w-full resize-none rounded-xl border border-cyan-500/30 bg-slate-950/40 backdrop-blur-[6px] px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 disabled:opacity-50 font-mono min-w-0 shadow-inner"
                     />
                     <button
                       type="button"
@@ -806,7 +806,7 @@ export default function PlpMathContentPage() {
                       disabled={!canSubmit || !customInstructions.trim() || isRefining}
                       aria-label="Refine result"
                       title="Refine result"
-                      className="flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-cyan-950 border border-cyan-500/40 px-5 py-2.5 text-sm font-semibold text-cyan-300 transition-all hover:bg-cyan-900/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 shadow-[0_0_12px_rgba(0,240,255,0.15)] font-mono focus:ring-2 focus:ring-cyan-400 focus:outline-none min-h-[44px]"
+                      className="relative z-10 flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-cyan-950/60 backdrop-blur-[6px] border border-cyan-500/40 px-5 py-2.5 text-sm font-semibold text-cyan-300 transition-all hover:bg-cyan-900/80 hover:text-white hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-50 shadow-[0_0_15px_rgba(0,240,255,0.2)] font-mono focus:ring-2 focus:ring-cyan-400 focus:outline-none min-h-[44px]"
                     >
                       <Lightbulb className="h-4 w-4 text-cyan-400" aria-hidden="true" />
                       <span>Refine result</span>
@@ -820,7 +820,7 @@ export default function PlpMathContentPage() {
           {/* Empty Results Standby State */}
           {!result && !isLoading && !error && (
             <>
-              <div className="machine-module relative flex flex-1 flex-col items-center justify-center border border-slate-800/90 bg-slate-950/85 p-8 sm:p-12 text-center min-w-0 max-w-full shadow-2xl overflow-hidden">
+              <div className="machine-module relative z-10 flex flex-1 flex-col items-center justify-center border border-cyan-500/30 p-8 sm:p-12 text-center min-w-0 max-w-full shadow-[0_10px_35px_rgba(0,0,0,0.7)] overflow-hidden">
                 {/* Corner brackets */}
                 <div className="pointer-events-none absolute top-0 left-0 h-3.5 w-3.5 border-t-2 border-l-2 border-cyan-400" />
                 <div className="pointer-events-none absolute top-0 right-0 h-3.5 w-3.5 border-t-2 border-r-2 border-cyan-400" />
@@ -828,11 +828,11 @@ export default function PlpMathContentPage() {
                 <div className="pointer-events-none absolute bottom-0 right-0 h-3.5 w-3.5 border-b-2 border-r-2 border-cyan-400" />
 
                 {/* Status Header Badges */}
-                <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/90 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
+                <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/80 backdrop-blur-[4px] px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
                   <span className="text-slate-500">CHAMBER:</span>
                   <span className="font-bold">MATH SYNTHESIZER // OUTPUT</span>
                 </div>
-                <div className="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 border border-emerald-500/40 bg-slate-950/90 px-2 py-0.5 text-[10px] text-emerald-400 font-mono">
+                <div className="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 border border-emerald-500/40 bg-slate-950/80 backdrop-blur-[4px] px-2 py-0.5 text-[10px] text-emerald-400 font-mono">
                   <span className="h-1.5 w-1.5 bg-emerald-400 animate-pulse" />
                   <span className="text-slate-500">STATUS:</span>
                   <span className="font-bold">STANDBY</span>
@@ -848,19 +848,19 @@ export default function PlpMathContentPage() {
                   Upload a math problem or enter formula text on the left, then click &quot;Generate formats&quot; to inspect LaTeX, Jodit HTML, and MathML.
                 </p>
                 <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left w-full max-w-md font-mono text-[11px] text-slate-300">
-                  <div className="flex items-center gap-2 border border-slate-800 bg-slate-900/80 px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/50 backdrop-blur-[4px] px-2.5 py-1.5">
                     <span className="h-1.5 w-1.5 bg-emerald-400 shrink-0" />
                     <span className="truncate">Option 1: Standard LaTeX</span>
                   </div>
-                  <div className="flex items-center gap-2 border border-slate-800 bg-slate-900/80 px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/50 backdrop-blur-[4px] px-2.5 py-1.5">
                     <span className="h-1.5 w-1.5 bg-amber-400 shrink-0" />
                     <span className="truncate">Option 2: Jodit HTML (CSS)</span>
                   </div>
-                  <div className="flex items-center gap-2 border border-slate-800 bg-slate-900/80 px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/50 backdrop-blur-[4px] px-2.5 py-1.5">
                     <span className="h-1.5 w-1.5 bg-cyan-400 shrink-0" />
                     <span className="truncate">Option 3: W3C MathML</span>
                   </div>
-                  <div className="flex items-center gap-2 border border-slate-800 bg-slate-900/80 px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 border border-cyan-500/25 bg-slate-950/50 backdrop-blur-[4px] px-2.5 py-1.5">
                     <span className="h-1.5 w-1.5 bg-indigo-400 shrink-0" />
                     <span className="truncate">WYSIWYG Visual Render</span>
                   </div>

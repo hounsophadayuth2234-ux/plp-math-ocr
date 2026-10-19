@@ -83,10 +83,9 @@ export function PreprocessProfileSelector({
               onClick={() => onSelectProfile(p.id)}
               className={`flex flex-col items-start p-2.5 rounded-none border text-left transition-all ${
                 isSelected
-                  ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40"
-                  : "border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:border-slate-700"
-              } disabled:opacity-50 min-h-[44px]`}
-            >
+                  ? "border-cyan-400 bg-cyan-950/65 backdrop-blur-[6px] text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_15px_rgba(0,240,255,0.2)]"
+                  : "border-cyan-500/20 bg-slate-950/40 backdrop-blur-[4px] text-slate-300 hover:text-white hover:border-cyan-400/50 hover:bg-cyan-950/30"
+              } disabled:opacity-50 min-h-[44px]`}>
               <div className="flex items-center gap-1.5 w-full">
                 <Icon className={`h-3.5 w-3.5 ${isSelected ? "text-cyan-300" : "text-slate-500"}`} />
                 <span className="text-[11px] font-bold truncate">{p.label}</span>

@@ -117,7 +117,7 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
 
       {selectedFile && previewUrl ? (
         /* Preview state with holographic laser scanner */
-        <div className="relative overflow-hidden rounded-xl border border-cyan-500/40 bg-slate-950/90 shadow-[0_0_20px_rgba(0,240,255,0.1)] min-w-0 max-w-full w-full">
+        <div className="relative overflow-hidden rounded-xl border border-cyan-500/40 bg-slate-950/45 backdrop-blur-[8px] shadow-[0_0_25px_rgba(0,240,255,0.15)] min-w-0 max-w-full w-full">
           {/* Subtle scanning laser bar across preview */}
           <div className="animate-laser-scan opacity-70" />
           
@@ -126,7 +126,7 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
             alt="Uploaded math problem"
             className="max-h-64 w-full object-contain p-3 relative z-10"
           />
-          <div className="flex items-center justify-between border-t border-cyan-500/20 bg-slate-900/90 px-4 py-2.5 relative z-10">
+          <div className="flex items-center justify-between border-t border-cyan-500/20 bg-slate-950/50 backdrop-blur-[6px] px-4 py-2.5 relative z-10">
             <div className="flex items-center gap-2 text-xs text-slate-400 truncate">
               <ImageIcon className="h-3.5 w-3.5 text-cyan-400 shrink-0" aria-hidden="true" />
               <span className="truncate font-medium text-slate-200">
@@ -142,7 +142,7 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
               disabled={disabled}
               aria-label="Remove uploaded math image"
               title="Remove uploaded math image"
-              className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-950/40 px-2.5 py-1.5 text-xs text-rose-300 hover:bg-rose-900/60 hover:text-white disabled:opacity-50 transition-colors focus:ring-2 focus:ring-rose-400 focus:outline-none shrink-0"
+              className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-950/40 backdrop-blur-[4px] px-2.5 py-1.5 text-xs text-rose-300 hover:bg-rose-900/60 hover:text-white disabled:opacity-50 transition-colors focus:ring-2 focus:ring-rose-400 focus:outline-none shrink-0"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Remove</span>
@@ -171,8 +171,8 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
             disabled
               ? "cursor-not-allowed border-slate-800 bg-slate-900/30 opacity-50"
               : isDragging
-              ? "border-cyan-400 bg-cyan-950/30 shadow-[0_0_25px_rgba(0,240,255,0.25)]"
-              : "border-cyan-500/30 bg-slate-950/60 hover:border-cyan-400/70 hover:bg-slate-900/80 hover:shadow-[0_0_20px_rgba(0,240,255,0.12)]"
+              ? "border-cyan-400 bg-cyan-950/40 backdrop-blur-[8px] shadow-[0_0_25px_rgba(0,240,255,0.25)]"
+              : "border-cyan-500/35 bg-slate-950/40 backdrop-blur-[8px] hover:border-cyan-400 hover:bg-cyan-950/20 hover:shadow-[0_0_25px_rgba(0,240,255,0.2)]"
           }`}
         >
           {/* Corner target reticles */}

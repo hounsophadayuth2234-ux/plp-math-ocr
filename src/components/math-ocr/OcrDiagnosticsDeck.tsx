@@ -57,7 +57,7 @@ export function OcrDiagnosticsDeck({
   return (
     <details
       data-testid="ocr-diagnostics-deck"
-      className="group border border-slate-800 bg-slate-950/80 p-3 sm:p-4 font-mono text-xs transition-all duration-200"
+      className="cyber-glass-panel relative z-10 group border border-cyan-500/30 p-3 sm:p-4 font-mono text-xs transition-all duration-200 shadow-[0_10px_35px_rgba(0,0,0,0.6)]"
     >
       <summary className="cursor-pointer text-xs font-bold text-slate-300 hover:text-cyan-300 select-none flex items-center justify-between min-h-[44px]">
         <div className="flex items-center gap-2">

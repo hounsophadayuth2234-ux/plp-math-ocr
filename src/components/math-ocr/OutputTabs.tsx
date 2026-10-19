@@ -111,9 +111,9 @@ export function OutputTabs({
   const currentTabLabel = TABS.find((t) => t.id === activeTab)?.label || "Code";
 
   return (
-    <div className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-xl min-w-0 max-w-full w-full">
+    <div className="cyber-glass-panel relative z-10 flex flex-col rounded-2xl border border-cyan-500/30 overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.7)] min-w-0 max-w-full w-full">
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/70 px-4 py-3 min-w-0 max-w-full">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-cyan-500/20 bg-slate-950/40 backdrop-blur-[6px] px-4 py-3 min-w-0 max-w-full">
         <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
           {isStale && (
             <span
@@ -169,7 +169,7 @@ export function OutputTabs({
               }}
               aria-label={`Copy ${currentTabLabel} to clipboard`}
               title={`Copy ${currentTabLabel} to clipboard`}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-slate-400 focus:outline-none"
+              className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-950/40 backdrop-blur-[4px] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-cyan-900/60 hover:text-white hover:border-cyan-400 transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none"
             >
               {copied === activeTab ? (
                 <>
@@ -191,7 +191,7 @@ export function OutputTabs({
       <div
         role="tablist"
         aria-label="Math Output Formats"
-        className="flex border-b border-slate-800 bg-slate-950/40 overflow-x-auto min-w-0 max-w-full w-full scrollbar-thin"
+        className="flex border-b border-cyan-500/20 bg-slate-950/35 backdrop-blur-[4px] overflow-x-auto min-w-0 max-w-full w-full scrollbar-thin"
       >
         {TABS.map((tab, idx) => {
           const Icon = tab.icon;
@@ -221,10 +221,10 @@ export function OutputTabs({
                   document.getElementById(`tab-${prevTab.id}`)?.focus();
                 }
               }}
-              className={`flex items-center gap-2 whitespace-nowrap px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-all focus:ring-2 focus:ring-indigo-400 focus:outline-none shrink-0 min-h-[44px] ${
+              className={`flex items-center gap-2 whitespace-nowrap px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-all focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0 min-h-[44px] ${
                 isActive
-                  ? "border-indigo-500 text-white bg-slate-900/80 shadow-xs"
-                  : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                  ? "border-cyan-400 text-white bg-cyan-950/40 shadow-xs"
+                  : "border-transparent text-slate-400 hover:text-slate-200 hover:border-cyan-500/40"
               }`}
             >
               <Icon className={`h-4 w-4 ${tab.accent} shrink-0`} aria-hidden="true" />

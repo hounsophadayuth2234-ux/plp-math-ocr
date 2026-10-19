@@ -7,6 +7,200 @@ interface MechanicalCyberBackgroundProps {
   hasResult?: boolean;
 }
 
+// ── 10 Horizontal Mathematical Streams (5 on Mobile, 10 on Desktop) ──
+const FORMULA_STREAMS = [
+  {
+    id: "stream-01",
+    direction: "rtl" as const,
+    duration: "28s",
+    delay: "-6s",
+    opacity: "opacity-[0.24]",
+    top: "4%",
+    desktopOnly: false,
+    items: [
+      { text: "∫ f(x)dx", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "x² + y² = r²", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "lim_{x→∞} (1 + 1/x)ˣ = e", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "Δx → 0", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "E = mc²", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "∂f/∂x + ∂f/∂y = 0", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "Σ_{n=1}^∞ 1/n² = π²/6", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "√(a² + b²)", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-02",
+    direction: "ltr" as const,
+    duration: "34s",
+    delay: "-14s",
+    opacity: "opacity-[0.18]",
+    top: "14%",
+    desktopOnly: false,
+    items: [
+      { text: "sin²θ + cos²θ = 1", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "∇ × B = μ₀J + μ₀ε₀ ∂E/∂t", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "π ≈ 3.14159265", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "aₙ = a₁ + (n − 1)d", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "e^{iπ} + 1 = 0", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "∫₀^∞ e^{-x²} dx = √π/2", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "det(A − λI) = 0", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "lim_{x→0} sin(x)/x = 1", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-03",
+    direction: "rtl" as const,
+    duration: "25s",
+    delay: "-3s",
+    opacity: "opacity-[0.24]",
+    top: "24%",
+    desktopOnly: false,
+    items: [
+      { text: "d/dx [ln(x)] = 1/x", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "x = (-b ± √(b² - 4ac)) / 2a", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "∮ B · dl = μ₀ I_{enc}", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "P(A|B) = P(B|A)P(A)/P(B)", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "∂²u/∂t² = c² ∇²u", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "∫ sec²(x) dx = tan(x) + C", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "Σ_{n=1}^∞ 1/n² = π²/6", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "sin θ + cos θ", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-04",
+    direction: "ltr" as const,
+    duration: "40s",
+    delay: "-20s",
+    opacity: "opacity-[0.16]",
+    top: "34%",
+    desktopOnly: false,
+    items: [
+      { text: "σ = √( 1/N ∑(xᵢ - μ)² )", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "a³ + b³ = (a+b)(a² - ab + b²)", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "H|ψ⟩ = E|ψ⟩", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "∇ · E = ρ / ε₀", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "∫ 1/(1+x²) dx = arctan(x) + C", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "S = k_B ln Ω", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "x² + y² = r²", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "lim x→∞", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-05",
+    direction: "rtl" as const,
+    duration: "30s",
+    delay: "-9s",
+    opacity: "opacity-[0.25]",
+    top: "44%",
+    desktopOnly: false,
+    items: [
+      { text: "∫ f(x)dx", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "aₙ = a₁ · rⁿ⁻¹", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "Δy/Δx → dy/dx", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "eˣ = 1 + x + x²/2! + x³/3! + ...", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "∂f/∂x", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "E = mc²", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "lim_{x→∞} 1/x = 0", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "π ≈ 3.14159", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-06",
+    direction: "ltr" as const,
+    duration: "44s",
+    delay: "-18s",
+    opacity: "opacity-[0.19]",
+    top: "54%",
+    desktopOnly: true,
+    items: [
+      { text: "Σ_{n=1}^∞ 1/n² = π²/6", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "A = π r²", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "F = G (m₁ m₂) / r²", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "cos(α ± β) = cos α cos β ∓ sin α sin β", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "∫ u dv = uv - ∫ v du", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "λ = h / p", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "√(a² + b²)", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "Δx → 0", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-07",
+    direction: "rtl" as const,
+    duration: "27s",
+    delay: "-7s",
+    opacity: "opacity-[0.23]",
+    top: "64%",
+    desktopOnly: true,
+    items: [
+      { text: "E = mc²", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "sin θ + cos θ = √2 sin(θ + π/4)", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "∫ xⁿ dx = xⁿ⁺¹/(n+1) + C", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "π ≈ 3.14159", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "f''(x) > 0 ⇒ convex", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "∮ E · da = Q_{encl}/ε₀", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "x² + 5x + 6 = 0", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "aₙ = a₁ + (n−1)d", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-08",
+    direction: "ltr" as const,
+    duration: "38s",
+    delay: "-16s",
+    opacity: "opacity-[0.17]",
+    top: "74%",
+    desktopOnly: true,
+    items: [
+      { text: "√(a² + b²)", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "lim_{x→a} [f(x) - f(a)]/(x - a) = f'(a)", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "e^{iθ} = cos θ + i sin θ", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "∇ · B = 0", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "∫ tan(x) dx = ln|sec(x)| + C", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "[H, P] = iℏ ∂V/∂x", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "Σ_{i=1}^n i = n(n+1)/2", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "∂f/∂x", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-09",
+    direction: "rtl" as const,
+    duration: "32s",
+    delay: "-11s",
+    opacity: "opacity-[0.26]",
+    top: "84%",
+    desktopOnly: true,
+    items: [
+      { text: "x² + y² = r²", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "∂f/∂t + u·∇f = 0", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "∫ e^{ax} dx = (1/a) e^{ax} + C", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "lim_{x→∞} x^{1/x} = 1", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "∫ f(x)dx", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "Σ_{k=0}^∞ xᵏ = 1/(1-x)", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "d/dx [sin x] = cos x", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "ΔS ≥ 0", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+    ],
+  },
+  {
+    id: "stream-10",
+    direction: "ltr" as const,
+    duration: "42s",
+    delay: "-24s",
+    opacity: "opacity-[0.18]",
+    top: "93%",
+    desktopOnly: true,
+    items: [
+      { text: "Σ_{n=1}^∞ 1/n²", color: "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "E = hν = ℏω", color: "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "sinh²x + 1 = cosh²x", color: "text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "∂²u/∂x² + ∂²u/∂y² = 0", color: "text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+      { text: "lim_{x→0} (eˣ - 1)/x = 1", color: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" },
+      { text: "∫ 1/x dx = ln|x| + C", color: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { text: "aₙ = a₁ + (n−1)d", color: "text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]" },
+      { text: "∮ F · dr = ∬ (∇ × F) · dS", color: "text-purple-300 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" },
+    ],
+  },
+];
+
 export function MechanicalCyberBackground({
   isProcessing: propIsProcessing,
   hasResult = false,
@@ -89,6 +283,55 @@ export function MechanicalCyberBackground({
 
       {/* ── Layer 2: Perspective Engineering Floor Grid ── */}
       <div className="perspective-floor-grid opacity-50" />
+
+      {/* ── Layer 2.5: Horizontal Mathematical Formula Streams (10 Desktop, 5 Mobile) ── */}
+      <div
+        data-testid="math-formula-streams"
+        className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
+      >
+        {FORMULA_STREAMS.map((row) => {
+          const isRTL = row.direction === "rtl";
+          const directionClass = isRTL ? "animate-formula-rtl" : "animate-formula-ltr";
+          return (
+            <div
+              key={row.id}
+              data-testid="formula-stream-row"
+              data-direction={row.direction}
+              className={`absolute left-0 w-full overflow-hidden whitespace-nowrap pointer-events-none select-none ${row.opacity} ${
+                row.desktopOnly ? "hidden md:flex" : "flex"
+              }`}
+              style={{ top: row.top }}
+            >
+              <div
+                className={`flex shrink-0 items-center gap-10 ${directionClass}`}
+                style={{
+                  animationDuration: row.duration,
+                  animationDelay: row.delay,
+                }}
+              >
+                {/* Primary formula set */}
+                {row.items.map((item, itemIdx) => (
+                  <span
+                    key={`p-${itemIdx}`}
+                    className={`font-mono text-xs sm:text-sm font-semibold tracking-wider ${item.color}`}
+                  >
+                    {item.text}
+                  </span>
+                ))}
+                {/* Repeated formula set for seamless continuous marquee */}
+                {row.items.map((item, itemIdx) => (
+                  <span
+                    key={`r-${itemIdx}`}
+                    className={`font-mono text-xs sm:text-sm font-semibold tracking-wider ${item.color}`}
+                  >
+                    {item.text}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* ── Layer 3: Two Horizontal Industrial Scanning Beams ── */}
       {/* Primary Scanning Beam */}

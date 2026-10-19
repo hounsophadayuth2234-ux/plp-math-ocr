@@ -416,17 +416,61 @@ body {
   animation: ambientGlowPulse 6s ease-in-out infinite;
 }
 
-/* 7. Mechanical Machine Panel Surface */
-.machine-module {
-  background: radial-gradient(circle at top left, #0d1527 0%, #070a13 70%, #04060c 100%);
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 0 20px rgba(0, 0, 0, 0.5);
+/* 7. Mathematical Formula Stream Marquee Animations (GPU-Accelerated) */
+@keyframes formulaMarqueeRTL {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes formulaMarqueeLTR {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-formula-rtl {
+  animation: formulaMarqueeRTL 32s linear infinite;
+  will-change: transform;
+}
+
+.animate-formula-ltr {
+  animation: formulaMarqueeLTR 34s linear infinite;
+  will-change: transform;
+}
+
+/* 8. Translucent Cyber Glass Panels & Surface Modules (35-55% Alpha, 8px Backdrop Blur) */
+.machine-module,
+.cyber-glass-panel {
+  background: radial-gradient(circle at top left, rgba(13, 24, 48, 0.52) 0%, rgba(8, 14, 28, 0.44) 70%, rgba(4, 8, 18, 0.48) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 240, 255, 0.28);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 20px rgba(0, 240, 255, 0.04);
   position: relative;
 }
 
-.machine-module:hover {
-  border-color: rgba(56, 189, 248, 0.35);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 25px rgba(0, 240, 255, 0.05);
+.machine-module:hover,
+.cyber-glass-panel:hover {
+  border-color: rgba(0, 240, 255, 0.45);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 25px rgba(0, 240, 255, 0.08);
+}
+
+.cyber-glass-card {
+  background: rgba(8, 16, 34, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 240, 255, 0.22);
+}
+
+.cyber-glass-card:hover {
+  border-color: rgba(0, 240, 255, 0.4);
 }
 
 /* Accessible reduced motion override */
@@ -441,7 +485,9 @@ body {
   .animate-particle-a,
   .animate-particle-b,
   .animate-circuit-pulse,
-  .animate-ambient-glow {
+  .animate-ambient-glow,
+  .animate-formula-rtl,
+  .animate-formula-ltr {
     animation: none !important;
   }
 }
