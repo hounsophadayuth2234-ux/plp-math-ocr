@@ -473,6 +473,28 @@ body {
   border-color: rgba(0, 240, 255, 0.4);
 }
 
+/* 9. Sidebar Active Modules Cyber-Glass Cards (rgba(7, 19, 38, 0.35-0.50), 8px Backdrop Blur) */
+.sidebar-module-glass {
+  background: rgba(7, 19, 38, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-module-glass:hover {
+  background: rgba(7, 19, 38, 0.58);
+  border-color: rgba(0, 240, 255, 0.38);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.12);
+}
+
+.sidebar-module-glass.is-active {
+  background: rgba(7, 19, 38, 0.50);
+  border-color: rgba(0, 240, 255, 0.52);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.20), inset 0 0 12px rgba(0, 240, 255, 0.08);
+}
+
+
 /* Accessible reduced motion override */
 @media (prefers-reduced-motion: reduce) {
   .animate-grid-drift,

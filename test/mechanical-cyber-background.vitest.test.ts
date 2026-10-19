@@ -118,4 +118,33 @@ describe("Mechanical Cyber Technology Background & Control Transparency Suite", 
     expect(pageContent).toContain("relative z-10");
     expect(pageContent).not.toContain("pointer-events-none relative z-10");
   });
+
+  // ── 9. Sidebar Active Modules Cards Transparency & Consistency ──
+  it("9. verifies sidebar active modules (01, 02, 03) share transparent dark-blue glass styling and cyber background visibility", () => {
+    const sidebarPath = path.resolve(
+      __dirname,
+      "../src/components/layout/Sidebar.tsx"
+    );
+    const shellPath = path.resolve(
+      __dirname,
+      "../src/components/layout/DashboardShell.tsx"
+    );
+    const sidebarContent = fs.readFileSync(sidebarPath, "utf-8");
+    const shellContent = fs.readFileSync(shellPath, "utf-8");
+
+    // CSS defines sidebar-module-glass with rgba(7, 19, 38, ...) and blur(8px)
+    expect(cssContent).toContain(".sidebar-module-glass");
+    expect(cssContent).toContain("rgba(7, 19, 38,");
+    expect(cssContent).toContain(".sidebar-module-glass.is-active");
+
+    // Sidebar maps all tools to .sidebar-module-glass
+    expect(sidebarContent).toContain("sidebar-module-glass");
+    expect(sidebarContent).toContain("sidebar-module-glass is-active");
+    expect(sidebarContent).toContain("focus-visible:ring-cyan-400");
+
+    // DashboardShell places MechanicalCyberBackground at root shell level
+    expect(shellContent).toContain("<MechanicalCyberBackground />");
+    expect(shellContent).toContain("<Sidebar");
+  });
 });
+
