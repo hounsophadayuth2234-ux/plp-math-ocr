@@ -17,6 +17,20 @@ import { ProcessingStatusLabel } from "./types";
 export type UpscaleScale = 1 | 2 | 4 | 8;
 export type UpscalePreset = "portrait" | "text" | "restore" | "custom" | "general" | "ultra";
 
+/**
+ * Authoritative Enhancement Configuration Object
+ */
+export interface EnhancementConfig {
+  factor: 1 | 2 | 4;
+  preset: string;
+  sharpness: number;
+  denoise: number;
+  clarity: number;
+  faceEnhancement: boolean;
+}
+
+export type ProcessingEngineType = "Browser resize/sharpen" | "Real AI model" | "Remote worker";
+
 export interface UpscaleOptions {
   scale: UpscaleScale;
   preset: UpscalePreset;
@@ -28,6 +42,8 @@ export interface UpscaleOptions {
   ultraReconstruction?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: UpscaleProgress) => void;
+  jobId?: string;
+  config?: EnhancementConfig;
 }
 
 export interface UpscaleProgress {
@@ -58,6 +74,7 @@ export interface ImageDiagnostics {
   recommendedPreset: UpscalePreset;
   recommendationReason: string;
   recommendationReasonKh: string;
+  actualEngine?: ProcessingEngineType;
 }
 
 export interface UpscaleResult {
@@ -68,10 +85,15 @@ export interface UpscaleResult {
   outputWidth: number;
   outputHeight: number;
   scale: number;
+  requestedScale?: number;
+  isFallback?: boolean;
+  fallbackReason?: string;
   diagnostics: ImageDiagnostics;
   elapsedMs: number;
   label: ProcessingStatusLabel;
   model: string;
+  engine: ProcessingEngineType;
+  jobId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -864,7 +886,6 @@ export function applyAntiBandingDither(
   srcData: { data: Uint8ClampedArray | Uint8Array; width: number; height: number }
 ): Uint8ClampedArray {
   const { width, height, data: src } = srcData;
-  const total = width * height;
   const output = new Uint8ClampedArray(src.length);
   output.set(src);
 

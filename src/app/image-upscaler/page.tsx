@@ -37,6 +37,7 @@ import {
   ImageDiagnostics,
   UpscaleResult,
   UpscaleScale,
+  EnhancementConfig,
 } from "@/lib/image-upscale-client";
 import { generateUpscaleSmartName } from "@/lib/smart-naming";
 
@@ -45,13 +46,41 @@ export default function ImageUpscalerPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [inputDiagnostics, setInputDiagnostics] = useState<ImageDiagnostics | null>(null);
 
-  // Enhancement controls
-  const [scale, setScale] = useState<UpscaleScale>(2);
-  const [preset, setPreset] = useState<UpscalePreset>("general");
-  const [faceEnhance, setFaceEnhance] = useState(false);
-  const [sharpness, setSharpness] = useState(65);
-  const [denoise, setDenoise] = useState(35);
-  const [clarity, setClarity] = useState(45);
+  // Authoritative Enhancement Configuration Object
+  const [config, setConfig] = useState<EnhancementConfig>({
+    factor: 2,
+    preset: "general",
+    sharpness: 65,
+    denoise: 35,
+    clarity: 45,
+    faceEnhancement: false,
+  });
+
+  // Authoritative Ref to prevent stale React closure reads in handlers
+  const configRef = useRef<EnhancementConfig>({
+    factor: 2,
+    preset: "general",
+    sharpness: 65,
+    denoise: 35,
+    clarity: 45,
+    faceEnhancement: false,
+  });
+
+  // Synchronous config updater
+  const updateConfig = useCallback(
+    (
+      updater:
+        | Partial<EnhancementConfig>
+        | ((prev: EnhancementConfig) => EnhancementConfig)
+    ) => {
+      setConfig((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : { ...prev, ...updater };
+        configRef.current = next;
+        return next;
+      });
+    },
+    []
+  );
 
   // Export settings
   const [exportFormat, setExportFormat] = useState<"png" | "jpeg">("png");
@@ -59,12 +88,14 @@ export default function ImageUpscalerPage() {
 
   // State management
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState<UpscaleProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<{ message: string; suggestedAction?: string } | null>(null);
   const [result, setResult] = useState<UpscaleResult | null>(null);
 
   const activeAbortControllerRef = useRef<AbortController | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
   const urlRegistryRef = useRef<ObjectUrlRegistry>(new ObjectUrlRegistry());
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -76,44 +107,76 @@ export default function ImageUpscalerPage() {
     };
   }, []);
 
+  // Broadcast processing state to pause heavy background decorative animations
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("ai-processing-change", {
+        detail: { isProcessing: isLoading },
+      })
+    );
+  }, [isLoading]);
+
   // Handle Preset Changes & set optimal defaults
   const handlePresetSelect = useCallback((selectedPreset: UpscalePreset) => {
     cyberAudio.playClick();
-    setPreset(selectedPreset);
     if (selectedPreset === "ultra") {
-      setFaceEnhance(false);
-      setSharpness(85);
-      setDenoise(30);
-      setClarity(65);
-      setScale((prev) => (prev < 4 ? 4 : prev));
+      updateConfig((prev) => ({
+        ...prev,
+        preset: "ultra",
+        faceEnhancement: false,
+        sharpness: 85,
+        denoise: 30,
+        clarity: 65,
+        factor: (prev.factor < 4 ? 4 : prev.factor) as 1 | 2 | 4,
+      }));
     } else if (selectedPreset === "portrait") {
-      setFaceEnhance(true);
-      setSharpness(60);
-      setDenoise(45);
-      setClarity(55);
+      updateConfig((prev) => ({
+        ...prev,
+        preset: "portrait",
+        faceEnhancement: true,
+        sharpness: 60,
+        denoise: 45,
+        clarity: 55,
+      }));
     } else if (selectedPreset === "text") {
-      setFaceEnhance(false);
-      setSharpness(80);
-      setDenoise(30);
-      setClarity(60);
+      updateConfig((prev) => ({
+        ...prev,
+        preset: "text",
+        faceEnhancement: false,
+        sharpness: 80,
+        denoise: 30,
+        clarity: 60,
+      }));
     } else if (selectedPreset === "restore") {
-      setFaceEnhance(false);
-      setSharpness(50);
-      setDenoise(70);
-      setClarity(40);
+      updateConfig((prev) => ({
+        ...prev,
+        preset: "restore",
+        faceEnhancement: false,
+        sharpness: 50,
+        denoise: 70,
+        clarity: 40,
+      }));
     } else if (selectedPreset === "custom") {
-      // Keep existing custom slider values
+      updateConfig((prev) => ({
+        ...prev,
+        preset: "custom",
+      }));
     } else {
       // General
-      setFaceEnhance(false);
-      setSharpness(65);
-      setDenoise(35);
-      setClarity(45);
+      updateConfig((prev) => ({
+        ...prev,
+        preset: "general",
+        faceEnhancement: false,
+        sharpness: 65,
+        denoise: 35,
+        clarity: 45,
+      }));
     }
-  }, []);
+  }, [updateConfig]);
 
   // Analyze image on upload for Stage 1 Diagnostics
   const analyzeInputImage = useCallback(async (file: File) => {
+    setIsUploading(true);
     try {
       const url = URL.createObjectURL(file);
       const img = new Image();
@@ -129,6 +192,7 @@ export default function ImageUpscalerPage() {
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) {
         URL.revokeObjectURL(url);
+        setIsUploading(false);
         return;
       }
 
@@ -137,19 +201,23 @@ export default function ImageUpscalerPage() {
       URL.revokeObjectURL(url);
 
       const diag = calculateImageDiagnostics(imgData);
+      diag.actualEngine = "Browser resize/sharpen";
       setInputDiagnostics(diag);
 
       // Auto-set recommended scale for tiny image
       if (diag.isTinyImage) {
-        setScale(diag.is8xEligible ? 8 : 4);
+        const recommendedFactor = (diag.is8xEligible ? 4 : 4) as 1 | 2 | 4;
+        updateConfig({ factor: recommendedFactor });
       }
 
       // Auto-set recommended preset
       handlePresetSelect(diag.recommendedPreset);
     } catch (err) {
       console.warn("[image-upscaler] Failed to run auto-diagnostics:", err);
+    } finally {
+      setIsUploading(false);
     }
-  }, [handlePresetSelect]);
+  }, [handlePresetSelect, updateConfig]);
 
   const handleFileSelect = useCallback((file: File | null) => {
     urlRegistryRef.current.revokeAll();
@@ -288,6 +356,10 @@ export default function ImageUpscalerPage() {
   const handleEnhance = async () => {
     if (!imageFile || isLoading) return;
 
+    // Read synchronously from authoritative ref to guarantee zero stale React closure bugs
+    const currentConfig = { ...configRef.current };
+    const targetFactor = currentConfig.factor;
+
     setIsLoading(true);
     setError(null);
     setResult(null);
@@ -311,21 +383,33 @@ export default function ImageUpscalerPage() {
     const abortController = new AbortController();
     activeAbortControllerRef.current = abortController;
 
+    // Generate unique processing job ID
+    const currentJobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    activeJobIdRef.current = currentJobId;
+
     try {
       const res = await upscaleImageStudio(imageFile, {
-        scale,
-        preset,
-        faceEnhance,
-        sharpness,
-        denoise,
-        clarity,
+        scale: targetFactor,
+        preset: currentConfig.preset as UpscalePreset,
+        faceEnhance: currentConfig.faceEnhancement,
+        sharpness: currentConfig.sharpness,
+        denoise: currentConfig.denoise,
+        clarity: currentConfig.clarity,
+        jobId: currentJobId,
+        config: currentConfig,
         signal: abortController.signal,
         onProgress: (p) => {
-          setProgress(p);
+          if (activeJobIdRef.current === currentJobId) {
+            setProgress(p);
+          }
         },
       });
 
-      if (abortController.signal.aborted) return;
+      // Ignore stale worker results or aborted jobs
+      if (abortController.signal.aborted || activeJobIdRef.current !== currentJobId) {
+        console.warn(`[image-upscaler] Ignoring stale result from earlier job ${currentJobId}`);
+        return;
+      }
 
       const registeredUrl = urlRegistryRef.current.create(res.blob);
       res.outputUrl = registeredUrl;
@@ -334,7 +418,7 @@ export default function ImageUpscalerPage() {
 
       const autoName = generateUpscaleSmartName({
         originalName: imageFile?.name,
-        preset,
+        preset: currentConfig.preset,
         isSmoothObject: res.diagnostics.isSmoothObjectLikely,
         isDocument: res.diagnostics.isDocumentLikely,
         skinToneRatio: res.diagnostics.skinToneRatio,
@@ -355,7 +439,9 @@ export default function ImageUpscalerPage() {
         message: err instanceof Error ? err.message : "Upscaling processing failed.",
       });
     } finally {
-      setIsLoading(false);
+      if (activeJobIdRef.current === currentJobId) {
+        setIsLoading(false);
+      }
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
@@ -402,7 +488,7 @@ export default function ImageUpscalerPage() {
       sanitizedBase ||
       generateUpscaleSmartName({
         originalName: imageFile?.name,
-        preset,
+        preset: config.preset,
         isSmoothObject: result.diagnostics.isSmoothObjectLikely,
         isDocument: result.diagnostics.isDocumentLikely,
         skinToneRatio: result.diagnostics.skinToneRatio,
@@ -417,6 +503,17 @@ export default function ImageUpscalerPage() {
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
   };
+
+  // Derive unified workflow status area
+  const currentStatus: "Ready" | "Uploading" | "Processing" | "Complete" | "Error" = error
+    ? "Error"
+    : isLoading
+    ? "Processing"
+    : isUploading
+    ? "Uploading"
+    : result
+    ? "Complete"
+    : "Ready";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8">
@@ -437,20 +534,36 @@ export default function ImageUpscalerPage() {
                   MODULE 03
                 </span>
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                  ធ្វើរូបឱ្យច្បាស់ (AI Image Enhancer & Super-Resolution Studio)
+                  HD Resize & Sharpen (ពង្រីកទំហំ & បង្កើនភាពច្បាស់)
                 </h1>
               </div>
               <p className="mt-0.5 text-xs text-slate-400">
-                Multi-Stage Pixel Restoration & Lanczos-3 Super-Resolution · 100% Client-Side Web Worker
+                Lanczos-3 High-Order Resampling & PDE Shock Sharpening · Client-Side Web Worker
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="rounded-xl border border-cyan-500/30 bg-slate-900/80 px-3 py-1.5 font-mono text-xs font-semibold text-cyan-300 shadow-[0_0_15px_rgba(0,240,255,0.1)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              STUDIO 4X ENGINE READY
-            </span>
+          {/* Unified Status Area (Requirement 4) */}
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 flex items-center gap-2 shadow-sm">
+              <span className="text-slate-400">STATUS:</span>
+              <span
+                data-testid="upscale-unified-status"
+                className={`font-bold ${
+                  currentStatus === "Complete"
+                    ? "text-emerald-400"
+                    : currentStatus === "Processing"
+                    ? "text-cyan-400"
+                    : currentStatus === "Uploading"
+                    ? "text-amber-400"
+                    : currentStatus === "Error"
+                    ? "text-rose-400"
+                    : "text-slate-300"
+                }`}
+              >
+                ● {currentStatus.toUpperCase()}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -468,6 +581,7 @@ export default function ImageUpscalerPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    data-testid="sample-image-upscale-btn"
                     onClick={handleLoadSample}
                     className="flex items-center gap-1 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-2 py-1 text-[11px] font-mono font-bold text-cyan-300 hover:bg-cyan-900/50 transition-colors cursor-pointer"
                     title="សាកល្បងជាមួយរូបភាពគំរូ"
@@ -498,31 +612,32 @@ export default function ImageUpscalerPage() {
               <ImageDiagnosticsCard
                 diagnostics={inputDiagnostics}
                 fileSize={imageFile?.size}
-                selectedPreset={preset}
+                selectedPreset={config.preset as UpscalePreset}
                 onApplyPreset={handlePresetSelect}
               />
             )}
 
             {/* Enhancement Controls */}
             <UpscaleControls
-              scale={scale}
+              scale={config.factor}
               onChangeScale={(s) => {
                 cyberAudio.playClick();
-                setScale(s);
+                const factor = (s > 4 ? 4 : s) as 1 | 2 | 4;
+                updateConfig({ factor });
               }}
-              preset={preset}
+              preset={config.preset as UpscalePreset}
               onChangePreset={handlePresetSelect}
-              faceEnhance={faceEnhance}
+              faceEnhance={config.faceEnhancement}
               onToggleFaceEnhance={(f) => {
                 cyberAudio.playClick();
-                setFaceEnhance(f);
+                updateConfig({ faceEnhancement: f });
               }}
-              sharpness={sharpness}
-              onChangeSharpness={setSharpness}
-              denoise={denoise}
-              onChangeDenoise={setDenoise}
-              clarity={clarity}
-              onChangeClarity={setClarity}
+              sharpness={config.sharpness}
+              onChangeSharpness={(val) => updateConfig({ sharpness: val })}
+              denoise={config.denoise}
+              onChangeDenoise={(val) => updateConfig({ denoise: val })}
+              clarity={config.clarity}
+              onChangeClarity={(val) => updateConfig({ clarity: val })}
               is8xEligible={inputDiagnostics?.is8xEligible}
               isTinyImage={inputDiagnostics?.isTinyImage}
               isLoading={isLoading}
@@ -549,33 +664,52 @@ export default function ImageUpscalerPage() {
               </div>
             )}
 
-            {/* Live Progress Scanner HUD */}
+            {/* Live Progress Scanner HUD (Decorative animations paused during processing if needed) */}
             {isLoading && (
               <RoboticScanner
                 active={true}
-                moduleName="STUDIO SUPER-RESOLUTION // [PDE SHOCK & STEPPED PYRAMID]"
+                moduleName="HD RESIZE & SHARPEN // [LANCZOS-3 & PDE SHOCK]"
                 steps={[
                   "STAGE 1/5: SMART IMAGE DIAGNOSTICS & NOISE ESTIMATE...",
                   "STAGE 2/5: PRE-UPSCALE ARTIFACT REMOVAL (KUWAHARA FILTER)...",
-                  `STAGE 3/5: STEPPED 2X PYRAMID RESAMPLING (${scale}X) & PDE SHOCK...`,
+                  `STAGE 3/5: STEPPED PYRAMID RESAMPLING (${config.factor}X) & PDE SHOCK...`,
                   "STAGE 4/5: MULTI-SCALE MICRO-CONTRAST & HALO-FREE CLAMPING...",
-                  preset === "text"
+                  config.preset === "text"
                     ? "STAGE 5/5: KHMER TEXT & FORMULA STROKE CRISPNESS BOOSTER..."
                     : "STAGE 5/5: ADAPTIVE LUMINANCE UNSHARP MASKING PASS...",
                 ]}
-                subtext="Multi-stage deterministic super-resolution running in Web Worker with zero cloud lag"
+                subtext="Multi-stage deterministic Lanczos-3 resampling running in Web Worker"
               />
             )}
 
             {/* Comparison Workspace (Active when result is ready) */}
             {result && previewUrl && !isLoading && (
               <div className="flex flex-col gap-4">
+                {/* Fallback Non-Success Banner (Requirement 10: Never silently claim 4x) */}
+                {result.isFallback && (
+                  <div
+                    data-testid="upscale-fallback-banner"
+                    className="flex items-center gap-2.5 rounded-xl border border-amber-500/50 bg-amber-950/50 p-3.5 font-mono text-xs text-amber-200 shadow-lg animate-pulse"
+                  >
+                    <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+                    <div className="flex-1">
+                      <span className="font-bold text-amber-300 uppercase">
+                        {result.fallbackReason || `${result.requestedScale}x unavailable — output generated at ${result.scale}x`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Before / After Slider Workspace */}
                 <BeforeAfterSlider
                   beforeSrc={previewUrl}
                   afterSrc={result.outputUrl}
                   beforeLabel="BEFORE (រូបដើម)"
-                  afterLabel={`AFTER (ក្រោយកែ - ច្បាស់ ${result.scale}X)`}
+                  afterLabel={
+                    result.isFallback
+                      ? `AFTER (${result.scale}X HD · ${result.requestedScale}X unavailable)`
+                      : `AFTER (${result.scale}X HD)`
+                  }
                   srcWidth={result.srcWidth}
                   srcHeight={result.srcHeight}
                   outputWidth={result.outputWidth}
@@ -590,7 +724,7 @@ export default function ImageUpscalerPage() {
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                         <span className="font-mono text-xs font-bold text-white uppercase tracking-wider">
-                          លទ្ធផលកែសម្រួលរួចរាល់ (Enhancement Complete)
+                          លទ្ធផលកែសម្រួលរួចរាល់ ({result.scale}X HD Complete)
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-slate-400">
@@ -636,7 +770,7 @@ export default function ImageUpscalerPage() {
                         cyberAudio.playClick();
                         const freshAutoName = generateUpscaleSmartName({
                           originalName: imageFile?.name,
-                          preset,
+                          preset: config.preset,
                           isSmoothObject: result.diagnostics.isSmoothObjectLikely,
                           isDocument: result.diagnostics.isDocumentLikely,
                           skinToneRatio: result.diagnostics.skinToneRatio,
@@ -688,11 +822,12 @@ export default function ImageUpscalerPage() {
                     {/* Download Button */}
                     <button
                       type="button"
+                      data-testid="upscale-download-btn"
                       onClick={handleDownload}
                       className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-6 py-3 font-mono text-xs font-bold text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.35)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] transition-all cursor-pointer"
                     >
                       <Download className="h-4 w-4" />
-                      <span>ទាញយករូបច្បាស់ (Export {exportFormat.toUpperCase()})</span>
+                      <span>ទាញយករូប ({exportFormat.toUpperCase()} · {result.outputWidth}×{result.outputHeight}px)</span>
                     </button>
                   </div>
                 </div>
@@ -715,11 +850,11 @@ export default function ImageUpscalerPage() {
                       </div>
                     </div>
                     <h3 className="font-mono text-sm font-bold text-white">
-                      ត្រៀមកែសម្រួល (READY FOR ENHANCEMENT)
+                      ត្រៀមកែសម្រួល (READY FOR HD RESIZE)
                     </h3>
                     <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-                      ជ្រើសរើស Preset ឬចុចប៊ូតុង{" "}
-                      <span className="text-amber-400 font-bold">&quot;ធ្វើឱ្យច្បាស់ (ENHANCE NOW)&quot;</span>{" "}
+                      ជ្រើសរើស Factor ({config.factor}x) ឬចុចប៊ូតុង{" "}
+                      <span className="text-amber-400 font-bold">&quot;HD Resize & Sharpen&quot;</span>{" "}
                       ដើម្បីដំណើរការ Stage 1 ដល់ 5។
                     </p>
                   </div>
@@ -729,7 +864,7 @@ export default function ImageUpscalerPage() {
                       <Sparkles className="h-8 w-8" />
                     </div>
                     <h3 className="mt-4 font-mono text-sm font-bold text-white uppercase tracking-wider">
-                      SUPER-RESOLUTION COMPARISON STANDBY
+                      HD RESIZE & SHARPEN STANDBY
                     </h3>
                     <p className="mt-2 text-xs text-slate-400 leading-relaxed">
                       សូមបញ្ចូលរូបភាព ឬចុចប៊ូតុង{" "}

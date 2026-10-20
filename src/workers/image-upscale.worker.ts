@@ -23,8 +23,8 @@ self.onmessage = async (e: MessageEvent) => {
 
   if (data.type === "START") {
     isAborted = false;
+    const { jobId, buffer, width, height, options, config } = data;
     try {
-      const { buffer, width, height, options } = data;
       const srcArray = new Uint8ClampedArray(buffer);
 
       const abortSignal = {
@@ -33,12 +33,17 @@ self.onmessage = async (e: MessageEvent) => {
         },
       } as unknown as AbortSignal;
 
+      const requestedScale = config?.factor ?? options?.scale ?? 2;
       const pipelineOptions: UpscaleOptions = {
         ...options,
+        scale: requestedScale,
         signal: abortSignal,
+        jobId,
+        config,
         onProgress: (progress: UpscaleProgress) => {
           self.postMessage({
             type: "PROGRESS",
+            jobId,
             progress,
           });
         },
@@ -50,19 +55,29 @@ self.onmessage = async (e: MessageEvent) => {
       );
 
       if (isAborted) {
-        self.postMessage({ type: "ERROR", error: "Upscaling aborted by user." });
+        self.postMessage({ type: "ERROR", jobId, error: "Upscaling aborted by user." });
         return;
       }
+
+      // Calculate actual factor produced by the pipeline
+      const actualFactor = Math.round(result.width / width);
 
       // Transfer ArrayBuffer back to main thread for zero-copy performance
       const outBuffer = result.data.buffer;
       self.postMessage(
         {
           type: "SUCCESS",
+          jobId,
           buffer: outBuffer,
           width: result.width,
           height: result.height,
-          diagnostics: result.diagnostics,
+          factor: actualFactor,
+          requestedFactor: requestedScale,
+          engine: "Browser resize/sharpen",
+          diagnostics: {
+            ...result.diagnostics,
+            actualEngine: "Browser resize/sharpen",
+          },
         },
         // @ts-expect-error Transferable postMessage
         [outBuffer]
@@ -71,6 +86,7 @@ self.onmessage = async (e: MessageEvent) => {
       const message = err instanceof Error ? err.message : String(err);
       self.postMessage({
         type: "ERROR",
+        jobId,
         error: message,
       });
     }

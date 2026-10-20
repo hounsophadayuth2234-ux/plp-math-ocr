@@ -2,19 +2,19 @@
   {
     "testNumber": 1,
     "testName": "Fast 512px Cold",
-    "measuredMs": 50,
+    "measuredMs": 55,
     "details": {
       "resolution": "512x512",
-      "decodeMs": 0.002900000000181535,
-      "resizeMs": 14.31699999999978,
+      "decodeMs": 0.002199999999902502,
+      "resizeMs": 17.93769999999995,
       "modelLoadMs": 28.5,
-      "inferenceMs": 6.693300000000136
+      "inferenceMs": 8.79989999999998
     }
   },
   {
     "testNumber": 2,
     "testName": "Fast 512px Warm",
-    "measuredMs": 10,
+    "measuredMs": 15,
     "details": {
       "resolution": "512x512",
       "modelLoadMs": 0
@@ -23,7 +23,7 @@
   {
     "testNumber": 3,
     "testName": "Fast 640px Cold",
-    "measuredMs": 49,
+    "measuredMs": 108,
     "details": {
       "resolution": "640x640",
       "modelLoadMs": 25
@@ -32,7 +32,7 @@
   {
     "testNumber": 4,
     "testName": "Fast 640px Warm",
-    "measuredMs": 15,
+    "measuredMs": 26,
     "details": {
       "resolution": "640x640",
       "modelLoadMs": 0
@@ -41,7 +41,7 @@
   {
     "testNumber": 5,
     "testName": "Fast 768px Cold",
-    "measuredMs": 58,
+    "measuredMs": 70,
     "details": {
       "resolution": "768x768",
       "modelLoadMs": 26.5
@@ -50,7 +50,7 @@
   {
     "testNumber": 6,
     "testName": "Fast 768px Warm",
-    "measuredMs": 21,
+    "measuredMs": 41,
     "details": {
       "resolution": "768x768",
       "modelLoadMs": 0
@@ -59,7 +59,7 @@
   {
     "testNumber": 7,
     "testName": "Fast 1024px",
-    "measuredMs": 10,
+    "measuredMs": 11,
     "details": {
       "resolution": "1024x1024",
       "modelLoadMs": 0
@@ -68,7 +68,7 @@
   {
     "testNumber": 8,
     "testName": "Balanced Mode",
-    "measuredMs": 867,
+    "measuredMs": 1075,
     "details": {
       "choke": 1,
       "feather": 0.7,
@@ -78,7 +78,7 @@
   {
     "testNumber": 9,
     "testName": "Fine Details Mode",
-    "measuredMs": 1003,
+    "measuredMs": 1240,
     "details": {
       "choke": 1.5,
       "feather": 1,
@@ -88,10 +88,10 @@
   {
     "testNumber": 10,
     "testName": "Person + Text Mode (Khmer & English)",
-    "measuredMs": 340,
+    "measuredMs": 656,
     "details": {
-      "khmerTextMs": 214,
-      "englishTextMs": 27,
+      "khmerTextMs": 302,
+      "englishTextMs": 58,
       "khmerStrokeRetention": "100.0%",
       "englishStrokeRetention": "100%"
     }
@@ -99,7 +99,7 @@
   {
     "testNumber": 11,
     "testName": "Person-Only Mode",
-    "measuredMs": 559,
+    "measuredMs": 1179,
     "details": {
       "textDetection": "Skipped (Mode does not require text detection)",
       "personAreaRatio": 1
@@ -108,7 +108,7 @@
   {
     "testNumber": 12,
     "testName": "Product-Only Mode",
-    "measuredMs": 148,
+    "measuredMs": 165,
     "details": {
       "textDetection": "Skipped (Mode does not require text detection)"
     }
@@ -116,16 +116,16 @@
   {
     "testNumber": 13,
     "testName": "UI Responsiveness on Mobile Viewport",
-    "measuredMs": 50,
+    "measuredMs": 53,
     "details": {
-      "mainThreadBlockingMs": 0,
+      "mainThreadBlockingMs": 3,
       "uiResponsiveness": "Responsive (<16ms main thread lag)"
     }
   },
   {
     "testNumber": 14,
     "testName": "Worker Cancellation Test",
-    "measuredMs": 1,
+    "measuredMs": 4,
     "details": {
       "abortedCleanly": true,
       "errorType": "AbortError"
@@ -143,7 +143,7 @@
   {
     "testNumber": 16,
     "testName": "Original-Resolution Export Test",
-    "measuredMs": 300,
+    "measuredMs": 457,
     "details": {
       "originalDimensions": "1024x1024",
       "exportDimensions": "1024x1024",

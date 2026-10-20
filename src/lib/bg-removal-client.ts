@@ -581,7 +581,9 @@ export async function removeBackgroundBrowser(
 
   const mode = options?.mode || "preview";
   const defaultMaxDim = mode === "preview" ? 1024 : 2048;
-  const targetCap = options?.targetMaxDimension ? Math.min(options.targetMaxDimension, defaultMaxDim) : defaultMaxDim;
+  const targetCap = options?.targetMaxDimension
+    ? Math.min(options.targetMaxDimension, 2048)
+    : defaultMaxDim;
   const modelName = "isnet_fp16" as const;
 
   const tStart = performance.now();
@@ -1566,6 +1568,9 @@ export interface SegmentSelectionOptions {
   manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
   secondaryProposalMask?: Uint8ClampedArray | Uint8Array | null;
   precomputedTextDetection?: TextDetectionExecutionResult;
+  keepPerson?: boolean;
+  keepText?: boolean;
+  keepGraphics?: boolean;
 }
 
 export interface SegmentSelectionResult {
@@ -1724,9 +1729,16 @@ export async function segmentObjectSelection(
       polygon: options.polygon,
     });
   } else {
+    const workingDimension = options?.targetMaxDimension ?? (
+      options?.quality === "fine_details"
+        ? 1536
+        : options?.quality === "balanced"
+        ? 1024
+        : 768
+    );
     initialOutput = await removeBackgroundBrowser(imageFile, {
-      mode: "preview",
-      targetMaxDimension: options?.targetMaxDimension,
+      mode: options?.quality === "fine_details" ? "final" : "preview",
+      targetMaxDimension: workingDimension,
       alphaMatting: false,
       signal: options?.signal,
       onProgress: options?.onProgress,
@@ -1791,9 +1803,9 @@ export async function segmentObjectSelection(
       width,
       height,
       {
-        keepPerson: true,
-        keepText: true,
-        keepGraphics: false,
+        keepPerson: options?.keepPerson !== false,
+        keepText: options?.keepText !== false,
+        keepGraphics: Boolean(options?.keepGraphics),
         graphicsMask: tRes.graphicsMask,
       }
     );

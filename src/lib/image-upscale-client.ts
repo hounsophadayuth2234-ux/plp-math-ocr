@@ -10,6 +10,7 @@ import {
   UpscaleOptions,
   UpscaleResult,
   ImageDiagnostics,
+  UpscaleScale,
 } from "./image-upscale-engine";
 
 export * from "./image-upscale-engine";
@@ -23,6 +24,12 @@ export async function upscaleImageStudio(
   options: UpscaleOptions
 ): Promise<UpscaleResult> {
   const startTime = performance.now();
+
+  const requestedFactor = options.config?.factor ?? options.scale ?? 2;
+  const normalizedOptions: UpscaleOptions = {
+    ...options,
+    scale: requestedFactor,
+  };
 
   // Load image to HTML5 Image
   const imgUrl = URL.createObjectURL(imageSource);
@@ -52,18 +59,20 @@ export async function upscaleImageStudio(
   URL.revokeObjectURL(imgUrl);
 
   let outputData: Uint8ClampedArray = srcImageData.data;
-  let outW = srcW * options.scale;
-  let outH = srcH * options.scale;
+  let outW = srcW * requestedFactor;
+  let outH = srcH * requestedFactor;
   let diagnostics: ImageDiagnostics | null = null;
+  let actualFactor: UpscaleScale = requestedFactor as UpscaleScale;
 
   // Try Web Worker first
   let workerSucceeded = false;
   if (typeof Worker !== "undefined" && typeof window !== "undefined") {
     try {
-      const workerResult = await executeInWorker(srcImageData, options);
+      const workerResult = await executeInWorker(srcImageData, normalizedOptions);
       outputData = workerResult.data;
       outW = workerResult.width;
       outH = workerResult.height;
+      actualFactor = (workerResult.factor ?? Math.round(outW / srcW)) as UpscaleScale;
       diagnostics = workerResult.diagnostics;
       workerSucceeded = true;
     } catch (workerErr) {
@@ -79,12 +88,19 @@ export async function upscaleImageStudio(
 
   // Fallback to main-thread pipeline if worker failed or unavailable
   if (!workerSucceeded) {
-    const pipelineResult = await runImageUpscalePipeline(srcImageData, options);
+    const pipelineResult = await runImageUpscalePipeline(srcImageData, normalizedOptions);
     outputData = pipelineResult.data;
     outW = pipelineResult.width;
     outH = pipelineResult.height;
+    actualFactor = Math.round(outW / srcW) as UpscaleScale;
     diagnostics = pipelineResult.diagnostics;
   }
+
+  // Detect fallback condition
+  const isFallback = actualFactor !== requestedFactor;
+  const fallbackReason = isFallback
+    ? `${requestedFactor}x unavailable — output generated at ${actualFactor}x`
+    : undefined;
 
   // Export to Canvas & Blob
   const outCanvas = document.createElement("canvas");
@@ -113,6 +129,9 @@ export async function upscaleImageStudio(
   const outputUrl = URL.createObjectURL(blob);
   const elapsedMs = Math.round(performance.now() - startTime);
 
+  const finalDiagnostics: ImageDiagnostics = diagnostics || calculateImageDiagnostics(srcImageData);
+  finalDiagnostics.actualEngine = "Browser resize/sharpen";
+
   return {
     outputUrl,
     blob,
@@ -120,11 +139,16 @@ export async function upscaleImageStudio(
     srcHeight: srcH,
     outputWidth: outW,
     outputHeight: outH,
-    scale: options.scale,
-    diagnostics: diagnostics || calculateImageDiagnostics(srcImageData),
+    scale: actualFactor, // Actual factor returned by the engine
+    requestedScale: requestedFactor,
+    isFallback,
+    fallbackReason,
+    diagnostics: finalDiagnostics,
     elapsedMs,
-    label: "Studio Super-Resolution Engine",
-    model: `Studio Super-Resolution (${options.scale}x · PDE Shock · Stepped Pyramid)`,
+    label: "HD Resize & Sharpen",
+    model: `HD Resize & Sharpen (${actualFactor}x · Lanczos-3 · PDE Shock)`,
+    engine: "Browser resize/sharpen",
+    jobId: options.jobId,
   };
 }
 
@@ -139,6 +163,7 @@ function executeInWorker(
   data: Uint8ClampedArray;
   width: number;
   height: number;
+  factor: number;
   diagnostics: ImageDiagnostics;
 }> {
   return new Promise((resolve, reject) => {
@@ -170,7 +195,7 @@ function executeInWorker(
         "abort",
         () => {
           if (worker) {
-            worker.postMessage({ type: "ABORT" });
+            worker.postMessage({ type: "ABORT", jobId: options.jobId });
           }
           cleanup();
           reject(new Error("Upscaling aborted by user."));
@@ -183,6 +208,12 @@ function executeInWorker(
       const msg = e.data;
       if (!msg) return;
 
+      // Ignore stale worker results from an earlier job
+      if (options.jobId && msg.jobId && msg.jobId !== options.jobId) {
+        console.warn(`[image-upscale-client] Discarding stale worker result from earlier job ${msg.jobId} (current: ${options.jobId})`);
+        return;
+      }
+
       if (msg.type === "PROGRESS") {
         options.onProgress?.(msg.progress);
       } else if (msg.type === "SUCCESS") {
@@ -191,6 +222,7 @@ function executeInWorker(
           data: new Uint8ClampedArray(msg.buffer),
           width: msg.width,
           height: msg.height,
+          factor: msg.factor ?? Math.round(msg.width / srcImageData.width),
           diagnostics: msg.diagnostics,
         });
       } else if (msg.type === "ERROR") {
@@ -209,9 +241,11 @@ function executeInWorker(
     worker.postMessage(
       {
         type: "START",
+        jobId: options.jobId,
         buffer,
         width: srcImageData.width,
         height: srcImageData.height,
+        config: options.config,
         options: {
           scale: options.scale,
           preset: options.preset,

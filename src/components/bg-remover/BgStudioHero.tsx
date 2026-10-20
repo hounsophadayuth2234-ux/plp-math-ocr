@@ -4,7 +4,17 @@ import React from "react";
 import { Sparkles } from "lucide-react";
 import { StudioLocale, getTranslation } from "@/lib/i18n";
 
-export function BgStudioHero({ locale = "km" }: { locale?: StudioLocale }) {
+export function BgStudioHero({
+  locale = "km",
+  selectedEngine = "browser",
+  workerStatus = "not_configured",
+  isModelCached = false,
+}: {
+  locale?: StudioLocale;
+  selectedEngine?: "browser" | "worker";
+  workerStatus?: "not_configured" | "checking" | "ready" | "unavailable" | "configured";
+  isModelCached?: boolean;
+}) {
   const t = (k: string) => getTranslation(locale, k);
 
   return (
@@ -38,10 +48,46 @@ export function BgStudioHero({ locale = "km" }: { locale?: StudioLocale }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-          <span className="flex items-center gap-1.5 border border-slate-800 bg-slate-900/60 px-2.5 py-1">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-emerald-400 font-bold">{t("hero.privacy")}</span>
+        {/* Engine Status Indicators (Requirement 3) */}
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+          {/* Browser AI Status */}
+          <span
+            data-testid="browser-ai-status-indicator"
+            className="flex items-center gap-1.5 border border-cyan-500/40 bg-slate-900/80 px-2.5 py-1 rounded"
+          >
+            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="text-cyan-300 font-bold">Browser AI:</span>
+            <span className="text-slate-300">{isModelCached ? "Warm (Cached)" : "Ready (WebGPU/WASM)"}</span>
+          </span>
+
+          {/* Remote Worker Status */}
+          <span
+            data-testid="remote-worker-status-indicator"
+            className={`flex items-center gap-1.5 border px-2.5 py-1 rounded ${
+              workerStatus === "ready"
+                ? "border-emerald-500/40 bg-emerald-950/40 text-emerald-300"
+                : workerStatus === "unavailable"
+                ? "border-rose-500/40 bg-rose-950/40 text-rose-300"
+                : "border-slate-800 bg-slate-900/60 text-slate-400"
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                workerStatus === "ready"
+                  ? "bg-emerald-400"
+                  : workerStatus === "unavailable"
+                  ? "bg-rose-400"
+                  : "bg-slate-500"
+              }`}
+            />
+            <span className="font-bold">Worker API:</span>
+            <span>
+              {workerStatus === "ready"
+                ? "Online"
+                : workerStatus === "unavailable"
+                ? "Offline (Retry / Browser AI)"
+                : "Not Configured"}
+            </span>
           </span>
         </div>
       </div>

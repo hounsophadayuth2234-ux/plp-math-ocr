@@ -136,6 +136,21 @@ export function ImageDiagnosticsCard({
         </div>
       </div>
 
+      {/* Actual Engine Disclosure Badge (Requirement 13) */}
+      <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-2.5 text-xs font-mono">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 text-[11px]">Processing Engine:</span>
+          <span data-testid="diag-actual-engine" className="rounded bg-cyan-950/80 px-2 py-0.5 text-[11px] font-bold text-cyan-300 border border-cyan-500/30">
+            {diagnostics.actualEngine || "Browser resize/sharpen"}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-slate-400">
+          <span>AI Super-Resolution Model: <strong className="text-slate-300">None (Lanczos/PDE Shaders)</strong></span>
+          <span>·</span>
+          <span>Remote Worker: <strong className="text-slate-300">Local Browser Worker</strong></span>
+        </div>
+      </div>
+
       {/* Preset Recommendation Alert */}
       <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-950/30 p-3">
         <div className="flex items-start gap-2.5">

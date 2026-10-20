@@ -489,11 +489,11 @@ export default function BgRemoverPage() {
   };
 
   const handleRunSegmentation = async (mode: "preview" | "final" | "worker", targetMaxDim?: number) => {
-    if (!imageFile) return;
-    if (isProcessingRef.current) {
-      console.log("[bg-remover] Ignoring duplicate click during processing");
+    if (!imageFile || isProcessingRef.current) {
+      console.log("[bg-remover] Ignoring duplicate click or missing image during processing");
       return;
     }
+    isProcessingRef.current = true;
     const priorResult = cachedResult;
     if (cachedResult) {
       setPreviousResult(cachedResult);
@@ -715,6 +715,10 @@ export default function BgRemoverPage() {
         const segResult = await segmentObjectSelection(imageFile, {
           mode: activeSelectionMode,
           targetMaxDimension: effectiveDim,
+          quality: edgeQuality,
+          keepPerson: personSubOption,
+          keepText: textSubOption,
+          keepGraphics: keepGraphicsSubOption,
           precomputedTextDetection,
           signal: abortController.signal,
           onProgress: (p) => {
@@ -918,6 +922,74 @@ export default function BgRemoverPage() {
     }
   };
 
+  // Instant canvas generator for Sample Image testing (Requirement 16)
+  const handleLoadSample = () => {
+    cyberAudio.playClick();
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Solid blue backdrop
+    ctx.fillStyle = "#1e3a8a";
+    ctx.fillRect(0, 0, 640, 480);
+
+    // Grid details
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < 640; x += 40) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 480);
+      ctx.stroke();
+    }
+
+    // Centered subject (avatar with clothing and face)
+    ctx.fillStyle = "#f59e0b"; // Clothing
+    ctx.beginPath();
+    ctx.arc(320, 360, 120, Math.PI, 0, false);
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = "#fde68a";
+    ctx.beginPath();
+    ctx.arc(320, 200, 70, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hair
+    ctx.fillStyle = "#1e293b";
+    ctx.beginPath();
+    ctx.arc(320, 180, 75, Math.PI * 0.8, Math.PI * 2.2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = "#0f172a";
+    ctx.beginPath();
+    ctx.arc(295, 195, 7, 0, Math.PI * 2);
+    ctx.arc(345, 195, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Smile
+    ctx.strokeStyle = "#e11d48";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(320, 230, 24, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+
+    // Foreground text label
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 20px 'Kantumruy Pro', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("គំរូកាត់ផ្ទៃខាងក្រោយ (Sample Test)", 320, 440);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], "sample-portrait.png", { type: "image/png" });
+      handleFileSelect(file);
+    }, "image/png");
+  };
+
   const handleReset = () => {
     cyberAudio.playClick();
     cyberAudio.stopScanningHum();
@@ -976,8 +1048,39 @@ export default function BgRemoverPage() {
       </div>
 
       {/* ── Workstation Engineering Specification Header Plate ── */}
-      <div className="relative z-10">
-        <BgStudioHero locale={locale} />
+      <div className="relative z-10 space-y-2">
+        <BgStudioHero
+          locale={locale}
+          selectedEngine={selectedEngine}
+          workerStatus={workerStatus}
+          isModelCached={isModelCached}
+        />
+
+        {/* Unified Status Area (Requirement 4) */}
+        <div className="flex items-center justify-between border border-slate-800 bg-slate-900/90 px-4 py-2 font-mono text-xs shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">STUDIO STATUS:</span>
+            <span
+              data-testid="bg-unified-status"
+              className={`font-bold ${
+                error
+                  ? "text-rose-400"
+                  : isProcessing
+                  ? "text-cyan-400"
+                  : cachedResult
+                  ? "text-emerald-400"
+                  : imageFile
+                  ? "text-amber-400"
+                  : "text-slate-300"
+              }`}
+            >
+              ● {error ? "ERROR" : isProcessing ? "PROCESSING" : cachedResult ? "COMPLETE" : imageFile ? "IMAGE LOADED" : "READY"}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-500 hidden sm:inline">
+            Ready → Uploading → Processing → Complete → Error
+          </span>
+        </div>
       </div>
 
 
@@ -1017,7 +1120,23 @@ export default function BgRemoverPage() {
             </div>
 
             {/* ── GROUP A: UPLOAD ── */}
-            <div className="space-y-1">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-300 uppercase font-mono">
+                  1. Image Intake / បញ្ចូលរូបភាព
+                </span>
+                <button
+                  type="button"
+                  data-testid="sample-image-btn"
+                  onClick={handleLoadSample}
+                  disabled={isProcessing}
+                  className="min-h-[32px] flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-950/60 px-2.5 py-1 text-[11px] font-mono font-bold text-cyan-300 hover:bg-cyan-900/60 transition-colors cursor-pointer disabled:opacity-50"
+                  title="សាកល្បងជាមួយរូបភាពគំរូ"
+                >
+                  <Zap className="h-3 w-3" />
+                  <span>សាកល្បងរូបគំរូ (Sample)</span>
+                </button>
+              </div>
               <BgUploadZone
                 onFileSelect={handleFileSelect}
                 selectedFile={imageFile}

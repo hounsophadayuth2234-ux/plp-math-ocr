@@ -11,7 +11,8 @@ export type ProcessingStatusLabel =
   | "Demo preview"
   | "Enhanced resize — not AI super-resolution"
   | "Document Safe Mode (AI Matte Disabled)"
-  | "Studio Super-Resolution Engine";
+  | "Studio Super-Resolution Engine"
+  | "HD Resize & Sharpen";
 
 export interface AppError {
   code:
