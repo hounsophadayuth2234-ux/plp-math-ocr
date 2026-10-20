@@ -17,10 +17,13 @@ import {
 import { StudioLocale, getTranslation } from "@/lib/i18n";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ProcessingStageMetrics } from "@/lib/bg-removal-client";
-import { MaskDiagnostics } from "@/lib/bg-compositor";
+import { MaskDiagnostics, SelectionMode } from "@/lib/bg-compositor";
 
 export interface BgAdvancedSettingsProps {
   locale: StudioLocale;
+  // Specialized Selection Modes
+  activeSelectionMode?: SelectionMode;
+  onSelectSelectionMode?: (mode: SelectionMode) => void;
   // Group A: Processing
   selectedEngine: "browser" | "worker";
   onSelectEngine: (engine: "browser" | "worker") => void;
@@ -46,12 +49,22 @@ export interface BgAdvancedSettingsProps {
   isModelCached: boolean;
   metrics?: ProcessingStageMetrics;
   diagnostics?: MaskDiagnostics;
+  visualDebug?: {
+    initialMaskUrl?: string;
+    refinedMaskUrl?: string;
+    removedComponentsUrl?: string;
+    finalAlphaUrl?: string;
+    removedComponentsCount?: number;
+    hasIsolatedBlobs?: boolean;
+  };
   // Reset Action
   onResetAdvanced: () => void;
 }
 
 export function BgAdvancedSettings({
   locale,
+  activeSelectionMode,
+  onSelectSelectionMode,
   selectedEngine,
   onSelectEngine,
   isWorkerConfigured,
@@ -73,6 +86,7 @@ export function BgAdvancedSettings({
   isModelCached,
   metrics,
   diagnostics,
+  visualDebug,
   onResetAdvanced,
 }: BgAdvancedSettingsProps) {
   const t = (k: string) => getTranslation(locale, k);
@@ -120,6 +134,88 @@ export function BgAdvancedSettings({
             <span>{t("advanced.reset")}</span>
           </button>
         </div>
+
+        {/* Specialized Keep Modes */}
+        {onSelectSelectionMode && (
+          <div className="border border-slate-800 bg-slate-900/60 p-3 space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 uppercase">
+              <span>Specialized Keep Modes</span>
+              <span className="text-[10px] text-cyan-400 font-normal">
+                {activeSelectionMode === "person_text_only"
+                  ? "Person + Text"
+                  : activeSelectionMode === "whole_product"
+                  ? "Product Only"
+                  : activeSelectionMode === "document_poster"
+                  ? "Document / Poster"
+                  : activeSelectionMode === "custom"
+                  ? "Custom Mask"
+                  : "Standard"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  cyberAudio.playClick();
+                  onSelectSelectionMode("person_text_only");
+                }}
+                className={`p-2 border text-left rounded-none transition-all ${
+                  activeSelectionMode === "person_text_only"
+                    ? "border-pink-400 bg-pink-950/60 text-white font-bold"
+                    : "border-slate-850 bg-slate-950/70 text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                <div className="font-bold text-[10.5px]">Person + Text</div>
+                <div className="text-[9px] text-slate-400 mt-0.5">Strokes & text</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  cyberAudio.playClick();
+                  onSelectSelectionMode("whole_product");
+                }}
+                className={`p-2 border text-left rounded-none transition-all ${
+                  activeSelectionMode === "whole_product"
+                    ? "border-amber-400 bg-amber-950/60 text-white font-bold"
+                    : "border-slate-850 bg-slate-950/70 text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                <div className="font-bold text-[10.5px]">Product Only</div>
+                <div className="text-[9px] text-slate-400 mt-0.5">Boxes & items</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  cyberAudio.playClick();
+                  onSelectSelectionMode("document_poster");
+                }}
+                className={`p-2 border text-left rounded-none transition-all ${
+                  activeSelectionMode === "document_poster"
+                    ? "border-cyan-400 bg-cyan-950/60 text-white font-bold"
+                    : "border-slate-850 bg-slate-950/70 text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                <div className="font-bold text-[10.5px]">Document / Poster</div>
+                <div className="text-[9px] text-slate-400 mt-0.5">Document safe mode</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  cyberAudio.playClick();
+                  onSelectSelectionMode("custom");
+                }}
+                className={`p-2 border text-left rounded-none transition-all ${
+                  activeSelectionMode === "custom"
+                    ? "border-rose-400 bg-rose-950/60 text-white font-bold"
+                    : "border-slate-850 bg-slate-950/70 text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                <div className="font-bold text-[10.5px]">Custom Mask</div>
+                <div className="text-[9px] text-slate-400 mt-0.5">Brush manual carve</div>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 2-Column Responsive Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -704,6 +800,52 @@ export function BgAdvancedSettings({
                 <span>Retention: {(diagnostics.areaRetentionRatio * 100).toFixed(1)}%</span>
                 <span>Components: {diagnostics.connectedComponentCount}</span>
                 <span>Holes: {diagnostics.interiorHoleCount}</span>
+              </div>
+            )}
+
+            {/* Visual Debug Diagnostic Cards (Requirement 10) */}
+            {visualDebug && (
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between text-[11px] font-bold text-cyan-300 uppercase font-mono">
+                  <span>Visual Debug Diagnostics</span>
+                  {visualDebug.hasIsolatedBlobs ? (
+                    <span className="text-[9px] text-rose-400 font-bold bg-rose-950/80 px-2 py-0.5 border border-rose-500/40">
+                      Isolated Blobs Detected
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 border border-emerald-500/40">
+                      Clean Silhouette (0 Blobs)
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[9px]">
+                  {visualDebug.initialMaskUrl && (
+                    <div className="flex flex-col items-center border border-slate-800 bg-slate-900/60 p-1.5 rounded">
+                      <span className="text-slate-400 mb-1 font-semibold">1. Initial Mask</span>
+                      <img src={visualDebug.initialMaskUrl} alt="Initial Mask" className="h-16 w-auto object-contain border border-slate-700 bg-black" />
+                    </div>
+                  )}
+                  {visualDebug.refinedMaskUrl && (
+                    <div className="flex flex-col items-center border border-slate-800 bg-slate-900/60 p-1.5 rounded">
+                      <span className="text-slate-400 mb-1 font-semibold">2. Refined Silhouette</span>
+                      <img src={visualDebug.refinedMaskUrl} alt="Refined Silhouette" className="h-16 w-auto object-contain border border-slate-700 bg-black" />
+                    </div>
+                  )}
+                  {visualDebug.removedComponentsUrl && (
+                    <div className="flex flex-col items-center border border-slate-800 bg-slate-900/60 p-1.5 rounded">
+                      <span className="text-rose-400 mb-1 font-semibold">
+                        3. Removed ({visualDebug.removedComponentsCount ?? 0})
+                      </span>
+                      <img src={visualDebug.removedComponentsUrl} alt="Removed Isolated Blobs" className="h-16 w-auto object-contain border border-rose-900/40 bg-black" />
+                    </div>
+                  )}
+                  {visualDebug.finalAlphaUrl && (
+                    <div className="flex flex-col items-center border border-slate-800 bg-slate-900/60 p-1.5 rounded">
+                      <span className="text-emerald-400 mb-1 font-semibold">4. Final Alpha Matte</span>
+                      <img src={visualDebug.finalAlphaUrl} alt="Final Alpha Matte" className="h-16 w-auto object-contain border border-emerald-900/40 bg-black" />
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

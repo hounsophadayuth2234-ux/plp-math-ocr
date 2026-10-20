@@ -567,6 +567,24 @@ export default function ImageUpscalerPage() {
           </div>
         </div>
 
+        {/* Engine Limitation Notice (Requirement: Module 03 Real Image Quality) */}
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-950/30 p-3.5 font-mono text-xs text-amber-200">
+          <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="font-bold uppercase text-amber-300">
+                Engine Notice: Algorithmic HD Resize &amp; Sharpen
+              </span>
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                Deterministic Resampling
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-100/80 leading-relaxed">
+              This client-side engine executes continuous 3-lobed Lanczos-3 interpolation, Kuwahara edge-preserving smoothing, and PDE shock filtering running in a Web Worker. It is not a generative neural network (such as Real-ESRGAN). It scales image dimensions accurately and enhances edge contrast without hallucinating synthetic textures.
+            </p>
+          </div>
+        </div>
+
         {/* Main 2-Column Studio Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Upload, Diagnostics, Controls (5 cols) */}
@@ -735,6 +753,17 @@ export default function ImageUpscalerPage() {
                         <span>{result.model}</span>
                         <span>·</span>
                         <span className="text-cyan-400 font-bold">{result.elapsedMs} ms</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+                        <span className="rounded bg-emerald-950/80 px-2 py-0.5 text-emerald-300 border border-emerald-500/30">
+                          ✓ Exact {result.outputWidth}×{result.outputHeight} ({result.scale}x Verified)
+                        </span>
+                        <span className="rounded bg-slate-900 px-2 py-0.5 text-slate-300 border border-slate-700">
+                          ✓ Ringing Clamp Active
+                        </span>
+                        <span className="rounded bg-slate-900 px-2 py-0.5 text-slate-300 border border-slate-700">
+                          ✓ Stroke Edge Crispness
+                        </span>
                       </div>
                     </div>
 

@@ -53,7 +53,7 @@ export default function BgRemoverPage() {
   const [cachedResult, setCachedResult] = useState<BgRemovalOutput | null>(null);
   const [previousResult, setPreviousResult] = useState<BgRemovalOutput | null>(null);
   const [initialCompositeUrl, setInitialCompositeUrl] = useState<string | null>(null);
-  const [selectedPurpose, setSelectedPurpose] = useState<"white" | "pink" | "transparent" | "custom">("white");
+  const [selectedPurpose, setSelectedPurpose] = useState<"white" | "pink" | "transparent" | "custom">("transparent");
   const [locale, setLocale] = useState<StudioLocale>(() => getSavedLocale());
   const [dehaloRadius, setDehaloRadius] = useState<number>(2);
   const [alphaChoke, setAlphaChoke] = useState<number>(1);
@@ -66,8 +66,9 @@ export default function BgRemoverPage() {
   >("ready");
 
   const [activeSelectionMode, setActiveSelectionMode] = useState<SelectionMode>(
-    "preserve_all_foreground"
+    "auto_portrait"
   );
+  const [simplifiedQuality, setSimplifiedQuality] = useState<"fast" | "quality">("fast");
   const excludedMaskRef = useRef<Uint8ClampedArray | null>(null);
 
   // Processing state
@@ -548,6 +549,15 @@ export default function BgRemoverPage() {
       }
     }, STAGE_DEADLINES.SLOW_NOTICE_SEC * 1000);
 
+    // 1b. Hard slow warning at 30 seconds with recovery option (Requirement 10)
+    const slow30Timer = setTimeout(() => {
+      if (activeAbortControllerRef.current === abortController) {
+        setSlowNotice(
+          "WARNING: Processing has exceeded 30 seconds. On-device WASM or remote server may be under heavy load. You can switch to Fast mode or cancel."
+        );
+      }
+    }, 30000);
+
     // 2. Cold asset download deadline: 120 seconds
     let assetLoadTimer: NodeJS.Timeout | null = setTimeout(() => {
       if (activeAbortControllerRef.current === abortController) {
@@ -778,6 +788,11 @@ export default function BgRemoverPage() {
           model: "@imgly/isnet_fp16",
           mode,
           metrics: segResult.metrics || { totalMs: elapsedTotal },
+          visualDebug: segResult.visualDebug,
+          refinedMask: segResult.refinedMask,
+          removedComponentsMask: segResult.removedComponentsMask,
+          removedComponentsCount: segResult.removedComponentsCount,
+          hasIsolatedBlobsRemaining: segResult.hasIsolatedBlobsRemaining,
         };
       }
 
@@ -790,6 +805,16 @@ export default function BgRemoverPage() {
       ) {
         console.log(`[bg-remover] Discarding result for ${imageFile.name} because superseded/stale`);
         return;
+      }
+
+      // Check for remaining isolated blobs in Auto Portrait mode
+      if (
+        output.hasIsolatedBlobsRemaining &&
+        (activeSelectionMode === "auto_portrait" || activeSelectionMode === "person" || activeSelectionMode === "person_only")
+      ) {
+        setError(
+          "Disconnected foreground components (isolated blobs) detected after portrait matting. Please verify in Advanced Diagnostics or refine using Manual Mask."
+        );
       }
 
       // Composite initially onto White #FFFFFF
@@ -878,6 +903,7 @@ export default function BgRemoverPage() {
       );
     } finally {
       clearTimeout(slowTimer);
+      clearTimeout(slow30Timer);
       if (assetLoadTimer) clearTimeout(assetLoadTimer);
       if (inferenceTimer) clearTimeout(inferenceTimer);
       setSlowNotice(null);
@@ -922,7 +948,10 @@ export default function BgRemoverPage() {
     }
   };
 
-  // Instant canvas generator for Sample Image testing (Requirement 16)
+  // Instant acceptance test sample generator:
+  // - Person wearing black suit and blue tie
+  // - White background
+  // - Small isolated blue dot to the right of the face
   const handleLoadSample = () => {
     cyberAudio.playClick();
     const canvas = document.createElement("canvas");
@@ -931,63 +960,96 @@ export default function BgRemoverPage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Solid blue backdrop
-    ctx.fillStyle = "#1e3a8a";
+    // 1. Pure White Background
+    ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, 640, 480);
 
-    // Grid details
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < 640; x += 40) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, 480);
-      ctx.stroke();
-    }
-
-    // Centered subject (avatar with clothing and face)
-    ctx.fillStyle = "#f59e0b"; // Clothing
+    // 2. Black suit jacket and shoulders
+    ctx.fillStyle = "#111827"; // Dark black suit
     ctx.beginPath();
-    ctx.arc(320, 360, 120, Math.PI, 0, false);
+    ctx.ellipse(320, 450, 190, 140, 0, Math.PI, 0, false);
     ctx.fill();
 
-    // Head
-    ctx.fillStyle = "#fde68a";
+    // 3. White shirt collar in V-neck opening
+    ctx.fillStyle = "#f8fafc";
     ctx.beginPath();
-    ctx.arc(320, 200, 70, 0, Math.PI * 2);
+    ctx.moveTo(270, 310);
+    ctx.lineTo(320, 370);
+    ctx.lineTo(370, 310);
+    ctx.closePath();
     ctx.fill();
 
-    // Hair
+    // 4. Blue tie running down from collar
+    ctx.fillStyle = "#2563eb"; // Royal blue tie
+    ctx.beginPath();
+    ctx.moveTo(312, 320);
+    ctx.lineTo(328, 320);
+    ctx.lineTo(334, 450);
+    ctx.lineTo(320, 475);
+    ctx.lineTo(306, 450);
+    ctx.closePath();
+    ctx.fill();
+
+    // 5. Neck
+    ctx.fillStyle = "#f5d0b5"; // Skin tone
+    ctx.fillRect(296, 250, 48, 65);
+
+    // 6. Ears
+    ctx.beginPath();
+    ctx.ellipse(248, 200, 14, 24, 0, 0, Math.PI * 2);
+    ctx.ellipse(392, 200, 14, 24, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 7. Face
+    ctx.beginPath();
+    ctx.ellipse(320, 200, 72, 85, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 8. Hair (black hair on top and temples)
+    ctx.fillStyle = "#09090b";
+    ctx.beginPath();
+    ctx.arc(320, 175, 78, Math.PI * 0.82, Math.PI * 2.18);
+    ctx.fill();
+
+    // 9. Eyes and mouth
     ctx.fillStyle = "#1e293b";
     ctx.beginPath();
-    ctx.arc(320, 180, 75, Math.PI * 0.8, Math.PI * 2.2);
+    ctx.arc(295, 195, 5, 0, Math.PI * 2);
+    ctx.arc(345, 195, 5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Eyes
-    ctx.fillStyle = "#0f172a";
+    ctx.strokeStyle = "#be123c";
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(295, 195, 7, 0, Math.PI * 2);
-    ctx.arc(345, 195, 7, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Smile
-    ctx.strokeStyle = "#e11d48";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(320, 230, 24, 0.2, Math.PI - 0.2);
+    ctx.arc(320, 230, 18, 0.2, Math.PI - 0.2);
     ctx.stroke();
 
-    // Foreground text label
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 20px 'Kantumruy Pro', sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("គំរូកាត់ផ្ទៃខាងក្រោយ (Sample Test)", 320, 440);
+    // 10. CRITICAL ACCEPTANCE TEST ELEMENT:
+    // Small isolated blue dot to the right of the face
+    ctx.fillStyle = "#2563eb"; // Blue dot
+    ctx.beginPath();
+    ctx.arc(460, 175, 7, 0, Math.PI * 2);
+    ctx.fill();
 
     canvas.toBlob((blob) => {
       if (!blob) return;
-      const file = new File([blob], "sample-portrait.png", { type: "image/png" });
+      const file = new File([blob], "acceptance-portrait-suit-tie.png", { type: "image/png" });
       handleFileSelect(file);
     }, "image/png");
+  };
+
+  const handleDownloadTransparentPng = () => {
+    if (!cachedResult?.transparentBlob) return;
+    cyberAudio.playClick();
+    const url = URL.createObjectURL(cachedResult.transparentBlob);
+    const link = document.createElement("a");
+    const baseStem = imageFile?.name ? imageFile.name.replace(/\.[a-zA-Z0-9]+$/i, "") : "portrait-cutout";
+    link.download = `${baseStem}-transparent.png`;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   const handleReset = () => {
@@ -1119,390 +1181,190 @@ export default function BgRemoverPage() {
               </span>
             </div>
 
-            {/* ── GROUP A: UPLOAD ── */}
+            {/* ── 1. UPLOAD IMAGE ── */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-300 uppercase font-mono">
-                  1. Image Intake / បញ្ចូលរូបភាព
+                <span className="text-xs font-bold text-slate-200 uppercase font-mono tracking-wider">
+                  1. Upload Image
                 </span>
                 <button
                   type="button"
                   data-testid="sample-image-btn"
                   onClick={handleLoadSample}
                   disabled={isProcessing}
-                  className="min-h-[32px] flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-950/60 px-2.5 py-1 text-[11px] font-mono font-bold text-cyan-300 hover:bg-cyan-900/60 transition-colors cursor-pointer disabled:opacity-50"
-                  title="សាកល្បងជាមួយរូបភាពគំរូ"
+                  className="min-h-[32px] flex items-center gap-1.5 rounded border border-cyan-500/40 bg-cyan-950/60 px-3 py-1 text-xs font-mono font-bold text-cyan-300 hover:bg-cyan-900/60 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Load acceptance test portrait (Black suit & blue tie with isolated blue dot)"
                 >
-                  <Zap className="h-3 w-3" />
-                  <span>សាកល្បងរូបគំរូ (Sample)</span>
+                  <Zap className="h-3.5 w-3.5" />
+                  <span>Sample Portrait (Suit & Tie)</span>
                 </button>
               </div>
               <BgUploadZone
                 onFileSelect={handleFileSelect}
                 selectedFile={imageFile}
                 disabled={isProcessing}
-                label="Upload image / បញ្ចូលរូបភាព"
+                label="Upload image"
                 hint="PNG, JPG, WEBP · Max 12MB"
               />
             </div>
 
-            {/* ── GROUP B: WHAT DO YOU WANT TO KEEP? ── */}
-            <div className="space-y-2 pt-2 border-t border-slate-800/80">
-              <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
-                <span>What do you want to keep? / រក្សាទុក</span>
-                <span className="text-cyan-400 font-bold text-[10px]">
-                  {activeSelectionMode === "preserve_all_foreground"
-                    ? "All foreground"
-                    : activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"
-                    ? "Person + Text"
-                    : activeSelectionMode === "person" || activeSelectionMode === "person_only"
-                    ? "Person only"
-                    : activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"
-                    ? "Product only"
-                    : activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster"
-                    ? "Document/text"
-                    : "Custom"}
+            {/* ── 2. MODE: Auto Portrait vs Auto General ── */}
+            <div className="space-y-2 pt-2 border-t border-slate-800/80 font-mono">
+              <div className="flex items-center justify-between text-xs uppercase text-slate-300 tracking-wider">
+                <span className="font-bold">2. Mode</span>
+                <span className="text-cyan-400 font-bold text-[11px]">
+                  {activeSelectionMode === "auto_portrait" ? "Auto Portrait (Recommended)" : "Auto General"}
                 </span>
               </div>
-
-              <div role="radiogroup" aria-label="What do you want to keep?" className="space-y-2 text-xs font-mono">
-                {/* Top 2 Primary Options */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {/* 1. Keep foreground (Default) */}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={activeSelectionMode === "preserve_all_foreground"}
-                    data-testid="content-mode-all"
-                    data-testid-alias="content-mode-preserve-all"
-                    onClick={() => {
-                      cyberAudio.playClick();
-                      setActiveSelectionMode("preserve_all_foreground");
-                    }}
-                    className={`min-h-[48px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                      activeSelectionMode === "preserve_all_foreground"
-                        ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
-                        : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                      <span className="h-2 w-2 rounded-none bg-emerald-400" />
-                      <span>1. Keep foreground (Default)</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 mt-0.5">All people, products, animals, and objects</span>
-                  </button>
-
-                  {/* 2. Keep person + text */}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"}
-                    data-testid="content-mode-person-text-only"
-                    data-testid-alias="content-mode-person-text"
-                    onClick={() => {
-                      cyberAudio.playClick();
-                      setActiveSelectionMode("person_text_only");
-                    }}
-                    className={`min-h-[48px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all ${
-                      activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text"
-                        ? "border-pink-400 bg-pink-950/60 text-white font-bold ring-1 ring-pink-400/40 shadow-[0_0_12px_rgba(244,114,182,0.2)]"
-                        : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                      <span className="h-2 w-2 rounded-none bg-pink-400" />
-                      <span>2. Keep person + text</span>
-                    </div>
-                    <span className="text-[10px] text-pink-300/80 mt-0.5">Person and text strokes; removes poster backdrop</span>
-                  </button>
-                </div>
-
-                {/* Sub-options for Person + Text Only mode */}
-                {(activeSelectionMode === "person_text_only" || activeSelectionMode === "person_plus_text") && (
-                  <div className="p-2.5 bg-slate-950/90 border border-pink-500/30 space-y-1.5">
-                    <div className="text-[10.5px] text-pink-200 font-bold">
-                      Person + Text Sub-options:
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-[10.5px]">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
-                        <input
-                          type="checkbox"
-                          data-testid="sub-option-person"
-                          checked={personSubOption}
-                          onChange={(e) => setPersonSubOption(e.target.checked)}
-                          className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
-                        />
-                        <span>Keep detected person</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
-                        <input
-                          type="checkbox"
-                          data-testid="sub-option-text"
-                          checked={textSubOption}
-                          onChange={(e) => setTextSubOption(e.target.checked)}
-                          className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
-                        />
-                        <span>Keep detected text</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
-                        <input
-                          type="checkbox"
-                          data-testid="sub-option-keep-graphics"
-                          checked={keepGraphicsSubOption}
-                          onChange={(e) => setKeepGraphicsSubOption(e.target.checked)}
-                          className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
-                        />
-                        <span>Keep graphics</span>
-                      </label>
-                    </div>
+              <div role="radiogroup" aria-label="Mode" className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSelectionMode === "auto_portrait"}
+                  data-testid="content-mode-auto-portrait"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("auto_portrait");
+                  }}
+                  className={`min-h-[48px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all cursor-pointer ${
+                    activeSelectionMode === "auto_portrait"
+                      ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]"
+                      : "border-slate-850 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <span className="h-2 w-2 bg-cyan-400" />
+                    <span>Auto Portrait</span>
                   </div>
-                )}
+                  <span className="text-[10px] text-cyan-200/70 mt-0.5">Person, suit, hair, ears</span>
+                </button>
 
-                {/* Collapsible: More Keep Options */}
-                <details className="group border border-slate-800/80 bg-slate-900/40 p-2">
-                  <summary className="cursor-pointer text-[11px] font-bold text-slate-400 hover:text-cyan-300 select-none flex items-center justify-between">
-                    <span>More keep options / ជម្រើសបន្ថែម</span>
-                    <span className="text-[9px] text-cyan-400 group-open:rotate-180 transition-transform">▼</span>
-                  </summary>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-2 mt-1 border-t border-slate-800">
-                    {/* 3. Person only */}
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={activeSelectionMode === "person" || activeSelectionMode === "person_only"}
-                      data-testid="content-mode-person"
-                      onClick={() => {
-                        cyberAudio.playClick();
-                        setActiveSelectionMode("person");
-                      }}
-                      className={`min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all ${
-                        activeSelectionMode === "person" || activeSelectionMode === "person_only"
-                          ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40"
-                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold text-[10.5px]">
-                        <span className="h-1.5 w-1.5 rounded-none bg-purple-400" />
-                        <span>Person only</span>
-                      </div>
-                      <span className="text-[9.5px] text-slate-400 mt-0.5">Keep human subject; remove poster text</span>
-                    </button>
-
-                    {/* 4. Product only */}
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"}
-                      data-testid="content-mode-product"
-                      onClick={() => {
-                        cyberAudio.playClick();
-                        setActiveSelectionMode("whole_product");
-                      }}
-                      className={`min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all ${
-                        activeSelectionMode === "whole_product" || activeSelectionMode === "product_only"
-                          ? "border-amber-400 bg-amber-950/60 text-white font-bold ring-1 ring-amber-400/40"
-                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold text-[10.5px]">
-                        <span className="h-1.5 w-1.5 rounded-none bg-amber-400" />
-                        <span>Product only</span>
-                      </div>
-                      <span className="text-[9.5px] text-slate-400 mt-0.5">Whole product, packages, boxes</span>
-                    </button>
-
-                    {/* 5. Document / text */}
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster" || activeSelectionMode === "document_text"}
-                      data-testid="content-mode-document"
-                      onClick={() => {
-                        cyberAudio.playClick();
-                        setActiveSelectionMode("document_poster");
-                      }}
-                      className={`min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all ${
-                        activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster" || activeSelectionMode === "document_text"
-                          ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40"
-                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold text-[10.5px]">
-                        <span className="h-1.5 w-1.5 rounded-none bg-cyan-400" />
-                        <span>Document/text</span>
-                      </div>
-                      <span className="text-[9.5px] text-slate-400 mt-0.5">Preserves page, text, logos byte-identical</span>
-                    </button>
-
-                    {/* 6. Custom mask */}
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"}
-                      data-testid="content-mode-custom"
-                      onClick={() => {
-                        cyberAudio.playClick();
-                        setActiveSelectionMode("custom");
-                      }}
-                      className={`min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all ${
-                        activeSelectionMode === "custom" || activeSelectionMode === "custom_mask"
-                          ? "border-rose-400 bg-rose-950/60 text-white font-bold ring-1 ring-rose-400/40"
-                          : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold text-[10.5px]">
-                        <span className="h-1.5 w-1.5 rounded-none bg-rose-400" />
-                        <span>Custom mask</span>
-                      </div>
-                      <span className="text-[9.5px] text-slate-400 mt-0.5">Paint custom areas with brushes</span>
-                    </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSelectionMode === "auto_general" || activeSelectionMode === "preserve_all_foreground"}
+                  data-testid="content-mode-auto-general"
+                  data-testid-alias="content-mode-all"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setActiveSelectionMode("auto_general");
+                  }}
+                  className={`min-h-[48px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all cursor-pointer ${
+                    activeSelectionMode === "auto_general" || activeSelectionMode === "preserve_all_foreground"
+                      ? "border-emerald-400 bg-emerald-950/70 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                      : "border-slate-850 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <span className="h-2 w-2 bg-emerald-400" />
+                    <span>Auto General</span>
                   </div>
-                </details>
+                  <span className="text-[10px] text-emerald-200/70 mt-0.5">Products, pets, scenes</span>
+                </button>
               </div>
             </div>
 
-            {/* ── GROUP C: PROCESS ── */}
-            <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
-              {/* Quality Selector */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 font-mono tracking-wider">
-                  <span>Processing quality / គុណភាព</span>
-                  <span className="text-cyan-400 font-bold text-[10px]">
-                    {edgeQuality === "fast" ? "Fast" : edgeQuality === "balanced" ? "Balanced" : "Fine details"}
-                  </span>
-                </div>
-                <div role="radiogroup" aria-label="Processing quality" className="grid grid-cols-3 gap-1.5 text-xs font-mono">
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={edgeQuality === "fast"}
-                    data-testid="edge-quality-fast"
-                    onClick={() => {
-                      cyberAudio.playClick();
-                      setEdgeQuality("fast");
-                    }}
-                    disabled={isProcessing}
-                    className={`min-h-[40px] flex items-center justify-center p-1.5 rounded-none border text-center transition-all ${
-                      edgeQuality === "fast"
-                        ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40"
-                        : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
-                    }`}
-                  >
-                    <span className="text-[11px]">Fast / លឿន</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={edgeQuality === "balanced"}
-                    data-testid="edge-quality-balanced"
-                    onClick={() => {
-                      cyberAudio.playClick();
-                      setEdgeQuality("balanced");
-                    }}
-                    disabled={isProcessing}
-                    className={`min-h-[40px] flex items-center justify-center p-1.5 rounded-none border text-center transition-all ${
-                      edgeQuality === "balanced"
-                        ? "border-purple-400 bg-purple-950/60 text-white font-bold ring-1 ring-purple-400/40"
-                        : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
-                    }`}
-                  >
-                    <span className="text-[11px]">Balanced / តុល្យភាព</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={edgeQuality === "quality" || edgeQuality === "fine_details"}
-                    data-testid="edge-quality-quality"
-                    onClick={() => {
-                      cyberAudio.playClick();
-                      setEdgeQuality("fine_details");
-                    }}
-                    disabled={isProcessing}
-                    className={`min-h-[40px] flex items-center justify-center p-1.5 rounded-none border text-center transition-all ${
-                      edgeQuality === "quality" || edgeQuality === "fine_details"
-                        ? "border-emerald-400 bg-emerald-950/60 text-white font-bold ring-1 ring-emerald-400/40"
-                        : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
-                    }`}
-                  >
-                    <span className="text-[11px]">Fine details / លម្អិត</span>
-                  </button>
-                </div>
+            {/* ── 3. QUALITY: Fast vs High Quality ── */}
+            <div className="space-y-2 pt-2 border-t border-slate-800/80 font-mono">
+              <div className="flex items-center justify-between text-xs uppercase text-slate-300 tracking-wider">
+                <span className="font-bold">3. Quality</span>
+                <span className="text-cyan-400 font-bold text-[11px]">
+                  {simplifiedQuality === "fast" ? "Fast (<10s)" : "High Quality (<20s)"}
+                </span>
               </div>
-
-              {/* Primary Visually Dominant Button */}
-              {selectedEngine === "worker" ? (
+              <div role="radiogroup" aria-label="Quality" className="grid grid-cols-2 gap-2 text-xs">
                 <button
                   type="button"
-                  data-testid="run-remote-worker-btn"
-                  onClick={() => handleRunSegmentation("worker")}
-                  disabled={!imageFile || isProcessing || !isWorkerConfigured || workerStatus === "unavailable"}
-                  className={`min-h-[50px] group relative w-full overflow-hidden rounded-none border p-3.5 text-center transition-all duration-200 active:scale-[0.98] font-mono cursor-pointer ${
-                    isProcessing && processingMode === "worker"
-                      ? "pointer-events-none opacity-80 border-purple-400 bg-purple-950/50"
-                      : !imageFile || !isWorkerConfigured || workerStatus === "unavailable"
-                      ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50"
-                      : "border-purple-400 bg-gradient-to-r from-purple-700 via-purple-600 to-indigo-700 text-white shadow-[0_0_25px_rgba(168,85,247,0.3)] hover:brightness-110 ring-1 ring-purple-400/50 font-bold"
+                  role="radio"
+                  aria-checked={simplifiedQuality === "fast"}
+                  data-testid="edge-quality-fast"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setSimplifiedQuality("fast");
+                    setEdgeQuality("fast");
+                  }}
+                  className={`min-h-[42px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
+                    simplifiedQuality === "fast"
+                      ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-sm"
+                      : "border-slate-850 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <Zap className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="font-semibold text-xs">Fast (⚡ &lt;10s)</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={simplifiedQuality === "quality"}
+                  data-testid="edge-quality-quality"
+                  onClick={() => {
+                    cyberAudio.playClick();
+                    setSimplifiedQuality("quality");
+                    setEdgeQuality("fine_details");
+                  }}
+                  className={`min-h-[42px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
+                    simplifiedQuality === "quality"
+                      ? "border-emerald-400 bg-emerald-950/70 text-white font-bold ring-1 ring-emerald-400/40 shadow-sm"
+                      : "border-slate-850 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="font-semibold text-xs">High Quality (✨ &lt;20s)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ── 4. PRIMARY BUTTON: Remove Background ── */}
+            <div className="space-y-2 pt-2 border-t border-slate-800/80 font-mono">
+              <div className="flex gap-2 items-center">
+                <button
+                  type="button"
+                  data-testid="fast-preview-start-btn"
+                  data-testid-alias="remove-background-btn"
+                  onClick={() => {
+                    if (simplifiedQuality === "fast") {
+                      handleRunSegmentation("preview", 640);
+                    } else if (selectedEngine === "worker" && isWorkerConfigured && workerStatus === "ready") {
+                      handleRunSegmentation("worker");
+                    } else {
+                      handleRunSegmentation("final");
+                    }
+                  }}
+                  disabled={!imageFile || isProcessing}
+                  className={`min-h-[50px] flex-1 group relative overflow-hidden rounded-none border p-3.5 text-center transition-all duration-200 active:scale-[0.98] font-mono cursor-pointer ${
+                    isProcessing
+                      ? "pointer-events-none opacity-80 border-cyan-400 bg-cyan-950/60"
+                      : !imageFile
+                      ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50 text-slate-500"
+                      : "border-cyan-400 bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 text-white shadow-[0_0_25px_rgba(0,240,255,0.3)] hover:brightness-110 ring-1 ring-cyan-400/50 font-bold"
                   }`}
                 >
                   <div className="flex items-center justify-center gap-2">
-                    {isProcessing && processingMode === "worker" ? (
+                    {isProcessing ? (
                       <Loader2 className="h-5 w-5 animate-spin text-white" />
                     ) : (
-                      <Server className="h-5 w-5 text-white" />
+                      <Zap className="h-5 w-5 text-white" />
                     )}
                     <span className="text-sm font-black uppercase tracking-wider text-white">
-                      Remove background (Remote Worker)
+                      {isProcessing ? "Processing Cutout..." : "Remove Background"}
                     </span>
                   </div>
                 </button>
-              ) : (
-                <div className="space-y-2">
-                  {/* Primary Action Button */}
-                  <button
-                    type="button"
-                    data-testid="fast-preview-start-btn"
-                    onClick={() => handleRunSegmentation("preview")}
-                    disabled={!imageFile || isProcessing}
-                    className={`min-h-[50px] group relative w-full overflow-hidden rounded-none border p-3.5 text-center transition-all duration-200 active:scale-[0.98] font-mono cursor-pointer ${
-                      isProcessing && processingMode === "preview"
-                        ? "pointer-events-none opacity-80 border-cyan-400 bg-cyan-950/60"
-                        : !imageFile
-                        ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/50 text-slate-500"
-                        : "border-cyan-400 bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 text-white shadow-[0_0_25px_rgba(0,240,255,0.3)] hover:brightness-110 ring-1 ring-cyan-400/50 font-bold"
-                    }`}
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      {isProcessing && processingMode === "preview" ? (
-                        <Loader2 className="h-5 w-5 animate-spin text-white" />
-                      ) : (
-                        <Zap className="h-5 w-5 text-white" />
-                      )}
-                      <span className="text-sm font-black uppercase tracking-wider text-white">
-                        Remove background / លុបផ្ទៃខាងក្រោយ
-                      </span>
-                    </div>
-                  </button>
 
-                  {/* Secondary High Quality Option */}
+                {isProcessing && (
                   <button
                     type="button"
-                    onClick={() => handleRunSegmentation("final")}
-                    disabled={!imageFile || isProcessing}
-                    className={`min-h-[42px] w-full flex items-center justify-center gap-2 rounded-none border p-2 text-center transition-all duration-200 active:scale-[0.98] font-mono ${
-                      isProcessing && processingMode === "final"
-                        ? "pointer-events-none opacity-80 border-emerald-400 bg-emerald-950/50 text-emerald-300"
-                        : !imageFile
-                        ? "cursor-not-allowed opacity-40 border-slate-800 bg-slate-900/40 text-slate-500"
-                        : "border-slate-700 bg-slate-900/80 hover:border-emerald-400/70 text-slate-300 hover:text-white cursor-pointer"
-                    }`}
+                    data-testid="cancel-btn"
+                    onClick={handleCancel}
+                    className="min-h-[50px] px-4 flex items-center justify-center gap-1.5 rounded-none border border-rose-500/50 bg-rose-950/70 text-rose-300 hover:bg-rose-900/80 transition-colors uppercase font-mono font-bold text-xs cursor-pointer"
+                    title="Cancel processing"
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="text-[11px] font-bold tracking-wider">
-                      Clean Cut (High quality) / កាត់ច្បាស់គុណភាពខ្ពស់
-                    </span>
+                    <XCircle className="h-4 w-4" />
+                    <span>Cancel</span>
                   </button>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Friendly Processing Status */}
               {isProcessing && (
@@ -1512,44 +1374,95 @@ export default function BgRemoverPage() {
                       <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
                       <span>
                         {progressInfo?.stage === "Preparing image"
-                          ? "Preparing image... / កំពុងរៀបចំរូបភាព..."
+                          ? "Preparing image..."
                           : progressInfo?.stage === "Quick cut in progress" ||
                             progressInfo?.stage === "Segmenting" ||
                             progressInfo?.stage === "Loading model"
-                          ? "Quick cut in progress... / កំពុងកាត់រហ័ស..."
+                          ? "Removing background..."
                           : progressInfo?.stage === "Preview ready"
-                          ? "Preview ready / រូបភាពមើលសាកល្បងរួចរាល់"
+                          ? "Preview ready"
                           : progressInfo?.stage === "Optional edge refinement" ||
                             progressInfo?.stage === "Refining mask"
-                          ? "Optional edge refinement... / សម្រួលគែមជម្រើស..."
-                          : "Processing... / កំពុងដំណើរការ..."}
+                          ? "Refining edges & color decontamination..."
+                          : "Processing..."}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        data-testid="cancel-btn"
-                        data-testid-alias="processing-cancel-btn"
-                        onClick={handleCancel}
-                        className="min-h-[36px] flex items-center gap-1 rounded-none border border-rose-500/40 bg-rose-950/60 px-2.5 py-1 text-[10px] text-rose-300 hover:bg-rose-900/60 uppercase cursor-pointer"
-                      >
-                        <XCircle className="h-3.5 w-3.5" /> Cancel
-                      </button>
-                      <button
-                        type="button"
                         data-testid="reset-btn"
-                        data-testid-alias="processing-reset-btn"
                         onClick={handleReset}
-                        className="min-h-[36px] flex items-center gap-1 rounded-none border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] text-slate-300 hover:text-white uppercase cursor-pointer"
+                        className="min-h-[32px] flex items-center gap-1 rounded-none border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] text-slate-300 hover:text-white uppercase cursor-pointer"
                       >
-                        <RefreshCw className="h-3.5 w-3.5" /> Reset
+                        <RefreshCw className="h-3 w-3" /> Reset
                       </button>
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* Slow warning banner if >30s (Requirement 10) */}
+              {slowNotice && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 border border-amber-500/50 bg-amber-950/60 text-amber-200 text-xs font-mono">
+                  <span>{slowNotice}</span>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCancel();
+                        setSimplifiedQuality("fast");
+                        handleRunSegmentation("preview", 640);
+                      }}
+                      className="px-2.5 py-1 bg-amber-500 text-slate-950 font-bold text-[10px] rounded uppercase cursor-pointer hover:bg-amber-400"
+                    >
+                      Use Fast Mode
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="px-2.5 py-1 bg-slate-800 text-slate-200 font-bold text-[10px] rounded uppercase cursor-pointer hover:bg-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* ── 5. COLLAPSED ADVANCED PANEL ── */}
+            <div className="pt-2 border-t border-slate-800/80">
+              <BgAdvancedSettings
+                locale={locale}
+                activeSelectionMode={activeSelectionMode}
+                onSelectSelectionMode={(m) => {
+                  cyberAudio.playClick();
+                  setActiveSelectionMode(m);
+                }}
+                selectedEngine={selectedEngine}
+                onSelectEngine={handleSwitchEngine}
+                isWorkerConfigured={isWorkerConfigured}
+                edgeQuality={edgeQuality === "quality" ? "fine_details" : edgeQuality}
+                onChangeEdgeQuality={(q) => setEdgeQuality(q)}
+                dehaloRadius={dehaloRadius}
+                onChangeDehaloRadius={setDehaloRadius}
+                alphaChoke={alphaChoke}
+                onChangeAlphaChoke={setAlphaChoke}
+                featherRadius={featherRadius}
+                onChangeFeatherRadius={setFeatherRadius}
+                selectedPurpose={selectedPurpose}
+                onSelectPurpose={setSelectedPurpose}
+                customColor={customColor}
+                onChangeCustomColor={setCustomColor}
+                onOpenManualMask={handleOpenManualMode}
+                hasImage={Boolean(imageFile)}
+                isProcessing={isProcessing}
+                isModelCached={isModelCached}
+                metrics={cachedResult?.metrics || liveStageMetrics || failedMetrics || undefined}
+                diagnostics={cachedResult?.diagnostics}
+                visualDebug={cachedResult?.visualDebug}
+                onResetAdvanced={handleResetAdvanced}
+              />
+            </div>
           </div>
         </div>
 
@@ -1674,6 +1587,31 @@ export default function BgRemoverPage() {
             </div>
           )}
 
+          {/* 5. RESULT PANEL: Download Transparent PNG bar */}
+          {cachedResult && originalUrl && !isProcessing && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border border-emerald-500/40 bg-slate-950/95 font-mono shadow-lg">
+              <div className="flex items-center gap-2.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                    Transparent Cutout Ready ({cachedResult.width}×{cachedResult.height}px)
+                  </span>
+                  <span className="text-[10.5px] text-slate-400">
+                    Engine: {cachedResult.model} · {cachedResult.metrics?.totalMs ?? 0}ms
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                data-testid="download-transparent-png-btn"
+                onClick={handleDownloadTransparentPng}
+                className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 rounded-none border border-emerald-400 bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-[0_0_20px_rgba(16,185,129,0.35)] hover:brightness-110 transition-all cursor-pointer"
+              >
+                <span>Download Transparent PNG</span>
+              </button>
+            </div>
+          )}
+
           {/* Output Deck: ColorStudio with Interactive Mask Correction Studio */}
           {cachedResult && originalUrl && initialCompositeUrl && !isProcessing && (
             <div className="space-y-3 font-mono">
@@ -1740,141 +1678,22 @@ export default function BgRemoverPage() {
               <div className="pointer-events-none absolute bottom-0 left-0 h-4 w-4 border-b-2 border-l-2 border-cyan-400/70" />
               <div className="pointer-events-none absolute bottom-0 right-0 h-4 w-4 border-b-2 border-r-2 border-cyan-400/70" />
 
-              {/* Corner rivets */}
-              <div className="pointer-events-none absolute top-2 left-2 h-1.5 w-1.5 bg-slate-700/80" />
-              <div className="pointer-events-none absolute top-2 right-2 h-1.5 w-1.5 bg-slate-700/80" />
-              <div className="pointer-events-none absolute bottom-2 left-2 h-1.5 w-1.5 bg-slate-700/80" />
-              <div className="pointer-events-none absolute bottom-2 right-2 h-1.5 w-1.5 bg-slate-700/80" />
-
               {/* Center Radar Scanner Reticle */}
               <div className="relative mb-5 flex h-20 w-20 items-center justify-center border border-cyan-500/40 bg-cyan-950/40 shadow-[0_0_25px_rgba(0,240,255,0.15)]">
-                {/* Rotating scanner ring */}
                 <div className="pointer-events-none absolute inset-1 border border-dashed border-cyan-400/50 animate-[spin_20s_linear_infinite]" />
-                {/* Crosshairs */}
                 <div className="pointer-events-none absolute top-0 bottom-0 left-1/2 w-[1px] bg-cyan-500/30 -translate-x-1/2" />
                 <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[1px] bg-cyan-500/30 -translate-y-1/2" />
                 <Sparkles className="h-7 w-7 text-cyan-300 animate-pulse" />
               </div>
 
               <h3 className="text-sm font-bold tracking-wider uppercase text-white font-mono flex items-center gap-2">
-                <span>Your result will appear here / លទ្ធផលនឹងបង្ហាញនៅទីនេះ</span>
+                <span>Your transparent cutout will appear here</span>
               </h3>
               <p className="mt-2 text-xs text-slate-400 font-mono max-w-md leading-relaxed">
-                Upload an image to begin
+                Upload a portrait or image to remove the background automatically.
               </p>
             </div>
           )}
-        </div>
-
-        {/* ── LOWER CONTROL DECK: OUTPUT & ADVANCED SETTINGS ── */}
-        <div className="lg:col-span-5 lg:col-start-1 lg:row-start-2 flex flex-col gap-4">
-          <div className="machine-module relative border border-slate-800/90 bg-slate-950/85 backdrop-blur-md p-4 sm:p-5 space-y-4 shadow-xl font-mono">
-            {/* Corner brackets */}
-            <div className="pointer-events-none absolute top-0 left-0 h-2.5 w-2.5 border-t-2 border-l-2 border-cyan-400/70" />
-            <div className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 border-t-2 border-r-2 border-cyan-400/70" />
-            <div className="pointer-events-none absolute bottom-0 left-0 h-2.5 w-2.5 border-b-2 border-l-2 border-cyan-400/70" />
-            <div className="pointer-events-none absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2 border-cyan-400/70" />
-
-            {/* Corner rivets */}
-            <div className="pointer-events-none absolute top-1.5 left-1.5 h-1 w-1 bg-slate-700/80" />
-            <div className="pointer-events-none absolute top-1.5 right-1.5 h-1 w-1 bg-slate-700/80" />
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 h-1 w-1 bg-slate-700/80" />
-            <div className="pointer-events-none absolute bottom-1.5 right-1.5 h-1 w-1 bg-slate-700/80" />
-
-            {/* Output Background Selector */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs uppercase text-slate-300 font-mono tracking-wider font-bold">
-                <span>{t("output.title")}</span>
-                <span className="text-cyan-400 font-bold text-[11px]">
-                  {selectedPurpose === "white"
-                    ? t("output.white")
-                    : selectedPurpose === "pink"
-                    ? t("output.pink")
-                    : selectedPurpose === "transparent"
-                    ? t("output.transparent")
-                    : t("output.custom")}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setSelectedPurpose("white");
-                  }}
-                  className={`min-h-[44px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
-                    selectedPurpose === "white"
-                      ? "border-cyan-400 bg-cyan-950/60 text-white font-bold ring-1 ring-cyan-400/40 shadow-sm"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className="h-3 w-3 bg-white border border-slate-400 shrink-0" />
-                  <span className="text-xs font-semibold">{t("output.white").split(" ")[0]}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setSelectedPurpose("pink");
-                  }}
-                  className={`min-h-[44px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
-                    selectedPurpose === "pink"
-                      ? "border-pink-400 bg-pink-950/60 text-white font-bold ring-1 ring-pink-400/40 shadow-sm"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className="h-3 w-3 border border-pink-400 shrink-0" style={{ backgroundColor: "#FFF0F5" }} />
-                  <span className="text-xs font-semibold">{t("output.pink").split(" ")[0]}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setSelectedPurpose("transparent");
-                  }}
-                  className={`min-h-[44px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
-                    selectedPurpose === "transparent"
-                      ? "border-indigo-400 bg-indigo-950/60 text-white font-bold ring-1 ring-indigo-400/40 shadow-sm"
-                      : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className="text-xs">🏁</span>
-                  <span className="text-xs font-semibold">{t("output.transparent").split(" ")[0]}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Grouped Advanced Settings Panel */}
-            <div className="pt-2 border-t border-slate-800/80">
-              <BgAdvancedSettings
-                locale={locale}
-                selectedEngine={selectedEngine}
-                onSelectEngine={handleSwitchEngine}
-                isWorkerConfigured={isWorkerConfigured}
-                edgeQuality={edgeQuality === "quality" ? "fine_details" : edgeQuality}
-                onChangeEdgeQuality={(q) => setEdgeQuality(q)}
-                dehaloRadius={dehaloRadius}
-                onChangeDehaloRadius={setDehaloRadius}
-                alphaChoke={alphaChoke}
-                onChangeAlphaChoke={setAlphaChoke}
-                featherRadius={featherRadius}
-                onChangeFeatherRadius={setFeatherRadius}
-                selectedPurpose={selectedPurpose}
-                onSelectPurpose={setSelectedPurpose}
-                customColor={customColor}
-                onChangeCustomColor={setCustomColor}
-                onOpenManualMask={handleOpenManualMode}
-                hasImage={Boolean(imageFile)}
-                isProcessing={isProcessing}
-                isModelCached={isModelCached}
-                metrics={cachedResult?.metrics || liveStageMetrics || failedMetrics || undefined}
-                diagnostics={cachedResult?.diagnostics}
-                onResetAdvanced={handleResetAdvanced}
-              />
-            </div>
-          </div>
         </div>
       </div>
 

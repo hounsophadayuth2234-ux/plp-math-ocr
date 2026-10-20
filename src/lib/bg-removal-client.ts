@@ -39,12 +39,15 @@ import {
   extractPersonMask,
   combinePersonAndTextMasks,
   generatePersonTextLayerOverlay,
+  autoPortraitSegmentationPipeline,
   TextStrokeMaskOptions,
   TextStrokeMaskResult,
   PersonMaskOptions,
   PersonMaskResult,
   CombinePersonAndTextOptions,
   CombinePersonAndTextResult,
+  AutoPortraitOptions,
+  AutoPortraitResult,
 } from "./bg-compositor";
 
 export type {
@@ -57,7 +60,10 @@ export type {
   PersonMaskResult,
   CombinePersonAndTextOptions,
   CombinePersonAndTextResult,
+  AutoPortraitOptions,
+  AutoPortraitResult,
 };
+export { autoPortraitSegmentationPipeline };
 export {
   detectDocumentQuad,
   generateQuadMask,
@@ -193,6 +199,18 @@ export interface BgRemovalOutput {
   metrics?: ProcessingStageMetrics;
   diagnostics?: MaskDiagnostics;
   rollbackTriggered?: boolean;
+  visualDebug?: {
+    initialMaskUrl: string;
+    refinedMaskUrl: string;
+    removedComponentsUrl: string;
+    finalAlphaUrl: string;
+    removedComponentsCount: number;
+    hasIsolatedBlobs: boolean;
+  };
+  refinedMask?: Uint8ClampedArray;
+  removedComponentsMask?: Uint8ClampedArray;
+  removedComponentsCount?: number;
+  hasIsolatedBlobsRemaining?: boolean;
 }
 
 export interface BgRemovalOptions {
@@ -1571,6 +1589,8 @@ export interface SegmentSelectionOptions {
   keepPerson?: boolean;
   keepText?: boolean;
   keepGraphics?: boolean;
+  alphaChoke?: number;
+  featherRadius?: number;
 }
 
 export interface SegmentSelectionResult {
@@ -1588,6 +1608,18 @@ export interface SegmentSelectionResult {
   maskOverlayUrl: string;
   selectionMode: SelectionMode;
   metrics?: ProcessingStageMetrics;
+  refinedMask?: Uint8ClampedArray;
+  removedComponentsMask?: Uint8ClampedArray;
+  removedComponentsCount?: number;
+  hasIsolatedBlobsRemaining?: boolean;
+  visualDebug?: {
+    initialMaskUrl: string;
+    refinedMaskUrl: string;
+    removedComponentsUrl: string;
+    finalAlphaUrl: string;
+    removedComponentsCount: number;
+    hasIsolatedBlobs: boolean;
+  };
 }
 
 /**
@@ -1765,13 +1797,45 @@ export async function segmentObjectSelection(
   let textDetectionMs = 0;
   let khmerFeatures: KhmerImageFeatures | undefined = undefined;
 
-  if (mode === "person" || mode === "person_only") {
-    // Dedicated person segmentation: isolatePersonMask strictly
-    const pRes = extractPersonMask(sourceImageData.data, alphaMaskBuffer, width, height);
-    // Apply conservative 1px inward choke strictly to personMask
-    const cleanedPersonMask = chokeAndFeatherAlphaMask(pRes.personMask, width, height, 1.0, 0.7);
-    for (let i = 0; i < totalPixels; i++) {
-      activeMask[i] = cleanedPersonMask[i];
+  let portraitVisualDebug: SegmentSelectionResult["visualDebug"] | undefined = undefined;
+  let removedCompsCount = 0;
+  let hasIsolatedBlobs = false;
+  let finalRefinedMask: Uint8ClampedArray | undefined = undefined;
+  let finalRemovedMask: Uint8ClampedArray | undefined = undefined;
+
+  if (mode === "auto_portrait" || mode === "person" || mode === "person_only") {
+    // Dedicated Auto Portrait pipeline
+    const portraitRes = autoPortraitSegmentationPipeline(
+      sourceImageData.data,
+      alphaMaskBuffer,
+      width,
+      height,
+      {
+        alphaChokePx: options?.alphaChoke || 1.2,
+        featherRadiusPx: options?.featherRadius || 1.0,
+        decontaminateBg: true,
+      }
+    );
+    activeMask.set(portraitRes.finalMask);
+    sourceImageData.data.set(portraitRes.decontaminatedRgba);
+    removedCompsCount = portraitRes.removedComponentsCount;
+    hasIsolatedBlobs = portraitRes.hasIsolatedBlobsRemaining;
+    finalRefinedMask = portraitRes.refinedMask;
+    finalRemovedMask = portraitRes.removedComponentsMask;
+
+    if (typeof document !== "undefined") {
+      const initUrl = createAlphaMaskDataUrl(portraitRes.initialMask, width, height);
+      const refUrl = createAlphaMaskDataUrl(portraitRes.refinedMask, width, height);
+      const remUrl = createAlphaMaskDataUrl(portraitRes.removedComponentsMask, width, height);
+      const finUrl = createAlphaMaskDataUrl(portraitRes.finalMask, width, height);
+      portraitVisualDebug = {
+        initialMaskUrl: initUrl,
+        refinedMaskUrl: refUrl,
+        removedComponentsUrl: remUrl,
+        finalAlphaUrl: finUrl,
+        removedComponentsCount: portraitRes.removedComponentsCount,
+        hasIsolatedBlobs: portraitRes.hasIsolatedBlobsRemaining,
+      };
     }
   } else if (mode === "person_text_only" || mode === "person_plus_text") {
     // 4-mask decoupled pipeline: personMask, textMask, protectedTextMask, finalKeepMask
@@ -1986,6 +2050,11 @@ export async function segmentObjectSelection(
     maskOverlayUrl,
     selectionMode: mode,
     metrics,
+    visualDebug: portraitVisualDebug,
+    refinedMask: finalRefinedMask,
+    removedComponentsMask: finalRemovedMask,
+    removedComponentsCount: removedCompsCount,
+    hasIsolatedBlobsRemaining: hasIsolatedBlobs,
   };
 }
 

@@ -225,6 +225,8 @@ export type ContentMode =
   | "custom";
 
 export type SelectionMode =
+  | "auto_portrait"
+  | "auto_general"
   | "preserve_all_foreground"
   | "person_text_only"
   | "person_only"
@@ -1197,10 +1199,21 @@ export function isolatePersonMask(
       continue; // Never include document banners or printed text lines
     }
 
-    // Include uniform or clothing if within the person's anatomical span
+    // Include uniform or clothing only if contiguous or close (<= 12px) to the person's skin/torso
     if (c.hasUniformOrHair && c.pixelCount > 50) {
+      let isNearSkin = skinComponents.length === 0;
+      if (!isNearSkin) {
+        for (const sc of skinComponents) {
+          const dx = Math.max(0, Math.max(sc.minX - c.maxX, c.minX - sc.maxX));
+          const dy = Math.max(0, Math.max(sc.minY - c.maxY, c.minY - sc.maxY));
+          if (dx <= 12 && dy <= 12) {
+            isNearSkin = true;
+            break;
+          }
+        }
+      }
       if (
-        skinComponents.length === 0 ||
+        isNearSkin &&
         (c.minY >= expandedMinY && c.maxY <= expandedMaxY && c.minX >= expandedMinX && c.maxX <= expandedMaxX)
       ) {
         personLabelSet.add(c.id);
@@ -1242,6 +1255,345 @@ export function isolatePersonMask(
   }
 
   return result;
+}
+
+export interface AutoPortraitOptions {
+  alphaChokePx?: number;
+  featherRadiusPx?: number;
+  decontaminateBg?: boolean;
+  minComponentRatio?: number;
+}
+
+export interface AutoPortraitResult {
+  finalMask: Uint8ClampedArray;
+  initialMask: Uint8ClampedArray;
+  refinedMask: Uint8ClampedArray;
+  removedComponentsMask: Uint8ClampedArray;
+  removedComponentsCount: number;
+  hasIsolatedBlobsRemaining: boolean;
+  dominantBgColor: {
+    r: number;
+    g: number;
+    b: number;
+    isChromaSpill: boolean;
+    dominantChannel: "r" | "g" | "b" | "none";
+    saturation: number;
+  };
+  decontaminatedRgba: Uint8ClampedArray;
+}
+
+/**
+ * Dedicated Auto Portrait Pipeline:
+ * - Uses human/person segmentation as primary mask
+ * - Does NOT enable text preservation or expand to arbitrary background objects
+ * - Removes disconnected foreground components not connected to main person silhouette
+ * - Preserves complete silhouette (hair, ears, face, neck, shirt, tie, jacket, shoulders)
+ * - Conservative alpha choke (1-2px) & boundary feathering
+ * - Background color decontamination (suppresses white & chroma spill)
+ * - Final small-component cleanup
+ * - Produces visual debug diagnostics (initialMask, refinedMask, removedComponentsMask, finalAlphaResult)
+ */
+export function autoPortraitSegmentationPipeline(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  rawInitialMask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  options?: AutoPortraitOptions
+): AutoPortraitResult {
+  const totalPixels = width * height;
+  const isMask4Ch = rawInitialMask.length === totalPixels * 4;
+  const initialMask = new Uint8ClampedArray(totalPixels);
+  for (let i = 0; i < totalPixels; i++) {
+    initialMask[i] = isMask4Ch ? rawInitialMask[i * 4 + 3] : rawInitialMask[i];
+  }
+
+  const chokeRadius = options?.alphaChokePx ?? 1.2;
+  const featherRadius = options?.featherRadiusPx ?? 1.0;
+  const minRatio = options?.minComponentRatio ?? 0.05;
+
+  // 1. Connected-component analysis on foreground mask (threshold > 128)
+  const labels = new Int32Array(totalPixels);
+  let currentLabel = 0;
+
+  interface CompData {
+    id: number;
+    pixelCount: number;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    skinPixels: number;
+    suitOrDarkPixels: number;
+    tieOrVibrantPixels: number;
+    pixels: number[];
+  }
+
+  const components: CompData[] = [];
+  const queue = new Int32Array(totalPixels);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      if (initialMask[idx] <= 128 || labels[idx] !== 0) continue;
+
+      currentLabel++;
+      let qHead = 0;
+      let qTail = 0;
+      queue[qTail++] = idx;
+      labels[idx] = currentLabel;
+
+      let pixelCount = 0;
+      let minX = x, maxX = x, minY = y, maxY = y;
+      let skinPixels = 0;
+      let suitOrDarkPixels = 0;
+      let tieOrVibrantPixels = 0;
+      const compPixels: number[] = [];
+
+      while (qHead < qTail) {
+        const curr = queue[qHead++];
+        pixelCount++;
+        compPixels.push(curr);
+
+        const cy = Math.floor(curr / width);
+        const cx = curr % width;
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+
+        const p = curr * 4;
+        const r = sourceRgba[p];
+        const g = sourceRgba[p + 1];
+        const b = sourceRgba[p + 2];
+
+        // Skin detection
+        if (r > 125 && g > 70 && b > 45 && r >= g && r - g >= 8 && r - b >= 15) {
+          skinPixels++;
+        }
+        // Dark suit or dark hair
+        if (r < 75 && g < 75 && b < 80) {
+          suitOrDarkPixels++;
+        }
+        // Tie (blue or red accent)
+        if ((b > 90 && b > r + 15 && b > g + 10) || (r > 120 && r > g + 30 && r > b + 30)) {
+          tieOrVibrantPixels++;
+        }
+
+        // 8-connected neighbors for accurate boundary component connectivity
+        for (let dy = -1; dy <= 1; dy++) {
+          const ny = cy + dy;
+          if (ny < 0 || ny >= height) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = cx + dx;
+            if (nx < 0 || nx >= width) continue;
+            const nIdx = ny * width + nx;
+            if (labels[nIdx] === 0 && initialMask[nIdx] > 128) {
+              labels[nIdx] = currentLabel;
+              queue[qTail++] = nIdx;
+            }
+          }
+        }
+      }
+
+      components.push({
+        id: currentLabel,
+        pixelCount,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        skinPixels,
+        suitOrDarkPixels,
+        tieOrVibrantPixels,
+        pixels: compPixels,
+      });
+    }
+  }
+
+  // 2. Identify the Primary Main Person Silhouette Component
+  let mainPerson: CompData | null = null;
+  let maxScore = -1;
+
+  for (const c of components) {
+    const score = c.pixelCount + c.skinPixels * 4 + c.suitOrDarkPixels * 2;
+    if (score > maxScore) {
+      maxScore = score;
+      mainPerson = c;
+    }
+  }
+
+  const keptMask = new Uint8ClampedArray(totalPixels);
+  const removedComponentsMask = new Uint8ClampedArray(totalPixels);
+  let removedComponentsCount = 0;
+
+  if (mainPerson) {
+    for (const p of mainPerson.pixels) {
+      keptMask[p] = initialMask[p];
+    }
+
+    // Filter disconnected components
+    for (const c of components) {
+      if (c.id === mainPerson.id) continue;
+
+      const distX = Math.max(0, Math.max(mainPerson.minX - c.maxX, c.minX - mainPerson.maxX));
+      const distY = Math.max(0, Math.max(mainPerson.minY - c.maxY, c.minY - mainPerson.maxY));
+      const bboxDist = Math.hypot(distX, distY);
+
+      const isTiny = c.pixelCount < mainPerson.pixelCount * minRatio;
+      const isDetached = bboxDist > 4;
+
+      if (isDetached || isTiny) {
+        // Disconnected artifact (e.g. isolated blue dot) -> REMOVE
+        for (const p of c.pixels) {
+          removedComponentsMask[p] = 255;
+          keptMask[p] = 0;
+        }
+        removedComponentsCount++;
+      } else {
+        // Connected or touching subject element
+        for (const p of c.pixels) {
+          keptMask[p] = initialMask[p];
+        }
+      }
+    }
+  }
+
+  // 3. Fill interior pinholes inside torso/head
+  const holeFilledMask = new Uint8ClampedArray(keptMask);
+  const outerBg = new Uint8Array(totalPixels);
+  const bgQueue = new Int32Array(totalPixels);
+  let bgHead = 0;
+  let bgTail = 0;
+
+  for (let x = 0; x < width; x++) {
+    if (keptMask[x] < 128) { outerBg[x] = 1; bgQueue[bgTail++] = x; }
+    const bIdx = (height - 1) * width + x;
+    if (keptMask[bIdx] < 128 && outerBg[bIdx] === 0) { outerBg[bIdx] = 1; bgQueue[bgTail++] = bIdx; }
+  }
+  for (let y = 0; y < height; y++) {
+    const lIdx = y * width;
+    if (keptMask[lIdx] < 128 && outerBg[lIdx] === 0) { outerBg[lIdx] = 1; bgQueue[bgTail++] = lIdx; }
+    const rIdx = y * width + (width - 1);
+    if (keptMask[rIdx] < 128 && outerBg[rIdx] === 0) { outerBg[rIdx] = 1; bgQueue[bgTail++] = rIdx; }
+  }
+
+  while (bgHead < bgTail) {
+    const curr = bgQueue[bgHead++];
+    const cy = Math.floor(curr / width);
+    const cx = curr % width;
+
+    const neighbors = [
+      cx > 0 ? curr - 1 : -1,
+      cx < width - 1 ? curr + 1 : -1,
+      cy > 0 ? curr - width : -1,
+      cy < height - 1 ? curr + width : -1,
+    ];
+
+    for (const n of neighbors) {
+      if (n >= 0 && outerBg[n] === 0 && keptMask[n] < 128) {
+        outerBg[n] = 1;
+        bgQueue[bgTail++] = n;
+      }
+    }
+  }
+
+  for (let i = 0; i < totalPixels; i++) {
+    if (outerBg[i] === 0 && keptMask[i] < 128) {
+      holeFilledMask[i] = 255;
+    }
+  }
+
+  // 4. Conservative Alpha Refinement
+  const refinedMask = chokeAndFeatherAlphaMask(
+    holeFilledMask,
+    width,
+    height,
+    chokeRadius,
+    featherRadius
+  );
+
+  // 5. Final Small-Component Cleanup after matting
+  const finalMask = new Uint8ClampedArray(refinedMask);
+  let remainingIsolatedBlobs = 0;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      if (finalMask[idx] <= 64 || labels[idx] === -999) continue;
+
+      let qh = 0, qt = 0;
+      queue[qt++] = idx;
+      labels[idx] = -999;
+      let cnt = 0;
+      let minX = x, maxX = x, minY = y, maxY = y;
+
+      while (qh < qt) {
+        const c = queue[qh++];
+        cnt++;
+        const cy = Math.floor(c / width);
+        const cx = c % width;
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+
+        for (let dy = -1; dy <= 1; dy++) {
+          const ny = cy + dy;
+          if (ny < 0 || ny >= height) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = cx + dx;
+            if (nx < 0 || nx >= width) continue;
+            const nIdx = ny * width + nx;
+            if (labels[nIdx] !== -999 && finalMask[nIdx] > 64) {
+              labels[nIdx] = -999;
+              queue[qt++] = nIdx;
+            }
+          }
+        }
+      }
+
+      if (mainPerson) {
+        const distX = Math.max(0, Math.max(mainPerson.minX - maxX, minX - mainPerson.maxX));
+        const distY = Math.max(0, Math.max(mainPerson.minY - maxY, minY - mainPerson.maxY));
+        const dist = Math.hypot(distX, distY);
+        if (dist > 8) {
+          if (cnt < mainPerson.pixelCount * 0.05) {
+            for (let k = 0; k < qt; k++) {
+              finalMask[queue[k]] = 0;
+              removedComponentsMask[queue[k]] = 255;
+            }
+            removedComponentsCount++;
+          } else {
+            remainingIsolatedBlobs++;
+          }
+        }
+      }
+    }
+  }
+
+  // 6. Background Color Decontamination
+  const dominantBg = detectDominantBackgroundColor(sourceRgba, width, height, finalMask);
+  const decontaminatedRgba = applyColorDehalo(
+    sourceRgba,
+    finalMask,
+    width,
+    height,
+    3,
+    null
+  );
+
+  return {
+    finalMask,
+    initialMask,
+    refinedMask,
+    removedComponentsMask,
+    removedComponentsCount,
+    hasIsolatedBlobsRemaining: remainingIsolatedBlobs > 0,
+    dominantBgColor: dominantBg,
+    decontaminatedRgba,
+  };
 }
 
 /**
@@ -2198,9 +2550,23 @@ export function detectContainerAndContents(
   const mode = options?.mode;
   const isConservative = options?.conservative ?? (mode === "whole_product" || mode === "preserve_all_foreground" || !mode);
 
-  // PRESERVE ALL FOREGROUND (DEFAULT MODE):
+  // AUTO PORTRAIT MODE: Never preserve small disconnected artifacts, leaves, dots, or stray noise
+  if (mode === "auto_portrait") {
+    const contentsMask = new Uint8ClampedArray(totalPixels);
+    for (let i = 0; i < totalPixels; i++) {
+      contentsMask[i] = isMask4Ch ? initialMask[i * 4 + 3] : initialMask[i];
+    }
+    return {
+      hasContainer: false,
+      boxConfidence: 0,
+      containerMask: new Uint8ClampedArray(totalPixels),
+      contentsMask,
+    };
+  }
+
+  // PRESERVE ALL FOREGROUND / AUTO GENERAL MODE:
   // Preserve all people, animals, plants, products, boxes, text, logos, hair, fur, disconnected objects
-  if (!mode || mode === "preserve_all_foreground") {
+  if (!mode || mode === "preserve_all_foreground" || mode === "auto_general") {
     const contentsMask = new Uint8ClampedArray(totalPixels);
     for (let i = 0; i < totalPixels; i++) {
       contentsMask[i] = isMask4Ch ? initialMask[i * 4 + 3] : initialMask[i];
