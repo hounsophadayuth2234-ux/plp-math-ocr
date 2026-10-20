@@ -564,7 +564,7 @@ body {
   position: relative;
   z-index: 10;
   width: 100%;
-  max-width: 440px;
+  max-width: 460px;
   padding: 1.5rem 1rem;
   margin: auto;
   box-sizing: border-box;
@@ -572,20 +572,31 @@ body {
 
 .auth-gate-card {
   width: 100%;
-  border-radius: 1rem;
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  background-color: rgba(7, 19, 38, 0.88);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 0 50px rgba(0, 240, 255, 0.16), inset 0 0 24px rgba(0, 240, 255, 0.06);
-  padding: 1.75rem;
+  border-radius: 1.125rem;
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  background-color: rgba(7, 19, 38, 0.90);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 0 50px rgba(0, 240, 255, 0.18), inset 0 0 24px rgba(0, 240, 255, 0.06);
+  padding: 2rem;
   box-sizing: border-box;
 }
 
-@media (max-width: 400px) {
+@media (max-width: 420px) {
   .auth-gate-card {
     padding: 1.25rem;
   }
+}
+
+/* Error Shake Micro-Animation */
+@keyframes errorShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+.animate-error-shake {
+  animation: errorShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
 /* Formula Stream Animations */
@@ -664,7 +675,8 @@ body {
   .animate-radar,
   .animate-radar-reverse,
   .animate-formula-rtl,
-  .animate-formula-ltr {
+  .animate-formula-ltr,
+  .animate-error-shake {
     animation: none !important;
     transform: none !important;
     will-change: auto !important;
