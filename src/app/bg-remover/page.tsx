@@ -9,6 +9,7 @@ import {
   Server,
   Loader2,
   AlertTriangle,
+  AlertCircle,
   RefreshCw,
   ImageOff,
   XCircle,
@@ -664,21 +665,8 @@ export default function BgRemoverPage() {
             totalMs: elapsedTotal,
           },
         };
-      } else if (mode === "worker") {
-        output = await removeBackgroundRemote(imageFile, {
-          refine: edgeQuality !== "fast",
-          quality: edgeQuality,
-          directUrl: directWorkerUrl,
-          signal: abortController.signal,
-          mode: activeSelectionMode,
-        });
-        const elapsedTotal = Math.round(performance.now() - startTime);
-        if (output.metrics) {
-          output.metrics.totalMs = elapsedTotal;
-        } else {
-          output.metrics = { totalMs: elapsedTotal };
-        }
       } else {
+        const isWorkerMode = mode === "worker";
         let precomputedTextDetection: TextDetectionExecutionResult | undefined = undefined;
 
         if (requiresTextDetection(activeSelectionMode)) {
@@ -721,7 +709,8 @@ export default function BgRemoverPage() {
           hasSmallKhmerText: precomputedTextDetection?.hasSmallOrUncertainKhmer,
           textConfidence: precomputedTextDetection?.hasSmallOrUncertainKhmer ? "uncertain" : "high",
         });
-        const effectiveDim = targetMaxDim ?? autoRes.resolution;
+        const effectiveDim = isWorkerMode ? undefined : (targetMaxDim ?? autoRes.resolution);
+
         const segResult = await segmentObjectSelection(imageFile, {
           mode: activeSelectionMode,
           targetMaxDimension: effectiveDim,
@@ -730,6 +719,8 @@ export default function BgRemoverPage() {
           keepText: textSubOption,
           keepGraphics: keepGraphicsSubOption,
           precomputedTextDetection,
+          remoteWorker: isWorkerMode,
+          directUrl: directWorkerUrl,
           signal: abortController.signal,
           onProgress: (p) => {
             setProgressInfo(p);
@@ -752,12 +743,16 @@ export default function BgRemoverPage() {
         const outData = outImgData.data;
         const srcData = sourceImageData.data;
         const total = width * height;
+        let transparentPixelCount = 0;
         for (let i = 0; i < total; i++) {
           const pIdx = i * 4;
           outData[pIdx] = srcData[pIdx];
           outData[pIdx + 1] = srcData[pIdx + 1];
           outData[pIdx + 2] = srcData[pIdx + 2];
           outData[pIdx + 3] = activeMask[i];
+          if (activeMask[i] < 128) {
+            transparentPixelCount++;
+          }
         }
         ctx.putImageData(outImgData, 0, 0);
 
@@ -784,8 +779,10 @@ export default function BgRemoverPage() {
           sourceWidth: segResult.sourceWidth,
           sourceHeight: segResult.sourceHeight,
           wasDownscaled: false,
-          label: "Browser AI result",
-          model: "@imgly/isnet_fp16",
+          label: isWorkerMode ? "Cloud API result" : "Browser AI result",
+          model: isWorkerMode
+            ? (workerModel || "rembg / u2net (Remote Worker)")
+            : "@imgly/isnet_fp16 (On-Device WASM)",
           mode,
           metrics: segResult.metrics || { totalMs: elapsedTotal },
           visualDebug: segResult.visualDebug,
@@ -794,6 +791,22 @@ export default function BgRemoverPage() {
           removedComponentsCount: segResult.removedComponentsCount,
           hasIsolatedBlobsRemaining: segResult.hasIsolatedBlobsRemaining,
         };
+
+        console.log("[bg-remover-trace]", {
+          selectedMode: activeSelectionMode,
+          selectedQuality: simplifiedQuality,
+          engine: isWorkerMode ? "Remote Worker" : "Browser Web Worker",
+          requestId: currentGenerationId,
+          endpoint: isWorkerMode ? (directWorkerUrl || "/api/remove-bg") : "browser-worker",
+          inputDimensions: `${segResult.sourceWidth || width}x${segResult.sourceHeight || height}`,
+          outputDimensions: `${width}x${height}`,
+          textDetectionRan: Boolean(precomputedTextDetection),
+          autoPortraitPipelineRan: activeSelectionMode === "auto_portrait" || activeSelectionMode === "person" || activeSelectionMode === "person_only",
+          blobCountBefore: (segResult.removedComponentsCount || 0) + (segResult.hasIsolatedBlobsRemaining ? 1 : 0),
+          blobCountAfter: segResult.hasIsolatedBlobsRemaining ? 1 : 0,
+          alphaTransparentPixelCount: transparentPixelCount,
+          totalDurationMs: elapsedTotal,
+        });
       }
 
       console.log(`[bg-remover] Segmentation finished for ${imageFile.name}`);
@@ -1325,10 +1338,14 @@ export default function BgRemoverPage() {
                   onClick={() => {
                     if (simplifiedQuality === "fast") {
                       handleRunSegmentation("preview", 640);
-                    } else if (selectedEngine === "worker" && isWorkerConfigured && workerStatus === "ready") {
-                      handleRunSegmentation("worker");
                     } else {
-                      handleRunSegmentation("final");
+                      if (!isWorkerConfigured || workerStatus === "unavailable" || workerStatus === "not_configured") {
+                        setError("High Quality engine unavailable. Choose Fast mode or retry.");
+                        setIsProcessing(false);
+                        isProcessingRef.current = false;
+                        return;
+                      }
+                      handleRunSegmentation("worker");
                     }
                   }}
                   disabled={!imageFile || isProcessing}
@@ -1365,6 +1382,32 @@ export default function BgRemoverPage() {
                   </button>
                 )}
               </div>
+
+              {/* Actionable recovery option when High Quality is unavailable */}
+              {error && error.includes("High Quality engine unavailable") && (
+                <div className="p-3 border border-amber-500/40 bg-amber-950/60 font-mono text-xs text-amber-200 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+                    <span className="font-bold">High Quality Engine Unavailable</span>
+                  </div>
+                  <p className="text-[11px] text-amber-100/80">
+                    The Remote Worker is currently unreachable. You can process immediately with Fast Mode on your device.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setSimplifiedQuality("fast");
+                      setEdgeQuality("fast");
+                      handleRunSegmentation("preview", 640);
+                    }}
+                    className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                    <span>Run with Fast Mode (&lt;10s)</span>
+                  </button>
+                </div>
+              )}
 
               {/* Friendly Processing Status */}
               {isProcessing && (

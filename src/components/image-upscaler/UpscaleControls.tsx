@@ -120,65 +120,11 @@ export function UpscaleControls({
         </div>
       )}
 
-      {/* 1. Mode Presets */}
-      <div>
-        <label className="mb-2 block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
-          1. ជ្រើសរើសទម្រង់កែសម្រួល (Enhancement Mode Preset)
-        </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {PRESET_CONFIGS.map((item) => {
-            const Icon = item.icon;
-            const isSelected = preset === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onChangePreset(item.id)}
-                disabled={isLoading || disabled}
-                className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-all cursor-pointer ${
-                  isSelected
-                    ? "border-cyan-400 bg-cyan-950/40 text-white shadow-[0_0_15px_rgba(0,240,255,0.2)]"
-                    : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                <div
-                  className={`mt-0.5 rounded-lg p-2 ${
-                    isSelected
-                      ? "bg-cyan-500 text-slate-950 shadow-sm"
-                      : "bg-slate-800 text-slate-400"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-mono text-xs font-bold text-slate-100">
-                      {item.titleKh}
-                    </p>
-                    {isSelected && (
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-cyan-500 text-slate-950">
-                        <Check className="h-3 w-3 stroke-[3]" />
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-mono text-[10px] text-cyan-400/80">
-                    {item.titleEn}
-                  </p>
-                  <p className="mt-1 line-clamp-1 text-[11px] text-slate-400">
-                    {item.desc}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 2. Resize & Sharpen Factor */}
+      {/* 1. Resize Factor (Default View: 2x / 4x) */}
       <div>
         <div className="mb-2 flex items-center justify-between">
           <label className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
-            2. កម្រិតពង្រីក (Resize Factor)
+            1. Scale Factor / កម្រិតពង្រីក
           </label>
           {is8xEligible && (
             <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-mono font-bold text-rose-300 border border-rose-500/30">
@@ -189,8 +135,8 @@ export function UpscaleControls({
         <div className={`grid ${is8xEligible ? "grid-cols-4" : "grid-cols-3"} gap-2`}>
           {[
             { val: 1 as UpscaleScale, labelKh: "1x ដើម", labelEn: "1x Sharpen" },
-            { val: 2 as UpscaleScale, labelKh: "2x HD", labelEn: "2x Resize" },
-            { val: 4 as UpscaleScale, labelKh: "4x HD", labelEn: "4x Resize" },
+            { val: 2 as UpscaleScale, labelKh: "2x HD", labelEn: "2x HD (Balanced)" },
+            { val: 4 as UpscaleScale, labelKh: "4x HD", labelEn: "4x HD (Ultra)" },
             ...(is8xEligible
               ? [{ val: 8 as UpscaleScale, labelKh: "8x Micro", labelEn: "Micro-HD" }]
               : []),
@@ -201,9 +147,9 @@ export function UpscaleControls({
               data-testid={`scale-btn-${opt.val}x`}
               onClick={() => onChangeScale(opt.val)}
               disabled={isLoading || disabled}
-              className={`min-h-[44px] flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all cursor-pointer ${
+              className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all cursor-pointer ${
                 scale === opt.val
-                  ? "border-amber-400 bg-amber-950/40 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)] font-bold ring-1 ring-amber-400/50"
+                  ? "border-amber-400 bg-amber-950/50 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)] font-bold ring-1 ring-amber-400/50"
                   : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
               } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
@@ -214,12 +160,12 @@ export function UpscaleControls({
         </div>
       </div>
 
-      {/* 3. Collapsible Advanced Tuning Panel */}
+      {/* 2. Collapsible Advanced Settings Panel (Presets, Face Filter, Tuning Sliders) */}
       <details className="group rounded-xl border border-slate-800 bg-slate-900/40 p-3.5 transition-all">
         <summary className="cursor-pointer text-xs font-mono font-bold text-slate-300 hover:text-cyan-300 select-none flex items-center justify-between min-h-[36px]">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-4 w-4 text-cyan-400" />
-            <span className="uppercase tracking-wider">3. Advanced Tuning & Face Filters</span>
+            <span className="uppercase tracking-wider">Advanced Settings &amp; Tuning</span>
           </div>
           <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">
             ▼
@@ -227,6 +173,56 @@ export function UpscaleControls({
         </summary>
 
         <div className="mt-3.5 pt-3.5 border-t border-slate-800 space-y-4">
+          {/* Mode Presets inside Advanced Panel */}
+          <div>
+            <label className="mb-2 block font-mono text-[11px] font-bold uppercase tracking-wider text-slate-300">
+              Enhancement Mode Preset
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {PRESET_CONFIGS.map((item) => {
+                const Icon = item.icon;
+                const isSelected = preset === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onChangePreset(item.id)}
+                    disabled={isLoading || disabled}
+                    className={`flex items-start gap-3 rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? "border-cyan-400 bg-cyan-950/40 text-white shadow-[0_0_15px_rgba(0,240,255,0.2)]"
+                        : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                    } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <div
+                      className={`mt-0.5 rounded-lg p-1.5 ${
+                        isSelected
+                          ? "bg-cyan-500 text-slate-950 shadow-sm"
+                          : "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-mono text-xs font-bold text-slate-100">
+                          {item.titleKh}
+                        </p>
+                        {isSelected && (
+                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-cyan-500 text-slate-950">
+                            <Check className="h-2.5 w-2.5 stroke-[3]" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-mono text-[10px] text-cyan-400/80">
+                        {item.titleEn}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           {/* Face Enhancement Mode Toggle */}
           <div>
             <label className="mb-2 block font-mono text-[11px] font-bold uppercase tracking-wider text-slate-300">

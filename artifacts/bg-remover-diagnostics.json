@@ -1,0 +1,53 @@
+{
+  "testDate": "2026-10-20T08:48:54.293Z",
+  "status": "PASSED",
+  "inputDimensions": {
+    "width": 640,
+    "height": 480
+  },
+  "outputDimensions": {
+    "width": 640,
+    "height": 480
+  },
+  "executionDurationMs": 521,
+  "pipeline": "Auto Portrait Pipeline (8-Connected Component Silhouette Isolation)",
+  "chokePx": 1.2,
+  "featherPx": 1,
+  "chromaDecontamination": true,
+  "acceptanceCriteria": {
+    "1. Isolated blue dot removed": {
+      "expected": "Alpha == 0 at (460, 175)",
+      "actualAlpha": 0,
+      "passed": true
+    },
+    "2. White background is transparent": {
+      "corners": {
+        "topLeft": 0,
+        "topRight": 0,
+        "bottomLeft": 0,
+        "bottomRight": 0
+      },
+      "transparentPixels": 230411,
+      "passed": true
+    },
+    "3. Person, hair, ears, face, shirt, suit, tie preserved": {
+      "faceAlpha": 255,
+      "tieAlpha": 255,
+      "suitAlpha": 255,
+      "hairAlpha": 255,
+      "earLAlpha": 255,
+      "earRAlpha": 255,
+      "passed": true
+    },
+    "4. No detached blobs remaining": {
+      "removedComponentsCount": 1,
+      "hasIsolatedBlobsRemaining": false,
+      "passed": true
+    },
+    "5. Real transparent PNG generated": {
+      "transparentPixelCount": 230411,
+      "subjectPixelCount": 75795,
+      "passed": true
+    }
+  }
+}
