@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { SettingsModal } from "./SettingsModal";
@@ -11,8 +12,16 @@ interface DashboardShellProps {
 }
 
 export function DashboardShell({ children }: DashboardShellProps) {
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Standalone external-style bypass: When on /login, bypass DashboardShell completely.
+  // Do NOT render sidebar, top navigation, dashboard content, module cards, logout button,
+  // API Keys button, or any application frames behind the login form.
+  if (pathname === "/login" || pathname?.startsWith("/login/")) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="relative isolate min-h-screen overflow-hidden flex h-screen w-full bg-slate-950 text-slate-100">

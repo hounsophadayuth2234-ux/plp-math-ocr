@@ -155,4 +155,26 @@ describe("Mechanical Cyber Security Gate & Authentication Engine", () => {
     expect(hashed).not.toContain("192.168.1.250");
     expect(hashed).toHaveLength(32);
   });
+
+  // 13. sanitizeInternalRedirect allows valid internal paths and blocks open redirects
+  it("13. sanitizeInternalRedirect enforces same-origin and strictly blocks external/open redirects", async () => {
+    const { sanitizeInternalRedirect } = await import("@/lib/auth-gate");
+
+    // Valid internal relative paths
+    expect(sanitizeInternalRedirect("/bg-remover")).toBe("/bg-remover");
+    expect(sanitizeInternalRedirect("/plp-math-content")).toBe("/plp-math-content");
+    expect(sanitizeInternalRedirect("/image-upscaler?filter=active")).toBe("/image-upscaler?filter=active");
+    expect(sanitizeInternalRedirect("/")).toBe("/");
+
+    // Malicious open redirect attempts
+    expect(sanitizeInternalRedirect("https://evil.com")).toBe("/");
+    expect(sanitizeInternalRedirect("http://evil.com/phish")).toBe("/");
+    expect(sanitizeInternalRedirect("//evil.com")).toBe("/");
+    expect(sanitizeInternalRedirect("/\\evil.com")).toBe("/");
+    expect(sanitizeInternalRedirect("javascript:alert(1)")).toBe("/");
+    expect(sanitizeInternalRedirect("data:text/html,hack")).toBe("/");
+    expect(sanitizeInternalRedirect(null)).toBe("/");
+    expect(sanitizeInternalRedirect(undefined)).toBe("/");
+    expect(sanitizeInternalRedirect("")).toBe("/");
+  });
 });

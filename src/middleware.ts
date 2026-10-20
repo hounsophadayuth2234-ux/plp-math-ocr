@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/auth-gate";
+import { verifySessionToken, SESSION_COOKIE_NAME, sanitizeInternalRedirect } from "@/lib/auth-gate";
 
 export const config = {
   matcher: [
@@ -32,9 +32,9 @@ export async function middleware(req: NextRequest) {
     isAuthenticated = check.valid;
   }
 
-  // 2. Redirect authenticated users away from the login gate to dashboard
+  // 2. Redirect authenticated users away from the login gate to dashboard (internal only)
   if (pathname === "/login" && isAuthenticated) {
-    const returnUrl = req.nextUrl.searchParams.get("from") || "/";
+    const returnUrl = sanitizeInternalRedirect(req.nextUrl.searchParams.get("from"));
     const redirectUrl = new URL(returnUrl, req.url);
     return NextResponse.redirect(redirectUrl);
   }

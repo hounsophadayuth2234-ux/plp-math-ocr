@@ -534,6 +534,109 @@ body {
   box-shadow: 0 0 22px rgba(0, 240, 255, 0.28);
 }
 
+/* -------------------------------------------------------------
+ * Standalone Mechanical Cyber Security Gateway Page & Elements
+ * ----------------------------------------------------------- */
+.auth-gate-page {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  min-height: 100dvh;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #030712;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.auth-gate-background {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.auth-gate-content {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 440px;
+  padding: 1.5rem 1rem;
+  margin: auto;
+  box-sizing: border-box;
+}
+
+.auth-gate-card {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background-color: rgba(7, 19, 38, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 0 50px rgba(0, 240, 255, 0.16), inset 0 0 24px rgba(0, 240, 255, 0.06);
+  padding: 1.75rem;
+  box-sizing: border-box;
+}
+
+@media (max-width: 400px) {
+  .auth-gate-card {
+    padding: 1.25rem;
+  }
+}
+
+/* Formula Stream Animations */
+@keyframes formulaStreamRtl {
+  0% {
+    transform: translate3d(100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+@keyframes formulaStreamLtr {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+.animate-formula-rtl {
+  display: inline-block;
+  white-space: nowrap;
+  animation: formulaStreamRtl 38s linear infinite;
+  will-change: transform;
+}
+
+.animate-formula-ltr {
+  display: inline-block;
+  white-space: nowrap;
+  animation: formulaStreamLtr 45s linear infinite;
+  will-change: transform;
+}
+
+/* Circuit Line Trace Animation */
+@keyframes circuitTrace {
+  0%, 100% {
+    stroke-dashoffset: 600;
+    opacity: 0.25;
+  }
+  50% {
+    stroke-dashoffset: 0;
+    opacity: 0.9;
+  }
+}
+
+.animate-circuit-trace {
+  stroke-dasharray: 200;
+  animation: circuitTrace 7s ease-in-out infinite;
+}
 
 /* Accessible reduced motion override */
 @media (prefers-reduced-motion: reduce) {
@@ -555,6 +658,7 @@ body {
   .animate-particle-a,
   .animate-particle-b,
   .animate-circuit-pulse,
+  .animate-circuit-trace,
   .animate-ambient-glow,
   .animate-laser-scan,
   .animate-radar,

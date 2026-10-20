@@ -20,6 +20,26 @@ export interface SessionPayload {
 }
 
 /**
+ * Validates and sanitizes a redirect target to prevent open redirect vulnerabilities.
+ * Ensures the destination is strictly an internal, same-origin relative path.
+ */
+export function sanitizeInternalRedirect(from: string | null | undefined): string {
+  if (!from || typeof from !== "string") return "/";
+  const trimmed = from.trim();
+  if (
+    trimmed.startsWith("/") &&
+    !trimmed.startsWith("//") &&
+    !trimmed.startsWith("/\\") &&
+    !trimmed.includes("://") &&
+    !trimmed.includes("\r") &&
+    !trimmed.includes("\n")
+  ) {
+    return trimmed;
+  }
+  return "/";
+}
+
+/**
  * Anonymizes client identifier by computing SHA-256 hash.
  * Ensures raw IP addresses are never stored in cache, state, or logs.
  */
