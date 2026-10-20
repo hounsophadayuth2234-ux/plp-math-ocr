@@ -33,6 +33,7 @@ yarn-error.log*
 # env files (strict: exclude all secrets, keep safe template)
 .env*
 !.env.example
+.gate-credentials-handoff.json
 
 # vercel & puppeteer
 .vercel

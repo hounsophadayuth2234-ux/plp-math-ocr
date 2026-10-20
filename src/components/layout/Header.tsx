@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, KeyRound } from "lucide-react";
 import { CORE_TOOLS } from "@/config/tools";
 
@@ -14,6 +14,7 @@ interface HeaderProps {
 
 export function Header({ onOpenSidebar, onOpenSettings }: HeaderProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const activeTool = CORE_TOOLS.find(
     (t) => pathname === t.href || pathname.startsWith(`${t.href}/`)
   );
@@ -54,8 +55,8 @@ export function Header({ onOpenSidebar, onOpenSettings }: HeaderProps) {
         )}
       </div>
 
-      {/* Motion Speed & Settings Controls */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
+      {/* Motion Speed, Settings & Logout Controls */}
+      <div className="flex items-center gap-2 sm:gap-2.5">
         <MotionSpeedControl compact={true} />
 
         <button
@@ -67,7 +68,26 @@ export function Header({ onOpenSidebar, onOpenSettings }: HeaderProps) {
           className="flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-950/40 px-3 py-1.5 text-xs font-mono font-semibold text-cyan-300 hover:bg-cyan-900/50 hover:text-white transition-all shadow-[0_0_12px_rgba(0,240,255,0.15)] focus:ring-2 focus:ring-cyan-400 focus:outline-none"
         >
           <KeyRound className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
-          <span>API Keys</span>
+          <span className="hidden sm:inline">API Keys</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="logout-gate-btn"
+          onClick={async () => {
+            try {
+              await fetch("/api/auth/gate", { method: "DELETE" });
+            } finally {
+              router.push("/login");
+              router.refresh();
+            }
+          }}
+          aria-label="Logout and lock application"
+          title="Logout and lock application"
+          className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-950/30 px-2.5 py-1.5 text-xs font-mono font-semibold text-rose-300 hover:bg-rose-900/50 hover:text-white transition-all shadow-[0_0_12px_rgba(244,63,94,0.15)] focus:ring-2 focus:ring-rose-400 focus:outline-none"
+        >
+          <span className="hidden sm:inline">ចាកចេញ</span>
+          <span>Logout</span>
         </button>
       </div>
     </header>
