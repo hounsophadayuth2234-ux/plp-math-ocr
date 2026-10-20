@@ -226,10 +226,26 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
   ]);
 }
 
+import { enforceRouteAuth } from "@/lib/auth-gate";
+import { enforceRateLimit } from "@/lib/rate-limiter";
+import { validateImageUpload } from "@/lib/image-upload-validator";
+
 // -----------------------------------------------------------
 // Route Handler
 // -----------------------------------------------------------
 export async function POST(req: NextRequest) {
+  // 1. Enforce Server-Side Session Authentication (defense-in-depth)
+  const authBlock = await enforceRouteAuth(req);
+  if (authBlock) {
+    return authBlock;
+  }
+
+  // 2. Enforce Server-Side Rate Limiting (10 req/min/IP) before reading payload
+  const rateLimitResponse = await enforceRateLimit(req, "math_ocr");
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const overallStartTime = Date.now();
   const requestId = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -293,37 +309,38 @@ export async function POST(req: NextRequest) {
 
     if (imageFile) {
       const imageBytes = await imageFile.arrayBuffer();
-      if (imageBytes.byteLength === 0) {
+      const validation = validateImageUpload(imageBytes, imageFile.name, {
+        maxSizeBytes: 4.5 * 1024 * 1024,
+        maxWidth: 4096,
+        maxHeight: 4096,
+        maxPixels: 16 * 1024 * 1024,
+      });
+
+      if (!validation.valid) {
+        let errorMessage = validation.error;
+        if (validation.code === "UNSUPPORTED_MEDIA_TYPE") {
+          errorMessage = "ប្រភេទឯកសារមិនត្រឹមត្រូវ (Unsupported Media Type)៖ សូមបញ្ចូលរូបភាព PNG, JPG, ឬ WEBP ពិតប្រាកដ។";
+        } else if (validation.code === "EMPTY_FILE") {
+          errorMessage = "ឯកសាររូបភាពទទេ (Empty File)៖ ឯកសារ 0 bytes មិនអាចដំណើរការបានទេ។";
+        } else if (validation.code === "PAYLOAD_TOO_LARGE") {
+          errorMessage = "ទំហំរូបភាពធំពេក (Payload Too Large)៖ រូបភាពលើសពីដែនកំណត់ 4.5 MB របស់ម៉ាស៊ីនមេ។";
+        }
+
         return NextResponse.json<MathOcrError>(
           {
             ok: false,
-            error: "ឯកសាររូបភាពទទេ (Empty File)៖ ឯកសារ 0 bytes មិនអាចដំណើរការបានទេ។",
-            details: "Uploaded image file is empty (0 bytes).",
-            code: "EMPTY_FILE",
+            error: errorMessage,
+            details: validation.details,
+            code: validation.code,
             retryable: false,
             requestId,
-            message: "Uploaded image file is empty (0 bytes).",
+            message: errorMessage,
           },
-          { status: 400 }
+          { status: validation.httpStatus }
         );
       }
 
-      const magicCheck = validateImageMagicBytes(imageBytes);
-      if (!magicCheck.valid || !magicCheck.format) {
-        return NextResponse.json<MathOcrError>(
-          {
-            ok: false,
-            error: "ប្រភេទឯកសារមិនត្រឹមត្រូវ (Unsupported Media Type)៖ សូមបញ្ចូលរូបភាព PNG, JPG, ឬ WEBP ពិតប្រាកដ។",
-            details: "Uploaded file does not have valid PNG, JPEG, or WEBP binary header signatures.",
-            code: "UNSUPPORTED_MEDIA_TYPE",
-            retryable: false,
-            requestId,
-            message: "Unsupported media type. Expected PNG, JPEG, or WEBP.",
-          },
-          { status: 415 }
-        );
-      }
-      verifiedMimeType = magicCheck.format;
+      verifiedMimeType = validation.format;
     }
 
     const apiKey = process.env.GEMINI_API_KEY;

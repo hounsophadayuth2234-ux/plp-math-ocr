@@ -5,6 +5,9 @@ import {
   UpscaleScale,
   ImageDiagnostics,
 } from "@/lib/image-upscale-engine";
+import { enforceRouteAuth } from "@/lib/auth-gate";
+import { enforceRateLimit } from "@/lib/rate-limiter";
+import { validateImageUpload } from "@/lib/image-upload-validator";
 
 export interface ImageUpscaleApiResponse {
   success: boolean;
@@ -17,6 +20,18 @@ export interface ImageUpscaleApiResponse {
 }
 
 export async function POST(req: NextRequest) {
+  // 1. Enforce Server-Side Session Auth (defense-in-depth)
+  const authBlock = await enforceRouteAuth(req);
+  if (authBlock) {
+    return authBlock;
+  }
+
+  // 2. Enforce Server-Side Rate Limiting (3 req/min/IP) before reading payload
+  const rateLimitBlock = await enforceRateLimit(req, "upscale");
+  if (rateLimitBlock) {
+    return rateLimitBlock;
+  }
+
   try {
     const formData = await req.formData();
     const imageFile = formData.get("image") as File | null;
@@ -42,6 +57,28 @@ export async function POST(req: NextRequest) {
       (presetStr as UpscalePreset) || "general";
 
     const bytes = await imageFile.arrayBuffer();
+
+    // 2. Validate image binary magic bytes, dimensions, pixel ceiling, and sanitize filename
+    const validation = validateImageUpload(bytes, imageFile.name, {
+      maxSizeBytes: 10 * 1024 * 1024,
+      maxWidth: 4096,
+      maxHeight: 4096,
+      maxPixels: 16 * 1024 * 1024,
+    });
+
+    if (!validation.valid) {
+      return NextResponse.json<ImageUpscaleApiResponse>(
+        {
+          success: false,
+          error: validation.error,
+          model: "Studio Super-Resolution Serverless Route",
+          scale: 2,
+          fallbackToClient: false,
+        },
+        { status: validation.httpStatus }
+      );
+    }
+
     const buffer = Buffer.from(bytes);
 
     // Check for configured external AI providers (Local GPU Worker or Replicate)
@@ -54,8 +91,8 @@ export async function POST(req: NextRequest) {
     if (workerUrl && !workerUrl.includes("your_worker_url")) {
       try {
         const workerFormData = new FormData();
-        const fileBlob = new Blob([bytes], { type: imageFile.type || "image/png" });
-        workerFormData.append("image", fileBlob, imageFile.name || "input.png");
+        const fileBlob = new Blob([bytes], { type: validation.format });
+        workerFormData.append("image", fileBlob, validation.sanitizedFilename);
         workerFormData.append("scale", scale.toString());
         workerFormData.append("preset", preset);
 
@@ -78,7 +115,7 @@ export async function POST(req: NextRequest) {
             const workerBlob = await workerRes.blob();
             const workerBytes = await workerBlob.arrayBuffer();
             const workerBase64 = Buffer.from(workerBytes).toString("base64");
-            resultUrl = `data:${workerBlob.type || "image/png"};base64,${workerBase64}`;
+            resultUrl = `data:${workerBlob.type || validation.format};base64,${workerBase64}`;
           }
 
           return NextResponse.json<ImageUpscaleApiResponse>(
@@ -99,7 +136,7 @@ export async function POST(req: NextRequest) {
 
     // Default Hybrid Response: return metadata & instruct client Web Worker engine execution
     const base64 = buffer.toString("base64");
-    const dataUri = `data:${imageFile.type || "image/png"};base64,${base64}`;
+    const dataUri = `data:${validation.format};base64,${base64}`;
 
     return NextResponse.json<ImageUpscaleApiResponse>(
       {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeImageGeneration } from "@/lib/image-generator-adapters";
 import { ProcessingStatusLabel } from "@/lib/types";
+import { enforceRouteAuth } from "@/lib/auth-gate";
+import { enforceRateLimit } from "@/lib/rate-limiter";
 
 export interface GenerateSuccess {
   images: string[];
@@ -19,6 +21,18 @@ export interface GenerateError {
 }
 
 export async function POST(req: NextRequest) {
+  // 1. Enforce Server-Side Session Auth (defense-in-depth)
+  const authBlock = await enforceRouteAuth(req);
+  if (authBlock) {
+    return authBlock;
+  }
+
+  // 2. Enforce Server-Side Rate Limiting (3 req/min/IP) before image generation
+  const rateLimitBlock = await enforceRateLimit(req, "generate_image");
+  if (rateLimitBlock) {
+    return rateLimitBlock;
+  }
+
   try {
     const body = await req.json();
     const {

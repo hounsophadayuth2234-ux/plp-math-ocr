@@ -55,7 +55,11 @@ export async function middleware(req: NextRequest) {
         },
         {
           status: 401,
-          headers: { "Cache-Control": "no-store, private" },
+          headers: {
+            "Cache-Control": "no-store, private",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+          },
         }
       );
     }

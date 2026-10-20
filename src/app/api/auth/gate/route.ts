@@ -11,12 +11,15 @@ import {
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/auth-gate";
 
+import { enforceRateLimit } from "@/lib/rate-limiter";
+
 /**
  * Extracts a privacy-safe client identity string from request headers.
  */
 function getClientSignature(req: NextRequest): string {
+  const xRealIp = req.headers.get("x-real-ip");
   const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded ? forwarded.split(",")[0].trim() : req.headers.get("x-real-ip") || "127.0.0.1";
+  const ip = (xRealIp && xRealIp.trim()) || (forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1");
   const userAgent = (req.headers.get("user-agent") || "unknown").slice(0, 100);
   return `${ip}::${userAgent}`;
 }
@@ -25,6 +28,8 @@ function getClientSignature(req: NextRequest): string {
  * GET /api/auth/gate - Check current session validity
  */
 export async function GET(req: NextRequest) {
+  const rateLimitBlock = await enforceRateLimit(req, "settings");
+  if (rateLimitBlock) return rateLimitBlock;
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!token) {
     return NextResponse.json(

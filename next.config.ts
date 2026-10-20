@@ -18,20 +18,43 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           {
-            key: "Cross-Origin-Resource-Policy",
-            value: "cross-origin",
-          },
-          {
-            key: "X-Frame-Options",
-            value: "SAMEORIGIN",
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
           },
           {
             key: "X-Content-Type-Options",
             value: "nosniff",
           },
           {
+            key: "X-Frame-Options",
+            value: "DENY",
+          },
+          {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com data:",
+              "img-src 'self' data: blob: https:",
+              "media-src 'self' data: blob:",
+              "connect-src 'self' https: wss: blob: data:",
+              "worker-src 'self' blob:",
+              "child-src 'self' blob:",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+              "upgrade-insecure-requests",
+            ].join("; "),
+          },
+          {
+            key: "Cross-Origin-Resource-Policy",
+            value: "cross-origin",
           },
         ],
       },

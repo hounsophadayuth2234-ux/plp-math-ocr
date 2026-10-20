@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { enforceRouteAuth } from "@/lib/auth-gate";
+import { enforceRateLimit } from "@/lib/rate-limiter";
+import { sanitizeFilename } from "@/lib/image-upload-validator";
+import { safeFetch, isBlockedHostname, isPrivateOrReservedIp } from "@/lib/ssrf-guard";
 
 export const maxDuration = 60; // Allow up to 60s for inference
 
@@ -249,18 +253,7 @@ export function validateImageUrl(
       return { ok: false, error: "On production Vercel, image URLs must use secure HTTPS protocol." };
     }
     const hostname = parsed.hostname.toLowerCase();
-    if (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "::1" ||
-      hostname === "0.0.0.0" ||
-      hostname.endsWith(".local") ||
-      hostname.endsWith(".internal") ||
-      hostname.startsWith("10.") ||
-      hostname.startsWith("192.168.") ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
-      hostname === "169.254.169.254"
-    ) {
+    if (isBlockedHostname(hostname) || isPrivateOrReservedIp(hostname)) {
       return {
         ok: false,
         error: "SSRF blocked: URL targets private, loopback, or cloud metadata address.",
@@ -350,6 +343,14 @@ function getWorkerConfig(): WorkerConfig {
  * Supports ?checkHealth=true to probe upstream /health endpoint.
  */
 export async function GET(req?: NextRequest) {
+  if (req) {
+    const authBlock = await enforceRouteAuth(req);
+    if (authBlock) return authBlock;
+
+    const rateLimitBlock = await enforceRateLimit(req, "settings");
+    if (rateLimitBlock) return rateLimitBlock;
+  }
+
   const config = getWorkerConfig();
   const searchParams = req?.nextUrl?.searchParams;
   const checkHealth = searchParams?.get("checkHealth") === "true";
@@ -491,6 +492,18 @@ export async function GET(req?: NextRequest) {
  * Production-ready server-side gateway to Remote Background Removal Worker.
  */
 export async function POST(req: NextRequest) {
+  // 1. Enforce Server-Side Session Auth (defense-in-depth)
+  const authBlock = await enforceRouteAuth(req);
+  if (authBlock) {
+    return authBlock;
+  }
+
+  // 2. Enforce Server-Side Rate Limiting (5 req/min/IP) before reading payload or dispatching worker
+  const rateLimitBlock = await enforceRateLimit(req, "remove_bg");
+  if (rateLimitBlock) {
+    return rateLimitBlock;
+  }
+
   const config = getWorkerConfig();
 
   // 1. Check configuration validity
@@ -695,17 +708,17 @@ export async function POST(req: NextRequest) {
       imageMime = detectedMime;
       imageBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
       inputDims = getImageDimensions(new Uint8Array(imageBuffer));
-      if (inputDims && (inputDims.width > 8000 || inputDims.height > 8000 || inputDims.width * inputDims.height > 50000000)) {
+      if (inputDims && (inputDims.width > 4096 || inputDims.height > 4096 || inputDims.width * inputDims.height > 16777216)) {
         return NextResponse.json(
           {
             ok: false,
             code: "DECOMPRESSION_BOMB",
-            error: "Image dimensions exceed maximum safe limit of 50MP or 8000x8000.",
+            error: "Image dimensions exceed maximum safe limit of 16MP or 4096x4096.",
           },
           { status: 400, headers: { "Cache-Control": "no-store, private" } }
         );
       }
-      fileName = "upload." + (detectedMime === "image/webp" ? "webp" : detectedMime === "image/jpeg" ? "jpg" : "png");
+      fileName = sanitizeFilename("upload." + (detectedMime === "image/webp" ? "webp" : detectedMime === "image/jpeg" ? "jpg" : "png"));
     } else {
       // Image URL validation
       const rawImageUrl = typeof jsonBody.imageUrl === "string" ? jsonBody.imageUrl.trim() : "";
@@ -733,51 +746,44 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Fetch image from approved URL with timeout
-      const fetchController = new AbortController();
-      const fetchTimeout = setTimeout(() => fetchController.abort(), 15000);
+      // Fetch image from approved URL using SSRF-safe fetch with DNS validation and manual redirect tracking
       try {
-        const imgRes = await fetch(rawImageUrl, {
-          signal: fetchController.signal,
+        const fetchResult = await safeFetch(rawImageUrl, {
+          timeoutMs: 15000,
+          maxSizeBytes: config.maxUploadBytes,
+          allowedContentTypes: allowedMimes,
+          requireHttps: isVercelProduction,
           headers: { "User-Agent": "PLP-BackgroundRemover/2.0" },
         });
-        if (!imgRes.ok) {
-          return NextResponse.json(
-            {
-              ok: false,
-              code: "IMAGE_FETCH_FAILED",
-              error: `Failed to fetch image from imageUrl: HTTP ${imgRes.status}`,
-            },
-            { status: 400, headers: { "Cache-Control": "no-store, private" } }
-          );
-        }
-        const ct = (imgRes.headers.get("content-type") || "").toLowerCase();
-        if (!allowedMimes.some((m) => ct.includes(m))) {
+
+        imageMime = fetchResult.contentType;
+        imageBuffer = fetchResult.buffer;
+        fileName = sanitizeFilename(fetchResult.finalUrl.split("/").pop()?.split("?")[0] || "image.png");
+      } catch (fetchErr: unknown) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        const isSsrf = msg.toLowerCase().includes("ssrf") || msg.toLowerCase().includes("private") || msg.toLowerCase().includes("loopback") || msg.toLowerCase().includes("metadata");
+        const isUnsupportedMedia = msg.toLowerCase().includes("unsupported content-type");
+        const isPayloadTooLarge = msg.toLowerCase().includes("payload too large");
+
+        if (isUnsupportedMedia) {
           return NextResponse.json(
             {
               ok: false,
               code: "UNSUPPORTED_MEDIA_TYPE",
-              error: `Unsupported media type '${ct || "unknown"}'. Only PNG, JPEG, and WebP are allowed.`,
+              error: msg,
             },
             { status: 415, headers: { "Cache-Control": "no-store, private" } }
           );
         }
-        imageMime = ct;
-        imageBuffer = await imgRes.arrayBuffer();
-        fileName = rawImageUrl.split("/").pop()?.split("?")[0] || "image.png";
-      } catch {
+
         return NextResponse.json(
           {
             ok: false,
-            code: "IMAGE_FETCH_FAILED",
-            error: fetchController.signal.aborted
-              ? "Image fetch timed out (15s)."
-              : "Failed to connect to imageUrl host.",
+            code: isSsrf ? "SSRF_BLOCKED" : isPayloadTooLarge ? "PAYLOAD_TOO_LARGE" : "IMAGE_FETCH_FAILED",
+            error: msg,
           },
           { status: 400, headers: { "Cache-Control": "no-store, private" } }
         );
-      } finally {
-        clearTimeout(fetchTimeout);
       }
 
       if (!imageBuffer || imageBuffer.byteLength === 0) {
@@ -803,12 +809,12 @@ export async function POST(req: NextRequest) {
       }
 
       inputDims = getImageDimensions(new Uint8Array(imageBuffer));
-      if (inputDims && (inputDims.width > 8000 || inputDims.height > 8000 || inputDims.width * inputDims.height > 50000000)) {
+      if (inputDims && (inputDims.width > 4096 || inputDims.height > 4096 || inputDims.width * inputDims.height > 16777216)) {
         return NextResponse.json(
           {
             ok: false,
             code: "DECOMPRESSION_BOMB",
-            error: "Image dimensions exceed maximum safe limit of 50MP or 8000x8000.",
+            error: "Image dimensions exceed maximum safe limit of 16MP or 4096x4096.",
           },
           { status: 400, headers: { "Cache-Control": "no-store, private" } }
         );
@@ -983,15 +989,15 @@ export async function POST(req: NextRequest) {
 
     imageMime = mimeType;
     imageBuffer = await imageFile.arrayBuffer();
-    fileName = (imageFile as File).name || "image.png";
+    fileName = sanitizeFilename((imageFile as File).name || "image.png");
 
     inputDims = getImageDimensions(new Uint8Array(imageBuffer));
-    if (inputDims && (inputDims.width > 8000 || inputDims.height > 8000 || inputDims.width * inputDims.height > 50000000)) {
+    if (inputDims && (inputDims.width > 4096 || inputDims.height > 4096 || inputDims.width * inputDims.height > 16777216)) {
       return NextResponse.json(
         {
           ok: false,
           code: "DECOMPRESSION_BOMB",
-          error: "Image dimensions exceed maximum safe limit of 50MP or 8000x8000.",
+          error: "Image dimensions exceed maximum safe limit of 16MP or 4096x4096.",
         },
         { status: 400, headers: { "Cache-Control": "no-store, private" } }
       );

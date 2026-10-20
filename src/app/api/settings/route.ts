@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { enforceRouteAuth } from "@/lib/auth-gate";
+import { enforceRateLimit } from "@/lib/rate-limiter";
+import { isBlockedHostname, isPrivateOrReservedIp } from "@/lib/ssrf-guard";
 
 const ENV_FILE_PATH = path.join(process.cwd(), ".env.local");
 
@@ -44,18 +47,7 @@ function validateWorkerHost(
       if (parsed.protocol !== "https:") {
         return { ok: false, error: "On production Vercel, worker URL must be HTTPS." };
       }
-      if (
-        hostname === "localhost" ||
-        hostname === "127.0.0.1" ||
-        hostname === "::1" ||
-        hostname === "0.0.0.0" ||
-        hostname.endsWith(".local") ||
-        hostname.endsWith(".internal") ||
-        hostname.startsWith("10.") ||
-        hostname.startsWith("192.168.") ||
-        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
-        hostname === "169.254.169.254"
-      ) {
+      if (isBlockedHostname(hostname) || isPrivateOrReservedIp(hostname)) {
         return {
           ok: false,
           error: "On production Vercel, private and loopback addresses are not permitted.",
@@ -70,7 +62,15 @@ function validateWorkerHost(
 
 // GET /api/settings - Returns current configuration status
 // Reads both process.env (Vercel runtime) and .env.local (local development)
-export async function GET() {
+export async function GET(req?: NextRequest) {
+  if (req) {
+    const authBlock = await enforceRouteAuth(req);
+    if (authBlock) return authBlock;
+
+    const rateLimitBlock = await enforceRateLimit(req, "settings");
+    if (rateLimitBlock) return rateLimitBlock;
+  }
+
   const env = readEnvFile();
   const isProduction =
     process.env.VERCEL === "1" ||
@@ -168,6 +168,14 @@ export async function GET() {
 
 // POST /api/settings - Updates settings safely
 export async function POST(req: NextRequest) {
+  // 1. Enforce Server-Side Session Auth (defense-in-depth)
+  const authBlock = await enforceRouteAuth(req);
+  if (authBlock) return authBlock;
+
+  // 2. Enforce Server-Side Rate Limiting
+  const rateLimitBlock = await enforceRateLimit(req, "settings");
+  if (rateLimitBlock) return rateLimitBlock;
+
   try {
     const isProduction =
       process.env.VERCEL === "1" ||

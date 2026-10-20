@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Replicate from "replicate";
 import { ProcessingStatusLabel } from "@/lib/types";
+import { enforceRouteAuth } from "@/lib/auth-gate";
+import { enforceRateLimit } from "@/lib/rate-limiter";
+import { validateImageUpload } from "@/lib/image-upload-validator";
 
 export interface UpscaleSuccess {
   outputUrl: string;
@@ -21,6 +24,18 @@ const REAL_ESRGAN_MODEL =
   "nightmareai/real-esrgan:42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b";
 
 export async function POST(req: NextRequest) {
+  // 1. Enforce Server-Side Session Auth (defense-in-depth)
+  const authBlock = await enforceRouteAuth(req);
+  if (authBlock) {
+    return authBlock;
+  }
+
+  // 2. Enforce Server-Side Rate Limiting (3 req/min/IP) before reading payload or calling provider
+  const rateLimitBlock = await enforceRateLimit(req, "upscale");
+  if (rateLimitBlock) {
+    return rateLimitBlock;
+  }
+
   try {
     const formData = await req.formData();
     const imageFile = formData.get("image") as File | null;
@@ -31,6 +46,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json<UpscaleError>(
         { error: "No image file provided." },
         { status: 400 }
+      );
+    }
+
+    const bytes = await imageFile.arrayBuffer();
+
+    // 2. Validate image binary magic bytes, dimensions, pixel ceiling, and sanitize filename
+    const validation = validateImageUpload(bytes, imageFile.name, {
+      maxSizeBytes: 10 * 1024 * 1024,
+      maxWidth: 4096,
+      maxHeight: 4096,
+      maxPixels: 16 * 1024 * 1024,
+    });
+
+    if (!validation.valid) {
+      return NextResponse.json<UpscaleError>(
+        {
+          error: validation.error,
+          code: validation.code,
+          details: validation.details,
+        },
+        { status: validation.httpStatus }
       );
     }
 
@@ -45,9 +81,8 @@ export async function POST(req: NextRequest) {
       .replace(/^["']|["']$/g, "")
       .replace(/\/+$/, "");
 
-    const bytes = await imageFile.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
-    const dataUri = `data:${imageFile.type || "image/png"};base64,${base64}`;
+    const dataUri = `data:${validation.format};base64,${base64}`;
 
     // 1. Explicit Demo Preview Mode ONLY when requested by client
     if (isDemoRequested) {
@@ -67,8 +102,8 @@ export async function POST(req: NextRequest) {
     if (workerUrl && !workerUrl.includes("your_worker_url")) {
       try {
         const workerFormData = new FormData();
-        const fileBlob = new Blob([bytes], { type: imageFile.type || "image/png" });
-        workerFormData.append("image", fileBlob, imageFile.name || "input.png");
+        const fileBlob = new Blob([bytes], { type: validation.format });
+        workerFormData.append("image", fileBlob, validation.sanitizedFilename);
         workerFormData.append("scale", scale.toString());
 
         const workerToken = process.env.UPSCALER_WORKER_TOKEN?.trim();

@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { NextRequest, NextResponse } from "next/server";
 
 // Session lifespan: 10 hours
 export const SESSION_MAX_AGE_SECONDS = 10 * 60 * 60; // 36,000s
@@ -17,6 +18,78 @@ export interface SessionPayload {
   iat: number;
   exp: number;
   jti: string;
+}
+
+/**
+ * Server-side session verification directly inside protected API routes (defense-in-depth).
+ * Enforces valid session cookie or Bearer authorization header.
+ * Blocks unauthenticated direct requests even if middleware was bypassed.
+ * Returns null if the request is validly authenticated, or a 401 NextResponse if unauthenticated or expired.
+ */
+export async function enforceRouteAuth(req: NextRequest): Promise<NextResponse | null> {
+  // In automated test environments, allow bypass unless testing auth explicitly
+  if (
+    process.env.NODE_ENV === "test" &&
+    process.env.ENABLE_ROUTE_AUTH_TESTS !== "1" &&
+    !req.headers.has("x-test-enforce-auth")
+  ) {
+    return null;
+  }
+
+  // 1. Inspect cookies for valid session token
+  let token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) {
+    token =
+      req.cookies.get("__Secure-dyt_gate_session")?.value ||
+      req.cookies.get("dyt_gate_session")?.value;
+  }
+
+  // 2. Also inspect Authorization header: Bearer <token>
+  if (!token) {
+    const authHeader = req.headers.get("authorization");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.slice(7).trim();
+    }
+  }
+
+  if (!token) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "UNAUTHORIZED",
+        error: "Unauthorized: Access requires active gate authentication.",
+        authenticated: false,
+      },
+      {
+        status: 401,
+        headers: {
+          "Cache-Control": "no-store, private",
+          "X-Content-Type-Options": "nosniff",
+        },
+      }
+    );
+  }
+
+  const session = await verifySessionToken(token);
+  if (!session.valid) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "UNAUTHORIZED",
+        error: `Unauthorized: ${session.error || "Invalid session credentials"}.`,
+        authenticated: false,
+      },
+      {
+        status: 401,
+        headers: {
+          "Cache-Control": "no-store, private",
+          "X-Content-Type-Options": "nosniff",
+        },
+      }
+    );
+  }
+
+  return null;
 }
 
 /**
@@ -195,19 +268,21 @@ function cleanupLocalMap() {
 export async function checkRateLimitAndLockout(
   hashedId: string
 ): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
+  const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
   if (redisUrl && redisToken) {
     try {
-      const lockRes = await fetch(`${redisUrl}/get/gate:lock:${hashedId}`, {
+      const lockKey = `gate:${envPrefix}:lock:${hashedId}`;
+      const lockRes = await fetch(`${redisUrl}/get/${lockKey}`, {
         headers: { Authorization: `Bearer ${redisToken}` },
         cache: "no-store",
       });
       if (lockRes.ok) {
         const lockData = await lockRes.json();
         if (lockData.result) {
-          const ttlRes = await fetch(`${redisUrl}/ttl/gate:lock:${hashedId}`, {
+          const ttlRes = await fetch(`${redisUrl}/ttl/${lockKey}`, {
             headers: { Authorization: `Bearer ${redisToken}` },
             cache: "no-store",
           });
@@ -241,13 +316,17 @@ export async function checkRateLimitAndLockout(
 export async function recordFailedAttempt(
   hashedId: string
 ): Promise<{ locked: boolean; retryAfterSeconds?: number; attempts: number }> {
+  const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
   if (redisUrl && redisToken) {
     try {
+      const attemptsKey = `gate:${envPrefix}:attempts:${hashedId}`;
+      const lockKey = `gate:${envPrefix}:lock:${hashedId}`;
+
       // Increment attempt counter with 1 hour expiration
-      const incrRes = await fetch(`${redisUrl}/incr/gate:attempts:${hashedId}`, {
+      const incrRes = await fetch(`${redisUrl}/incr/${attemptsKey}`, {
         headers: { Authorization: `Bearer ${redisToken}` },
         cache: "no-store",
       });
@@ -256,7 +335,7 @@ export async function recordFailedAttempt(
 
       if (attempts === 1) {
         // Set attempt expiry window
-        await fetch(`${redisUrl}/expire/gate:attempts:${hashedId}/3600`, {
+        await fetch(`${redisUrl}/expire/${attemptsKey}/3600`, {
           headers: { Authorization: `Bearer ${redisToken}` },
           cache: "no-store",
         });
@@ -264,7 +343,7 @@ export async function recordFailedAttempt(
 
       if (attempts >= MAX_FAILED_ATTEMPTS) {
         // Activate 30-minute lock
-        await fetch(`${redisUrl}/setex/gate:lock:${hashedId}/${LOCKOUT_DURATION_SECONDS}/1`, {
+        await fetch(`${redisUrl}/setex/${lockKey}/${LOCKOUT_DURATION_SECONDS}/1`, {
           headers: { Authorization: `Bearer ${redisToken}` },
           cache: "no-store",
         });
@@ -298,17 +377,20 @@ export async function recordFailedAttempt(
  * Resets failed attempts upon successful password verification.
  */
 export async function clearFailedAttempts(hashedId: string): Promise<void> {
+  const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
   if (redisUrl && redisToken) {
     try {
+      const attemptsKey = `gate:${envPrefix}:attempts:${hashedId}`;
+      const lockKey = `gate:${envPrefix}:lock:${hashedId}`;
       await fetch(`${redisUrl}/pipeline`, {
         method: "POST",
         headers: { Authorization: `Bearer ${redisToken}`, "Content-Type": "application/json" },
         body: JSON.stringify([
-          ["DEL", `gate:attempts:${hashedId}`],
-          ["DEL", `gate:lock:${hashedId}`],
+          ["DEL", attemptsKey],
+          ["DEL", lockKey],
         ]),
         cache: "no-store",
       });

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 import type { AnyNode } from "domhandler";
+import { enforceRouteAuth } from "@/lib/auth-gate";
+import { enforceRateLimit } from "@/lib/rate-limiter";
+import { safeFetch } from "@/lib/ssrf-guard";
 
 // -----------------------------------------------------------
 // Types
@@ -22,20 +25,6 @@ export interface ScrapeError {
   details?: string;
 }
 
-// Blocked domains to prevent SSRF abuse in a team context
-const BLOCKED_HOSTS = [
-  "localhost", "127.0.0.1", "0.0.0.0",
-  "169.254.", "10.", "192.168.", "172.16.",
-];
-
-function isBlockedUrl(urlStr: string): boolean {
-  try {
-    const u = new URL(urlStr);
-    return BLOCKED_HOSTS.some((h) => u.hostname.startsWith(h) || u.hostname === h);
-  } catch {
-    return true;
-  }
-}
 
 // -----------------------------------------------------------
 // CSS Sanitizer — scope all rules to a wrapper class
@@ -91,6 +80,16 @@ function sanitizeHtml($: cheerio.CheerioAPI, $root: cheerio.Cheerio<AnyNode>): s
 // Route Handler – POST /api/web-scraper
 // -----------------------------------------------------------
 export async function POST(req: NextRequest) {
+  // 1. Enforce Server-Side Session Auth (defense-in-depth)
+  const authBlock = await enforceRouteAuth(req);
+  if (authBlock) return authBlock;
+
+  // 2. Enforce Server-Side Rate Limiting (20 req/min/IP) before reading payload or fetching target
+  const rateLimitBlock = await enforceRateLimit(req, "web_scraper");
+  if (rateLimitBlock) {
+    return rateLimitBlock;
+  }
+
   try {
     const body = await req.json();
     const { url, selector } = body as { url: string; selector?: string };
@@ -105,44 +104,42 @@ export async function POST(req: NextRequest) {
     // Normalize URL
     const targetUrl = url.startsWith("http") ? url : `https://${url}`;
 
-    if (isBlockedUrl(targetUrl)) {
-      return NextResponse.json<ScrapeError>(
-        { error: "Requests to internal/private IP ranges are not allowed." },
-        { status: 403 }
-      );
-    }
-
-    // Fetch the target page (15s timeout)
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    // Fetch the target page using SSRF-safe fetch (DNS check, private IP block, redirect tracking)
     let rawHtml: string;
-
     try {
-      const response = await fetch(targetUrl, {
+      const fetchResult = await safeFetch(targetUrl, {
+        timeoutMs: 15_000,
+        maxSizeBytes: 10 * 1024 * 1024,
         headers: {
           "User-Agent":
             "Mozilla/5.0 (compatible; NexusAI-WebCloner/1.0; +internal)",
           Accept: "text/html,application/xhtml+xml",
           "Accept-Language": "en-US,en;q=0.9",
         },
-        signal: controller.signal,
       });
-      clearTimeout(timeout);
-      if (!response.ok) {
+      rawHtml = new TextDecoder().decode(fetchResult.buffer);
+    } catch (fetchErr: unknown) {
+      const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      const isSsrf =
+        msg.toLowerCase().includes("ssrf") ||
+        msg.toLowerCase().includes("private") ||
+        msg.toLowerCase().includes("loopback") ||
+        msg.toLowerCase().includes("metadata");
+
+      if (isSsrf) {
         return NextResponse.json<ScrapeError>(
           {
-            error: `Target server returned HTTP ${response.status}: ${response.statusText}`,
+            error: "Requests to internal/private IP ranges or metadata services are not allowed.",
+            details: msg,
           },
-          { status: 502 }
+          { status: 403 }
         );
       }
-      rawHtml = await response.text();
-    } catch (fetchErr) {
-      clearTimeout(timeout);
+
       return NextResponse.json<ScrapeError>(
         {
           error: "Failed to fetch the target URL.",
-          details: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+          details: msg,
         },
         { status: 502 }
       );
