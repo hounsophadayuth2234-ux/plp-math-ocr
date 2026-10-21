@@ -16,6 +16,11 @@
  */
 
 import type { MathSolverProblem, SolverMode } from "@/app/api/math-solver/route";
+import {
+  renderColumnCalculationHtml,
+  renderColumnCalculationText,
+  detectAndBuildStructuredCalculation,
+} from "./column-calculation";
 
 export function escapeHtml(str: string | number | null | undefined): string {
   if (str === null || str === undefined) return "";
@@ -214,6 +219,60 @@ body {
   overflow-x: auto;
   font-weight: 600;
 }
+.column-calculation {
+  border-collapse: collapse;
+  display: inline-table;
+  margin: 12px 0;
+  font-family: "Noto Sans Khmer", "Kantumruy Pro", Arial, sans-serif;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.column-calculation .operator-cell {
+  width: 32px;
+  text-align: center;
+  font-weight: 700;
+  padding: 2px 4px;
+}
+.column-calculation .digit-cell {
+  width: 36px;
+  min-width: 36px;
+  text-align: center;
+  padding: 2px 4px;
+}
+.column-calculation .separator-row td {
+  border-top: 3px solid #111827;
+  height: 4px;
+  padding: 0;
+}
+.fraction-calculation {
+  display: inline-flex;
+  align-items: center;
+  margin: 12px 0;
+  font-family: "Noto Sans Khmer", "Kantumruy Pro", Arial, sans-serif;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.fraction-calculation .fraction-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fraction-calculation .fraction-term {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  padding: 0 4px;
+}
+.fraction-calculation .fraction-bar {
+  width: 100%;
+  border-top: 2px solid #111827;
+  margin: 2px 0;
+}
+.fraction-calculation .fraction-op {
+  padding: 0 6px;
+  font-weight: 700;
+}
 .final-answer-box {
   background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
   border: 1.5px solid #10b981;
@@ -355,9 +414,22 @@ body {
         ? problem.verticalLines.join("\n")
         : problem.alignedWorking;
 
-    if (vertText) {
+    const structuredCalc =
+      problem.structuredCalculation ||
+      detectAndBuildStructuredCalculation(
+        problem.extractedProblem,
+        problem.finalAnswer,
+        problem.verticalLines
+      );
+
+    if (structuredCalc || vertText) {
       parts.push('    <div style="color: #64748b; font-size: 11px; margin-top: 10px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
-      parts.push(`    <pre class="vertical-calc">${escapeHtml(vertText)}</pre>\n`);
+      if (structuredCalc) {
+        parts.push(renderColumnCalculationHtml(structuredCalc));
+      }
+      if (vertText) {
+        parts.push(`    <pre class="vertical-calc">${escapeHtml(vertText)}</pre>\n`);
+      }
     }
     parts.push("  </section>\n\n");
   }
@@ -474,10 +546,21 @@ export function renderCanonicalSolutionPlainText(
       lines.push("");
     }
 
-    const vertText =
-      problem.verticalLines && problem.verticalLines.length > 0
-        ? problem.verticalLines.join("\n")
-        : problem.alignedWorking;
+    const structuredCalc =
+      problem.structuredCalculation ||
+      (!problem.verticalLines || problem.verticalLines.length === 0
+        ? detectAndBuildStructuredCalculation(
+            problem.extractedProblem,
+            problem.finalAnswer,
+            problem.verticalLines
+          )
+        : undefined);
+
+    const vertText = structuredCalc
+      ? renderColumnCalculationText(structuredCalc)
+      : problem.verticalLines && problem.verticalLines.length > 0
+      ? problem.verticalLines.join("\n")
+      : problem.alignedWorking;
 
     if (vertText) {
       lines.push("ការគណនាតាមជួរឈរ (Vertical Calculation):");

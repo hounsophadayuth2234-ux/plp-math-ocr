@@ -7,6 +7,10 @@ import {
   verifyMathResultDeterministically,
   DeterministicVerificationResult,
 } from "@/lib/deterministic-math-verifier";
+import {
+  type StructuredCalculation,
+  detectAndBuildStructuredCalculation,
+} from "@/lib/column-calculation";
 
 export const maxDuration = 60;
 
@@ -60,6 +64,7 @@ export interface MathSolverProblem {
   finalAnswer?: string;
   verification?: string;
   deterministicResult?: DeterministicVerificationResult;
+  structuredCalculation?: StructuredCalculation;
   confidence: "high" | "medium" | "low";
   confidenceKhmer: string;
   ambiguousParts?: string[];
@@ -839,6 +844,16 @@ Return a valid JSON object matching the standard schema.`;
           finalAnswer: responseFinalAnswer,
           verification: (p.verification as string) || "",
           deterministicResult,
+          structuredCalculation:
+            solverMode === "solve"
+              ? undefined
+              : deterministicResult?.structuredCalculation ||
+                detectAndBuildStructuredCalculation(
+                  extractedProblem,
+                  finalAnswer,
+                  responseVerticalLines
+                ) ||
+                undefined,
           confidence: ((p.confidence as string) || "medium") as "high" | "medium" | "low",
           confidenceKhmer:
             (p.confidenceKhmer as string) ||

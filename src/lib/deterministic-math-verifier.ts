@@ -10,6 +10,11 @@
  * - Khmer numeral bidirectional conversion
  */
 
+import {
+  type StructuredCalculation,
+  detectAndBuildStructuredCalculation,
+} from "./column-calculation";
+
 export interface Fraction {
   numerator: number;
   denominator: number;
@@ -27,6 +32,7 @@ export interface DeterministicVerificationResult {
   verticalLines?: string[];
   detailedKhmerExplanation?: string;
   reviewPoints: string[];
+  structuredCalculation?: StructuredCalculation;
 }
 
 export interface ColumnOperationStep {
@@ -769,6 +775,12 @@ export function verifyMathResultDeterministically(
       );
     }
 
+    const structuredCalculation = detectAndBuildStructuredCalculation(
+      problemStatement,
+      computedKhmer,
+      arith.verticalLines
+    );
+
     return {
       computedAnswer: computedStr,
       computedAnswerKhmer: computedKhmer,
@@ -781,6 +793,7 @@ export function verifyMathResultDeterministically(
       verticalLines: arith.verticalLines,
       detailedKhmerExplanation: arith.detailedKhmerExplanation,
       reviewPoints,
+      structuredCalculation: structuredCalculation || undefined,
     };
   }
 
@@ -793,6 +806,11 @@ export function verifyMathResultDeterministically(
     const propNorm = fromKhmerNumeral(proposedAnswer).replace(/\s+/g, "");
     const matches = propNorm.includes(computedFracStr) || propNorm.includes(computedFracKhmer);
 
+    const structuredCalculation = detectAndBuildStructuredCalculation(
+      problemStatement,
+      computedFracKhmer
+    );
+
     return {
       computedAnswer: computedFracStr,
       computedAnswerKhmer: computedFracKhmer,
@@ -802,6 +820,7 @@ export function verifyMathResultDeterministically(
       verificationMethod: "Exact Fraction Engine",
       verificationMethodKhmer: frac.stepsKhmer || `ប្រភាគសម្រួលរួច = ${computedFracKhmer}`,
       reviewPoints,
+      structuredCalculation: structuredCalculation || undefined,
     };
   }
 

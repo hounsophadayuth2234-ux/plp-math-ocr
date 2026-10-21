@@ -21,10 +21,11 @@ import type { MathSolverProblem, SolverMode } from "@/app/api/math-solver/route"
 import {
   copyCanonicalSolutionToClipboard,
   copyCanonicalSolutionPlainTextToClipboard,
-  renderCanonicalSolutionPlainText,
   renderCanonicalSolutionHtml,
   copyTextFallback,
 } from "@/lib/math-solution-html";
+import { ColumnCalculationView } from "./ColumnCalculationView";
+import { detectAndBuildStructuredCalculation } from "@/lib/column-calculation";
 
 interface SolutionCardProps {
   problem: MathSolverProblem;
@@ -67,6 +68,14 @@ export function SolutionCard({
   const isMode1 = effectiveMode === "solve";
   const isMode2 = effectiveMode === "generate";
   const isMode3 = effectiveMode === "verify";
+
+  const structuredCalc =
+    problem.structuredCalculation ||
+    detectAndBuildStructuredCalculation(
+      problem.extractedProblem,
+      problem.finalAnswer,
+      problem.verticalLines
+    );
 
   // Pre-generate raw HTML source for copy / modal
   const htmlSource = renderCanonicalSolutionHtml(problem, {
@@ -387,12 +396,17 @@ export function SolutionCard({
               </div>
             )}
 
-            {/* True vertical calculation with preserved newlines and monospace layout */}
-            {(Boolean(problem.verticalLines && problem.verticalLines.length > 0) || Boolean(problem.alignedWorking)) && (
-              <div className="rounded-lg border border-slate-700 bg-slate-950 p-4 overflow-x-auto">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2 font-sans">
+            {/* Place-value aligned column calculation & monospace fallback */}
+            {(structuredCalc || Boolean(problem.verticalLines && problem.verticalLines.length > 0) || Boolean(problem.alignedWorking)) && (
+              <div className="rounded-lg border border-slate-700 bg-slate-950 p-4 overflow-x-auto space-y-3">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block font-sans">
                   ការគណនាតាមជួរឈរ (Vertical Calculation):
                 </span>
+                {structuredCalc && (
+                  <div className="py-2" data-testid="structured-column-calculation">
+                    <ColumnCalculationView calculation={structuredCalc} />
+                  </div>
+                )}
                 <pre
                   data-testid="vertical-calculation-pre"
                   className="font-mono text-sm text-emerald-300 leading-relaxed whitespace-pre font-semibold"

@@ -42,6 +42,11 @@ import {
   escapeHtml,
   copyTextFallback,
 } from "@/lib/math-solution-html";
+import {
+  detectAndBuildStructuredCalculation,
+  renderColumnCalculationText,
+  renderColumnCalculationHtml,
+} from "@/lib/column-calculation";
 import type { MathSolverProblem } from "@/app/api/math-solver/route";
 import { SolutionCard } from "@/components/math-solver/SolutionCard";
 import { renderToString } from "react-dom/server";
@@ -1256,5 +1261,155 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
       expect(text).not.toContain("<pre");
       expect(text).not.toContain("</");
     });
+  });
+
+  describe("Place-Value Column Alignment System & Acceptance Tests", () => {
+    // 1. Primary Acceptance Test: ៤៣១ + ៦៥
+    it("Primary Acceptance: ៤៣១ + ៦៥ strictly aligns by place value in data model, UI, HTML export, and plain text", () => {
+      const calc = detectAndBuildStructuredCalculation("៤៣១ + ៦៥", "៤៩៦");
+      expect(calc).not.toBeNull();
+      if (!calc) return;
+
+      expect(calc.columns).toEqual(["hundreds", "tens", "ones"]);
+
+      // Row 0: operand ៤៣១
+      expect(calc.rows[0].role).toBe("operand");
+      expect(calc.rows[0].operator).toBe("");
+      expect(calc.rows[0].digits).toEqual(["៤", "៣", "១"]);
+
+      // Row 1: operand + ៦៥ (zero-padded place value)
+      expect(calc.rows[1].role).toBe("operand");
+      expect(calc.rows[1].operator).toBe("+");
+      expect(calc.rows[1].digits).toEqual(["០", "៦", "៥"]);
+
+      // ៦ must be in tens column (index 1), below ៣
+      expect(calc.rows[1].digits[1]).toBe("៦");
+      expect(calc.rows[0].digits[1]).toBe("៣");
+
+      // ៥ must be in ones column (index 2), below ១
+      expect(calc.rows[1].digits[2]).toBe("៥");
+      expect(calc.rows[0].digits[2]).toBe("១");
+
+      // Row 2: separator
+      expect(calc.rows[2].role).toBe("separator");
+
+      // Row 3: result ៤៩៦
+      expect(calc.rows[3].role).toBe("result");
+      expect(calc.rows[3].digits).toEqual(["៤", "៩", "៦"]);
+
+      // Verify HTML Table Export
+      const htmlTable = renderColumnCalculationHtml(calc);
+      expect(htmlTable).toContain('<table class="column-calculation" role="math" aria-label="ការគណនាជួរឈរ">');
+      expect(htmlTable).toContain('<td class="operator-cell">+</td>');
+      expect(htmlTable).toContain('<td class="digit-cell">៤</td>');
+      expect(htmlTable).toContain('<td class="digit-cell">៣</td>');
+      expect(htmlTable).toContain('<td class="digit-cell">១</td>');
+      expect(htmlTable).toContain('<td class="digit-cell">៦</td>');
+      expect(htmlTable).toContain('<td class="digit-cell">៥</td>');
+
+      // Verify Plain Text Output
+      const text = renderColumnCalculationText(calc);
+      expect(text.includes("\n")).toBe(true);
+      expect(text).toContain("៤ ៣ ១");
+      expect(text).toContain("+");
+      expect(text).toContain("០ ៦ ៥");
+      expect(text).toContain("៤ ៩ ៦");
+
+      // Verify Visible React Component via SolutionCard
+      const prob: MathSolverProblem = {
+        id: "prob-431-65",
+        mode: "verify",
+        extractedProblem: "៤៣១ + ៦៥",
+        finalAnswer: "៤៩៦",
+        structuredCalculation: calc,
+        solutionKhmer: "៤៣១ + ៦៥ = ៤៩៦",
+        confidence: "high",
+        confidenceKhmer: "កម្រិតខ្ពស់",
+      };
+      const rendered = renderToString(React.createElement(SolutionCard, { problem: prob, index: 0, totalProblems: 1 }));
+      expect(rendered).toContain('data-testid="structured-column-calculation"');
+      expect(rendered).toContain("column-calculation");
+      expect(rendered).toContain("operator-cell");
+      expect(rendered).toContain("digit-cell");
+    });
+
+    // 2. All 7 Required Operations:
+    // ៤៣១ + ៦៥, ៧៩៥ − ៥៤, ៧០២ − ២៧៨, ២៤ × ៣, ៨៤ ÷ ៤, ១/២ + ១/៤, ១២.៥ + ៣.៧៥
+    const requiredOps = [
+      { expr: "៤៣១ + ៦៥", ans: "៤៩៦", expectedType: "arithmetic" },
+      { expr: "៧៩៥ − ៥៤", ans: "៧៤១", expectedType: "arithmetic" },
+      { expr: "៧០២ − ២៧៨", ans: "៤២៤", expectedType: "arithmetic" },
+      { expr: "២៤ × ៣", ans: "៧២", expectedType: "arithmetic" },
+      { expr: "៨៤ ÷ ៤", ans: "២១", expectedType: "division" },
+      { expr: "១/២ + ១/៤", ans: "៣/៤", expectedType: "fraction" },
+      { expr: "១២.៥ + ៣.៧៥", ans: "១៦.២៥", expectedType: "decimal" },
+    ];
+
+    for (const op of requiredOps) {
+      it(`Acceptance verification for operation: ${op.expr}`, () => {
+        const calc = detectAndBuildStructuredCalculation(op.expr, op.ans);
+        expect(calc).not.toBeNull();
+        if (!calc) return;
+
+        expect(calc.type).toBe(op.expectedType);
+
+        // Check columns consistency for arithmetic/division/decimal
+        if (calc.type !== "fraction") {
+          const colCount = calc.columns.length;
+          expect(colCount).toBeGreaterThan(0);
+          for (const row of calc.rows) {
+            if (row.role !== "separator") {
+              expect(row.digits.length).toBe(colCount);
+            }
+          }
+        }
+
+        // Test HTML generation
+        const htmlTable = renderColumnCalculationHtml(calc);
+        expect(htmlTable.length).toBeGreaterThan(0);
+        if (calc.type !== "fraction") {
+          expect(htmlTable).toContain("column-calculation");
+          expect(htmlTable).toContain("<table");
+        } else {
+          expect(htmlTable).toContain("fraction-calculation");
+        }
+
+        // Test Text copy generation
+        const textCalc = renderColumnCalculationText(calc);
+        expect(textCalc.length).toBeGreaterThan(0);
+        expect(textCalc.includes("\n")).toBe(true);
+
+        // Test Full HTML Document Export
+        const prob: MathSolverProblem = {
+          id: `op-${op.expr}`,
+          mode: "verify",
+          extractedProblem: op.expr,
+          finalAnswer: op.ans,
+          structuredCalculation: calc,
+          solutionKhmer: `ដំណោះស្រាយ ${op.expr}`,
+          confidence: "high",
+          confidenceKhmer: "កម្រិតខ្ពស់",
+        };
+
+        const fullHtml = renderCanonicalSolutionHtml(prob);
+        expect(fullHtml).toContain("<!doctype html>");
+        expect(fullHtml).toContain("<style>");
+        if (calc.type !== "fraction") {
+          expect(fullHtml).toContain('<table class="column-calculation"');
+        } else {
+          expect(fullHtml).toContain('<div class="fraction-calculation"');
+        }
+
+        // Test Full Plain Text Export
+        const fullPlain = renderCanonicalSolutionPlainText(prob);
+        expect(fullPlain).toContain("ប្រធានលំហាត់៖ " + op.expr);
+        expect(fullPlain).not.toContain("<table");
+        expect(fullPlain).not.toContain("</");
+
+        // Test Visible UI component render
+        const uiHtml = renderToString(React.createElement(SolutionCard, { problem: prob, index: 0, totalProblems: 1 }));
+        expect(uiHtml).toContain('data-testid="structured-column-calculation"');
+      });
+    }
   });
 });
