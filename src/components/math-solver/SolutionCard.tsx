@@ -15,10 +15,12 @@ import {
   Code2,
   Sparkles,
   Download,
+  X,
 } from "lucide-react";
-import type { MathSolverProblem } from "@/app/api/math-solver/route";
+import type { MathSolverProblem, SolverMode } from "@/app/api/math-solver/route";
 import {
   copyCanonicalSolutionToClipboard,
+  copyCanonicalSolutionPlainTextToClipboard,
   renderCanonicalSolutionPlainText,
   renderCanonicalSolutionHtml,
   copyTextFallback,
@@ -30,6 +32,7 @@ interface SolutionCardProps {
   totalProblems: number;
   gradeTitle?: string;
   solverModeTitle?: string;
+  solverMode?: SolverMode;
 }
 
 export function SolutionCard({
@@ -38,41 +41,60 @@ export function SolutionCard({
   totalProblems,
   gradeTitle,
   solverModeTitle,
+  solverMode,
 }: SolutionCardProps) {
   const [copiedText, setCopiedText] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
+  const [copiedModalHtml, setCopiedModalHtml] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [showAmbiguous, setShowAmbiguous] = useState(true);
+  const [showHtmlModal, setShowHtmlModal] = useState(false);
 
-  // Copy plain text
+  // Determine effective mode
+  const effectiveMode: SolverMode =
+    solverMode ||
+    problem.mode ||
+    (solverModeTitle?.toLowerCase().includes("verify")
+      ? "verify"
+      : solverModeTitle?.toLowerCase().includes("generate")
+      ? "generate"
+      : problem.extractedAnswer
+      ? "verify"
+      : !problem.finalAnswer && problem.solutionKhmer
+      ? "generate"
+      : "solve");
+
+  const isMode1 = effectiveMode === "solve";
+  const isMode2 = effectiveMode === "generate";
+  const isMode3 = effectiveMode === "verify";
+
+  // Pre-generate raw HTML source for copy / modal
+  const htmlSource = renderCanonicalSolutionHtml(problem, {
+    gradeTitle,
+    solverModeTitle,
+    solverMode: effectiveMode,
+  });
+
+  // Copy plain text ("ចម្លងអត្ថបទ")
   const handleCopyText = async () => {
-    const text = renderCanonicalSolutionPlainText(problem, {
+    const success = await copyCanonicalSolutionPlainTextToClipboard(problem, {
       gradeTitle,
       solverModeTitle,
+      solverMode: effectiveMode,
     });
-    try {
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        setCopiedText(true);
-        setTimeout(() => setCopiedText(false), 2000);
-        return;
-      }
-    } catch {
-      console.warn("Clipboard text copy failed, trying fallback");
-    }
-    const success = copyTextFallback(text);
     if (success) {
       setCopiedText(true);
       setTimeout(() => setCopiedText(false), 2000);
     }
   };
 
-  // Copy as HTML (Dual-mode: text/html + text/plain)
+  // Copy HTML source ("ចម្លងកូដ HTML")
   const handleCopyHtml = async () => {
     try {
       const success = await copyCanonicalSolutionToClipboard(problem, {
         gradeTitle,
         solverModeTitle,
+        solverMode: effectiveMode,
       });
       if (success) {
         setCopiedHtml(true);
@@ -83,14 +105,10 @@ export function SolutionCard({
     }
   };
 
-  // Download HTML
+  // Download HTML ("ទាញយកឯកសារ HTML")
   const handleDownloadHtml = () => {
     try {
-      const htmlContent = renderCanonicalSolutionHtml(problem, {
-        gradeTitle,
-        solverModeTitle,
-      });
-      const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+      const blob = new Blob([htmlSource], { type: "text/html;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -101,6 +119,14 @@ export function SolutionCard({
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Failed to download HTML:", err);
+    }
+  };
+
+  const handleCopyFromModal = () => {
+    const success = copyTextFallback(htmlSource);
+    if (success) {
+      setCopiedModalHtml(true);
+      setTimeout(() => setCopiedModalHtml(false), 2000);
     }
   };
 
@@ -181,6 +207,13 @@ export function SolutionCard({
               {problem.inferredGradeKhmer}
             </span>
           )}
+          <span className="rounded-md bg-violet-900/40 border border-violet-500/30 px-2 py-0.5 text-xs text-violet-300 font-mono uppercase">
+            {effectiveMode === "solve"
+              ? "MODE 1: ចម្លើយ"
+              : effectiveMode === "generate"
+              ? "MODE 2: វិធីដោះស្រាយ"
+              : "MODE 3: ដោះស្រាយ+ផ្ទៀងផ្ទាត់"}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span
@@ -193,8 +226,8 @@ export function SolutionCard({
       </div>
 
       <div className="p-5 space-y-5">
-        {/* 1. Visual Interpretation (When visual elements are present) */}
-        {problem.visualInterpretation && (
+        {/* 1. Visual Interpretation (Mode 2 or Mode 3 only) */}
+        {!isMode1 && problem.visualInterpretation && (
           <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-2">
               <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
@@ -245,19 +278,19 @@ export function SolutionCard({
           </div>
         )}
 
-        {/* 2. Extracted Problem */}
+        {/* 2. Extracted Problem (Mandatory in all modes) */}
         <div className="space-y-2">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
             <BookOpen className="h-3.5 w-3.5 text-violet-400" />
-            ១. ប្រធានលំហាត់
+            ប្រធានលំហាត់
           </h4>
           <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed font-mono">
             {problem.extractedProblem}
           </div>
         </div>
 
-        {/* 3. Formal Framework (Given, To Find, Formulas) */}
-        {(problem.given || problem.toFind || problem.formulas) && (
+        {/* 3. Formal Framework (Mode 2 & Mode 3 only) */}
+        {!isMode1 && (problem.given || problem.toFind || problem.formulas) && (
           <div className="rounded-lg border border-indigo-500/20 bg-indigo-950/15 p-4 space-y-2.5 text-xs">
             {problem.given && (
               <div>
@@ -280,8 +313,8 @@ export function SolutionCard({
           </div>
         )}
 
-        {/* 4. Student Existing Answer & Verification */}
-        {problem.extractedAnswer && answerBadge && (
+        {/* 4. Student Existing Answer & Verification (Mode 3 only) */}
+        {isMode3 && problem.extractedAnswer && answerBadge && (
           <div className="space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
               ចម្លើយដែលមានក្នុងរូបភាព
@@ -342,56 +375,68 @@ export function SolutionCard({
         )}
 
         {/* 5. Step-by-Step Solution & Aligned Working */}
-        <div className="space-y-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            {problem.extractedAnswer ? "៤" : "២"}. វិធីដោះស្រាយលម្អិត
-          </h4>
-          <div className="rounded-lg border border-violet-500/20 bg-violet-950/20 p-4 text-sm text-slate-100 whitespace-pre-wrap leading-loose">
-            {problem.solutionKhmer || problem.solution}
-          </div>
+        {/* STRICT CONTRACT: Mode 2 and Mode 3 ONLY. In Mode 1, this must NOT be rendered. */}
+        {!isMode1 && (problem.solutionKhmer || problem.solution || problem.verticalLines || problem.alignedWorking) && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              វិធីដោះស្រាយលម្អិត
+            </h4>
+            {(problem.solutionKhmer || problem.solution) && (
+              <div className="rounded-lg border border-violet-500/20 bg-violet-950/20 p-4 text-sm text-slate-100 whitespace-pre-wrap leading-loose">
+                {problem.solutionKhmer || problem.solution}
+              </div>
+            )}
 
-          {/* Aligned vertical working (for column addition, subtraction, multiplication, fractions) */}
-          {(Boolean(problem.verticalLines && problem.verticalLines.length > 0) || Boolean(problem.alignedWorking)) && (
-            <div className="rounded-lg border border-slate-700 bg-slate-950 p-4 overflow-x-auto">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2 font-sans">
-                ការគណនាតាមជួរឈរ (Vertical Calculation):
-              </span>
-              <pre
-                data-testid="vertical-calculation-pre"
-                className="font-mono text-sm text-emerald-300 leading-relaxed whitespace-pre font-semibold"
-                style={{
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                  whiteSpace: "pre",
-                }}
-              >
-                {problem.verticalLines && problem.verticalLines.length > 0
-                  ? problem.verticalLines.join("\n")
-                  : problem.alignedWorking}
-              </pre>
-            </div>
-          )}
-        </div>
+            {/* True vertical calculation with preserved newlines and monospace layout */}
+            {(Boolean(problem.verticalLines && problem.verticalLines.length > 0) || Boolean(problem.alignedWorking)) && (
+              <div className="rounded-lg border border-slate-700 bg-slate-950 p-4 overflow-x-auto">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2 font-sans">
+                  ការគណនាតាមជួរឈរ (Vertical Calculation):
+                </span>
+                <pre
+                  data-testid="vertical-calculation-pre"
+                  className="font-mono text-sm text-emerald-300 leading-relaxed whitespace-pre font-semibold"
+                  style={{
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                    whiteSpace: "pre",
+                  }}
+                >
+                  {problem.verticalLines && problem.verticalLines.length > 0
+                    ? problem.verticalLines.join("\n")
+                    : problem.alignedWorking}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 6. Final Answer */}
-        <div className="space-y-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            ចម្លើយចុងក្រោយ
-          </h4>
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
-              <span className="text-base font-bold text-emerald-200 font-mono">
-                {problem.finalAnswer}
+        {/* STRICT CONTRACT:
+            - Mode 1: Rendered!
+            - Mode 2: STRICTLY NOT RENDERED!
+            - Mode 3: Rendered!
+        */}
+        {!isMode2 && problem.finalAnswer && (
+          <div className="space-y-2" data-testid="final-answer-card">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              ចម្លើយចុងក្រោយ
+            </h4>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                <span className="text-base font-bold text-emerald-200 font-mono">
+                  {problem.finalAnswer}
+                </span>
+              </div>
+              <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-3 py-1 text-xs font-bold text-emerald-300">
+                សម្រេច ✓
               </span>
             </div>
-            <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-3 py-1 text-xs font-bold text-emerald-300">
-              សម្រេច ✓
-            </span>
           </div>
-        </div>
+        )}
 
         {/* 7. Deterministic Verification Card */}
-        {(problem.verification || problem.deterministicResult) && (
+        {(isMode1 || isMode3) && (problem.verification || problem.deterministicResult) && (
           <div className="rounded-lg border border-slate-700 overflow-hidden">
             <button
               type="button"
@@ -400,7 +445,7 @@ export function SolutionCard({
             >
               <span className="flex items-center gap-2">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                ការពិនិត្យផ្ទៀងផ្ទាត់ដោយប្រព័ន្ធសុក្រឹត (Stage 2 Deterministic Verifier)
+                ការពិនិត្យផ្ទៀងផ្ទាត់ដោយប្រព័ន្ធសុក្រឹត (Deterministic Verifier)
               </span>
               {showVerification ? (
                 <ChevronUp className="h-4 w-4" />
@@ -424,13 +469,15 @@ export function SolutionCard({
                         {problem.deterministicResult.statusKhmer}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">វិធីផ្ទៀងផ្ទាត់៖</span>
-                      <span className="text-slate-200 font-medium">
-                        {problem.deterministicResult.verificationMethodKhmer ||
-                          problem.deterministicResult.verificationMethod}
-                      </span>
-                    </div>
+                    {isMode3 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">វិធីផ្ទៀងផ្ទាត់៖</span>
+                        <span className="text-slate-200 font-medium">
+                          {problem.deterministicResult.verificationMethodKhmer ||
+                            problem.deterministicResult.verificationMethod}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <span className="text-slate-400">ចម្លើយដែលបានគណនា៖</span>
                       <span className="font-mono font-bold text-emerald-300">
@@ -486,13 +533,13 @@ export function SolutionCard({
           </div>
         )}
 
-        {/* Action Buttons: Copy Text, Copy as HTML, Download HTML */}
+        {/* Action Buttons: ចម្លងអត្ថបទ, ចម្លងកូដ HTML, ទាញយកឯកសារ HTML, មើល HTML Source */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
           <div className="text-xs text-slate-400">
             {copiedHtml && (
               <span className="text-emerald-400 font-medium inline-flex items-center gap-1.5 animate-pulse">
                 <Check className="h-3.5 w-3.5" />
-                បានចម្លងដំណោះស្រាយជា HTML រួចរាល់!
+                បានចម្លងកូដ HTML រួចរាល់!
               </span>
             )}
           </div>
@@ -512,33 +559,111 @@ export function SolutionCard({
               ) : (
                 <>
                   <Copy className="h-3.5 w-3.5" />
-                  ចម្លងជាអត្ថបទ
+                  ចម្លងអត្ថបទ
                 </>
               )}
             </button>
 
-            {/* 2. Copy as HTML */}
+            {/* 2. Copy as HTML Source */}
             <button
               type="button"
               onClick={handleCopyHtml}
               className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-600/20 px-3.5 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/30 hover:text-white transition-colors shadow-sm"
             >
               <Code2 className="h-3.5 w-3.5 text-indigo-400" />
-              ចម្លងជា HTML
+              ចម្លងកូដ HTML
             </button>
 
-            {/* 3. Download HTML */}
+            {/* 3. Download HTML file */}
             <button
               type="button"
               onClick={handleDownloadHtml}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:border-violet-500/40 hover:text-violet-300 transition-colors"
             >
               <Download className="h-3.5 w-3.5 text-slate-400" />
-              ទាញយក HTML
+              ទាញយកឯកសារ HTML
+            </button>
+
+            {/* 4. View HTML Source Modal */}
+            <button
+              type="button"
+              onClick={() => setShowHtmlModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-400" />
+              មើល HTML Source
             </button>
           </div>
         </div>
       </div>
+
+      {/* HTML Source Preview Modal */}
+      {showHtmlModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-3xl rounded-2xl border border-violet-500/40 bg-slate-950 p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Code2 className="h-5 w-5 text-indigo-400" />
+                <h3 className="text-sm font-bold text-white">
+                  កូដ HTML Source (HTML Code Preview)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHtmlModal(false)}
+                className="rounded-lg p-1 text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              កូដ HTML ខាងក្រោមជាឯកសារពេញលេញ (Standalone Document) រួមមាន CSS, ភាសាខ្មែរ, និងគណនាតាមជួរឈរ។ អ្នកអាចចម្លងយកទៅបិទភ្ជាប់ក្នុង Code Editor ឬ Web Browser បាន។
+            </p>
+
+            <div className="flex-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+              <textarea
+                readOnly
+                value={htmlSource}
+                rows={16}
+                className="w-full h-full p-4 font-mono text-xs text-emerald-300 bg-transparent resize-none focus:outline-none overflow-auto whitespace-pre"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+              <span className="text-[11px] text-slate-500 font-mono">
+                ទំហំកូដ៖ {new Blob([htmlSource]).size} bytes
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyFromModal}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
+                >
+                  {copiedModalHtml ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      បានចម្លងកូដ!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      ចម្លងកូដ HTML
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowHtmlModal(false)}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-300 hover:text-white"
+                >
+                  បិទ
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

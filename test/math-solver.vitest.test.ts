@@ -388,7 +388,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
 
     const fd = buildFormData({
       gradeLevel: "grade_5",
-      solverMode: "generate",
+      solverMode: "verify",
       problemText: "បណ្តោយ 15 m ទទឹង 8 m រកផ្ទៃក្រឡា",
     });
     const res = await POST(buildRequest(fd));
@@ -596,7 +596,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
 
     const html = renderCanonicalSolutionHtml(sampleProblem, {
       gradeTitle: "ថ្នាក់ទី ៣",
-      solverModeTitle: "SOLVE",
+      solverModeTitle: "SOLVE + VERIFY",
     });
 
     // Verify preservation
@@ -697,9 +697,9 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
     expect(content).toContain("min-h-[44px]");
     // Grade selector responsive columns
     expect(content).toContain("grid-cols-2 sm:grid-cols-4 md:grid-cols-7");
-    // "ចម្លងជា HTML" button presence
-    expect(content).toContain("ចម្លងជា HTML");
-    expect(content).toContain("បានចម្លងជា HTML រួចរាល់!");
+    // "ចម្លងកូដ HTML" button presence
+    expect(content).toContain("ចម្លងកូដ HTML");
+    expect(content).toContain("បានចម្លងកូដ HTML រួចរាល់!");
   });
 
   // =========================================================================
@@ -708,6 +708,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
   it("Test 24: DOM regression asserts element.textContent.includes('\\n') === true and renders separate vertical lines", () => {
     const canonicalProblem: MathSolverProblem = {
       id: "prob-795-54",
+      mode: "verify",
       extractedProblem: "៧៩៥ − ៥៤",
       verticalLines: [
         "  ៧៩៥",
@@ -724,14 +725,15 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
       confidenceKhmer: "កម្រិតខ្ពស់",
     };
 
-    // Render SolutionCard to HTML string
+    // Render SolutionCard to HTML string (Mode 3: verify displays vertical calculation)
     const cardHtml = renderToString(
       React.createElement(SolutionCard, {
         problem: canonicalProblem,
         index: 0,
         totalProblems: 1,
         gradeTitle: "ថ្នាក់ទី ៣",
-        solverModeTitle: "SOLVE",
+        solverModeTitle: "SOLVE + VERIFY",
+        solverMode: "verify",
       })
     );
 
@@ -823,6 +825,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
   it("Test 27: Plain text, HTML copy, and Download HTML derive from canonical object and preserve vertical alignment", () => {
     const canonicalProblem: MathSolverProblem = {
       id: "prob-canonical",
+      mode: "verify",
       extractedProblem: "៧៩៥ − ៥៤",
       verticalLines: [
         "  ៧៩៥",
@@ -854,21 +857,25 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
     expect(plainText.includes("\n")).toBe(true);
     expect(plainText).toContain("ការគណនាតាមជួរឈរ (Vertical Calculation):");
     expect(plainText).toContain("  ៧៩៥\n−  ៥៤\n─────\n  ៧៤១");
-    expect(plainText).toContain("ចម្លើយចុងក្រោយ៖ ៧៤១");
-    expect(plainText).toContain("🛡️ ការពិនិត្យផ្ទៀងផ្ទាត់ដោយប្រព័ន្ធសុក្រឹត៖");
+    expect(plainText).toContain("ចម្លើយ៖ ៧៤១");
+    expect(plainText).not.toContain("<article");
+    expect(plainText).not.toContain("<style");
 
-    // 2. HTML Output
+    // 2. HTML Output - Real standalone HTML Document
     const htmlOutput = renderCanonicalSolutionHtml(canonicalProblem);
-    const $ = cheerio.load(htmlOutput);
-    const preEl = $("pre");
+    expect(htmlOutput).toContain("<!doctype html>");
+    expect(htmlOutput).toContain("<style>");
+    expect(htmlOutput).toContain("<article class=\"solution\">");
+    expect(htmlOutput).toContain("<pre class=\"vertical-calc\">");
+    expect(htmlOutput).toContain("៧៩៥");
+    expect(htmlOutput).toContain("៥៤");
+    expect(htmlOutput).toContain("៧៤១");
+    expect(htmlOutput).not.toContain("<script");
+    expect(htmlOutput).not.toContain("onclick");
+    expect(htmlOutput).not.toContain("onerror");
+    expect(htmlOutput).not.toContain("javascript:");
 
-    expect(preEl.length).toBeGreaterThan(0);
-    expect(preEl.text().includes("\n")).toBe(true);
-    expect(preEl.text()).toContain("៧៩៥");
-    expect(preEl.text()).toContain("៥៤");
-    expect(preEl.text()).toContain("៧៤១");
-
-    // 3. UI Card renders all three action buttons
+    // 3. UI Card renders all four clear action buttons
     const cardHtml = renderToString(
       React.createElement(SolutionCard, {
         problem: canonicalProblem,
@@ -876,16 +883,16 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
         totalProblems: 1,
       })
     );
-    expect(cardHtml).toContain("ចម្លងជាអត្ថបទ");
-    expect(cardHtml).toContain("ចម្លងជា HTML");
-    expect(cardHtml).toContain("ទាញយក HTML");
+    expect(cardHtml).toContain("ចម្លងអត្ថបទ");
+    expect(cardHtml).toContain("ចម្លងកូដ HTML");
+    expect(cardHtml).toContain("ទាញយកឯកសារ HTML");
+    expect(cardHtml).toContain("មើល HTML Source");
   });
 
   // =========================================================================
-  // Test 28: Live Preview End-to-End API test for ៧៩៥ − ៥៤
+  // Test 28: Live Preview End-to-End API test for ៧៩៥ − ៥៤ (Mode 3: Verify)
   // =========================================================================
-  it("Test 28: End-to-End API test with ៧៩៥ − ៥៤ overrides collapsed string and returns 741 with vertical lines", async () => {
-    // Simulate AI returning collapsed string without newlines
+  it("Test 28: End-to-End API test with ៧៩៥ − ៥៤ overrides collapsed string and returns 741 with vertical lines in verify mode", async () => {
     mockGeminiSuccess({
       problems: [
         {
@@ -906,7 +913,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
       "image",
       new File([pngMagicBytes().buffer as ArrayBuffer], "test_795_54.png", { type: "image/png" })
     );
-    formData.append("solverMode", "solve");
+    formData.append("solverMode", "verify");
     formData.append("gradeLevel", "grade_3");
     formData.append("problemText", "៧៩៥ − ៥៤");
 
@@ -924,25 +931,330 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
     // Final answer is exactly ៧៤១
     expect(prob.finalAnswer).toBe("៧៤១");
 
-    // Vertical lines are preserved as structured lines
+    // Vertical lines are preserved as structured lines with newlines
     expect(Array.isArray(prob.verticalLines)).toBe(true);
     expect(prob.verticalLines.length).toBe(4);
     expect(prob.verticalLines[0].trim()).toBe("៧៩៥");
     expect(prob.verticalLines[1]).toContain("៥៤");
     expect(prob.verticalLines[3].trim()).toBe("៧៤១");
-
-    // Aligned working preserves newlines
     expect(prob.alignedWorking.includes("\n")).toBe(true);
 
-    // Explanation is expanded to full Grade 3 pedagogical 7 sections
+    // Explanation is expanded to full Grade 3 pedagogical sections
     expect(prob.solutionKhmer).toContain("ប្រមាណវិធី");
     expect(prob.solutionKhmer).toContain("ជំហានទី១ — ខ្ទង់ឯកតា");
     expect(prob.solutionKhmer).toContain("ដោយមិនបាច់ខ្ចីទេ");
   });
 
+  // =========================================================================
+  // Test 29: copyTextFallback handles fallback copy safely
+  // =========================================================================
   it("Test 29: copyTextFallback handles fallback copy safely when ClipboardItem is unavailable", () => {
-    // In node environment without document, returns false without throwing
     const res = copyTextFallback("test string");
     expect(res).toBe(false);
+  });
+
+  // =========================================================================
+  // Test 30: STRICT THREE-MODE CONTRACT (Mode 1, Mode 2, Mode 3)
+  // =========================================================================
+  describe("Test 30: Strict Three-Mode Contract", () => {
+    it("Mode 1 (solve): Contains answer but NO detailed solution or vertical working", async () => {
+      mockGeminiSuccess({
+        problems: [
+          {
+            id: "p1",
+            extractedProblem: "៧៩៥ − ៥៤",
+            finalAnswer: "៧៤១",
+            solutionKhmer: "ជំហានលម្អិត...",
+            alignedWorking: "  ៧៩៥\n−  ៥៤\n─────\n  ៧៤១",
+          },
+        ],
+        totalProblems: 1,
+      });
+
+      const fd = buildFormData({
+        solverMode: "solve",
+        problemText: "៧៩៥ − ៥៤",
+      });
+      const res = await POST(buildRequest(fd));
+      const data = await res.json();
+      const p = data.problems[0];
+
+      // Mode 1 contract:
+      expect(p.finalAnswer).toBe("៧៤១");
+      expect(p.solutionKhmer).toBe("");
+      expect(p.alignedWorking).toBeUndefined();
+      expect(p.verticalLines).toBeUndefined();
+
+      // UI Card check in Mode 1
+      const html = renderToString(
+        React.createElement(SolutionCard, {
+          problem: p,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "solve",
+        })
+      );
+      expect(html).toContain("៧៤១");
+      expect(html).not.toContain("Vertical Calculation");
+      expect(html).not.toContain("វិធីដោះស្រាយលម្អិត");
+    });
+
+    it("Mode 2 (generate): Contains detailed solution and vertical working but NO separate final answer", async () => {
+      mockGeminiSuccess({
+        problems: [
+          {
+            id: "p1",
+            extractedProblem: "៧៩៥ − ៥៤",
+            finalAnswer: "៧៤១",
+            solutionKhmer: "ជំហានទី១៖ ៥ − ៤ = ១",
+            alignedWorking: "  ៧៩៥\n−  ៥៤\n─────\n  ៧៤១",
+          },
+        ],
+        totalProblems: 1,
+      });
+
+      const fd = buildFormData({
+        solverMode: "generate",
+        problemText: "៧៩៥ − ៥៤",
+      });
+      const res = await POST(buildRequest(fd));
+      const data = await res.json();
+      const p = data.problems[0];
+
+      // Mode 2 contract:
+      expect(p.finalAnswer).toBe("");
+      expect(p.solutionKhmer).toContain("ជំហានទី១");
+      expect(p.alignedWorking).toContain("៧៩៥");
+      expect(Array.isArray(p.verticalLines)).toBe(true);
+
+      // UI Card check in Mode 2
+      const html = renderToString(
+        React.createElement(SolutionCard, {
+          problem: p,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "generate",
+        })
+      );
+      expect(html).toContain("វិធីដោះស្រាយលម្អិត");
+      expect(html).toContain("Vertical Calculation");
+      expect(html).not.toContain('data-testid="final-answer-card"');
+      expect(html).not.toContain("ចម្លើយចុងក្រោយ");
+    });
+
+    it("Mode 3 (verify): Contains both solution steps, vertical working, AND final answer", async () => {
+      mockGeminiSuccess({
+        problems: [
+          {
+            id: "p1",
+            extractedProblem: "៧៩៥ − ៥៤",
+            finalAnswer: "៧៤១",
+            solutionKhmer: "ជំហានទី១៖ ៥ − ៤ = ១",
+            alignedWorking: "  ៧៩៥\n−  ៥៤\n─────\n  ៧៤១",
+          },
+        ],
+        totalProblems: 1,
+      });
+
+      const fd = buildFormData({
+        solverMode: "verify",
+        problemText: "៧៩៥ − ៥៤",
+      });
+      const res = await POST(buildRequest(fd));
+      const data = await res.json();
+      const p = data.problems[0];
+
+      // Mode 3 contract:
+      expect(p.finalAnswer).toBe("៧៤១");
+      expect(p.solutionKhmer).toContain("ជំហានទី១");
+      expect(p.alignedWorking).toContain("៧៩៥");
+      expect(Array.isArray(p.verticalLines)).toBe(true);
+
+      // UI Card check in Mode 3
+      const html = renderToString(
+        React.createElement(SolutionCard, {
+          problem: p,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "verify",
+        })
+      );
+      expect(html).toContain("៧៤១");
+      expect(html).toContain("វិធីដោះស្រាយលម្អិត");
+      expect(html).toContain("Vertical Calculation");
+    });
+  });
+
+  // =========================================================================
+  // Test 31: KHMER PEDAGOGICAL INVARIANTS BY GRADE LEVEL
+  // =========================================================================
+  describe("Test 31: Khmer Pedagogical Invariants by Grade Level", () => {
+    it("Grade 1 produces visual/concrete grouping representations", () => {
+      const g1 = verifyMathResultDeterministically("៧៩៥ − ៥៤", "៧៤១", {
+        gradeLevel: "grade_1",
+        solverMode: "generate",
+      });
+      expect(g1.detailedKhmerExplanation).toBeDefined();
+      const exp1 = g1.detailedKhmerExplanation!;
+      expect(exp1).toContain("បំបែក");
+      // Does not contain Grade 3 column place-value table
+      expect(exp1).not.toContain("ខ្ទង់ឯកតា៖");
+    });
+
+    it("Grade 6 produces algebraic equations, properties, and rigorous mathematical balance", () => {
+      const g6 = verifyMathResultDeterministically("៧៩៥ − ៥៤", "៧៤១", {
+        gradeLevel: "grade_6",
+        solverMode: "generate",
+      });
+      expect(g6.detailedKhmerExplanation).toBeDefined();
+      const exp6 = g6.detailedKhmerExplanation!;
+
+      // Grade 6 vocabulary
+      expect(exp6).toContain("ថ្នាក់ទី ៦ (ការវិភាគពិជគណិត និងសមីការ)");
+      expect(exp6).toContain("សមីការពិជគណិត");
+      expect(exp6).toContain("Algebraic");
+      expect(exp6).toContain("សមភាព");
+      expect(exp6).toContain("x =");
+    });
+
+    it("Proves Grade 1 and Grade 6 produce distinct pedagogical templates for the exact same input", () => {
+      const g1 = verifyMathResultDeterministically("៧៩៥ − ៥៤", "៧៤១", {
+        gradeLevel: "grade_1",
+      });
+      const g6 = verifyMathResultDeterministically("៧៩៥ − ៥៤", "៧៤១", {
+        gradeLevel: "grade_6",
+      });
+
+      expect(g1.detailedKhmerExplanation).not.toEqual(g6.detailedKhmerExplanation);
+      expect(g1.detailedKhmerExplanation).toContain("វត្ថុ");
+      expect(g6.detailedKhmerExplanation).toContain("សមីការ");
+    });
+  });
+
+  // =========================================================================
+  // Test 32: TRUE VERTICAL ARITHMETIC WITH PRESERVED ROWS & NEWLINES
+  // =========================================================================
+  describe("Test 32: True Vertical Arithmetic & Long Division", () => {
+    it("Long division (៨៤ ÷ ៤ = ២១) produces structured rows, preserved newlines, and brings down digits", () => {
+      const arith = verifyMathResultDeterministically("៨៤ ÷ ៤", "២១");
+      expect(arith.isVerified).toBe(true);
+      expect(arith.computedAnswerKhmer).toBe("២១");
+
+      expect(arith.verticalLines).toBeDefined();
+      expect(Array.isArray(arith.verticalLines)).toBe(true);
+      expect(arith.verticalLines!.length).toBeGreaterThan(4);
+
+      const verticalBlock = arith.verticalLines!.join("\n");
+      expect(verticalBlock.includes("\n")).toBe(true);
+      expect(verticalBlock).toContain("២១"); // quotient
+      expect(verticalBlock).toContain("៤ │ ៨៤"); // divisor | dividend
+      expect(verticalBlock).toContain("−"); // subtraction step
+      expect(verticalBlock).toContain("─"); // horizontal bar
+    });
+
+    it("Subtraction with genuine borrowing (៧០២ − ២៧៨ = ៤២៤) produces correct multi-step borrow chain", () => {
+      const arith = verifyMathResultDeterministically("៧០២ − ២៧៨", "៤២៤");
+      expect(arith.isVerified).toBe(true);
+      expect(arith.computedAnswerKhmer).toBe("៤២៤");
+
+      expect(arith.verticalLines).toBeDefined();
+      expect(arith.verticalLines!.length).toBe(4);
+      expect(arith.verticalLines![0].trim()).toBe("៧០២");
+      expect(arith.verticalLines![1]).toContain("២៧៨");
+      expect(arith.verticalLines![3].trim()).toBe("៤២៤");
+
+      // Verify borrowing explanation mentions borrowing from hundreds across tens to ones
+      expect(arith.detailedKhmerExplanation).toContain("ខ្ចី");
+      expect(arith.detailedKhmerExplanation).toContain("ខ្ទង់រយ");
+      expect(arith.detailedKhmerExplanation).toContain("ខ្ទង់ដប់");
+    });
+
+    it("Fraction addition (១/២ + ១/៤ = ៣/៤) finds LCM and reduces properly", () => {
+      const frac = evaluateFractionArithmetic("១/២ + ១/៤");
+      expect(frac.success).toBe(true);
+      expect(frac.result).toEqual({ numerator: 3, denominator: 4 });
+      expect(frac.stepsKhmer).toContain("តម្រូវភាគបែងរួម៖ ៤");
+      expect(frac.stepsKhmer).toContain("៣/៤");
+    });
+  });
+
+  // =========================================================================
+  // Test 33: REAL HTML SOURCE INTEGRITY & SECURITY
+  // =========================================================================
+  describe("Test 33: Real HTML Source Document & Security Invariants", () => {
+    it("Copy HTML output produces a complete HTML5 document with CSS and no unsafe scripts", () => {
+      const prob: MathSolverProblem = {
+        id: "sec-prob",
+        mode: "verify",
+        extractedProblem: "៧៩៥ − ៥៤",
+        finalAnswer: "៧៤១",
+        verticalLines: ["  ៧៩៥", "−  ៥៤", "─────", "  ៧៤១"],
+        solutionKhmer: "ជំហានដោះស្រាយ...",
+        verification: "៧៤១ + ៥៤ = ៧៩៥ ✓",
+        confidence: "high",
+        confidenceKhmer: "កម្រិតខ្ពស់",
+      };
+
+      const html = renderCanonicalSolutionHtml(prob);
+
+      // Must be a complete HTML document
+      expect(html.startsWith("<!doctype html>")).toBe(true);
+      expect(html).toContain('<html lang="km">');
+      expect(html).toContain("<head>");
+      expect(html).toContain('<meta charset="utf-8">');
+      expect(html).toContain("<style>");
+      expect(html).toContain("</style>");
+      expect(html).toContain("<body>");
+      expect(html).toContain('<article class="solution">');
+      expect(html).toContain("</article>");
+      expect(html).toContain("</body>");
+      expect(html).toContain("</html>");
+
+      // Preserves Khmer text and newlines
+      expect(html).toContain("ប្រធានលំហាត់");
+      expect(html).toContain("៧៩៥ − ៥៤");
+      expect(html).toContain("៧៤១");
+      expect(html.includes("\n")).toBe(true);
+
+      // Preserves <pre class="vertical-calc">
+      expect(html).toContain('<pre class="vertical-calc">');
+      expect(html).toContain("  ៧៩៥\n−  ៥៤\n─────\n  ៧៤១");
+
+      // Zero-XSS invariant: no scripts, no onclick, no javascript:
+      expect(html).not.toContain("<script");
+      expect(html).not.toContain("onclick=");
+      expect(html).not.toContain("onerror=");
+      expect(html).not.toContain("onload=");
+      expect(html).not.toContain("javascript:");
+    });
+
+    it("Copy Text produces purely plain text with line breaks and ZERO HTML tags", () => {
+      const prob: MathSolverProblem = {
+        id: "text-prob",
+        mode: "verify",
+        extractedProblem: "៧៩៥ − ៥៤",
+        finalAnswer: "៧៤១",
+        verticalLines: ["  ៧៩៥", "−  ៥៤", "─────", "  ៧៤១"],
+        solutionKhmer: "ជំហានដោះស្រាយ",
+        confidence: "high",
+        confidenceKhmer: "កម្រិតខ្ពស់",
+      };
+
+      const text = renderCanonicalSolutionPlainText(prob);
+
+      // Contains line breaks
+      expect(text.includes("\n")).toBe(true);
+      expect(text).toContain("ប្រធានលំហាត់៖ ៧៩៥ − ៥៤");
+      expect(text).toContain("ចម្លើយ៖ ៧៤១");
+
+      // STRICTLY NO HTML TAGS
+      expect(text).not.toContain("<!doctype");
+      expect(text).not.toContain("<html");
+      expect(text).not.toContain("<div");
+      expect(text).not.toContain("<article");
+      expect(text).not.toContain("<style");
+      expect(text).not.toContain("<pre");
+      expect(text).not.toContain("</");
+    });
   });
 });

@@ -5,10 +5,17 @@
  * 1. Single canonical solution object renders BOTH the on-screen UI and the copied/downloaded HTML.
  * 2. Strictly safe escaping & sanitization (no scripts, no event handlers, no unsafe links).
  * 3. Preserves Khmer diacritics, subscripts, equations, aligned column math, and verification badges.
- * 4. Dual-mode clipboard support: rich text/html + plain-text fallback.
+ * 4. Dual-mode clipboard support:
+ *    - "ចម្លងជាអត្ថបទ" (Copy Text): plain text with line breaks, NO HTML tags.
+ *    - "ចម្លងកូដ HTML" (Copy HTML): full standalone HTML source code (<!doctype html>...<article>...).
+ *      Clipboard text/plain contains raw HTML source code, while text/html contains rich rendered HTML.
+ * 5. Strict 3-Mode Contract:
+ *    - Mode 1 ("solve"): problem + final answer + verification status only. NO steps, NO vertical lines.
+ *    - Mode 2 ("generate"): problem + formulas + steps + vertical working. STRICTLY NO final answer block.
+ *    - Mode 3 ("verify"): problem + formulas + student answer + steps + vertical working + final answer + verification.
  */
 
-import type { MathSolverProblem } from "@/app/api/math-solver/route";
+import type { MathSolverProblem, SolverMode } from "@/app/api/math-solver/route";
 
 export function escapeHtml(str: string | number | null | undefined): string {
   if (str === null || str === undefined) return "";
@@ -22,12 +29,12 @@ export function escapeHtml(str: string | number | null | undefined): string {
 
 export function sanitizeHtml(rawHtml: string): string {
   if (!rawHtml) return "";
-  // Strip dangerous tags: script, iframe, object, embed, link, form, style, meta
+  // Strip dangerous tags: script, iframe, object, embed, link, form, meta
   let clean = rawHtml.replace(
-    /<(script|iframe|object|embed|link|form|style|meta|svg|base)\b[^>]*>[\s\S]*?<\/\1>/gi,
+    /<(script|iframe|object|embed|link|form|svg|base)\b[^>]*>[\s\S]*?<\/\1>/gi,
     ""
   );
-  clean = clean.replace(/<(script|iframe|object|embed|link|form|style|meta|svg|base)\b[^>]*\/>/gi, "");
+  clean = clean.replace(/<(script|iframe|object|embed|link|form|svg|base)\b[^>]*\/>/gi, "");
   // Strip inline event handlers: onclick, onerror, onload, onmouseover, etc.
   clean = clean.replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, "");
   clean = clean.replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, "");
@@ -41,340 +48,381 @@ export interface RenderSolutionOptions {
   gradeTitle?: string;
   solverModeTitle?: string;
   documentTitle?: string;
+  solverMode?: SolverMode;
+}
+
+/**
+ * Determine effective mode from options or problem fields
+ */
+function getEffectiveMode(problem: MathSolverProblem, options?: RenderSolutionOptions): SolverMode {
+  if (options?.solverMode) return options.solverMode;
+  if (problem.mode) return problem.mode;
+  if (options?.solverModeTitle) {
+    const t = options.solverModeTitle.toLowerCase();
+    if (t.includes("verify") || t.includes("ផ្ទៀងផ្ទាត់")) return "verify";
+    if (t.includes("generate") || t.includes("បង្កើត")) return "generate";
+    if (t.includes("solve") || t.includes("ដោះស្រាយ")) return "solve";
+  }
+  if (problem.extractedAnswer || problem.answerStatus) return "verify";
+  if (!problem.finalAnswer && (problem.solutionKhmer || problem.verticalLines)) return "generate";
+  return "solve";
 }
 
 /**
  * Render the Canonical Solution Object to pure HTML
- * Used for both on-screen rendering and "Copy as HTML" / Download.
+ * Returns a complete, valid, standalone HTML document conforming to the Mode Contract.
  */
 export function renderCanonicalSolutionHtml(
   problem: MathSolverProblem,
   options?: RenderSolutionOptions
 ): string {
+  const mode = getEffectiveMode(problem, options);
+  const isMode1 = mode === "solve";
+  const isMode2 = mode === "generate";
+  const isMode3 = mode === "verify";
+
+  const docTitle = options?.documentTitle || "ដំណោះស្រាយគណិតវិទ្យា — ថ្នាក់បឋមសិក្សា";
+  const gradeLabel = options?.gradeTitle || problem.inferredGradeKhmer || "ថ្នាក់បឋមសិក្សា";
+  const modeLabel =
+    options?.solverModeTitle ||
+    (isMode1
+      ? "ដោះស្រាយលំហាត់ (ចម្លើយ)"
+      : isMode2
+      ? "បង្កើតដំណោះស្រាយ (វិធីដោះស្រាយ)"
+      : "ដោះស្រាយ + ផ្ទៀងផ្ទាត់ (ពេញលេញ)");
+
   const parts: string[] = [];
 
-  const fontStack =
-    "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Kantumruy Pro', 'Siemreap', Roboto, Helvetica, Arial, sans-serif";
-
-  parts.push(
-    `<div class="math-solution-document" style="font-family: ${fontStack}; line-height: 1.65; color: #1e293b; max-width: 760px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">`
-  );
+  // Standalone HTML5 Document Opening
+  parts.push("<!doctype html>\n");
+  parts.push('<html lang="km">\n');
+  parts.push("<head>\n");
+  parts.push('<meta charset="utf-8">\n');
+  parts.push('<meta name="viewport" content="width=device-width, initial-scale=1">\n');
+  parts.push(`<title>${escapeHtml(docTitle)}</title>\n`);
+  parts.push("<style>\n");
+  parts.push(`
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Kantumruy Pro", "Siemreap", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.7;
+  color: #1e293b;
+  background-color: #f8fafc;
+  margin: 0;
+  padding: 24px 16px;
+}
+.solution {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+.solution-header {
+  border-bottom: 2px solid #6366f1;
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+}
+.solution-header h1 {
+  margin: 0 0 6px 0;
+  color: #312e81;
+  font-size: 20px;
+  font-weight: 700;
+}
+.badges {
+  font-size: 13px;
+  color: #64748b;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.badge-grade {
+  background: #eef2ff;
+  color: #4338ca;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.badge-mode {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.section-title {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+}
+.problem-box {
+  background: #f1f5f9;
+  border-left: 4px solid #6366f1;
+  padding: 12px 16px;
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+  color: #0f172a;
+  white-space: pre-wrap;
+  margin-bottom: 20px;
+}
+.framework-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+.student-review {
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 20px;
+}
+.student-review.correct {
+  background: #ecfdf5;
+  border: 1px solid #10b981;
+  color: #065f46;
+}
+.student-review.incorrect {
+  background: #fef2f2;
+  border: 1px solid #ef4444;
+  color: #991b1b;
+}
+.solution-steps {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 14px;
+  color: #1e293b;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  margin-bottom: 20px;
+}
+.vertical-calc {
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background: #0f172a;
+  color: #6ee7b7;
+  padding: 14px;
+  border-radius: 8px;
+  margin: 14px 0 20px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: auto;
+  font-weight: 600;
+}
+.final-answer-box {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1.5px solid #10b981;
+  border-radius: 8px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.final-answer-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #065f46;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 2px;
+}
+.final-answer-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #047857;
+  font-family: monospace;
+}
+.badge-status {
+  background: #10b981;
+  color: #ffffff;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.verification-box {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+.footer {
+  margin-top: 24px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 11px;
+  color: #94a3b8;
+  text-align: center;
+}
+`);
+  parts.push("</style>\n");
+  parts.push("</head>\n");
+  parts.push("<body>\n");
+  parts.push('<article class="solution">\n');
 
   // Document Title / Header
-  parts.push(
-    `<div class="solution-header" style="border-bottom: 2px solid #6366f1; padding-bottom: 12px; margin-bottom: 20px;">`
-  );
-  parts.push(
-    `<h2 style="margin: 0 0 6px 0; color: #312e81; font-size: 20px; font-weight: 700;">${escapeHtml(
-      options?.documentTitle || "ដំណោះស្រាយគណិតវិទ្យា — ថ្នាក់បឋមសិក្សា"
-    )}</h2>`
-  );
-  if (options?.gradeTitle || options?.solverModeTitle) {
-    parts.push(
-      `<div style="font-size: 13px; color: #64748b; display: flex; gap: 12px; flex-wrap: wrap;">`
-    );
-    if (options?.gradeTitle) {
-      parts.push(
-        `<span style="background: #eef2ff; color: #4338ca; padding: 2px 8px; border-radius: 6px; font-weight: 600;">${escapeHtml(
-          options.gradeTitle
-        )}</span>`
-      );
-    }
-    if (options?.solverModeTitle) {
-      parts.push(
-        `<span style="background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 6px;">${escapeHtml(
-          options.solverModeTitle
-        )}</span>`
-      );
-    }
-    parts.push(`</div>`);
-  }
-  parts.push(`</div>`);
+  parts.push('  <header class="solution-header">\n');
+  parts.push(`    <h1>${escapeHtml(docTitle)}</h1>\n`);
+  parts.push('    <div class="badges">\n');
+  parts.push(`      <span class="badge-grade">${escapeHtml(gradeLabel)}</span>\n`);
+  parts.push(`      <span class="badge-mode">${escapeHtml(modeLabel)}</span>\n`);
+  parts.push("    </div>\n");
+  parts.push("  </header>\n\n");
 
-  // Section 1: Visual Interpretation (if visual problem detected)
-  if (problem.visualInterpretation) {
+  // Visual Interpretation (Mode 2 or Mode 3 only)
+  if (!isMode1 && problem.visualInterpretation) {
     const vi = problem.visualInterpretation;
-    parts.push(
-      `<div class="visual-interpretation-block" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 20px;">`
-    );
-    parts.push(
-      `<h3 style="margin: 0 0 10px 0; font-size: 14px; color: #0f172a; font-weight: 700;">🔍 ការបកស្រាយរូបភាព (Visual Interpretation)</h3>`
-    );
-    parts.push(
-      `<table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155;">`
-    );
-    parts.push(
-      `<tr><td style="padding: 4px 8px; font-weight: 600; width: 35%;">វត្ថុដែលបានស្គាល់៖</td><td style="padding: 4px 8px;">${escapeHtml(
-        vi.recognizedObjects
-      )}</td></tr>`
-    );
-    parts.push(
-      `<tr><td style="padding: 4px 8px; font-weight: 600;">ចំនួនវត្ថុ៖</td><td style="padding: 4px 8px; font-family: monospace; font-weight: 600;">${escapeHtml(
-        vi.objectCount
-      )}</td></tr>`
-    );
+    parts.push('  <section class="visual-interpretation-block" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 20px;">\n');
+    parts.push('    <h2 class="section-title">🔍 ការបកស្រាយរូបភាព (Visual Interpretation)</h2>\n');
+    parts.push('    <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155;">\n');
+    parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600; width: 35%;">វត្ថុដែលបានស្គាល់៖</td><td style="padding: 4px 8px;">${escapeHtml(vi.recognizedObjects)}</td></tr>\n`);
+    parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600;">ចំនួនវត្ថុ៖</td><td style="padding: 4px 8px; font-family: monospace; font-weight: 600;">${escapeHtml(vi.objectCount)}</td></tr>\n`);
     if (vi.arrangement) {
-      parts.push(
-        `<tr><td style="padding: 4px 8px; font-weight: 600;">របៀបរៀបចំ៖</td><td style="padding: 4px 8px;">${escapeHtml(
-          vi.arrangement
-        )}</td></tr>`
-      );
+      parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600;">របៀបរៀបចំ៖</td><td style="padding: 4px 8px;">${escapeHtml(vi.arrangement)}</td></tr>\n`);
     }
-    parts.push(
-      `<tr><td style="padding: 4px 8px; font-weight: 600;">ប្រមាណវិធីដែលបានបកស្រាយ៖</td><td style="padding: 4px 8px; color: #4338ca; font-weight: 600;">${escapeHtml(
-        vi.interpretedOperation
-      )}</td></tr>`
-    );
-    parts.push(
-      `<tr><td style="padding: 4px 8px; font-weight: 600;">កម្រិតទំនុកចិត្ត៖</td><td style="padding: 4px 8px;">${escapeHtml(
-        vi.confidenceKhmer || vi.confidence
-      )}</td></tr>`
-    );
-    parts.push(`</table>`);
-
+    parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600;">ប្រមាណវិធីដែលបានបកស្រាយ៖</td><td style="padding: 4px 8px; color: #4338ca; font-weight: 600;">${escapeHtml(vi.interpretedOperation)}</td></tr>\n`);
+    parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600;">កម្រិតទំនុកចិត្ត៖</td><td style="padding: 4px 8px;">${escapeHtml(vi.confidenceKhmer || vi.confidence)}</td></tr>\n`);
+    parts.push("    </table>\n");
     if (vi.possibleAlternatives && vi.possibleAlternatives.length > 0) {
-      parts.push(
-        `<div style="margin-top: 8px; padding: 6px 10px; background: #fef3c7; border-radius: 6px; font-size: 12px; color: #92400e;">`
-      );
-      parts.push(
-        `<strong>ការបកស្រាយផ្សេងទៀតដែលអាចមាន៖</strong> ${escapeHtml(
-          vi.possibleAlternatives.join(" ឬ ")
-        )}`
-      );
-      parts.push(`</div>`);
+      parts.push(`    <div style="margin-top: 8px; padding: 6px 10px; background: #fef3c7; border-radius: 6px; font-size: 12px; color: #92400e;"><strong>ការបកស្រាយផ្សេងទៀត៖</strong> ${escapeHtml(vi.possibleAlternatives.join(" ឬ "))}</div>\n`);
     }
-    parts.push(`</div>`);
+    parts.push("  </section>\n\n");
   }
 
-  // Section 2: Problem Statement
-  parts.push(`<div class="problem-statement-section" style="margin-bottom: 20px;">`);
-  parts.push(
-    `<h3 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 700; color: #475569; text-transform: uppercase;">១. ប្រធានលំហាត់</h3>`
-  );
-  parts.push(
-    `<div style="background: #f1f5f9; border-left: 4px solid #6366f1; padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 14px; color: #0f172a; white-space: pre-wrap;">${escapeHtml(
-      problem.extractedProblem
-    )}</div>`
-  );
-  parts.push(`</div>`);
+  // 1. Problem Statement (Mandatory in all modes)
+  parts.push('  <section class="problem-statement-section">\n');
+  parts.push('    <h2 class="section-title">ប្រធានលំហាត់</h2>\n');
+  parts.push(`    <div class="problem-box">${escapeHtml(problem.extractedProblem)}</div>\n`);
+  parts.push("  </section>\n\n");
 
-  // Section 3: Educational Framework (Given, To Find, Formulas)
-  if (problem.given || problem.toFind || problem.formulas) {
-    parts.push(
-      `<div class="educational-framework-section" style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">`
-    );
+  // 2. Educational Framework (Given, To Find, Formulas) - Mode 2 & Mode 3 only
+  if (!isMode1 && (problem.given || problem.toFind || problem.formulas)) {
+    parts.push('  <section class="framework-box">\n');
     if (problem.given) {
-      parts.push(
-        `<div style="margin-bottom: 8px;"><strong style="color: #475569; font-size: 13px;">អ្វីដែលគេឱ្យ (Given):</strong> <span style="font-size: 13px; color: #1e293b;">${escapeHtml(
-          problem.given
-        )}</span></div>`
-      );
+      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលគេឱ្យ (Given)៖</strong> <span>${escapeHtml(problem.given)}</span></div>\n`);
     }
     if (problem.toFind) {
-      parts.push(
-        `<div style="margin-bottom: 8px;"><strong style="color: #475569; font-size: 13px;">អ្វីដែលត្រូវរក (To Find):</strong> <span style="font-size: 13px; color: #1e293b;">${escapeHtml(
-          problem.toFind
-        )}</span></div>`
-      );
+      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលត្រូវរក (To Find)៖</strong> <span>${escapeHtml(problem.toFind)}</span></div>\n`);
     }
     if (problem.formulas) {
-      parts.push(
-        `<div><strong style="color: #475569; font-size: 13px;">រូបមន្តដែលត្រូវប្រើ (Formulas):</strong> <span style="font-size: 13px; font-family: monospace; color: #4338ca; font-weight: 600;">${escapeHtml(
-          problem.formulas
-        )}</span></div>`
-      );
+      parts.push(`    <div><strong>រូបមន្តដែលត្រូវប្រើ (Formulas)៖</strong> <span style="font-family: monospace; color: #4338ca; font-weight: 600;">${escapeHtml(problem.formulas)}</span></div>\n`);
     }
-    parts.push(`</div>`);
+    parts.push("  </section>\n\n");
   }
 
-  // Section 4: Existing Student Answer Verification (if present)
-  if (problem.extractedAnswer) {
+  // 3. Student Answer Review - Mode 3 only
+  if (isMode3 && problem.extractedAnswer) {
     const isCorrect = problem.answerStatus === "correct";
-    const statusBg = isCorrect ? "#ecfdf5" : "#fef2f2";
-    const statusBorder = isCorrect ? "#10b981" : "#ef4444";
-    const statusColor = isCorrect ? "#065f46" : "#991b1b";
-
-    parts.push(
-      `<div class="student-answer-review" style="background: ${statusBg}; border: 1px solid ${statusBorder}; border-radius: 8px; padding: 14px; margin-bottom: 20px;">`
-    );
-    parts.push(
-      `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">`
-    );
-    parts.push(
-      `<strong style="color: ${statusColor}; font-size: 13px;">ចម្លើយរបស់សិស្សក្នុងរូបភាព៖</strong>`
-    );
-    parts.push(
-      `<span style="background: ${statusBorder}; color: #ffffff; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">${escapeHtml(
-        problem.answerStatusKhmer || (isCorrect ? "ត្រឹមត្រូវ ✓" : "មិនទាន់ត្រឹមត្រូវ ✗")
-      )}</span>`
-    );
-    parts.push(`</div>`);
-    parts.push(
-      `<div style="font-family: monospace; font-size: 14px; color: #0f172a; margin-bottom: 8px;">${escapeHtml(
-        problem.extractedAnswer
-      )}</div>`
-    );
-
+    parts.push(`  <section class="student-review ${isCorrect ? "correct" : "incorrect"}">\n`);
+    parts.push('    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">\n');
+    parts.push(`      <strong>ចម្លើយរបស់សិស្សក្នុងរូបភាព៖</strong>\n`);
+    parts.push(`      <span style="background: ${isCorrect ? "#10b981" : "#ef4444"}; color: #ffffff; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">${escapeHtml(problem.answerStatusKhmer || (isCorrect ? "ត្រឹមត្រូវ ✓" : "មិនទាន់ត្រឹមត្រូវ ✗"))}</span>\n`);
+    parts.push("    </div>\n");
+    parts.push(`    <div style="font-family: monospace; font-size: 14px; margin-bottom: 8px;">${escapeHtml(problem.extractedAnswer)}</div>\n`);
     if (problem.answerStatus === "incorrect") {
       if (problem.incorrectStep) {
-        parts.push(
-          `<div style="font-size: 12px; color: #991b1b; margin-top: 6px;"><strong>ជំហានដែលខុស៖</strong> ${escapeHtml(
-            problem.incorrectStep
-          )}</div>`
-        );
+        parts.push(`    <div style="font-size: 12px; margin-top: 6px;"><strong>ជំហានដែលខុស៖</strong> ${escapeHtml(problem.incorrectStep)}</div>\n`);
       }
       if (problem.errorExplanationKhmer) {
-        parts.push(
-          `<div style="font-size: 12px; color: #7f1d1d; margin-top: 4px;"><strong>ការពន្យល់កំហុស៖</strong> ${escapeHtml(
-            problem.errorExplanationKhmer
-          )}</div>`
-        );
+        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ការពន្យល់កំហុស៖</strong> ${escapeHtml(problem.errorExplanationKhmer)}</div>\n`);
       }
       if (problem.correctedStep) {
-        parts.push(
-          `<div style="font-size: 12px; color: #065f46; margin-top: 4px;"><strong>ជំហានត្រឹមត្រូវ៖</strong> ${escapeHtml(
-            problem.correctedStep
-          )}</div>`
-        );
+        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ជំហានត្រឹមត្រូវ៖</strong> ${escapeHtml(problem.correctedStep)}</div>\n`);
       }
     }
-    parts.push(`</div>`);
+    parts.push("  </section>\n\n");
   }
 
-  // Section 5: Step-by-Step Solution & Aligned Column Working
-  parts.push(`<div class="solution-body-section" style="margin-bottom: 20px;">`);
-  parts.push(
-    `<h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #475569; text-transform: uppercase;">២. វិធីដោះស្រាយលម្អិត</h3>`
-  );
-  parts.push(
-    `<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 14px; color: #1e293b; line-height: 1.8; white-space: pre-wrap;">${escapeHtml(
-      problem.solutionKhmer || problem.solution
-    )}</div>`
-  );
+  // 4. Step-by-Step Solution & Aligned Column Working
+  // STRICT CONTRACT: Mode 2 & Mode 3 ONLY. In Mode 1, this must NOT be rendered.
+  if (!isMode1 && (problem.solutionKhmer || problem.solution || problem.verticalLines || problem.alignedWorking)) {
+    parts.push('  <section class="solution-body-section">\n');
+    parts.push('    <h2 class="section-title">វិធីដោះស្រាយ</h2>\n');
+    if (problem.solutionKhmer || problem.solution) {
+      parts.push(`    <div class="solution-steps">${escapeHtml(problem.solutionKhmer || problem.solution)}</div>\n`);
+    }
 
-  // Aligned column working (vertical addition, subtraction with borrowing, multiplication, fractions)
-  const vertText =
-    problem.verticalLines && problem.verticalLines.length > 0
-      ? problem.verticalLines.join("\n")
-      : problem.alignedWorking;
+    const vertText =
+      problem.verticalLines && problem.verticalLines.length > 0
+        ? problem.verticalLines.join("\n")
+        : problem.alignedWorking;
 
-  if (vertText) {
-    parts.push(
-      `<div class="aligned-working-block" style="margin-top: 14px; background: #0f172a; color: #f8fafc; border-radius: 8px; padding: 14px; overflow-x: auto;">`
-    );
-    parts.push(
-      `<div style="color: #94a3b8; font-size: 11px; margin-bottom: 6px; text-transform: uppercase; font-family: ${fontStack};">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>`
-    );
-    parts.push(
-      `<pre style="margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 14px; line-height: 1.5; white-space: pre; color: #6ee7b7;">${escapeHtml(vertText)}</pre>`
-    );
-    parts.push(`</div>`);
+    if (vertText) {
+      parts.push('    <div style="color: #64748b; font-size: 11px; margin-top: 10px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
+      parts.push(`    <pre class="vertical-calc">${escapeHtml(vertText)}</pre>\n`);
+    }
+    parts.push("  </section>\n\n");
   }
-  parts.push(`</div>`);
 
-  // Section 6: Final Answer Badge
-  parts.push(`<div class="final-answer-section" style="margin-bottom: 20px;">`);
-  parts.push(
-    `<div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1.5px solid #10b981; border-radius: 8px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">`
-  );
-  parts.push(`<div>`);
-  parts.push(
-    `<span style="font-size: 12px; font-weight: 700; color: #065f46; text-transform: uppercase; display: block; margin-bottom: 2px;">ចម្លើយចុងក្រោយ (Final Answer)</span>`
-  );
-  parts.push(
-    `<span style="font-size: 18px; font-weight: 800; color: #047857; font-family: monospace;">${escapeHtml(
-      problem.finalAnswer
-    )}</span>`
-  );
-  parts.push(`</div>`);
-  parts.push(
-    `<span style="background: #10b981; color: #ffffff; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">សម្រេច ✓</span>`
-  );
-  parts.push(`</div>`);
-  parts.push(`</div>`);
+  // 5. Final Answer Badge
+  // STRICT CONTRACT:
+  // - Mode 1 ("solve"): Render final answer!
+  // - Mode 2 ("generate"): STRICTLY DO NOT render final answer!
+  // - Mode 3 ("verify"): Render final answer!
+  if (!isMode2 && problem.finalAnswer) {
+    parts.push('  <section class="final-answer-section">\n');
+    parts.push('    <div class="final-answer-box">\n');
+    parts.push("      <div>\n");
+    parts.push('        <span class="final-answer-title">ចម្លើយចុងក្រោយ</span>\n');
+    parts.push(`        <span class="final-answer-value">${escapeHtml(problem.finalAnswer)}</span>\n`);
+    parts.push("      </div>\n");
+    parts.push('      <span class="badge-status">សម្រេច ✓</span>\n');
+    parts.push("    </div>\n");
+    parts.push("  </section>\n\n");
+  }
 
-  // Section 7: Deterministic Verification (Stage 2 proof)
-  if (problem.verification || problem.deterministicResult) {
+  // 6. Deterministic Verification
+  // Mode 1 (status only if available) & Mode 3 (full verification)
+  if ((isMode1 || isMode3) && (problem.verification || problem.deterministicResult)) {
     const isDetVerified = problem.deterministicResult?.isVerified !== false;
-    parts.push(
-      `<div class="verification-section" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 20px;">`
-    );
-    parts.push(
-      `<h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 700; color: #334155; display: flex; align-items: center; gap: 6px;">🛡️ ការពិនិត្យផ្ទៀងផ្ទាត់ដោយប្រព័ន្ធសុក្រឹត (Deterministic Verification)</h4>`
-    );
+    parts.push('  <section class="verification-box">\n');
+    parts.push('    <h3 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 700; color: #334155;">🛡️ ការពិនិត្យផ្ទៀងផ្ទាត់ (Verification)</h3>\n');
     if (problem.deterministicResult) {
-      parts.push(
-        `<div style="font-size: 13px; color: #475569; margin-bottom: 6px;"><strong>លទ្ធផលផ្ទៀងផ្ទាត់៖</strong> <span style="font-weight: 700; color: ${
-          isDetVerified ? "#059669" : "#dc2626"
-        };">${escapeHtml(
-          problem.deterministicResult.statusKhmer || (isDetVerified ? "ផ្ទៀងផ្ទាត់ត្រឹមត្រូវ ✓" : "មានភាពខុសគ្នា ✗")
-        )}</span></div>`
-      );
-      parts.push(
-        `<div style="font-size: 13px; color: #475569; margin-bottom: 6px;"><strong>វិធីផ្ទៀងផ្ទាត់៖</strong> ${escapeHtml(
-          problem.deterministicResult.verificationMethodKhmer ||
-            problem.deterministicResult.verificationMethod
-        )}</div>`
-      );
-      parts.push(
-        `<div style="font-size: 13px; color: #475569;"><strong>ចម្លើយដែលបានគណនា៖</strong> <span style="font-family: monospace; font-weight: 700;">${escapeHtml(
-          problem.deterministicResult.computedAnswerKhmer ||
-            problem.deterministicResult.computedAnswer
-        )}</span></div>`
-      );
+      parts.push(`    <div style="font-size: 13px; color: #475569; margin-bottom: 4px;"><strong>ស្ថានភាព៖</strong> <span style="font-weight: 700; color: ${isDetVerified ? "#059669" : "#dc2626"};">${escapeHtml(problem.deterministicResult.statusKhmer || (isDetVerified ? "ផ្ទៀងផ្ទាត់ត្រឹមត្រូវ ✓" : "មានភាពខុសគ្នា ✗"))}</span></div>\n`);
+      if (isMode3) {
+        parts.push(`    <div style="font-size: 13px; color: #475569; margin-bottom: 4px;"><strong>វិធីផ្ទៀងផ្ទាត់៖</strong> ${escapeHtml(problem.deterministicResult.verificationMethodKhmer || problem.deterministicResult.verificationMethod)}</div>\n`);
+      }
     } else if (problem.verification) {
-      parts.push(
-        `<div style="font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(
-          problem.verification
-        )}</div>`
-      );
+      parts.push(`    <div style="font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(problem.verification)}</div>\n`);
     }
-    parts.push(`</div>`);
+    parts.push("  </section>\n\n");
   }
 
-  // Section 8: Ambiguities & Review Points (Zero-Guessing Invariant)
-  const allReviewPoints = [
-    ...(problem.ambiguousParts || []),
-    ...(problem.reviewSuggestions || []),
-    ...(problem.deterministicResult?.reviewPoints || []),
-  ];
-
-  if (allReviewPoints.length > 0) {
-    parts.push(
-      `<div class="review-points-section" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 14px; margin-bottom: 10px;">`
-    );
-    parts.push(
-      `<h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #92400e;">⚠️ ចំណុចដែលត្រូវឱ្យអ្នកប្រើពិនិត្យឡើងវិញ (Points for Review):</h4>`
-    );
-    parts.push(`<ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #78350f;">`);
-    for (const pt of allReviewPoints) {
-      parts.push(`<li style="margin-bottom: 4px;">${escapeHtml(pt)}</li>`);
-    }
-    parts.push(`</ul>`);
-    parts.push(`</div>`);
-  }
-
-  // Footer metadata
-  parts.push(
-    `<div style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #94a3b8; text-align: center;">`
-  );
-  parts.push(
-    `DYT ECOSYSTEM • កម្មវិធីដោះស្រាយគណិតវិទ្យាថ្នាក់បឋមសិក្សា (Module 04: Khmer Math Solver)`
-  );
-  parts.push(`</div>`);
-
-  parts.push(`</div>`);
+  // 7. Footer
+  parts.push('  <footer class="footer">\n');
+  parts.push("    DYT ECOSYSTEM • កម្មវិធីដោះស្រាយគណិតវិទ្យាថ្នាក់បឋមសិក្សា (Module 04: Khmer Math Solver)\n");
+  parts.push("  </footer>\n");
+  parts.push("</article>\n");
+  parts.push("</body>\n");
+  parts.push("</html>");
 
   return sanitizeHtml(parts.join(""));
 }
 
 /**
- * Plain-text fallback for clipboard writing
+ * Plain-text renderer for clipboard writing
+ * Strictly obeys the 3-Mode Contract:
+ * - Mode 1: Problem + Final Answer only (no detailed solution steps).
+ * - Mode 2: Problem + Framework + Solution Steps + Vertical Calculation (NO final answer).
+ * - Mode 3: Problem + Framework + Student Answer + Solution Steps + Vertical Calculation + Final Answer + Verification.
  */
 export function renderCanonicalSolutionPlainText(
   problem: MathSolverProblem,
   options?: RenderSolutionOptions
 ): string {
+  const mode = getEffectiveMode(problem, options);
+  const isMode1 = mode === "solve";
+  const isMode2 = mode === "generate";
+  const isMode3 = mode === "verify";
+
   const lines: string[] = [];
 
   lines.push("==================================================");
@@ -384,7 +432,8 @@ export function renderCanonicalSolutionPlainText(
   lines.push("==================================================");
   lines.push("");
 
-  if (problem.visualInterpretation) {
+  // Mode 2 & Mode 3: Visual interpretation
+  if (!isMode1 && problem.visualInterpretation) {
     const vi = problem.visualInterpretation;
     lines.push("🔍 ការបកស្រាយរូបភាព (Visual Interpretation):");
     lines.push(`- វត្ថុដែលបានស្គាល់៖ ${vi.recognizedObjects}`);
@@ -395,16 +444,20 @@ export function renderCanonicalSolutionPlainText(
     lines.push("");
   }
 
-  lines.push("១. ប្រធានលំហាត់៖");
-  lines.push(problem.extractedProblem);
+  // Problem Statement
+  lines.push(`ប្រធានលំហាត់៖ ${problem.extractedProblem}`);
   lines.push("");
 
-  if (problem.given) lines.push(`អ្វីដែលគេឱ្យ៖ ${problem.given}`);
-  if (problem.toFind) lines.push(`អ្វីដែលត្រូវរក៖ ${problem.toFind}`);
-  if (problem.formulas) lines.push(`រូបមន្តដែលត្រូវប្រើ៖ ${problem.formulas}`);
-  if (problem.given || problem.toFind || problem.formulas) lines.push("");
+  // Framework (Mode 2 & 3 only)
+  if (!isMode1 && (problem.given || problem.toFind || problem.formulas)) {
+    if (problem.given) lines.push(`អ្វីដែលគេឱ្យ៖ ${problem.given}`);
+    if (problem.toFind) lines.push(`អ្វីដែលត្រូវរក៖ ${problem.toFind}`);
+    if (problem.formulas) lines.push(`រូបមន្តដែលត្រូវប្រើ៖ ${problem.formulas}`);
+    lines.push("");
+  }
 
-  if (problem.extractedAnswer) {
+  // Student Answer Review (Mode 3 only)
+  if (isMode3 && problem.extractedAnswer) {
     lines.push(`ចម្លើយសិស្សក្នុងរូបភាព៖ ${problem.extractedAnswer}`);
     lines.push(`ស្ថានភាព៖ ${problem.answerStatusKhmer || problem.answerStatus}`);
     if (problem.incorrectStep) lines.push(`ជំហានដែលខុស៖ ${problem.incorrectStep}`);
@@ -412,43 +465,45 @@ export function renderCanonicalSolutionPlainText(
     lines.push("");
   }
 
-  lines.push("២. វិធីដោះស្រាយលម្អិត៖");
-  lines.push(problem.solutionKhmer || problem.solution);
-  lines.push("");
+  // Step-by-Step Solution & Vertical Lines (Mode 2 & Mode 3 ONLY)
+  if (!isMode1 && (problem.solutionKhmer || problem.solution || problem.verticalLines || problem.alignedWorking)) {
+    lines.push("វិធីដោះស្រាយ៖");
+    const sol = problem.solutionKhmer || problem.solution;
+    if (sol) {
+      lines.push(sol);
+      lines.push("");
+    }
 
-  const vertText =
-    problem.verticalLines && problem.verticalLines.length > 0
-      ? problem.verticalLines.join("\n")
-      : problem.alignedWorking;
+    const vertText =
+      problem.verticalLines && problem.verticalLines.length > 0
+        ? problem.verticalLines.join("\n")
+        : problem.alignedWorking;
 
-  if (vertText) {
-    lines.push("ការគណនាតាមជួរឈរ (Vertical Calculation):");
-    lines.push(vertText);
+    if (vertText) {
+      lines.push("ការគណនាតាមជួរឈរ (Vertical Calculation):");
+      lines.push(vertText);
+      lines.push("");
+    }
+  }
+
+  // Final Answer (Mode 1 & Mode 3 ONLY - STRICTLY OMITTED IN MODE 2)
+  if (!isMode2 && problem.finalAnswer) {
+    lines.push(`ចម្លើយ៖ ${problem.finalAnswer}`);
     lines.push("");
   }
 
-  lines.push(`ចម្លើយចុងក្រោយ៖ ${problem.finalAnswer}`);
-  lines.push("");
-
-  if (problem.deterministicResult) {
-    lines.push("🛡️ ការពិនិត្យផ្ទៀងផ្ទាត់ដោយប្រព័ន្ធសុក្រឹត៖");
-    lines.push(`- លទ្ធផល៖ ${problem.deterministicResult.statusKhmer}`);
-    lines.push(`- វិធី៖ ${problem.deterministicResult.verificationMethodKhmer}`);
-    lines.push(`- ចម្លើយគណនា៖ ${problem.deterministicResult.computedAnswerKhmer}`);
-    lines.push("");
-  } else if (problem.verification) {
-    lines.push(`ការពិនិត្យផ្ទៀងផ្ទាត់៖ ${problem.verification}`);
-    lines.push("");
-  }
-
-  const allReview = [
-    ...(problem.ambiguousParts || []),
-    ...(problem.reviewSuggestions || []),
-  ];
-  if (allReview.length > 0) {
-    lines.push("⚠️ ចំណុចដែលត្រូវពិនិត្យឡើងវិញ៖");
-    allReview.forEach((p) => lines.push(`- ${p}`));
-    lines.push("");
+  // Verification
+  if ((isMode1 || isMode3) && (problem.deterministicResult || problem.verification)) {
+    if (problem.deterministicResult) {
+      lines.push(`ស្ថានភាពផ្ទៀងផ្ទាត់៖ ${problem.deterministicResult.statusKhmer}`);
+      if (isMode3) {
+        lines.push(`វិធីផ្ទៀងផ្ទាត់៖ ${problem.deterministicResult.verificationMethodKhmer}`);
+      }
+      lines.push("");
+    } else if (problem.verification) {
+      lines.push(`ការពិនិត្យផ្ទៀងផ្ទាត់៖ ${problem.verification}`);
+      lines.push("");
+    }
   }
 
   return lines.join("\n");
@@ -478,27 +533,27 @@ export function copyTextFallback(text: string): boolean {
 }
 
 /**
- * Universal Dual-Type Clipboard Copy
- * Writes both text/html and text/plain to clipboard if supported,
- * falling back to navigator.clipboard.writeText, then copyTextFallback.
+ * Universal Dual-Type Clipboard Copy for "ចម្លងកូដ HTML"
+ * Writes both:
+ * - text/plain = complete HTML source string (so code editors paste raw tags & css)
+ * - text/html  = rendered sanitized HTML (so rich text editors paste formatted document)
  */
 export async function copyCanonicalSolutionToClipboard(
   problem: MathSolverProblem,
   options?: RenderSolutionOptions
 ): Promise<boolean> {
-  const htmlContent = renderCanonicalSolutionHtml(problem, options);
-  const textContent = renderCanonicalSolutionPlainText(problem, options);
+  const htmlSource = renderCanonicalSolutionHtml(problem, options);
 
   if (typeof window === "undefined") {
     return false;
   }
 
-  // 1. Primary: ClipboardItem dual-write
+  // 1. Primary: ClipboardItem dual-write with text/plain = htmlSource!
   if (typeof navigator !== "undefined" && navigator.clipboard) {
     try {
       if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
-        const blobHtml = new Blob([htmlContent], { type: "text/html" });
-        const blobText = new Blob([textContent], { type: "text/plain" });
+        const blobHtml = new Blob([htmlSource], { type: "text/html" });
+        const blobText = new Blob([htmlSource], { type: "text/plain" });
         const item = new ClipboardItem({
           "text/html": blobHtml,
           "text/plain": blobText,
@@ -513,7 +568,7 @@ export async function copyCanonicalSolutionToClipboard(
     // 2. Secondary: writeText fallback
     try {
       if (navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(htmlContent);
+        await navigator.clipboard.writeText(htmlSource);
         return true;
       }
     } catch (err) {
@@ -522,5 +577,31 @@ export async function copyCanonicalSolutionToClipboard(
   }
 
   // 3. Fallback: document.execCommand textarea copy
-  return copyTextFallback(htmlContent);
+  return copyTextFallback(htmlSource);
+}
+
+/**
+ * Copy Plain Text Solution to Clipboard ("ចម្លងអត្ថបទ")
+ * Writes strictly plain text with line breaks and NO HTML tags.
+ */
+export async function copyCanonicalSolutionPlainTextToClipboard(
+  problem: MathSolverProblem,
+  options?: RenderSolutionOptions
+): Promise<boolean> {
+  const plainText = renderCanonicalSolutionPlainText(problem, options);
+
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(plainText);
+      return true;
+    } catch {
+      // fallback
+    }
+  }
+
+  return copyTextFallback(plainText);
 }

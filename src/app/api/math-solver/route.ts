@@ -36,6 +36,7 @@ export interface VisualInterpretation {
 
 export interface MathSolverProblem {
   id: string;
+  mode?: SolverMode;
   extractedProblem: string;
   visualInterpretation?: VisualInterpretation;
   inferredGrade?: string;
@@ -52,12 +53,12 @@ export interface MathSolverProblem {
   errorExplanationKhmer?: string;
   correctedStep?: string;
   // Core solving & explanation
-  solution: string;
+  solution?: string;
   solutionKhmer: string;
   alignedWorking?: string;
   verticalLines?: string[];
-  finalAnswer: string;
-  verification: string;
+  finalAnswer?: string;
+  verification?: string;
   deterministicResult?: DeterministicVerificationResult;
   confidence: "high" | "medium" | "low";
   confidenceKhmer: string;
@@ -404,26 +405,31 @@ ZERO-GUESSING RULES:
         text: "Transcribe or visually interpret this math problem now. Return valid JSON.",
       });
     } else if (solverMode === "generate") {
-      // MODE 2: GENERATE FULL SOLUTION
+      // MODE 2: GENERATE FULL SOLUTION (Method only - STRICTLY NO FINAL ANSWER BLOCK)
       const GENERATE_PROMPT = `${SYSTEM_CORE}
 
-MODE: បង្កើតដំណោះស្រាយអប់រំពេញលេញ (Generate Full Educational Solution)
+MODE 2: “បង្កើតដំណោះស្រាយ” (Generate Solution - Method Only)
 Detail Level Requested: "${detailLevel}"
 
 ${problemTextInput ? `PROBLEM STATEMENT:\n${problemTextInput}` : "Extract or visually infer the problem from the image."}
 
-Structure the solution into these formal sections:
-1. "extractedProblem": Full problem statement in Khmer.
-2. "visualInterpretation": If visual-only or diagram-based, provide recognizedObjects, objectCount, arrangement, interpretedOperation.
-3. "given": អ្វីដែលគេឱ្យ (Given values/parameters).
-4. "toFind": អ្វីដែលត្រូវរក (Target quantity/variable).
-5. "formulas": រូបមន្តដែលត្រូវប្រើ (Mathematical formulas/theorems used).
-6. "solution": Step-by-step working.
-7. "solutionKhmer": Complete, pedagogical Khmer explanation matching the target grade.
-8. "alignedWorking": Vertical column calculation layout if arithmetic, or fraction reduction steps.
-9. "finalAnswer": Final computed value with appropriate units.
-10. "verification": Verification check work.
-11. "inferredGrade": E.g. "grade_3" (and "inferredGradeKhmer": "ថ្នាក់ទី ៣").
+STRICT MODE 2 CONTRACT (CRITICAL):
+- Purpose: Show the method only.
+- Output MUST contain:
+  1. "extractedProblem": Full problem statement in Khmer.
+  2. "visualInterpretation": If visual-only or diagram-based, provide recognizedObjects, objectCount, arrangement, interpretedOperation.
+  3. "given": អ្វីដែលគេឱ្យ (Given values/parameters).
+  4. "toFind": អ្វីដែលត្រូវរក (Target quantity/variable).
+  5. "formulas": រូបមន្តដែលត្រូវប្រើ (Mathematical formulas/theorems used).
+  6. "solution": Step-by-step working without a standalone final answer.
+  7. "solutionKhmer": Complete, pedagogical Khmer explanation matching the target grade. The explanation may end with the final calculation step, but do NOT add a separate answer block.
+  8. "alignedWorking": Vertical column calculation layout if arithmetic, or fraction reduction steps.
+  9. "inferredGrade" and "inferredGradeKhmer".
+- Output MUST NOT contain:
+  - DO NOT output a separate final answer section!
+  - DO NOT output a standalone final numeric answer!
+  - DO NOT output a "ចម្លើយចុងក្រោយ" block!
+  - Keep "finalAnswer" as empty string ("").
 
 ${languageInstruction}
 
@@ -439,28 +445,27 @@ Return a valid JSON object matching the standard schema.`;
         });
       }
       parts.push({
-        text: `Generate the complete educational solution now for Grade "${gradeLevel}". Return valid JSON.`,
+        text: `Generate the method-only educational solution now for Grade "${gradeLevel}". Return valid JSON.`,
       });
     } else if (solverMode === "verify") {
-      // MODE 3: SOLVE + VERIFY + GENERATE
+      // MODE 3: SOLVE + VERIFY (Both Method and Final Answer)
       const VERIFY_PROMPT = `${SYSTEM_CORE}
 
-MODE: ដោះស្រាយ + ផ្ទៀងផ្ទាត់ចម្លើយសិស្ស (Solve + Verify Student Answer)
+MODE 3: “ដោះស្រាយ + ផ្ទៀងផ្ទាត់” (Solve + Verify - Full Solution & Final Answer)
 
 ${problemTextInput ? `PROBLEM:\n${problemTextInput}` : "Extract or visually infer the problem from the image."}
 ${existingAnswerInput ? `STUDENT'S EXISTING ANSWER / WORK:\n${existingAnswerInput}` : "Extract the student's written answer from the image."}
 
-1. Solve independently from first principles.
-2. Compare the student's existing answer with the verified result.
-3. Determine "answerStatus": "correct" | "incorrect" | "unverifiable".
-   - "answerStatusKhmer": "ត្រឹមត្រូវ ✓" | "មិនទាន់ត្រឹមត្រូវ ✗" | "មិនអាចផ្ទៀងផ្ទាត់បាន"
-4. If incorrect:
-   - "incorrectStep": Pinpoint the exact step where the mistake occurred.
-   - "errorExplanationKhmer": Gentle, clear pedagogical explanation of the misconception.
-   - "correctedStep": The correct step and reasoning.
-5. Provide complete corrected solution in "solutionKhmer" suitable for the grade.
-6. Provide "alignedWorking" for column operations.
-7. State "finalAnswer" and "verification".
+STRICT MODE 3 CONTRACT:
+- Purpose: Show BOTH answer and complete solution, and compare student's answer.
+- Output MUST contain:
+  1. "extractedProblem": Full problem statement.
+  2. "formulas" / "given" / "toFind": Formal framework.
+  3. "solution" and "solutionKhmer": Full pedagogical working.
+  4. "alignedWorking": True vertical arithmetic with preserved newlines.
+  5. "finalAnswer": Final verified answer.
+  6. "verification": Verification calculation and mathematical proof.
+  7. "extractedAnswer", "answerStatus" ("correct" | "incorrect" | "unverifiable"), "answerStatusKhmer", and if incorrect: "incorrectStep", "errorExplanationKhmer", "correctedStep".
 
 ${languageInstruction}
 
@@ -479,10 +484,10 @@ Return a valid JSON object.`;
         text: "Perform independent solving and student answer verification now. Return valid JSON.",
       });
     } else {
-      // MODE 1: SOLVE PROBLEM (Default)
+      // MODE 1: SOLVE PROBLEM (Answer Only - NO DETAILED METHOD)
       const SOLVE_PROMPT = `${SYSTEM_CORE}
 
-MODE: ដោះស្រាយលំហាត់ (Solve Problem)
+MODE 1: “ដោះស្រាយលំហាត់” (Solve Problem - Answer Only)
 
 ${problemTextInput ? `PROBLEM TO SOLVE:\n${problemTextInput}` : "Extract or visually infer the problem from the image."}
 ${
@@ -491,14 +496,17 @@ ${
     : ""
 }
 
-CRITICAL RULES:
-1. If the problem is purely visual (fruits, toys, rows/columns, shaded fraction shapes), describe the visual structure in "visualInterpretation".
-2. Solve step by step with clear Khmer reasoning tailored to the selected grade.
-3. For column arithmetic (+, -, ×, ÷), include the vertically aligned ASCII work in "alignedWorking".
-4. State the final answer clearly with units in "finalAnswer".
-5. Provide check work in "verification".
-6. If any part is ambiguous, list in "ambiguousParts" and do not guess.
-7. Set "inferredGrade" and "inferredGradeKhmer" if grade was set to auto.
+STRICT MODE 1 CONTRACT (CRITICAL):
+- Purpose: Give the final answer ONLY.
+- Output MUST contain:
+  1. "extractedProblem": Extracted math problem statement.
+  2. "finalAnswer": Clear, concise final answer (e.g. "៧៤១").
+  3. "verification": Verification status / proof if available.
+- Output MUST NOT contain:
+  - DO NOT output step-by-step explanation! Keep "solution" and "solutionKhmer" empty ("").
+  - DO NOT output pedagogical solution!
+  - DO NOT output vertical working! Keep "alignedWorking" empty or null.
+  - DO NOT output detailed formula explanation! Keep "formulas", "given", "toFind" empty.
 
 ${languageInstruction}${questionFilter}
 
@@ -514,7 +522,7 @@ Return a valid JSON object matching the standard schema.`;
         });
       }
       parts.push({
-        text: "Solve this problem now and return valid JSON.",
+        text: "Solve this problem now and return final answer only in valid JSON.",
       });
     }
 
@@ -709,7 +717,11 @@ Return a valid JSON object matching the standard schema.`;
             deterministicResult = verifyMathResultDeterministically(
               extractedProblem,
               finalAnswer,
-              { existingStudentAnswer: extractedAnswer }
+              {
+                existingStudentAnswer: extractedAnswer,
+                gradeLevel,
+                solverMode,
+              }
             );
 
             // Always prioritize deterministic vertical lines and aligned working if available
@@ -752,6 +764,7 @@ Return a valid JSON object matching the standard schema.`;
             gradeLevel === "grade_1" ||
             gradeLevel === "grade_2" ||
             gradeLevel === "grade_3" ||
+            gradeLevel === "grade_6" ||
             solutionKhmer.length < 120 ||
             !solutionKhmer.includes("ខ្ទង់"))
         ) {
@@ -763,15 +776,43 @@ Return a valid JSON object matching the standard schema.`;
           finalAnswer = deterministicResult.computedAnswerKhmer;
         }
 
+        // STRICT THREE-MODE RESPONSE CONTRACT ENFORCEMENT
+        let responseSolution = (p.solution as string) || "";
+        let responseSolutionKhmer = solutionKhmer;
+        let responseAlignedWorking = alignedWorking;
+        let responseVerticalLines = verticalLines;
+        let responseFinalAnswer = finalAnswer;
+        let responseGiven = (p.given as string) || undefined;
+        let responseToFind = (p.toFind as string) || (p.to_find as string) || undefined;
+        let responseFormulas = (p.formulas as string) || undefined;
+
+        if (solverMode === "solve") {
+          // MODE 1: ANSWER ONLY
+          // MUST NOT contain step-by-step explanation, pedagogical solution, vertical working, or detailed formulas
+          responseSolution = "";
+          responseSolutionKhmer = "";
+          responseAlignedWorking = undefined;
+          responseVerticalLines = undefined;
+          responseGiven = undefined;
+          responseToFind = undefined;
+          responseFormulas = undefined;
+        } else if (solverMode === "generate") {
+          // MODE 2: METHOD ONLY
+          // MUST NOT contain a separate final answer section, a standalone final numeric answer, or a "ចម្លើយចុងក្រោយ" block
+          responseFinalAnswer = "";
+        }
+        // MODE 3 retains all fields
+
         return {
           id,
+          mode: solverMode,
           extractedProblem,
           visualInterpretation,
           inferredGrade: (p.inferredGrade as string) || inferredGradeGlobal,
           inferredGradeKhmer: (p.inferredGradeKhmer as string) || inferredGradeKhmerGlobal,
-          given: (p.given as string) || undefined,
-          toFind: (p.toFind as string) || (p.to_find as string) || undefined,
-          formulas: (p.formulas as string) || undefined,
+          given: responseGiven,
+          toFind: responseToFind,
+          formulas: responseFormulas,
           extractedAnswer,
           answerStatus:
             (p.answerStatus === "correct" ||
@@ -791,11 +832,11 @@ Return a valid JSON object matching the standard schema.`;
             (p.error_explanation_khmer as string) ||
             undefined,
           correctedStep: (p.correctedStep as string) || (p.corrected_step as string) || undefined,
-          solution: (p.solution as string) || "",
-          solutionKhmer,
-          alignedWorking,
-          verticalLines,
-          finalAnswer,
+          solution: responseSolution,
+          solutionKhmer: responseSolutionKhmer,
+          alignedWorking: responseAlignedWorking,
+          verticalLines: responseVerticalLines,
+          finalAnswer: responseFinalAnswer,
           verification: (p.verification as string) || "",
           deterministicResult,
           confidence: ((p.confidence as string) || "medium") as "high" | "medium" | "low",

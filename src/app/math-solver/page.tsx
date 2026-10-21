@@ -26,6 +26,8 @@ import {
   ChevronDown,
   ChevronUp,
   Settings,
+  Eye,
+  X,
 } from "lucide-react";
 import { SolverImageUpload } from "@/components/math-solver/SolverImageUpload";
 import { SolutionCard } from "@/components/math-solver/SolutionCard";
@@ -40,8 +42,10 @@ import type {
 } from "@/app/api/math-solver/route";
 import {
   copyCanonicalSolutionToClipboard,
+  copyCanonicalSolutionPlainTextToClipboard,
   renderCanonicalSolutionHtml,
   renderCanonicalSolutionPlainText,
+  copyTextFallback,
 } from "@/lib/math-solution-html";
 
 const GRADE_OPTIONS: { id: GradeLevel; label: string; sublabel: string }[] = [
@@ -89,6 +93,8 @@ export default function MathSolverPage() {
   const [result, setResult] = useState<MathSolverResponse | null>(null);
   const [copiedText, setCopiedText] = useState<boolean>(false);
   const [copiedHtml, setCopiedHtml] = useState<boolean>(false);
+  const [showTopHtmlModal, setShowTopHtmlModal] = useState<boolean>(false);
+  const [copiedTopModalHtml, setCopiedTopModalHtml] = useState<boolean>(false);
 
   // Request & Abort Management
   const activeRequestIdRef = useRef<number>(0);
@@ -360,27 +366,24 @@ export default function MathSolverPage() {
     }
   }, [error, handleExtract, handleSolveOrGenerate]);
 
-  // Copy solution to clipboard as Plain Text
+  // Copy solution to clipboard as Plain Text ("ចម្លងអត្ថបទ")
   const handleCopyText = useCallback(async () => {
     if (!result || !result.problems || result.problems.length === 0) return;
     const p: MathSolverProblem = result.problems[0];
     const gradeTitle =
       GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា";
-    const text = renderCanonicalSolutionPlainText(p, {
+    const success = await copyCanonicalSolutionPlainTextToClipboard(p, {
       gradeTitle,
       solverModeTitle: result.solverMode.toUpperCase(),
+      solverMode: result.solverMode,
     });
-
-    try {
-      await navigator.clipboard.writeText(text);
+    if (success) {
       setCopiedText(true);
       setTimeout(() => setCopiedText(false), 2000);
-    } catch {
-      console.warn("Clipboard text copy failed");
     }
   }, [result, gradeLevel]);
 
-  // Copy solution to clipboard as HTML (Dual-mode: text/html + text/plain)
+  // Copy solution to clipboard as HTML Source ("ចម្លងកូដ HTML")
   const handleCopyHtml = useCallback(async () => {
     if (!result || !result.problems || result.problems.length === 0) return;
     const p: MathSolverProblem = result.problems[0];
@@ -391,6 +394,7 @@ export default function MathSolverPage() {
       const success = await copyCanonicalSolutionToClipboard(p, {
         gradeTitle,
         solverModeTitle: result.solverMode.toUpperCase(),
+        solverMode: result.solverMode,
       });
       if (success) {
         setCopiedHtml(true);
@@ -401,30 +405,18 @@ export default function MathSolverPage() {
     }
   }, [result, gradeLevel]);
 
-  // Download solution as HTML file (Visually matching on-screen solution)
+  // Download solution as HTML file ("ទាញយកឯកសារ HTML" - matching Copy HTML exactly)
   const handleDownloadHtml = useCallback(() => {
     if (!result || !result.problems || result.problems.length === 0) return;
     const p: MathSolverProblem = result.problems[0];
     const gradeTitle =
       GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា";
 
-    const htmlContent = `<!DOCTYPE html>
-<html lang="km">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Khmer Math Solution — ${gradeTitle}</title>
-  <style>
-    body { background: #f8fafc; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-  </style>
-</head>
-<body>
-  ${renderCanonicalSolutionHtml(p, {
-    gradeTitle,
-    solverModeTitle: result.solverMode.toUpperCase(),
-  })}
-</body>
-</html>`;
+    const htmlContent = renderCanonicalSolutionHtml(p, {
+      gradeTitle,
+      solverModeTitle: result.solverMode.toUpperCase(),
+      solverMode: result.solverMode,
+    });
 
     const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -901,7 +893,7 @@ export default function MathSolverPage() {
               </div>
             </div>
 
-            {/* Universal Solution Actions: Copy Text, Copy HTML, Download HTML */}
+            {/* Universal Solution Actions: ចម្លងអត្ថបទ, ចម្លងកូដ HTML, ទាញយកឯកសារ HTML, មើល HTML Source */}
             <div className="flex flex-wrap items-center gap-2">
               {/* 1. Copy plain text */}
               <button
@@ -917,12 +909,12 @@ export default function MathSolverPage() {
                 ) : (
                   <>
                     <Copy className="h-3.5 w-3.5 text-slate-400" />
-                    <span>ចម្លងជាអត្ថបទ</span>
+                    <span>ចម្លងអត្ថបទ</span>
                   </>
                 )}
               </button>
 
-              {/* 2. Copy as HTML */}
+              {/* 2. Copy as HTML Source */}
               <button
                 type="button"
                 onClick={handleCopyHtml}
@@ -931,12 +923,12 @@ export default function MathSolverPage() {
                 {copiedHtml ? (
                   <>
                     <Check className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="text-emerald-300">បានចម្លងជា HTML រួចរាល់!</span>
+                    <span className="text-emerald-300">បានចម្លងកូដ HTML រួចរាល់!</span>
                   </>
                 ) : (
                   <>
                     <Code2 className="h-3.5 w-3.5 text-indigo-400" />
-                    <span>ចម្លងជា HTML</span>
+                    <span>ចម្លងកូដ HTML</span>
                   </>
                 )}
               </button>
@@ -948,7 +940,17 @@ export default function MathSolverPage() {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
               >
                 <Download className="h-3.5 w-3.5 text-slate-400" />
-                <span>ទាញយក HTML</span>
+                <span>ទាញយកឯកសារ HTML</span>
+              </button>
+
+              {/* 4. View HTML Source */}
+              <button
+                type="button"
+                onClick={() => setShowTopHtmlModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors min-h-[36px]"
+              >
+                <Eye className="h-3.5 w-3.5 text-slate-400" />
+                <span>មើល HTML Source</span>
               </button>
 
               {/* Clear */}
@@ -963,6 +965,82 @@ export default function MathSolverPage() {
             </div>
           </div>
 
+          {/* HTML Source Preview Modal (Top Bar) */}
+          {showTopHtmlModal && problemResult && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="w-full max-w-3xl rounded-2xl border border-violet-500/40 bg-slate-950 p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Code2 className="h-5 w-5 text-indigo-400" />
+                    <h3 className="text-sm font-bold text-white">
+                      កូដ HTML Source (HTML Document Source Code)
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTopHtmlModal(false)}
+                    className="rounded-lg p-1 text-slate-400 hover:text-white hover:bg-slate-800"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <p className="text-xs text-slate-400">
+                  កូដ HTML ខាងក្រោមជាឯកសារពេញលេញ (Standalone Document) រួមមាន CSS, ភាសាខ្មែរ, និងគណនាតាមជួរឈរ។
+                </p>
+
+                <div className="flex-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+                  <textarea
+                    readOnly
+                    value={renderCanonicalSolutionHtml(problemResult, {
+                      gradeTitle: GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា",
+                      solverModeTitle: result.solverMode.toUpperCase(),
+                      solverMode: result.solverMode,
+                    })}
+                    rows={16}
+                    className="w-full h-full p-4 font-mono text-xs text-emerald-300 bg-transparent resize-none focus:outline-none overflow-auto whitespace-pre"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const src = renderCanonicalSolutionHtml(problemResult, {
+                        gradeTitle: GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា",
+                        solverModeTitle: result.solverMode.toUpperCase(),
+                        solverMode: result.solverMode,
+                      });
+                      copyTextFallback(src);
+                      setCopiedTopModalHtml(true);
+                      setTimeout(() => setCopiedTopModalHtml(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
+                  >
+                    {copiedTopModalHtml ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        បានចម្លងកូដ!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4" />
+                        ចម្លងកូដ HTML
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowTopHtmlModal(false)}
+                    className="rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-300 hover:text-white"
+                  >
+                    បិទ
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Canonical Solution Cards */}
           <div className="space-y-6">
             {result.problems.map((prob, idx) => (
@@ -975,6 +1053,7 @@ export default function MathSolverPage() {
                   GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា"
                 }
                 solverModeTitle={result.solverMode.toUpperCase()}
+                solverMode={result.solverMode}
               />
             ))}
           </div>
