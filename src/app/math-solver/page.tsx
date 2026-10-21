@@ -22,29 +22,57 @@ import {
   BookOpen,
   GraduationCap,
   ShieldCheck,
+  Code2,
+  ChevronDown,
+  ChevronUp,
+  Settings,
 } from "lucide-react";
 import { SolverImageUpload } from "@/components/math-solver/SolverImageUpload";
+import { SolutionCard } from "@/components/math-solver/SolutionCard";
 import type {
   MathSolverResponse,
   MathSolverProblem,
   MathSolverError,
   SolverMode,
   DetailLevel,
+  GradeLevel,
+  VisualInterpretation,
 } from "@/app/api/math-solver/route";
+import {
+  copyCanonicalSolutionToClipboard,
+  renderCanonicalSolutionHtml,
+  renderCanonicalSolutionPlainText,
+} from "@/lib/math-solution-html";
+
+const GRADE_OPTIONS: { id: GradeLevel; label: string; sublabel: string }[] = [
+  { id: "auto", label: "ស្វ័យប្រវត្តិ", sublabel: "Auto Detect" },
+  { id: "grade_1", label: "ថ្នាក់ទី ១", sublabel: "Grade 1" },
+  { id: "grade_2", label: "ថ្នាក់ទី ២", sublabel: "Grade 2" },
+  { id: "grade_3", label: "ថ្នាក់ទី ៣", sublabel: "Grade 3" },
+  { id: "grade_4", label: "ថ្នាក់ទី ៤", sublabel: "Grade 4" },
+  { id: "grade_5", label: "ថ្នាក់ទី ៥", sublabel: "Grade 5" },
+  { id: "grade_6", label: "ថ្នាក់ទី ៦", sublabel: "Grade 6" },
+];
 
 export default function MathSolverPage() {
-  // Mode selection state
+  // Mode & Grade selection state
   const [solverMode, setSolverMode] = useState<SolverMode>("solve");
   const [detailLevel, setDetailLevel] = useState<DetailLevel>("step_by_step");
+  const [gradeLevel, setGradeLevel] = useState<GradeLevel>("auto");
+  const [inferredGradeDisplay, setInferredGradeDisplay] = useState<string | null>(null);
 
   // Input State
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [extractedProblemText, setExtractedProblemText] = useState<string>("");
   const [existingAnswerText, setExistingAnswerText] = useState<string>("");
   const [ambiguousParts, setAmbiguousParts] = useState<string[]>([]);
+  const [extractedVisual, setExtractedVisual] = useState<VisualInterpretation | null>(null);
   const [extractionConfidence, setExtractionConfidence] = useState<
     "high" | "medium" | "low" | null
   >(null);
+
+  // Advanced settings accordion
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
 
   // Execution State
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
@@ -59,7 +87,8 @@ export default function MathSolverPage() {
 
   // Result State
   const [result, setResult] = useState<MathSolverResponse | null>(null);
-  const [copied, setCopied] = useState<boolean>(false);
+  const [copiedText, setCopiedText] = useState<boolean>(false);
+  const [copiedHtml, setCopiedHtml] = useState<boolean>(false);
 
   // Request & Abort Management
   const activeRequestIdRef = useRef<number>(0);
@@ -102,12 +131,14 @@ export default function MathSolverPage() {
     setExtractedProblemText("");
     setExistingAnswerText("");
     setAmbiguousParts([]);
+    setExtractedVisual(null);
     setExtractionConfidence(null);
     setResult(null);
     setError(null);
+    setInferredGradeDisplay(null);
   }, [handleCancel]);
 
-  // STAGE 1: Extract Problem Text from Image
+  // STAGE 1: Extract Problem Text & Visual Structure from Image
   const handleExtract = useCallback(
     async (fileToUse?: File) => {
       const file = fileToUse || imageFile;
@@ -124,6 +155,7 @@ export default function MathSolverPage() {
       try {
         const formData = new FormData();
         formData.append("action", "extract");
+        formData.append("gradeLevel", gradeLevel);
         formData.append("image", file, file.name);
 
         const response = await fetch("/api/math-solver", {
@@ -166,10 +198,18 @@ export default function MathSolverPage() {
         if (firstProblem?.extractedAnswer) {
           setExistingAnswerText(firstProblem.extractedAnswer);
         }
+        if (firstProblem?.visualInterpretation) {
+          setExtractedVisual(firstProblem.visualInterpretation);
+        } else {
+          setExtractedVisual(null);
+        }
         if (firstProblem?.ambiguousParts && firstProblem.ambiguousParts.length > 0) {
           setAmbiguousParts(firstProblem.ambiguousParts);
         } else {
           setAmbiguousParts([]);
+        }
+        if (successData.inferredGradeKhmer) {
+          setInferredGradeDisplay(successData.inferredGradeKhmer);
         }
         setExtractionConfidence(firstProblem?.confidence || "medium");
         setError(null);
@@ -190,10 +230,10 @@ export default function MathSolverPage() {
         }
       }
     },
-    [imageFile, isBusy]
+    [imageFile, isBusy, gradeLevel]
   );
 
-  // When image is selected, automatically initiate text extraction
+  // When image is selected, automatically initiate text/visual extraction
   const handleFileSelect = useCallback(
     (file: File | null) => {
       setImageFile(file);
@@ -205,6 +245,7 @@ export default function MathSolverPage() {
         setExtractedProblemText("");
         setExistingAnswerText("");
         setAmbiguousParts([]);
+        setExtractedVisual(null);
         setExtractionConfidence(null);
       }
     },
@@ -229,12 +270,12 @@ export default function MathSolverPage() {
       const formData = new FormData();
       formData.append("action", "solve");
       formData.append("solverMode", solverMode);
+      formData.append("gradeLevel", gradeLevel);
       if (solverMode === "generate") {
         formData.append("detailLevel", detailLevel);
       }
       formData.append("problemText", textToSolve);
 
-      // Only attach student answer in verify mode or when present
       if (solverMode === "verify" && existingAnswerText.trim()) {
         formData.append("existingAnswer", existingAnswerText.trim());
       }
@@ -279,6 +320,9 @@ export default function MathSolverPage() {
 
       const successData = data as MathSolverResponse;
       setResult(successData);
+      if (successData.inferredGradeKhmer) {
+        setInferredGradeDisplay(successData.inferredGradeKhmer);
+      }
       setError(null);
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -296,7 +340,15 @@ export default function MathSolverPage() {
         setIsSolving(false);
       }
     }
-  }, [extractedProblemText, imageFile, isBusy, solverMode, detailLevel, existingAnswerText]);
+  }, [
+    extractedProblemText,
+    imageFile,
+    isBusy,
+    solverMode,
+    gradeLevel,
+    detailLevel,
+    existingAnswerText,
+  ]);
 
   // Retry based on current failure stage
   const handleRetry = useCallback(() => {
@@ -308,111 +360,80 @@ export default function MathSolverPage() {
     }
   }, [error, handleExtract, handleSolveOrGenerate]);
 
-  // Copy solution to clipboard
-  const handleCopy = useCallback(async () => {
+  // Copy solution to clipboard as Plain Text
+  const handleCopyText = useCallback(async () => {
     if (!result || !result.problems || result.problems.length === 0) return;
     const p: MathSolverProblem = result.problems[0];
-    const lines: string[] = [];
-
-    if (result.solverMode === "generate") {
-      lines.push(`===== ដំណោះស្រាយអប់រំពេញលេញ (FULL EDUCATIONAL SOLUTION) =====`);
-      lines.push(`១. ប្រធានលំហាត់៖\n${p.extractedProblem}`);
-      if (p.given) lines.push(`\n២. អ្វីដែលគេឱ្យ៖\n${p.given}`);
-      if (p.toFind) lines.push(`\n៣. អ្វីដែលត្រូវរក៖\n${p.toFind}`);
-      if (p.formulas) lines.push(`\n៤. រូបមន្តដែលត្រូវប្រើ៖\n${p.formulas}`);
-      lines.push(`\n៥. ដំណោះស្រាយតាមជំហាន៖\n${p.solution}`);
-      lines.push(`\n៦. ការពន្យល់ជាភាសាខ្មែរ៖\n${p.solutionKhmer}`);
-      lines.push(`\n៧. ចម្លើយចុងក្រោយ៖\n${p.finalAnswer}`);
-      if (p.verification) lines.push(`\n៨. ពិនិត្យចម្លើយឡើងវិញ៖\n${p.verification}`);
-    } else if (result.solverMode === "verify") {
-      lines.push(`===== ដោះស្រាយ + ផ្ទៀងផ្ទាត់ចម្លើយ (SOLVE & VERIFY) =====`);
-      lines.push(`ប្រធានលំហាត់៖ ${p.extractedProblem}`);
-      lines.push(`ចម្លើយសិស្ស៖ ${p.extractedAnswer || "មិនបានបញ្ជាក់"}`);
-      lines.push(`លទ្ធផលផ្ទៀងផ្ទាត់៖ ${p.answerStatusKhmer || p.answerStatus || ""}`);
-      if (p.incorrectStep) {
-        lines.push(`ចំណុចខុស៖ ${p.incorrectStep}`);
-        if (p.errorExplanationKhmer) lines.push(`ការពន្យល់កំហុស៖ ${p.errorExplanationKhmer}`);
-        if (p.correctedStep) lines.push(`ការកែតម្រូវ៖ ${p.correctedStep}`);
-      }
-      lines.push(`\nដំណោះស្រាយកែតម្រូវពេញលេញ៖\n${p.solutionKhmer || p.solution}`);
-      lines.push(`\nចម្លើយចុងក្រោយដែលត្រឹមត្រូវ៖ ${p.finalAnswer}`);
-      if (p.verification) lines.push(`\nការផ្ទៀងផ្ទាត់៖ ${p.verification}`);
-    } else {
-      lines.push(`===== ដោះស្រាយលំហាត់គណិតវិទ្យា (MATH SOLUTION) =====`);
-      lines.push(`ប្រធានលំហាត់៖ ${p.extractedProblem}`);
-      lines.push(`\nវិធីដោះស្រាយមួយជំហានម្តងៗ៖\n${p.solutionKhmer || p.solution}`);
-      lines.push(`\nចម្លើយចុងក្រោយ៖ ${p.finalAnswer}`);
-      if (p.verification) lines.push(`\nការផ្ទៀងផ្ទាត់ឡើងវិញ៖ ${p.verification}`);
-    }
+    const gradeTitle =
+      GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា";
+    const text = renderCanonicalSolutionPlainText(p, {
+      gradeTitle,
+      solverModeTitle: result.solverMode.toUpperCase(),
+    });
 
     try {
-      await navigator.clipboard.writeText(lines.join("\n"));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(text);
+      setCopiedText(true);
+      setTimeout(() => setCopiedText(false), 2000);
     } catch {
-      console.warn("Clipboard copy failed");
+      console.warn("Clipboard text copy failed");
     }
-  }, [result]);
+  }, [result, gradeLevel]);
 
-  // Download solution as text file
-  const handleDownload = useCallback(() => {
+  // Copy solution to clipboard as HTML (Dual-mode: text/html + text/plain)
+  const handleCopyHtml = useCallback(async () => {
     if (!result || !result.problems || result.problems.length === 0) return;
     const p: MathSolverProblem = result.problems[0];
+    const gradeTitle =
+      GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា";
 
-    const modeLabels: Record<SolverMode, string> = {
-      solve: "SOLVE_PROBLEM",
-      generate: "GENERATE_FULL_SOLUTION",
-      verify: "SOLVE_AND_VERIFY",
-    };
-
-    const header = [
-      `DYT ECOSYSTEM — MODULE 04: KHMER MATH SOLVER`,
-      `MODE: ${modeLabels[result.solverMode]}`,
-      `DATE: ${new Date().toLocaleString("km-KH")}`,
-      `--------------------------------------------------`,
-    ];
-
-    const body: string[] = [];
-    if (result.solverMode === "generate") {
-      body.push(`១. ប្រធានលំហាត់៖\n${p.extractedProblem}`);
-      if (p.given) body.push(`\n២. អ្វីដែលគេឱ្យ៖\n${p.given}`);
-      if (p.toFind) body.push(`\n៣. អ្វីដែលត្រូវរក៖\n${p.toFind}`);
-      if (p.formulas) body.push(`\n៤. រូបមន្តដែលត្រូវប្រើ៖\n${p.formulas}`);
-      body.push(`\n៥. ដំណោះស្រាយតាមជំហាន៖\n${p.solution}`);
-      body.push(`\n៦. ការពន្យល់ជាភាសាខ្មែរ៖\n${p.solutionKhmer}`);
-      body.push(`\n៧. ចម្លើយចុងក្រោយ៖\n${p.finalAnswer}`);
-      if (p.verification) body.push(`\n៨. ពិនិត្យចម្លើយឡើងវិញ៖\n${p.verification}`);
-    } else if (result.solverMode === "verify") {
-      body.push(`ប្រធានលំហាត់៖\n${p.extractedProblem}`);
-      body.push(`\nចម្លើយសិស្ស៖ ${p.extractedAnswer || "N/A"}`);
-      body.push(`ស្ថានភាពផ្ទៀងផ្ទាត់៖ ${p.answerStatusKhmer || p.answerStatus || ""}`);
-      if (p.incorrectStep) body.push(`ចំណុចខុស៖ ${p.incorrectStep}`);
-      if (p.errorExplanationKhmer) body.push(`ការពន្យល់កំហុស៖ ${p.errorExplanationKhmer}`);
-      if (p.correctedStep) body.push(`ការកែតម្រូវ៖ ${p.correctedStep}`);
-      body.push(`\nដំណោះស្រាយកែតម្រូវពេញលេញ៖\n${p.solutionKhmer || p.solution}`);
-      body.push(`\nចម្លើយចុងក្រោយ៖ ${p.finalAnswer}`);
-      if (p.verification) body.push(`\nការផ្ទៀងផ្ទាត់៖ ${p.verification}`);
-    } else {
-      body.push(`ប្រធានលំហាត់៖\n${p.extractedProblem}`);
-      body.push(`\nវិធីដោះស្រាយមួយជំហានម្តងៗ៖\n${p.solutionKhmer || p.solution}`);
-      body.push(`\nចម្លើយចុងក្រោយ៖ ${p.finalAnswer}`);
-      if (p.verification) body.push(`\nការផ្ទៀងផ្ទាត់ឡើងវិញ៖ ${p.verification}`);
+    try {
+      const success = await copyCanonicalSolutionToClipboard(p, {
+        gradeTitle,
+        solverModeTitle: result.solverMode.toUpperCase(),
+      });
+      if (success) {
+        setCopiedHtml(true);
+        setTimeout(() => setCopiedHtml(false), 2500);
+      }
+    } catch (err) {
+      console.error("Failed to copy HTML:", err);
     }
+  }, [result, gradeLevel]);
 
-    const footer = [
-      `\n--------------------------------------------------`,
-      `PROVIDER: ${result.inferenceProvider}`,
-    ];
+  // Download solution as HTML file (Visually matching on-screen solution)
+  const handleDownloadHtml = useCallback(() => {
+    if (!result || !result.problems || result.problems.length === 0) return;
+    const p: MathSolverProblem = result.problems[0];
+    const gradeTitle =
+      GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា";
 
-    const content = [...header, ...body, ...footer].join("\n");
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const htmlContent = `<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Khmer Math Solution — ${gradeTitle}</title>
+  <style>
+    body { background: #f8fafc; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+</head>
+<body>
+  ${renderCanonicalSolutionHtml(p, {
+    gradeTitle,
+    solverModeTitle: result.solverMode.toUpperCase(),
+  })}
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `khmer-math-${result.solverMode}-${Date.now()}.txt`;
+    a.download = `khmer-math-solution-${result.solverMode}-${Date.now()}.html`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, [result]);
+  }, [result, gradeLevel]);
 
   const problemResult = result?.problems?.[0];
 
@@ -434,13 +455,13 @@ export default function MathSolverPage() {
           <div className="space-y-1">
             <div className="inline-flex items-center gap-2 border border-violet-500/40 bg-violet-950/70 px-2.5 py-0.5 text-[11px] text-violet-300 font-mono tracking-wider rounded-md">
               <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
-              <span>MODULE 04 // KHMER MATH SOLVER</span>
+              <span>MODULE 04 // KHMER MATH SOLVER (GRADES 1–6)</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white uppercase">
               ដោះស្រាយលំហាត់គណិតវិទ្យា
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              ដោះស្រាយលំហាត់ បង្កើតដំណោះស្រាយគរុកោសល្យ និងផ្ទៀងផ្ទាត់ចម្លើយសិស្សជាភាសាខ្មែរតាមស្ដង់ដារអប់រំ។
+              ដោះស្រាយលំហាត់ពីអក្សរ និងរូបភាព visual (វត្ថុរាប់, ប្រភាគ, ជួរដេកជួរឈរ, ធរណីមាត្រ) សម្រាប់សិស្សថ្នាក់ទី ១ ដល់ទី ៦។
             </p>
           </div>
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-violet-400/50 bg-violet-950/60 text-violet-300 shadow-[0_0_20px_rgba(139,92,246,0.3)]">
@@ -448,8 +469,40 @@ export default function MathSolverPage() {
           </div>
         </div>
 
-        {/* ── Mode Selector Near Upload Area ── */}
+        {/* ── Grade Selector Bar ── */}
         <div className="mt-5 pt-4 border-t border-slate-800/80 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="text-xs font-bold font-mono tracking-wider text-slate-400 uppercase flex items-center gap-2">
+              <GraduationCap className="h-4 w-4 text-violet-400" />
+              <span>ជ្រើសរើសកម្រិតថ្នាក់ // Grade Level:</span>
+            </label>
+            {gradeLevel === "auto" && inferredGradeDisplay && (
+              <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/50 border border-emerald-500/40 px-2.5 py-0.5 rounded-full animate-fade-in">
+                កម្រិតដែលបានប៉ាន់ស្មាន៖ {inferredGradeDisplay}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5">
+            {GRADE_OPTIONS.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => setGradeLevel(g.id)}
+                className={`flex flex-col items-center justify-center py-2 px-2 rounded-xl border text-center transition-all ${
+                  gradeLevel === g.id
+                    ? "border-violet-500 bg-violet-600/30 text-white shadow-[0_0_12px_rgba(139,92,246,0.25)] ring-1 ring-violet-400"
+                    : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                }`}
+              >
+                <span className="text-xs font-bold">{g.label}</span>
+                <span className="text-[10px] text-slate-400/80">{g.sublabel}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Mode Selector ── */}
+        <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2">
           <label className="text-xs font-bold font-mono tracking-wider text-slate-400 uppercase flex items-center gap-2">
             <span>មុខងារដំណើរការ // Select Function Mode</span>
           </label>
@@ -464,7 +517,11 @@ export default function MathSolverPage() {
                   : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700"
               }`}
             >
-              <Calculator className={`h-4 w-4 ${solverMode === "solve" ? "text-violet-400" : "text-slate-500"}`} />
+              <Calculator
+                className={`h-4 w-4 ${
+                  solverMode === "solve" ? "text-violet-400" : "text-slate-500"
+                }`}
+              />
               <div>
                 <p className="text-xs font-bold">១. ដោះស្រាយលំហាត់</p>
                 <p className="text-[10px] text-slate-400">Solve Problem</p>
@@ -481,7 +538,11 @@ export default function MathSolverPage() {
                   : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700"
               }`}
             >
-              <BookOpen className={`h-4 w-4 ${solverMode === "generate" ? "text-violet-400" : "text-slate-500"}`} />
+              <BookOpen
+                className={`h-4 w-4 ${
+                  solverMode === "generate" ? "text-violet-400" : "text-slate-500"
+                }`}
+              />
               <div>
                 <p className="text-xs font-bold">២. បង្កើតដំណោះស្រាយ</p>
                 <p className="text-[10px] text-slate-400">Generate Full Solution (8 Sections)</p>
@@ -498,7 +559,11 @@ export default function MathSolverPage() {
                   : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700"
               }`}
             >
-              <ShieldCheck className={`h-4 w-4 ${solverMode === "verify" ? "text-violet-400" : "text-slate-500"}`} />
+              <ShieldCheck
+                className={`h-4 w-4 ${
+                  solverMode === "verify" ? "text-violet-400" : "text-slate-500"
+                }`}
+              />
               <div>
                 <p className="text-xs font-bold">៣. ដោះស្រាយ + ផ្ទៀងផ្ទាត់</p>
                 <p className="text-[10px] text-slate-400">Solve &amp; Verify Student Work</p>
@@ -557,9 +622,7 @@ export default function MathSolverPage() {
                 {error.messageKhmer || error.message}
               </p>
               {error.message && error.messageKhmer && (
-                <p className="text-xs text-rose-300/80 font-mono">
-                  {error.message}
-                </p>
+                <p className="text-xs text-rose-300/80 font-mono">{error.message}</p>
               )}
             </div>
           </div>
@@ -616,7 +679,7 @@ export default function MathSolverPage() {
                 className="inline-flex items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-950/40 px-3 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-900/40 transition-colors"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                <span>ស្រង់អត្ថបទឡើងវិញ (Re-extract)</span>
+                <span>ស្រង់អត្ថបទ/រូបភាពឡើងវិញ (Re-extract)</span>
               </button>
               <span className="text-[11px] text-emerald-400 flex items-center gap-1">
                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -628,7 +691,7 @@ export default function MathSolverPage() {
           {isExtracting && (
             <div className="flex items-center gap-2.5 rounded-xl border border-violet-500/30 bg-violet-950/30 p-3 text-xs text-violet-300 animate-pulse">
               <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
-              <span>កំពុងស្រង់អត្ថបទលំហាត់ពីរូបភាព... (Extracting text...)</span>
+              <span>កំពុងវិភាគរូបភាព និងស្វែងយល់ពីលំហាត់... (Analyzing visual elements...)</span>
             </div>
           )}
         </div>
@@ -659,6 +722,24 @@ export default function MathSolverPage() {
                 </span>
               )}
             </div>
+
+            {/* Visual Interpretation Card (Before Solving) */}
+            {extractedVisual && (
+              <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/30 p-3 text-xs text-cyan-200 space-y-1.5">
+                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                  ការបកស្រាយពីទម្រង់រូបភាព (Visual Interpretation):
+                </span>
+                <div className="grid grid-cols-2 gap-1.5 text-[11px] pt-1 text-slate-300">
+                  <div>វត្ថុ៖ <span className="font-semibold text-white">{extractedVisual.recognizedObjects}</span></div>
+                  <div>ចំនួន៖ <span className="font-semibold font-mono text-white">{extractedVisual.objectCount}</span></div>
+                  {extractedVisual.arrangement && (
+                    <div>រៀបចំ៖ <span className="font-semibold text-white">{extractedVisual.arrangement}</span></div>
+                  )}
+                  <div>ប្រមាណវិធី៖ <span className="font-semibold text-violet-300 font-mono">{extractedVisual.interpretedOperation}</span></div>
+                </div>
+              </div>
+            )}
 
             {/* Uncertainty Warning Notice (Anti-Guessing) */}
             {ambiguousParts.length > 0 && (
@@ -703,13 +784,13 @@ export default function MathSolverPage() {
                 rows={4}
                 value={extractedProblemText}
                 onChange={(e) => setExtractedProblemText(e.target.value)}
-                placeholder="អត្ថបទលំហាត់នឹងបង្ហាញនៅទីនេះបន្ទាប់ពីបញ្ចូលរូបភាព ឬអ្នកអាចវាយបញ្ចូលដោយផ្ទាល់..."
+                placeholder="អត្ថបទលំហាត់នឹងបង្ហាញនៅទីនេះបន្ទាប់ពីបញ្ចូលរូបភាព ឬអ្នកអាចវាយបញ្ចូលដោយផ្ទាល់ (ឧ. ៤ × ៦ = ?)..."
                 disabled={isBusy}
                 className="w-full rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-100 placeholder-slate-500 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 focus:outline-none transition-colors"
               />
             </div>
 
-            {/* Answer-Verification Controls (ONLY shown when Mode 3 is selected) */}
+            {/* Answer-Verification Controls (Mode 3) */}
             {solverMode === "verify" && (
               <div className="space-y-1.5 border-t border-slate-800/80 pt-3">
                 <label
@@ -798,286 +879,138 @@ export default function MathSolverPage() {
 
       {/* STAGE 3: Solution Results Display */}
       {problemResult && (
-        <div className="rounded-2xl border border-violet-500/30 bg-slate-950/90 p-6 space-y-6 shadow-2xl">
-          {/* Result Card Header with Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/20 text-violet-400">
-                <Sparkles className="h-4 w-4" />
+        <div className="space-y-6">
+          {/* Top Result Action Bar */}
+          <div className="rounded-2xl border border-violet-500/30 bg-slate-950/90 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600/20 text-violet-400 border border-violet-500/30">
+                <Sparkles className="h-5 w-5" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">
                   {result.solverMode === "generate"
                     ? "ដំណោះស្រាយអប់រំពេញលេញ (Full Educational Solution)"
                     : result.solverMode === "verify"
-                    ? "លទ្ធផលផ្ទៀងផ្ទាត់ & ដំណោះស្រាយកែតម្រូវ (Verification & Correction)"
+                    ? "លទ្ធផលផ្ទៀងផ្ទាត់ & ដំណោះស្រាយកែតម្រូវ"
                     : "ដំណោះស្រាយលំហាត់ (Math Solution)"}
                 </h3>
                 <p className="text-xs text-slate-400 font-mono">
-                  {result.inferenceProvider} · {result.solverMode.toUpperCase()} MODE
+                  {result.inferredGradeKhmer || "ថ្នាក់បឋមសិក្សា"} · {result.solverMode.toUpperCase()}
                 </p>
               </div>
             </div>
 
-            {/* Action Buttons: Copy, Download, Clear */}
+            {/* Universal Solution Actions: Copy HTML, Copy Text, Download HTML */}
             <div className="flex flex-wrap items-center gap-2">
+              {/* Copy as HTML */}
               <button
                 type="button"
-                onClick={handleCopy}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
+                onClick={handleCopyHtml}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/50 bg-indigo-600/25 px-3 py-1.5 text-xs font-bold text-indigo-200 hover:bg-indigo-600/40 hover:text-white transition-colors min-h-[36px] shadow-sm"
               >
-                {copied ? (
+                {copiedHtml ? (
                   <>
                     <Check className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="text-emerald-300">បានចម្លង! (Copied)</span>
+                    <span className="text-emerald-300">បានចម្លងជា HTML រួចរាល់!</span>
                   </>
                 ) : (
                   <>
-                    <Copy className="h-3.5 w-3.5 text-slate-400" />
-                    <span>ចម្លង (Copy)</span>
+                    <Code2 className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>ចម្លងជា HTML</span>
                   </>
                 )}
               </button>
 
+              {/* Copy plain text */}
               <button
                 type="button"
-                onClick={handleDownload}
+                onClick={handleCopyText}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
+              >
+                {copiedText ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-emerald-300">បានចម្លង!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5 text-slate-400" />
+                    <span>ចម្លងជាអត្ថបទ</span>
+                  </>
+                )}
+              </button>
+
+              {/* Download as HTML */}
+              <button
+                type="button"
+                onClick={handleDownloadHtml}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
               >
                 <Download className="h-3.5 w-3.5 text-slate-400" />
-                <span>ទាញយក (Download)</span>
+                <span>ទាញយក HTML</span>
               </button>
 
+              {/* Clear */}
               <button
                 type="button"
                 onClick={handleClear}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-rose-300 hover:border-rose-500/40 transition-colors min-h-[36px]"
               >
                 <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
-                <span>សម្អាត (Clear)</span>
+                <span>សម្អាត</span>
               </button>
             </div>
           </div>
 
-          {/* MODE 3: ANSWER VERIFICATION BANNER */}
-          {result.solverMode === "verify" && (
-            <div
-              className={`rounded-xl border p-4 space-y-3 ${
-                problemResult.answerStatus === "correct"
-                  ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-200"
-                  : problemResult.answerStatus === "incorrect"
-                  ? "border-rose-500/40 bg-rose-950/30 text-rose-200"
-                  : "border-amber-500/40 bg-amber-950/30 text-amber-200"
-              }`}
+          {/* Canonical Solution Cards */}
+          <div className="space-y-6">
+            {result.problems.map((prob, idx) => (
+              <SolutionCard
+                key={prob.id || idx}
+                problem={prob}
+                index={idx}
+                totalProblems={result.problems.length}
+                gradeTitle={
+                  GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា"
+                }
+                solverModeTitle={result.solverMode.toUpperCase()}
+              />
+            ))}
+          </div>
+
+          {/* Advanced Technical Diagnostics Accordion */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowAdvancedSettings((prev) => !prev)}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono uppercase tracking-wider font-bold">
-                  ការផ្ទៀងផ្ទាត់ចម្លើយសិស្ស (Answer Verification)
-                </span>
-                <span
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                    problemResult.answerStatus === "correct"
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      : problemResult.answerStatus === "incorrect"
-                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
-                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                  }`}
-                >
-                  {problemResult.answerStatus === "correct" && (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  )}
-                  {problemResult.answerStatus === "incorrect" && (
-                    <XCircle className="h-4 w-4 text-rose-400" />
-                  )}
-                  {problemResult.answerStatus === "unverifiable" && (
-                    <HelpCircle className="h-4 w-4 text-amber-400" />
-                  )}
-                  <span>
-                    {problemResult.answerStatusKhmer ||
-                      (problemResult.answerStatus === "correct"
-                        ? "ត្រឹមត្រូវ ✓"
-                        : problemResult.answerStatus === "incorrect"
-                        ? "មិនទាន់ត្រឹមត្រូវ ✗"
-                        : "មិនអាចផ្ទៀងផ្ទាត់បាន")}
-                  </span>
-                </span>
-              </div>
-
-              <div className="text-xs space-y-1.5 pt-1 border-t border-slate-800/60">
-                {problemResult.extractedAnswer && (
-                  <p>
-                    <span className="text-slate-400">ចម្លើយសិស្សដែលមានស្រាប់៖</span>{" "}
-                    <span className="font-mono font-bold text-white">
-                      {problemResult.extractedAnswer}
-                    </span>
-                  </p>
-                )}
-                {problemResult.incorrectStep && (
-                  <p className="text-rose-300 font-medium">
-                    <span className="text-rose-400 font-bold">ចំណុចខុស៖</span>{" "}
-                    {problemResult.incorrectStep}
-                  </p>
-                )}
-                {problemResult.errorExplanationKhmer && (
-                  <p className="text-rose-200">
-                    <span className="text-rose-400 font-bold">ការពន្យល់កំហុស៖</span>{" "}
-                    {problemResult.errorExplanationKhmer}
-                  </p>
-                )}
-                {problemResult.correctedStep && (
-                  <p className="text-emerald-300 font-medium">
-                    <span className="text-emerald-400 font-bold">ការកែតម្រូវត្រឹមត្រូវ៖</span>{" "}
-                    {problemResult.correctedStep}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* MODE 2: 8-SECTION POLISHED EDUCATIONAL SOLUTION */}
-          {result.solverMode === "generate" ? (
-            <div className="space-y-4">
-              {/* 1. ប្រធានលំហាត់ */}
-              <div className="space-y-1">
-                <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-violet-300 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                  <span>១. ប្រធានលំហាត់ (Problem Statement)</span>
-                </h4>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3.5 text-sm font-semibold text-white">
-                  {problemResult.extractedProblem}
-                </div>
-              </div>
-
-              {/* 2 & 3: អ្វីដែលគេឱ្យ & អ្វីដែលត្រូវរក */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {problemResult.given && (
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
-                      ២. អ្វីដែលគេឱ្យ (Given)
-                    </h4>
-                    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-200 leading-relaxed">
-                      {problemResult.given}
-                    </div>
-                  </div>
-                )}
-                {problemResult.toFind && (
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
-                      ៣. អ្វីដែលត្រូវរក (To Find)
-                    </h4>
-                    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-200 leading-relaxed">
-                      {problemResult.toFind}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 4. រូបមន្តដែលត្រូវប្រើ */}
-              {problemResult.formulas && (
-                <div className="space-y-1">
-                  <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
-                    ៤. រូបមន្តដែលត្រូវប្រើ (Formulas To Use)
-                  </h4>
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 text-xs font-mono text-cyan-300">
-                    {problemResult.formulas}
-                  </div>
-                </div>
+              <span className="flex items-center gap-2">
+                <Settings className="h-3.5 w-3.5 text-slate-500" />
+                <span>ការកំណត់កម្រិតខ្ពស់ &amp; ពត៌មានបច្ចេកទេស (Advanced Settings &amp; Diagnostics)</span>
+              </span>
+              {showAdvancedSettings ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
               )}
-
-              {/* 5. ដំណោះស្រាយតាមជំហាន */}
-              {problemResult.solution && (
-                <div className="space-y-1">
-                  <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
-                    ៥. ដំណោះស្រាយតាមជំហាន (Working)
-                  </h4>
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3.5 text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed">
-                    {problemResult.solution}
-                  </div>
-                </div>
-              )}
-
-              {/* 6. ការពន្យល់ជាភាសាខ្មែរ */}
-              <div className="space-y-1">
-                <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
-                  ៦. ការពន្យល់ជាភាសាខ្មែរ (Khmer Pedagogical Explanation)
-                </h4>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-100 leading-relaxed whitespace-pre-wrap">
-                  {problemResult.solutionKhmer}
-                </div>
+            </button>
+            {showAdvancedSettings && (
+              <div className="border-t border-slate-800 p-4 space-y-2 text-xs font-mono text-slate-400 bg-slate-950/90">
+                <div>ម៉ាស៊ីនដំណើរការ (Provider): {result.inferenceProvider}</div>
+                <div>ទម្រង់ដំណោះស្រាយ (Mode): {result.solverMode}</div>
+                <div>កម្រិតថ្នាក់ដែលបានជ្រើស (Selected Grade): {result.gradeLevel}</div>
+                {result.inferredGrade && (
+                  <div>កម្រិតថ្នាក់ដែលបានប៉ាន់ស្មាន (Inferred Grade): {result.inferredGrade} ({result.inferredGradeKhmer})</div>
+                )}
+                <div>រយៈពេលវិភាគ (Reasoning Time): {result.timings.reasoningMs} ms</div>
+                <div>រយៈពេលសរុប (Total Time): {result.timings.totalMs} ms</div>
+                {result.imageQualityNote && (
+                  <div>ចំណាំគុណភាពរូបភាព៖ {result.imageQualityNote}</div>
+                )}
               </div>
-
-              {/* 7. ចម្លើយចុងក្រោយ */}
-              <div className="rounded-xl border border-violet-500/40 bg-gradient-to-r from-violet-950/40 to-slate-950/80 p-4 space-y-1">
-                <span className="text-xs font-mono uppercase tracking-wider text-violet-300 font-bold">
-                  ៧. ចម្លើយចុងក្រោយ (Final Answer)
-                </span>
-                <div className="text-lg font-mono font-bold text-emerald-400">
-                  {problemResult.finalAnswer}
-                </div>
-              </div>
-
-              {/* 8. ពិនិត្យចម្លើយឡើងវិញ */}
-              {problemResult.verification && (
-                <div className="space-y-1">
-                  <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
-                    ៨. ពិនិត្យចម្លើយឡើងវិញ (Verification / Check Work)
-                  </h4>
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-300 font-mono">
-                    {problemResult.verification}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            /* MODE 1 & MODE 3 CORE DISPLAY */
-            <div className="space-y-4">
-              {/* Problem Statement Display */}
-              <div className="space-y-1.5">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400">
-                  ប្រធានលំហាត់ (Problem)
-                </h4>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm font-semibold text-white">
-                  {problemResult.extractedProblem}
-                </div>
-              </div>
-
-              {/* Step-by-Step Explanation */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400">
-                  {result.solverMode === "verify"
-                    ? "ដំណោះស្រាយកែតម្រូវពេញលេញ (Corrected Solution in Khmer)"
-                    : "វិធីដោះស្រាយមួយជំហានម្តងៗជាភាសាខ្មែរ (Step-by-Step Explanation)"}
-                </h4>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 text-sm text-slate-200 leading-relaxed whitespace-pre-wrap space-y-2">
-                  {problemResult.solutionKhmer || problemResult.solution}
-                </div>
-              </div>
-
-              {/* Final Answer Banner */}
-              <div className="rounded-xl border border-violet-500/40 bg-gradient-to-r from-violet-950/40 to-slate-950/80 p-5 space-y-1">
-                <span className="text-xs font-mono uppercase tracking-wider text-violet-300 font-bold">
-                  {result.solverMode === "verify"
-                    ? "ចម្លើយចុងក្រោយដែលត្រឹមត្រូវ (Final Verified Answer)"
-                    : "ចម្លើយចុងក្រោយ (Final Answer)"}
-                </span>
-                <div className="text-lg sm:text-xl font-mono font-bold text-emerald-400">
-                  {problemResult.finalAnswer}
-                </div>
-              </div>
-
-              {/* Verification / Check Work */}
-              {problemResult.verification && (
-                <div className="space-y-1.5">
-                  <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400">
-                    ការផ្ទៀងផ្ទាត់ឡើងវិញ (Verification / Check Work)
-                  </h4>
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3.5 text-xs text-slate-300 font-mono">
-                    {problemResult.verification}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
