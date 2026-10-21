@@ -39,7 +39,7 @@ describe("Feature 3 — Real AI Image Super-Resolution (Real-ESRGAN Compact ONNX
     it("4. Configures 4x Real-ESRGAN model with safe checksum & source URL", () => {
       expect(appPyContent).toContain("realesr-general-x4v3");
       expect(appPyContent).toContain("UPSCALE_FACTOR = 4");
-      expect(appPyContent).toContain("f4ce97b00540dcfcf1d7a261455e2d2ac40c2f538a0fbce31e4ffd960b1e07a3");
+      expect(appPyContent).toContain("09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4");
     });
 
     it("5. Bounded concurrency protects CPU memory with asyncio.Semaphore(1)", () => {
@@ -90,7 +90,7 @@ describe("Feature 3 — Real AI Image Super-Resolution (Real-ESRGAN Compact ONNX
     it("12. Dockerfile pre-bakes Real-ESRGAN model and rembg model into image", () => {
       expect(dockerfileContent).toContain("new_session('isnet-general-use')");
       expect(dockerfileContent).toContain("realesr-general-x4v3.onnx");
-      expect(dockerfileContent).toContain("f4ce97b00540dcfcf1d7a261455e2d2ac40c2f538a0fbce31e4ffd960b1e07a3");
+      expect(dockerfileContent).toContain("09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4");
       expect(dockerfileContent).toContain('CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]');
     });
 

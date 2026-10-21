@@ -59,7 +59,7 @@ UPSCALE_MODEL_URL = os.getenv(
 )
 UPSCALE_MODEL_SHA256 = os.getenv(
     "UPSCALER_MODEL_SHA256",
-    "f4ce97b00540dcfcf1d7a261455e2d2ac40c2f538a0fbce31e4ffd960b1e07a3"
+    "09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4"
 )
 MODEL_CACHE_DIR = os.getenv(
     "MODEL_CACHE_DIR",
