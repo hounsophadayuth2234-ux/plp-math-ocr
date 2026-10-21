@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Copy, Check, Eye, Code2, FileCode, Binary, AlertTriangle, Download } from "lucide-react";
 import { sanitizeJoditHtml } from "@/lib/math-ocr-utils";
+import { sanitizeMathHtml, sanitizeMathLatex, sanitizeMathMLMarkup } from "@/lib/math-ocr-normalizer";
 
 interface OutputTabsProps {
   latex: string;
@@ -35,13 +36,27 @@ export function OutputTabs({
   const [copied, setCopied] = useState<TabId | null>(null);
   const [copyFailed, setCopyFailed] = useState<string | null>(null);
 
-  const sanitizedHtml = sanitizeJoditHtml(joditHtml);
+  const cleanLatex = sanitizeMathLatex(latex);
+  const cleanHtml = sanitizeMathHtml(joditHtml || sanitizeJoditHtml(joditHtml));
+  const cleanMathML = sanitizeMathMLMarkup(mathml);
 
   const copyText = async (text: string, tab: TabId) => {
     setCopyFailed(null);
     try {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
+      if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
+        setCopied(tab);
+        setTimeout(() => setCopied(null), 2000);
+      } else if (typeof document !== "undefined") {
+        // Fallback for older browsers / iframe restrictions
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
         setCopied(tab);
         setTimeout(() => setCopied(null), 2000);
       } else {
@@ -163,9 +178,9 @@ export function OutputTabs({
             <button
               type="button"
               onClick={() => {
-                if (activeTab === "latex") copyText(latex, "latex");
-                else if (activeTab === "joditHtml") copyText(sanitizedHtml, "joditHtml");
-                else if (activeTab === "mathml") copyText(mathml, "mathml");
+                if (activeTab === "latex") copyText(cleanLatex, "latex");
+                else if (activeTab === "joditHtml") copyText(cleanHtml, "joditHtml");
+                else if (activeTab === "mathml") copyText(cleanMathML, "mathml");
               }}
               aria-label={`Copy ${currentTabLabel} to clipboard`}
               title={`Copy ${currentTabLabel} to clipboard`}
@@ -174,12 +189,12 @@ export function OutputTabs({
               {copied === activeTab ? (
                 <>
                   <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                  <span>Copied!</span>
+                  <span>បានចម្លងរួចរាល់</span>
                 </>
               ) : (
                 <>
                   <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>Copy {currentTabLabel}</span>
+                  <span>ចម្លង {currentTabLabel}</span>
                 </>
               )}
             </button>
@@ -255,7 +270,7 @@ export function OutputTabs({
                 <button
                   type="button"
                   data-testid="copy-latex-btn"
-                  onClick={() => copyText(latex, "latex")}
+                  onClick={() => copyText(cleanLatex, "latex")}
                   aria-label="Copy LaTeX code to clipboard"
                   title="Copy LaTeX code to clipboard"
                   className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 transition-colors focus:ring-2 focus:ring-emerald-400 focus:outline-none shrink-0"
@@ -263,18 +278,18 @@ export function OutputTabs({
                   {copied === "latex" ? (
                     <>
                       <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                      <span>Copied!</span>
+                      <span>បានចម្លងរួចរាល់</span>
                     </>
                   ) : (
                     <>
                       <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>Copy LaTeX</span>
+                      <span>ចម្លង LaTeX</span>
                     </>
                   )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => downloadFile(latex, "equation.tex", "text/plain")}
+                  onClick={() => downloadFile(cleanLatex, "equation.tex", "text/plain")}
                   aria-label="Download LaTeX file"
                   title="Download equation.tex"
                   className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-emerald-400 focus:outline-none shrink-0"
@@ -285,7 +300,7 @@ export function OutputTabs({
               </div>
             </div>
             <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-emerald-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
-              {latex}
+              {cleanLatex}
             </pre>
             <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-2 text-[11px] text-slate-400">
               Compatible with KaTeX (0.19.0+), Overleaf, MathJax, Markdown documents, and standard LaTeX compilers.
@@ -319,7 +334,7 @@ export function OutputTabs({
                 <button
                   type="button"
                   data-testid="copy-jodit-btn"
-                  onClick={() => copyText(sanitizedHtml, "joditHtml")}
+                  onClick={() => copyText(cleanHtml, "joditHtml")}
                   aria-label="Copy Jodit HTML code to clipboard"
                   title="Copy Jodit HTML code to clipboard"
                   className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors focus:ring-2 focus:ring-amber-400 focus:outline-none"
@@ -327,18 +342,18 @@ export function OutputTabs({
                   {copied === "joditHtml" ? (
                     <>
                       <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                      <span>Copied!</span>
+                      <span>បានចម្លងរួចរាល់</span>
                     </>
                   ) : (
                     <>
                       <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>Copy Jodit HTML</span>
+                      <span>ចម្លង HTML</span>
                     </>
                   )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => downloadFile(sanitizedHtml, "equation.html", "text/html")}
+                  onClick={() => downloadFile(cleanHtml, "equation.html", "text/html")}
                   aria-label="Download Jodit HTML file"
                   title="Download equation.html"
                   className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-amber-400 focus:outline-none shrink-0"
@@ -349,7 +364,7 @@ export function OutputTabs({
               </div>
             </div>
             <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-amber-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
-              {sanitizedHtml}
+              {cleanHtml}
             </pre>
             <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-2 text-[11px] text-slate-400">
               Paste directly into Jodit WYSIWYG editor in educational LMS platforms. Zero external stylesheets.
@@ -373,7 +388,7 @@ export function OutputTabs({
                 <button
                   type="button"
                   data-testid="copy-mathml-btn"
-                  onClick={() => copyText(mathml, "mathml")}
+                  onClick={() => copyText(cleanMathML, "mathml")}
                   aria-label="Copy MathML code to clipboard"
                   title="Copy MathML code to clipboard"
                   className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0"
@@ -381,18 +396,18 @@ export function OutputTabs({
                   {copied === "mathml" ? (
                     <>
                       <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                      <span>Copied!</span>
+                      <span>បានចម្លងរួចរាល់</span>
                     </>
                   ) : (
                     <>
                       <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>Copy MathML</span>
+                      <span>ចម្លង MathML</span>
                     </>
                   )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => downloadFile(mathml, "equation.xml", "application/xml")}
+                  onClick={() => downloadFile(cleanMathML, "equation.xml", "application/xml")}
                   aria-label="Download MathML file"
                   title="Download equation.xml"
                   className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0"
@@ -403,7 +418,7 @@ export function OutputTabs({
               </div>
             </div>
             <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-cyan-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
-              {mathml}
+              {cleanMathML}
             </pre>
             <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-2 text-[11px] text-slate-400">
               Standard Mathematical Markup Language with W3C namespace for accessibility, modern browsers, and e-learning.
@@ -427,20 +442,29 @@ export function OutputTabs({
                 <button
                   type="button"
                   data-testid="copy-preview-btn"
-                  onClick={() => copyText(sanitizedHtml, "preview")}
+                  onClick={() => copyText(cleanHtml, "preview")}
                   aria-label="Copy preview HTML code to clipboard"
                   title="Copy preview HTML code to clipboard"
                   className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-slate-400 focus:outline-none"
                 >
-                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>Copy HTML</span>
+                  {copied === "preview" ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                      <span>បានចម្លងរួចរាល់</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>ចម្លង HTML</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
             <div className="flex-1 bg-white p-2 min-w-0 max-w-full overflow-hidden">
               <iframe
                 title="Jodit HTML Preview"
-                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:16px;background:#ffffff;overflow-wrap:break-word;word-break:break-word;}</style></head><body>${sanitizedHtml}</body></html>`}
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:16px;background:#ffffff;overflow-wrap:break-word;word-break:break-word;}</style></head><body>${cleanHtml}</body></html>`}
                 sandbox=""
                 className="h-full w-full min-h-72 min-w-0 max-w-full"
                 style={{ border: "none", minHeight: "320px", maxWidth: "100%" }}

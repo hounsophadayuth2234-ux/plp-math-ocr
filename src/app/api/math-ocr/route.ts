@@ -10,6 +10,7 @@ import {
   validateMathematicalSyntax,
   computeLineConfidences,
 } from "@/lib/khmer-grapheme-normalizer";
+import { normalizeGeminiMathOutput } from "@/lib/math-ocr-normalizer";
 
 export const maxDuration = 45;
 
@@ -209,11 +210,22 @@ export function isTransientProviderError(err: unknown): boolean {
   return false;
 }
 
-// Exponential backoff with random jitter
-function getBackoffMs(retryCount: number): number {
-  const base = Math.min(1000, 200 * Math.pow(2, retryCount));
-  const jitter = Math.random() * 200;
-  return Math.round(base + jitter);
+// Exponential backoff with random jitter according to Phase 4 specification:
+// - attempt 1 failure (before attempt 2): ~400–800ms
+// - attempt 2 failure (before attempt 3): ~900–1600ms
+export function getBackoffMs(retryCount: number): number {
+  if (retryCount === 0) {
+    return Math.round(400 + Math.random() * 400); // 400 - 800 ms
+  }
+  return Math.round(900 + Math.random() * 700); // 900 - 1600 ms
+}
+
+export type DelayFunction = (ms: number) => Promise<void>;
+let activeDelayFn: DelayFunction = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+export function setMathOcrDelayFunction(fn: DelayFunction | null) {
+  activeDelayFn = fn || ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
 }
 
 // Helper to execute a promise with a timeout
@@ -399,6 +411,9 @@ export async function POST(req: NextRequest) {
     const OVERALL_BUDGET_MS = 38000;
     const PER_MODEL_TIMEOUT_MS = 8000;
 
+    let lastErrorMsg = "";
+    let isLastRateLimited = false;
+
     for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
       const modelName = candidateModels[mIdx];
       const elapsedOverall = Date.now() - overallStartTime;
@@ -408,9 +423,10 @@ export async function POST(req: NextRequest) {
 
       attemptedModels.push(modelName);
 
-      // Bounded retry behavior: Maximum 1 retry per model (up to 2 attempts total)
+      // Up to 3 total attempts (initial + 2 retries) if single model, or 2 attempts per fallback model
+      const maxAttemptsForModel = candidateModels.length === 1 ? 3 : 2;
       let modelSuccess = false;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < maxAttemptsForModel; attempt++) {
         totalAttempts++;
         const currentElapsed = Date.now() - overallStartTime;
         const remainingBudget = OVERALL_BUDGET_MS - currentElapsed;
@@ -460,6 +476,11 @@ export async function POST(req: NextRequest) {
             /key=[A-Za-z0-9_.-]+/gi,
             "key=[REDACTED]"
           );
+          lastErrorMsg = safeErrorMsg;
+
+          if (/\b429\b|rate limit|too many requests|resource exhausted/i.test(safeErrorMsg)) {
+            isLastRateLimited = true;
+          }
 
           console.warn(
             JSON.stringify({
@@ -473,15 +494,15 @@ export async function POST(req: NextRequest) {
             })
           );
 
-          // If error is fatal (non-transient authentication or invalid input), abort all retries
+          // If error is fatal (non-transient authentication, 400, 401, 403, or invalid input), abort all retries
           if (!isTransient) {
             break;
           }
 
-          // If transient and first attempt, apply backoff with jitter before the single retry
-          if (attempt === 0) {
+          // If transient and not the final attempt, apply exponential backoff with jitter
+          if (attempt < maxAttemptsForModel - 1) {
             const backoff = getBackoffMs(attempt);
-            await new Promise((r) => setTimeout(r, backoff));
+            await activeDelayFn(backoff);
           }
         }
       }
@@ -504,6 +525,7 @@ export async function POST(req: NextRequest) {
           totalAttempts,
           attemptedModels,
           isTimeout,
+          isLastRateLimited,
         })
       );
 
@@ -518,6 +540,20 @@ export async function POST(req: NextRequest) {
             error: "ការដំណើរការលើសកំណត់ពេល (Timeout)៖ ម៉ាស៊ីន AI ដំណើរការយឺតជាងធម្មតា។ សូមចុច 'ព្យាយាមម្តងទៀត'។",
           },
           { status: 504 }
+        );
+      }
+
+      if (isLastRateLimited && attemptedModels.length === 1) {
+        return NextResponse.json<MathOcrError>(
+          {
+            ok: false,
+            code: "RATE_LIMITED",
+            retryable: true,
+            requestId,
+            message: "Rate limit reached. Please wait a moment and try again.",
+            error: "ប្រព័ន្ធកំពុងមានអ្នកប្រើប្រាស់ច្រើន។ សូមរង់ចាំបន្តិច ហើយប្រព័ន្ធនឹងសាកល្បងម្ដងទៀត។",
+          },
+          { status: 429 }
         );
       }
 
@@ -546,16 +582,29 @@ export async function POST(req: NextRequest) {
     );
 
     try {
-      const cleaned = responseText
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```$/i, "")
-        .trim();
-
-      const parsed = JSON.parse(cleaned) as MathOcrResponse;
-
-      if (!parsed.latex || !parsed.joditHtml) {
-        throw new Error("Model response missing required latex or joditHtml fields");
+      const normalized = normalizeGeminiMathOutput(responseText);
+      if (!normalized.latex && !normalized.html) {
+        throw new Error("Model response missing required latex or html fields");
       }
+
+      let parsed: Partial<MathOcrResponse> = {};
+      try {
+        const cleaned = responseText
+          .replace(/^```(?:json)?\s*/i, "")
+          .replace(/\s*```$/i, "")
+          .trim();
+        parsed = JSON.parse(cleaned) as MathOcrResponse;
+      } catch {
+        parsed = {};
+      }
+
+      parsed.latex = normalized.latex;
+      parsed.joditHtml = normalized.html;
+      parsed.mathml = normalized.mathml;
+      parsed.transcription = normalized.explanationKhmer || parsed.transcription || parsed.latex || "";
+      parsed.detectedType = parsed.detectedType || "Bilingual Math Problem";
+      parsed.rawDescription = parsed.rawDescription || parsed.transcription;
+      parsed.confidence = parsed.confidence ?? 0.98;
 
       // KaTeX normalization and validation
       const katexValidation = validateLatexWithKatex(parsed.latex);
@@ -565,9 +614,6 @@ export async function POST(req: NextRequest) {
       parsed.joditHtml = sanitizeJoditHtml(parsed.joditHtml);
 
       // Normalize Khmer text using Unicode NFC & grapheme-safe rules
-      if (!parsed.transcription) {
-        parsed.transcription = parsed.latex;
-      }
       parsed.transcription = normalizeKhmerText(parsed.transcription);
 
       // Verify mathematical syntax & structure (balanced parens/braces, frac, radicals, matrix)
@@ -579,25 +625,12 @@ export async function POST(req: NextRequest) {
         ];
       }
 
-      if (!parsed.mathml) {
-        parsed.mathml = `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mtext>${parsed.transcription || "Math Expression"}</mtext></math>`;
-      } else {
-        const mathmlValidation = validateMathML(parsed.mathml);
-        parsed.mathml = mathmlValidation.normalized;
-      }
-      if (!parsed.detectedType) {
-        parsed.detectedType = "Bilingual Math Problem";
-      }
-      if (!parsed.rawDescription) {
-        parsed.rawDescription = parsed.transcription;
-      }
-
-      parsed.regions = computeLineConfidences(parsed.transcription, parsed.confidence ?? 0.98);
+      parsed.regions = computeLineConfidences(parsed.transcription, parsed.confidence);
       parsed.inferenceProvider = `Serverless Gemini Vision (${selectedModel})`;
       parsed.serverElapsedMs = Date.now() - overallStartTime;
       parsed.isDemoMode = false;
 
-      return NextResponse.json<MathOcrResponse>(parsed, { status: 200 });
+      return NextResponse.json<MathOcrResponse>(parsed as MathOcrResponse, { status: 200 });
     } catch (parseErr) {
       console.error("[math-ocr] JSON parse error:", parseErr, "Response text:", responseText);
       return NextResponse.json<MathOcrError>(

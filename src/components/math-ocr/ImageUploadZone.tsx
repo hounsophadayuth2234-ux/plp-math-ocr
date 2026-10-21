@@ -50,9 +50,9 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
         return;
       }
 
-      // 3. 4.5 MB limit check (matches Vercel serverless function limit)
-      if (file.size > 4.5 * 1024 * 1024) {
-        setSizeError("ទំហំឯកសារធំជាង 4.5 MB សូមជ្រើសរើសរូបភាពតូចជាងនេះ (File exceeds 4.5 MB limit)");
+      // 3. Size check: allow up to 20 MB for client-side auto-compression
+      if (file.size > 20 * 1024 * 1024) {
+        setSizeError("ទំហំឯកសារធំជាង 20 MB សូមជ្រើសរើសរូបភាពតូចជាងនេះ (File exceeds 20 MB limit)");
         return;
       }
 
@@ -111,7 +111,7 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
       >
         Upload math image
         <span className="ml-2 font-normal normal-case text-slate-500">
-          (PNG, JPG, WEBP · max 4.5 MB)
+          (PNG, JPG, WEBP · Auto-compressed before upload)
         </span>
       </label>
 

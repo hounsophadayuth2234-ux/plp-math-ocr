@@ -20,6 +20,7 @@ import { PreprocessProfileSelector } from "@/components/math-ocr/PreprocessProfi
 import { OcrDiagnosticsDeck } from "@/components/math-ocr/OcrDiagnosticsDeck";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import { preprocessMathImageForUpload } from "@/lib/math-ocr-utils";
+import { prepareMathOcrImage, PreparedMathOcrImage } from "@/lib/math-ocr-prep";
 import type { MathOcrResponse } from "@/app/api/math-ocr/route";
 import {
   PreprocessProfile,
@@ -88,6 +89,7 @@ export default function PlpMathContentPage() {
   const [failedDuration, setFailedDuration] = useState<number | null>(null);
   const [isResultStale, setIsResultStale] = useState<boolean>(false);
   const [errorRequestId, setErrorRequestId] = useState<string | null>(null);
+  const [prepInfo, setPrepInfo] = useState<PreparedMathOcrImage | null>(null);
 
   // Advanced OCR Quality, Runtime Capabilities & Syntax Validation states
   const [profile, setProfile] = useState<PreprocessProfile>("printed_light_background");
@@ -149,6 +151,7 @@ export default function PlpMathContentPage() {
 
   const handleFileSelect = async (file: File | null) => {
     setImageFile(file);
+    setPrepInfo(null);
     setQualityAssessment(null);
     if (!file) return;
 
@@ -223,12 +226,18 @@ export default function PlpMathContentPage() {
 
     try {
       let fileToSend: File | Blob | null = imageFile;
-      if (fileToSend && fileToSend instanceof File) {
+      if (imageFile) {
         try {
-          // Preprocess and compress if image is large, staying safely under Vercel's 4.5MB payload limit
-          fileToSend = await preprocessMathImageForUpload(fileToSend);
+          const prepared = await prepareMathOcrImage(imageFile);
+          setPrepInfo(prepared);
+          fileToSend = prepared.blob;
         } catch (prepErr) {
-          console.warn("Client preprocessing skipped or failed, using original file:", prepErr);
+          console.warn("Client image preparation fallback:", prepErr);
+          try {
+            fileToSend = await preprocessMathImageForUpload(imageFile);
+          } catch {
+            fileToSend = imageFile;
+          }
         }
 
         // Hard check: reject files larger than Vercel's 4.5MB limit before sending
@@ -289,17 +298,20 @@ export default function PlpMathContentPage() {
         const is413 =
           response.status === 413 ||
           /payload_too_large|request entity too large|FUNCTION_PAYLOAD_TOO_LARGE/i.test(responseText) ||
-          data?.code === "PAYLOAD_TOO_LARGE";
+          data?.code === "PAYLOAD_TOO_LARGE" ||
+          data?.code === "IMAGE_TOO_LARGE";
         const is415 = response.status === 415 || data?.code === "UNSUPPORTED_MEDIA_TYPE";
         const is429 =
           response.status === 429 ||
           /rate limit|quota|too many requests/i.test(responseText) ||
-          data?.code === "RATE_LIMIT_EXCEEDED";
+          data?.code === "RATE_LIMIT_EXCEEDED" ||
+          data?.code === "RATE_LIMITED";
         const isModelUnavailable =
           data?.code === "MODEL_UNAVAILABLE" ||
+          data?.code === "TEMPORARY_UNAVAILABLE" ||
           (response.status === 503 && data?.code !== "PROVIDER_NOT_CONFIGURED");
         const isProviderNotConfigured = data?.code === "PROVIDER_NOT_CONFIGURED";
-        const is504 = response.status === 504 || data?.code === "UPSTREAM_TIMEOUT";
+        const is504 = response.status === 504 || data?.code === "UPSTREAM_TIMEOUT" || data?.code === "OCR_TIMEOUT";
 
         let khmerError = "ម៉ាស៊ីនមេជួបបញ្ហា (Server Error)៖ មិនអាចបំលែងរូបភាពគណិតវិទ្យាបានទេ។ សូមចុច 'ព្យាយាមម្តងទៀត'។";
         let userFriendlyDetails: string | null = null;
@@ -310,10 +322,9 @@ export default function PlpMathContentPage() {
         } else if (is415) {
           khmerError = "ទម្រង់រូបភាពមិនត្រឹមត្រូវ (Unsupported Media Type)៖ សូមប្រើរូបភាព PNG, JPEG ឬ WEBP។";
         } else if (is429) {
-          khmerError = "ម៉ាស៊ីន AI ជាប់រវល់ (Rate Limit Exceeded)៖ សំណើច្រើនពេកក្នុងពេលតែមួយ។ សូមរង់ចាំបន្តិច រួចព្យាយាមម្តងទៀត។";
+          khmerError = "ប្រព័ន្ធកំពុងមានអ្នកប្រើប្រាស់ច្រើន។ សូមរង់ចាំបន្តិច ហើយប្រព័ន្ធនឹងសាកល្បងម្ដងទៀត។";
         } else if (isModelUnavailable) {
-          khmerError =
-            "ម៉ាស៊ីន AI កំពុងមានសំណើច្រើន (Service Busy)៖ ប្រព័ន្ធកំពុងដំណើរការមមាញឹកបន្តិច។ សូមចុច 'ព្យាយាមម្តងទៀត' (The math AI service is temporarily busy. Please try again)។";
+          khmerError = "សេវាកម្មកំពុងរវល់បន្តិច។ សូមរង់ចាំ ហើយសាកល្បងម្ដងទៀត។";
           userFriendlyDetails = "Automatic model failover was attempted. Please click 'Retry' to re-process.";
         } else if (isProviderNotConfigured) {
           khmerError =
@@ -535,6 +546,18 @@ export default function PlpMathContentPage() {
               disabled={isLoading || isRefining}
             />
 
+            {/* Client-Side Image Compression & Geometry Telemetry Badge */}
+            {prepInfo && (
+              <div
+                data-testid="math-ocr-prep-badge"
+                className="flex items-center justify-between text-[11px] font-mono text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 px-3 py-1.5 rounded-lg"
+              >
+                <span>Original: {(prepInfo.originalBytes / 1024).toFixed(0)} KB</span>
+                <span>Optimized: {(prepInfo.compressedBytes / 1024).toFixed(0)} KB ({prepInfo.mimeType.split("/")[1].toUpperCase()})</span>
+                <span>{prepInfo.width}×{prepInfo.height}px {prepInfo.wasResized ? "(Capped 1280px)" : "(Native)"}</span>
+              </div>
+            )}
+
             {/* Actionable Low Quality Notice */}
             {qualityAssessment?.warningMessage && (
               <div
@@ -636,8 +659,8 @@ export default function PlpMathContentPage() {
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  <span>Processing math content… ({activeElapsed.toFixed(1)}s)</span>
+                  <Loader2 className="h-4 w-4 animate-spin text-cyan-300" aria-hidden="true" />
+                  <span>កំពុងអាន និងបម្លែងរូបភាព… ({activeElapsed.toFixed(1)}s)</span>
                 </>
               ) : (
                 <>
