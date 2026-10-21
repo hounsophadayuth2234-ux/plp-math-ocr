@@ -16,7 +16,7 @@ export interface ToolModule {
   engine: string;
   accentColor: string;
   highlights: string[];
-  iconName: "Calculator" | "Eraser" | "Sparkles" | "ImagePlus" | "Code2";
+  iconName: "Calculator" | "Eraser" | "Sparkles" | "ImagePlus" | "Code2" | "Brain";
   disabled?: boolean;
 }
 
@@ -80,24 +80,24 @@ export const CORE_TOOLS: ToolModule[] = [
     disabled: false,
   },
   {
-    id: "image-generator",
+    id: "math-solver",
     number: 4,
-    title: "បង្កើតរូបភាព",
-    shortTitle: "បង្កើតរូបភាព",
-    href: "/image-generator",
+    title: "ដោះស្រាយលំហាត់គណិតវិទ្យា",
+    shortTitle: "ដោះស្រាយគណិតវិទ្យា",
+    href: "/math-solver",
     description:
-      "បង្កើតរូបភាព និងគំនូរប្លែកៗតាមរយៈការសរសេរ Prompt ជាមួយម៉ូដែល Flux Schnell ឬ Local Diffusion Worker ក្នុងល្បឿនលឿនបំផុត និងទាញយករូបភាពបានភ្លាមៗ។",
-    badge: "Flux / Local Worker / Demo",
-    engine: "Local Diffusion Worker / Cloud GPU / Demo",
-    accentColor: "from-pink-500 via-purple-500 to-indigo-600",
+      "បញ្ចូលរូបភាពលំហាត់គណិតវិទ្យាដើម្បីទទួលបានការពន្យល់ជាភាសាខ្មែរ និងផ្ទៀងផ្ទាត់ចម្លើយ។ ស្គាល់ទាំងអក្សរដៃ អក្សរបោះពុម្ព និងរូបរាងធរណីមាត្រ។",
+    badge: "Khmer AI Solver",
+    engine: "Gemini Vision Reasoning",
+    accentColor: "from-violet-500 via-purple-500 to-fuchsia-600",
     highlights: [
-      "Local Worker (IMAGE_WORKER_URL) & Cloud Flux adapter",
-      "Explicit Demo Preview mode (zero fake claims)",
-      "Custom prompt & negative prompt controls",
-      "Persistent session gallery with one-click download",
+      "ស្គាល់រូបភាពគណិតវិទ្យា (Printed & Handwritten)",
+      "ផ្ទៀងផ្ទាត់ចម្លើយត្រឹមត្រូវ ឬមិនត្រឹមត្រូវ",
+      "ពន្យល់ជាភាសាខ្មែរជំហានម្តងៗ",
+      "ស្គាល់ច្រើនបញ្ហាក្នុងរូបភាពតែមួយ",
     ],
-    iconName: "ImagePlus",
-    disabled: true,
+    iconName: "Brain",
+    disabled: false,
   },
   {
     id: "web-cloner",

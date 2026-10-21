@@ -13,6 +13,7 @@ import {
   Zap,
   Users,
   AlertTriangle,
+  Brain,
 } from "lucide-react";
 import { TEAM_MEMBERS } from "@/config/tools";
 
@@ -92,13 +93,13 @@ export default function DashboardOverviewPage() {
         </div>
         <div className="flex items-center gap-2 border border-slate-800/80 bg-slate-900/70 px-3 py-2">
           <span className="h-2 w-2 rounded-none bg-amber-400 animate-pulse" />
-          <span className="text-slate-400">MOD-03/04:</span>
+          <span className="text-slate-400">MOD-03:</span>
           <span className="font-bold text-amber-300 truncate">MAINTENANCE</span>
         </div>
         <div className="flex items-center gap-2 border border-slate-800/80 bg-slate-900/70 px-3 py-2">
-          <span className="h-2 w-2 rounded-none bg-purple-400" />
-          <span className="text-slate-400">DYT NODES:</span>
-          <span className="font-bold text-purple-300 truncate">4 CONNECTED</span>
+          <span className="h-2 w-2 rounded-none bg-violet-400" />
+          <span className="text-slate-400">MOD-04:</span>
+          <span className="font-bold text-white truncate">MATH SOLVER READY</span>
         </div>
       </div>
 
@@ -245,12 +246,79 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* ── 4. Compact Maintenance Notice for Modules 03 & 04 ── */}
+      {/* ── Module 04: Khmer Math Solver Card ── */}
+      <div className="machine-module group relative flex flex-col border border-violet-500/30 bg-slate-950/85 p-6 shadow-2xl transition-all duration-300 hover:border-violet-400 hover:shadow-[0_0_35px_rgba(139,92,246,0.15)]">
+        <div className="pointer-events-none absolute top-0 left-0 h-3 w-3 border-t-2 border-l-2 border-violet-400" />
+        <div className="pointer-events-none absolute top-0 right-0 h-3 w-3 border-t-2 border-r-2 border-violet-400" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-3 w-3 border-b-2 border-l-2 border-violet-400" />
+        <div className="pointer-events-none absolute bottom-0 right-0 h-3 w-3 border-b-2 border-r-2 border-violet-400" />
+
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex-1">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-violet-400/60 bg-violet-950/80 text-violet-400">
+                  <Brain className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-violet-400 uppercase tracking-widest font-mono">
+                    MODULE 04 // KHMER MATH SOLVER
+                  </span>
+                  <h2 className="text-base font-bold text-white font-sans">
+                    ដោះស្រាយលំហាត់គណិតវិទ្យា
+                  </h2>
+                </div>
+              </div>
+              <span className="border border-violet-500/40 bg-violet-950/60 text-violet-300 px-2 py-0.5 text-[10px] font-bold">
+                NEW
+              </span>
+            </div>
+
+            <p className="mt-3.5 text-xs text-slate-300 font-sans leading-relaxed">
+              Upload math problem images for AI-powered step-by-step Khmer explanations, answer verification, and multi-problem detection. Supports handwritten, printed Khmer/English, fractions, algebra, geometry, and calculus.
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t border-slate-800/80 pt-3.5 text-xs font-mono">
+              <div className="flex items-center gap-2 text-slate-300">
+                <CheckCircle2 className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                <span>ស្គាល់រូបភាពគណិតវិទ្យា (Printed &amp; Handwritten)</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300">
+                <CheckCircle2 className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                <span>ផ្ទៀងផ្ទាត់ចម្លើយត្រឹមត្រូវ ឬមិនត្រឹមត្រូវ</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300">
+                <CheckCircle2 className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                <span>ពន្យល់ជាភាសាខ្មែរជំហានម្តងៗ</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300">
+                <CheckCircle2 className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                <span>ស្គាល់ច្រើនបញ្ហាក្នុងរូបភាពតែមួយ</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-slate-800/80">
+          <Link
+            href="/math-solver"
+            className="min-h-[46px] group flex w-full items-center justify-between border border-violet-500/50 bg-gradient-to-r from-violet-950/90 via-slate-900 to-slate-900 px-4 py-2.5 text-xs font-bold text-violet-300 transition-all hover:border-violet-300 hover:text-white hover:shadow-[0_0_15px_rgba(139,92,246,0.25)] focus:ring-2 focus:ring-violet-400 focus:outline-none"
+          >
+            <span className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-violet-400" />
+              <span>OPEN MATH SOLVER (ដោះស្រាយលំហាត់)</span>
+            </span>
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </Link>
+        </div>
+      </div>
+
+      {/* ── 4. Compact Maintenance Notice ── */}
       <div className="flex items-center gap-3 border border-amber-500/30 bg-amber-950/25 px-4 py-3 text-xs font-mono text-amber-300/90 shadow-[0_0_15px_rgba(245,158,11,0.08)]">
         <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
         <span className="font-semibold text-amber-400">NOTE:</span>
         <span>
-          Modules 03–04 (Image Upscaler &amp; Generator) are temporarily under scheduled maintenance while resources are prioritized for Modules 01 and 02.
+          Modules 03 &amp; 05 (Image Upscaler &amp; Web Cloner) are temporarily under scheduled maintenance.
         </span>
       </div>
 

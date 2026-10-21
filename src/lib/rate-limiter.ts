@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export type RateLimitCategory =
   | "math_ocr"
+  | "math_solver"
   | "remove_bg"
   | "upscale"
   | "generate_image"
@@ -16,6 +17,7 @@ export interface RateLimitConfig {
 
 export const RATE_LIMIT_CONFIGS: Record<RateLimitCategory, RateLimitConfig> = {
   math_ocr: { limit: 10, windowSeconds: 60 },
+  math_solver: { limit: 8, windowSeconds: 60 },
   remove_bg: { limit: 5, windowSeconds: 60 },
   upscale: { limit: 3, windowSeconds: 60 },
   generate_image: { limit: 3, windowSeconds: 60 },
