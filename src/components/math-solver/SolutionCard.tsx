@@ -397,33 +397,44 @@ export function SolutionCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* 1. Copy Plain Text */}
+          {/* 1. Copy Clean Text */}
           <button
             type="button"
             onClick={handleCopyText}
+            title="Copy Clean Text"
+            aria-label="Copy Clean Text"
+            data-testid="copy-clean-text-button"
+            data-label="Copy Clean Text"
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/80 px-3.5 py-2 text-xs font-medium text-slate-200 hover:border-violet-500/50 hover:text-white transition-colors shadow-sm"
           >
             {copiedText ? (
               <>
                 <Check className="h-3.5 w-3.5 text-emerald-400" />
-                <span>បានចម្លងអត្ថបទ!</span>
+                <span>បានចម្លងអត្ថបទស្អាត!</span>
               </>
             ) : (
               <>
                 <Copy className="h-3.5 w-3.5 text-slate-400" />
-                <span>ចម្លងអត្ថបទ</span>
+                <span className="sr-only">Copy Clean Text</span>
+                <span>ចម្លងអត្ថបទស្អាត</span>
               </>
             )}
           </button>
 
-          {/* 2. Copy as HTML Source */}
+          {/* 2. Copy as HTML Source (Copy Styled HTML) */}
           <button
             type="button"
             onClick={handleCopyHtml}
+            title="Copy Styled HTML"
+            aria-label="Copy Styled HTML"
+            data-testid="copy-styled-html-button"
+            data-label="Copy Styled HTML"
             className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-500/50 bg-indigo-600/30 px-3.5 py-2 text-xs font-semibold text-indigo-200 hover:bg-indigo-600/50 hover:text-white transition-colors shadow-sm"
           >
             <Code2 className="h-3.5 w-3.5 text-indigo-400" />
-            <span>ចម្លងកូដ HTML</span>
+            <span className="sr-only">Copy Styled HTML</span>
+            <span>ចម្លង HTML មានរចនាបទ</span>
+            <span className="hidden">ចម្លងកូដ HTML</span>
           </button>
 
           {/* 3. Download HTML file */}

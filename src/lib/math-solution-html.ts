@@ -20,7 +20,29 @@ import {
   renderColumnCalculationHtml,
   renderColumnCalculationText,
   detectAndBuildStructuredCalculation,
+  toMathSolution,
+  structuredToVerticalCalculation,
+  verticalToStructuredCalculation,
+  type MathSolution,
+  type MathStep,
+  type VerticalCalculation,
+  type VerticalRow,
+  type MathOperation,
+  type VerticalRowRole,
+  type StructuredCalculation,
 } from "./column-calculation";
+
+export {
+  type MathSolution,
+  type MathStep,
+  type VerticalCalculation,
+  type VerticalRow,
+  type MathOperation,
+  type VerticalRowRole,
+  toMathSolution,
+  structuredToVerticalCalculation,
+  verticalToStructuredCalculation,
+};
 
 export function escapeHtml(str: string | number | null | undefined): string {
   if (str === null || str === undefined) return "";
@@ -49,6 +71,160 @@ export function sanitizeHtml(rawHtml: string): string {
   return clean;
 }
 
+export interface ValidationResult<T> {
+  valid: boolean;
+  data?: T;
+  calculation?: T;
+  error?: string;
+  errors?: string[];
+  errorKhmer?: string;
+}
+
+export function validateVerticalCalculation(
+  calc: unknown
+): ValidationResult<VerticalCalculation> {
+  if (!calc || typeof calc !== "object") {
+    const err = "Calculation must be an object";
+    return { valid: false, error: err, errors: [err], errorKhmer: "ទិន្នន័យគណនាមិនត្រឹមត្រូវ" };
+  }
+  const c = calc as Partial<VerticalCalculation>;
+  if (!c.columns || !Array.isArray(c.columns) || c.columns.length === 0) {
+    const err = "Columns array is missing or empty";
+    return { valid: false, error: err, errors: [err], errorKhmer: "បាត់បង់ជួរឈរ (Columns)" };
+  }
+  if (!c.rows || !Array.isArray(c.rows) || c.rows.length === 0) {
+    const err = "Rows array is missing or empty";
+    return { valid: false, error: err, errors: [err], errorKhmer: "បាត់បង់ជួរដេក (Rows)" };
+  }
+
+  const numCols = c.columns.length;
+
+  for (let rIdx = 0; rIdx < c.rows.length; rIdx++) {
+    const row = c.rows[rIdx];
+    if (!row || typeof row !== "object") {
+      const err = `Row at index ${rIdx} is invalid`;
+      return { valid: false, error: err, errors: [err], errorKhmer: `ជួរដេកទី ${rIdx + 1} មិនត្រឹមត្រូវ` };
+    }
+    const cells = row.cells || (row as any).digits;
+    if (!Array.isArray(cells)) {
+      const err = `Row ${rIdx} is missing cells array`;
+      return { valid: false, error: err, errors: [err], errorKhmer: `ជួរដេកទី ${rIdx + 1} គ្មានក្រឡា cells` };
+    }
+    // Check column count consistency
+    if (row.role !== "separator" && cells.length !== numCols) {
+      const err = `Row column count mismatch: Row ${rIdx} has ${cells.length} cells, expected ${numCols}`;
+      return {
+        valid: false,
+        error: err,
+        errors: [err],
+        errorKhmer: `ចំនួនក្រឡាក្នុងជួរដេកទី ${rIdx + 1} (${cells.length}) មិនត្រូវគ្នានឹងចំនួនជួរឈរ (${numCols})`,
+      };
+    }
+    // Check single-digit rule (no multi-digit content like "431" in one cell)
+    if (row.role !== "separator") {
+      for (let cIdx = 0; cIdx < cells.length; cIdx++) {
+        const cell = String(cells[cIdx] || "").trim();
+        if (cell.length > 1 && row.role !== "borrow") {
+          const err = `Cell at row ${rIdx}, col ${cIdx} contains multiple digits: "${cell}". Each place-value cell must contain at most one digit.`;
+          return {
+            valid: false,
+            error: err,
+            errors: [err],
+            errorKhmer: `ក្រឡាជួរដេក ${rIdx + 1} ជួរឈរ ${cIdx + 1} មានលេខច្រើនខ្ទង់ "${cell}"។ ក្រឡានីមួយៗត្រូវផ្ទុកលេខតែមួយខ្ទង់ប៉ុណ្ណោះ។`,
+          };
+        }
+      }
+    }
+    // Reject scripts or tags in cells
+    for (let cIdx = 0; cIdx < cells.length; cIdx++) {
+      const cell = String(cells[cIdx] || "");
+      if (/<script\b|javascript:|onerror=|onclick=/i.test(cell)) {
+        const err = `Unsafe HTML script or event handler detected in cell at row ${rIdx}, col ${cIdx}`;
+        return {
+          valid: false,
+          error: err,
+          errors: [err],
+          errorKhmer: `មានកូដមិនមានសុវត្ថិភាពក្នុងក្រឡាគណនា`,
+        };
+      }
+    }
+  }
+
+  return {
+    valid: true,
+    data: c as VerticalCalculation,
+    calculation: c as VerticalCalculation,
+    errors: [],
+  };
+}
+
+export function validateMathSolution(data: unknown): ValidationResult<MathSolution> {
+  if (!data || typeof data !== "object") {
+    const err = "Math solution payload is not an object";
+    return {
+      valid: false,
+      error: err,
+      errors: [err],
+      errorKhmer: "ទិន្នន័យដំណោះស្រាយមិនត្រឹមត្រូវ។",
+    };
+  }
+
+  const raw = data as Record<string, unknown>;
+  const problemStatement = String(raw.problemStatement || raw.extractedProblem || "").trim();
+  if (!problemStatement) {
+    const err = "Missing required problemStatement";
+    return {
+      valid: false,
+      error: err,
+      errors: [err],
+      errorKhmer: "បាត់បង់ប្រធានលំហាត់។",
+    };
+  }
+
+  // Reject dangerous tags, scripts, and event handlers
+  const rawJson = JSON.stringify(data);
+  if (/<script\b|javascript:|onerror=|onclick=|onload=/i.test(rawJson)) {
+    const err = "Unsafe HTML script or event handler detected in payload";
+    return {
+      valid: false,
+      error: err,
+      errors: [err],
+      errorKhmer: "ទិន្នន័យមានផ្ទុកកូដមិនមានសុវត្ថិភាព។",
+    };
+  }
+
+  try {
+    const solution = toMathSolution(data);
+
+    for (const vert of solution.verticalCalculations) {
+      const vRes = validateVerticalCalculation(vert);
+      if (!vRes.valid) {
+        return {
+          valid: false,
+          error: vRes.error,
+          errors: vRes.errors,
+          errorKhmer: vRes.errorKhmer,
+        };
+      }
+    }
+
+    return {
+      valid: true,
+      data: solution,
+      calculation: solution as any,
+      errors: [],
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to canonicalize math solution";
+    return {
+      valid: false,
+      error: msg,
+      errors: [msg],
+      errorKhmer: "មិនអាចបំលែងទម្រង់ដំណោះស្រាយបានទេ។",
+    };
+  }
+}
+
 export interface RenderSolutionOptions {
   gradeTitle?: string;
   solverModeTitle?: string;
@@ -59,17 +235,18 @@ export interface RenderSolutionOptions {
 /**
  * Determine effective mode from options or problem fields
  */
-function getEffectiveMode(problem: MathSolverProblem, options?: RenderSolutionOptions): SolverMode {
+function getEffectiveMode(problem: MathSolverProblem | MathSolution, options?: RenderSolutionOptions): SolverMode {
   if (options?.solverMode) return options.solverMode;
-  if (problem.mode) return problem.mode;
+  if (problem.mode) return problem.mode as SolverMode;
   if (options?.solverModeTitle) {
     const t = options.solverModeTitle.toLowerCase();
     if (t.includes("verify") || t.includes("ផ្ទៀងផ្ទាត់")) return "verify";
     if (t.includes("generate") || t.includes("បង្កើត")) return "generate";
     if (t.includes("solve") || t.includes("ដោះស្រាយ")) return "solve";
   }
-  if (problem.extractedAnswer || problem.answerStatus) return "verify";
-  if (!problem.finalAnswer && (problem.solutionKhmer || problem.verticalLines)) return "generate";
+  const p = problem as any;
+  if (p.extractedAnswer || p.answerStatus) return "verify";
+  if (!p.finalAnswer && (p.solutionKhmer || p.explanationKhmer || p.verticalLines)) return "generate";
   return "solve";
 }
 
@@ -78,7 +255,7 @@ function getEffectiveMode(problem: MathSolverProblem, options?: RenderSolutionOp
  * Returns a complete, valid, standalone HTML document conforming to the Mode Contract.
  */
 export function renderCanonicalSolutionHtml(
-  problem: MathSolverProblem,
+  problem: MathSolverProblem | MathSolution,
   options?: RenderSolutionOptions
 ): string {
   const mode = getEffectiveMode(problem, options);
@@ -86,8 +263,13 @@ export function renderCanonicalSolutionHtml(
   const isMode2 = mode === "generate";
   const isMode3 = mode === "verify";
 
+  const p = problem as any;
+  const problemStatement = p.problemStatement || p.extractedProblem || "";
+  const finalAnswer = p.finalAnswer || "";
+  const solKhmer = p.explanationKhmer || p.solutionKhmer || p.solution || "";
+
   const docTitle = options?.documentTitle || "PLP Math Content — សន្លឹកដំណោះស្រាយគណិតវិទ្យា";
-  const gradeLabel = options?.gradeTitle || problem.inferredGradeKhmer || "ថ្នាក់បឋមសិក្សា";
+  const gradeLabel = options?.gradeTitle || p.inferredGradeKhmer || "ថ្នាក់បឋមសិក្សា";
   const modeLabel =
     options?.solverModeTitle ||
     (isMode1
@@ -223,25 +405,28 @@ body {
   border-collapse: collapse;
   display: inline-table;
   margin: 12px 0;
-  font-family: "Noto Sans Khmer", "Kantumruy Pro", Arial, sans-serif;
-  font-size: 22px;
+  font-family: monospace, "Noto Sans Khmer", "Kantumruy Pro", Arial, sans-serif;
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 .column-calculation .operator-cell {
-  width: 32px;
+  width: 24px;
+  min-width: 24px;
   text-align: center;
   font-weight: 700;
   padding: 2px 4px;
 }
 .column-calculation .digit-cell {
-  width: 36px;
-  min-width: 36px;
+  width: 32px;
+  min-width: 32px;
   text-align: center;
   padding: 2px 4px;
 }
 .column-calculation .separator-row td {
-  border-top: 3px solid #111827;
-  height: 4px;
+  border-bottom: 2px solid #000;
+  border-top: none;
+  height: 6px;
   padding: 0;
 }
 .fraction-calculation {
@@ -361,42 +546,42 @@ body {
   // 1. Problem Statement (Mandatory in all modes)
   parts.push('  <section class="problem-statement-section">\n');
   parts.push('    <h2 class="section-title">ប្រធានលំហាត់</h2>\n');
-  parts.push(`    <div class="problem-box">${escapeHtml(problem.extractedProblem)}</div>\n`);
+  parts.push(`    <div class="problem-box">${escapeHtml(problemStatement)}</div>\n`);
   parts.push("  </section>\n\n");
 
   // 2. Educational Framework (Given, To Find, Formulas) - Mode 2 & Mode 3 only
-  if (!isMode1 && (problem.given || problem.toFind || problem.formulas)) {
+  if (!isMode1 && (p.given || p.toFind || p.formulas)) {
     parts.push('  <section class="framework-box">\n');
-    if (problem.given) {
-      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលគេឱ្យ (Given)៖</strong> <span>${escapeHtml(problem.given)}</span></div>\n`);
+    if (p.given) {
+      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលគេឱ្យ (Given)៖</strong> <span>${escapeHtml(p.given)}</span></div>\n`);
     }
-    if (problem.toFind) {
-      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលត្រូវរក (To Find)៖</strong> <span>${escapeHtml(problem.toFind)}</span></div>\n`);
+    if (p.toFind) {
+      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលត្រូវរក (To Find)៖</strong> <span>${escapeHtml(p.toFind)}</span></div>\n`);
     }
-    if (problem.formulas) {
-      parts.push(`    <div><strong>រូបមន្តដែលត្រូវប្រើ (Formulas)៖</strong> <span style="font-family: monospace; color: #4338ca; font-weight: 600;">${escapeHtml(problem.formulas)}</span></div>\n`);
+    if (p.formulas) {
+      parts.push(`    <div><strong>រូបមន្តដែលត្រូវប្រើ (Formulas)៖</strong> <span style="font-family: monospace; color: #4338ca; font-weight: 600;">${escapeHtml(p.formulas)}</span></div>\n`);
     }
     parts.push("  </section>\n\n");
   }
 
   // 3. Student Answer Review - Mode 3 only
-  if (isMode3 && problem.extractedAnswer) {
-    const isCorrect = problem.answerStatus === "correct";
+  if (isMode3 && p.extractedAnswer) {
+    const isCorrect = p.answerStatus === "correct";
     parts.push(`  <section class="student-review ${isCorrect ? "correct" : "incorrect"}">\n`);
     parts.push('    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">\n');
     parts.push(`      <strong>ចម្លើយរបស់សិស្សក្នុងរូបភាព៖</strong>\n`);
-    parts.push(`      <span style="background: ${isCorrect ? "#10b981" : "#ef4444"}; color: #ffffff; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">${escapeHtml(problem.answerStatusKhmer || (isCorrect ? "ត្រឹមត្រូវ ✓" : "មិនទាន់ត្រឹមត្រូវ ✗"))}</span>\n`);
+    parts.push(`      <span style="background: ${isCorrect ? "#10b981" : "#ef4444"}; color: #ffffff; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">${escapeHtml(p.answerStatusKhmer || (isCorrect ? "ត្រឹមត្រូវ ✓" : "មិនទាន់ត្រឹមត្រូវ ✗"))}</span>\n`);
     parts.push("    </div>\n");
-    parts.push(`    <div style="font-family: monospace; font-size: 14px; margin-bottom: 8px;">${escapeHtml(problem.extractedAnswer)}</div>\n`);
-    if (problem.answerStatus === "incorrect") {
-      if (problem.incorrectStep) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 6px;"><strong>ជំហានដែលខុស៖</strong> ${escapeHtml(problem.incorrectStep)}</div>\n`);
+    parts.push(`    <div style="font-family: monospace; font-size: 14px; margin-bottom: 8px;">${escapeHtml(p.extractedAnswer)}</div>\n`);
+    if (p.answerStatus === "incorrect") {
+      if (p.incorrectStep) {
+        parts.push(`    <div style="font-size: 12px; margin-top: 6px;"><strong>ជំហានដែលខុស៖</strong> ${escapeHtml(p.incorrectStep)}</div>\n`);
       }
-      if (problem.errorExplanationKhmer) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ការពន្យល់កំហុស៖</strong> ${escapeHtml(problem.errorExplanationKhmer)}</div>\n`);
+      if (p.errorExplanationKhmer) {
+        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ការពន្យល់កំហុស៖</strong> ${escapeHtml(p.errorExplanationKhmer)}</div>\n`);
       }
-      if (problem.correctedStep) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ជំហានត្រឹមត្រូវ៖</strong> ${escapeHtml(problem.correctedStep)}</div>\n`);
+      if (p.correctedStep) {
+        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ជំហានត្រឹមត្រូវ៖</strong> ${escapeHtml(p.correctedStep)}</div>\n`);
       }
     }
     parts.push("  </section>\n\n");
@@ -404,30 +589,30 @@ body {
 
   // 4. Step-by-Step Solution & Aligned Column Working
   // STRICT CONTRACT: Mode 2 & Mode 3 ONLY. In Mode 1, this must NOT be rendered.
-  if (!isMode1 && (problem.solutionKhmer || problem.solution || problem.verticalLines || problem.alignedWorking)) {
+  if (!isMode1 && (solKhmer || p.verticalLines || p.alignedWorking || p.verticalCalculations)) {
     parts.push('  <section class="solution-body-section">\n');
     parts.push('    <h2 class="section-title">វិធីដោះស្រាយ</h2>\n');
-    if (problem.solutionKhmer || problem.solution) {
-      parts.push(`    <div class="solution-steps">${escapeHtml(problem.solutionKhmer || problem.solution)}</div>\n`);
+    if (solKhmer) {
+      parts.push(`    <div class="solution-steps">${escapeHtml(solKhmer)}</div>\n`);
     }
 
-    const vertText =
-      problem.verticalLines && problem.verticalLines.length > 0
-        ? problem.verticalLines.join("\n")
-        : problem.alignedWorking;
-
     const structuredCalc =
-      problem.structuredCalculation ||
-      detectAndBuildStructuredCalculation(
-        problem.extractedProblem,
-        problem.finalAnswer,
-        problem.verticalLines
-      );
+      p.structuredCalculation ||
+      (p.verticalCalculations && p.verticalCalculations.length > 0
+        ? verticalToStructuredCalculation(p.verticalCalculations[0])
+        : !p.verticalLines || p.verticalLines.length === 0
+        ? detectAndBuildStructuredCalculation(problemStatement, finalAnswer, p.verticalLines)
+        : undefined);
+
+    const vertText =
+      p.verticalLines && p.verticalLines.length > 0
+        ? p.verticalLines.join("\n")
+        : p.alignedWorking;
 
     if (structuredCalc || vertText) {
       parts.push('    <div style="color: #64748b; font-size: 11px; margin-top: 10px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
       if (structuredCalc) {
-        parts.push(renderColumnCalculationHtml(structuredCalc));
+        parts.push(renderColumnCalculationHtml(structuredCalc, { inlineStyles: true }));
       }
       if (vertText) {
         parts.push(`    <pre class="vertical-calc">${escapeHtml(vertText)}</pre>\n`);
@@ -441,12 +626,12 @@ body {
   // - Mode 1 ("solve"): Render final answer!
   // - Mode 2 ("generate"): STRICTLY DO NOT render final answer!
   // - Mode 3 ("verify"): Render final answer!
-  if (!isMode2 && problem.finalAnswer) {
+  if (!isMode2 && finalAnswer) {
     parts.push('  <section class="final-answer-section">\n');
     parts.push('    <div class="final-answer-box">\n');
     parts.push("      <div>\n");
     parts.push('        <span class="final-answer-title">ចម្លើយចុងក្រោយ</span>\n');
-    parts.push(`        <span class="final-answer-value">${escapeHtml(problem.finalAnswer)}</span>\n`);
+    parts.push(`        <span class="final-answer-value">${escapeHtml(finalAnswer)}</span>\n`);
     parts.push("      </div>\n");
     parts.push('      <span class="badge-status">សម្រេច ✓</span>\n');
     parts.push("    </div>\n");
@@ -455,17 +640,17 @@ body {
 
   // 6. Deterministic Verification
   // Mode 1 (status only if available) & Mode 3 (full verification)
-  if ((isMode1 || isMode3) && (problem.verification || problem.deterministicResult)) {
-    const isDetVerified = problem.deterministicResult?.isVerified !== false;
+  if ((isMode1 || isMode3) && (p.verification || p.deterministicResult)) {
+    const isDetVerified = p.deterministicResult?.isVerified !== false;
     parts.push('  <section class="verification-box">\n');
     parts.push('    <h3 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 700; color: #334155;">🛡️ ការពិនិត្យផ្ទៀងផ្ទាត់ (Verification)</h3>\n');
-    if (problem.deterministicResult) {
-      parts.push(`    <div style="font-size: 13px; color: #475569; margin-bottom: 4px;"><strong>ស្ថានភាព៖</strong> <span style="font-weight: 700; color: ${isDetVerified ? "#059669" : "#dc2626"};">${escapeHtml(problem.deterministicResult.statusKhmer || (isDetVerified ? "ផ្ទៀងផ្ទាត់ត្រឹមត្រូវ ✓" : "មានភាពខុសគ្នា ✗"))}</span></div>\n`);
+    if (p.deterministicResult) {
+      parts.push(`    <div style="font-size: 13px; color: #475569; margin-bottom: 4px;"><strong>ស្ថានភាព៖</strong> <span style="font-weight: 700; color: ${isDetVerified ? "#059669" : "#dc2626"};">${escapeHtml(p.deterministicResult.statusKhmer || (isDetVerified ? "ផ្ទៀងផ្ទាត់ត្រឹមត្រូវ ✓" : "មានភាពខុសគ្នា ✗"))}</span></div>\n`);
       if (isMode3) {
-        parts.push(`    <div style="font-size: 13px; color: #475569; margin-bottom: 4px;"><strong>វិធីផ្ទៀងផ្ទាត់៖</strong> ${escapeHtml(problem.deterministicResult.verificationMethodKhmer || problem.deterministicResult.verificationMethod)}</div>\n`);
+        parts.push(`    <div style="font-size: 13px; color: #475569; margin-bottom: 4px;"><strong>វិធីផ្ទៀងផ្ទាត់៖</strong> ${escapeHtml(p.deterministicResult.verificationMethodKhmer || p.deterministicResult.verificationMethod)}</div>\n`);
       }
-    } else if (problem.verification) {
-      parts.push(`    <div style="font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(problem.verification)}</div>\n`);
+    } else if (p.verification) {
+      parts.push(`    <div style="font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(p.verification)}</div>\n`);
     }
     parts.push("  </section>\n\n");
   }
@@ -491,13 +676,18 @@ body {
  * - Mode 3: Problem + Framework + Student Answer + Solution Steps + Vertical Calculation + Final Answer + Verification.
  */
 export function renderCanonicalSolutionPlainText(
-  problem: MathSolverProblem,
+  problem: MathSolverProblem | MathSolution,
   options?: RenderSolutionOptions
 ): string {
   const mode = getEffectiveMode(problem, options);
   const isMode1 = mode === "solve";
   const isMode2 = mode === "generate";
   const isMode3 = mode === "verify";
+
+  const p = problem as any;
+  const problemText = p.problemStatement || p.extractedProblem || "";
+  const finalAnswer = p.finalAnswer || "";
+  const solKhmer = p.explanationKhmer || p.solutionKhmer || p.solution || "";
 
   const lines: string[] = [];
 
@@ -509,8 +699,8 @@ export function renderCanonicalSolutionPlainText(
   lines.push("");
 
   // Mode 2 & Mode 3: Visual interpretation
-  if (!isMode1 && problem.visualInterpretation) {
-    const vi = problem.visualInterpretation;
+  if (!isMode1 && p.visualInterpretation) {
+    const vi = p.visualInterpretation;
     lines.push("🔍 ការបកស្រាយរូបភាព (Visual Interpretation):");
     lines.push(`- វត្ថុដែលបានស្គាល់៖ ${vi.recognizedObjects}`);
     lines.push(`- ចំនួនវត្ថុ៖ ${vi.objectCount}`);
@@ -521,50 +711,47 @@ export function renderCanonicalSolutionPlainText(
   }
 
   // Problem Statement
-  lines.push(`ប្រធានលំហាត់៖ ${problem.extractedProblem}`);
+  lines.push(`ប្រធានលំហាត់៖ ${problemText}`);
   lines.push("");
 
   // Framework (Mode 2 & 3 only)
-  if (!isMode1 && (problem.given || problem.toFind || problem.formulas)) {
-    if (problem.given) lines.push(`អ្វីដែលគេឱ្យ៖ ${problem.given}`);
-    if (problem.toFind) lines.push(`អ្វីដែលត្រូវរក៖ ${problem.toFind}`);
-    if (problem.formulas) lines.push(`រូបមន្តដែលត្រូវប្រើ៖ ${problem.formulas}`);
+  if (!isMode1 && (p.given || p.toFind || p.formulas)) {
+    if (p.given) lines.push(`អ្វីដែលគេឱ្យ៖ ${p.given}`);
+    if (p.toFind) lines.push(`អ្វីដែលត្រូវរក៖ ${p.toFind}`);
+    if (p.formulas) lines.push(`រូបមន្តដែលត្រូវប្រើ៖ ${p.formulas}`);
     lines.push("");
   }
 
   // Student Answer Review (Mode 3 only)
-  if (isMode3 && problem.extractedAnswer) {
-    lines.push(`ចម្លើយសិស្សក្នុងរូបភាព៖ ${problem.extractedAnswer}`);
-    lines.push(`ស្ថានភាព៖ ${problem.answerStatusKhmer || problem.answerStatus}`);
-    if (problem.incorrectStep) lines.push(`ជំហានដែលខុស៖ ${problem.incorrectStep}`);
-    if (problem.correctedStep) lines.push(`ជំហានត្រឹមត្រូវ៖ ${problem.correctedStep}`);
+  if (isMode3 && p.extractedAnswer) {
+    lines.push(`ចម្លើយសិស្សក្នុងរូបភាព៖ ${p.extractedAnswer}`);
+    lines.push(`ស្ថានភាព៖ ${p.answerStatusKhmer || p.answerStatus}`);
+    if (p.incorrectStep) lines.push(`ជំហានដែលខុស៖ ${p.incorrectStep}`);
+    if (p.correctedStep) lines.push(`ជំហានត្រឹមត្រូវ៖ ${p.correctedStep}`);
     lines.push("");
   }
 
   // Step-by-Step Solution & Vertical Lines (Mode 2 & Mode 3 ONLY)
-  if (!isMode1 && (problem.solutionKhmer || problem.solution || problem.verticalLines || problem.alignedWorking)) {
+  if (!isMode1 && (solKhmer || p.verticalLines || p.alignedWorking || p.verticalCalculations)) {
     lines.push("វិធីដោះស្រាយ៖");
-    const sol = problem.solutionKhmer || problem.solution;
-    if (sol) {
-      lines.push(sol);
+    if (solKhmer) {
+      lines.push(solKhmer);
       lines.push("");
     }
 
     const structuredCalc =
-      problem.structuredCalculation ||
-      (!problem.verticalLines || problem.verticalLines.length === 0
-        ? detectAndBuildStructuredCalculation(
-            problem.extractedProblem,
-            problem.finalAnswer,
-            problem.verticalLines
-          )
+      p.structuredCalculation ||
+      (p.verticalCalculations && p.verticalCalculations.length > 0
+        ? verticalToStructuredCalculation(p.verticalCalculations[0])
+        : !p.verticalLines || p.verticalLines.length === 0
+        ? detectAndBuildStructuredCalculation(problemText, finalAnswer, p.verticalLines)
         : undefined);
 
     const vertText = structuredCalc
       ? renderColumnCalculationText(structuredCalc)
-      : problem.verticalLines && problem.verticalLines.length > 0
-      ? problem.verticalLines.join("\n")
-      : problem.alignedWorking;
+      : p.verticalLines && p.verticalLines.length > 0
+      ? p.verticalLines.join("\n")
+      : p.alignedWorking;
 
     if (vertText) {
       lines.push("ការគណនាតាមជួរឈរ (Vertical Calculation):");
@@ -574,21 +761,21 @@ export function renderCanonicalSolutionPlainText(
   }
 
   // Final Answer (Mode 1 & Mode 3 ONLY - STRICTLY OMITTED IN MODE 2)
-  if (!isMode2 && problem.finalAnswer) {
-    lines.push(`ចម្លើយ៖ ${problem.finalAnswer}`);
+  if (!isMode2 && finalAnswer) {
+    lines.push(`ចម្លើយ៖ ${finalAnswer}`);
     lines.push("");
   }
 
   // Verification
-  if ((isMode1 || isMode3) && (problem.deterministicResult || problem.verification)) {
-    if (problem.deterministicResult) {
-      lines.push(`ស្ថានភាពផ្ទៀងផ្ទាត់៖ ${problem.deterministicResult.statusKhmer}`);
+  if ((isMode1 || isMode3) && (p.deterministicResult || p.verification)) {
+    if (p.deterministicResult) {
+      lines.push(`ស្ថានភាពផ្ទៀងផ្ទាត់៖ ${p.deterministicResult.statusKhmer}`);
       if (isMode3) {
-        lines.push(`វិធីផ្ទៀងផ្ទាត់៖ ${problem.deterministicResult.verificationMethodKhmer}`);
+        lines.push(`វិធីផ្ទៀងផ្ទាត់៖ ${p.deterministicResult.verificationMethodKhmer}`);
       }
       lines.push("");
-    } else if (problem.verification) {
-      lines.push(`ការពិនិត្យផ្ទៀងផ្ទាត់៖ ${problem.verification}`);
+    } else if (p.verification) {
+      lines.push(`ការពិនិត្យផ្ទៀងផ្ទាត់៖ ${p.verification}`);
       lines.push("");
     }
   }
@@ -620,13 +807,13 @@ export function copyTextFallback(text: string): boolean {
 }
 
 /**
- * Universal Dual-Type Clipboard Copy for "ចម្លងកូដ HTML"
+ * Universal Dual-Type Clipboard Copy for "Copy Styled HTML" / "ចម្លង HTML មានរចនាបទ"
  * Writes both:
  * - text/plain = complete HTML source string (so code editors paste raw tags & css)
  * - text/html  = rendered sanitized HTML (so rich text editors paste formatted document)
  */
-export async function copyCanonicalSolutionToClipboard(
-  problem: MathSolverProblem,
+export async function copyStyledHtmlToClipboard(
+  problem: MathSolverProblem | MathSolution,
   options?: RenderSolutionOptions
 ): Promise<boolean> {
   const htmlSource = renderCanonicalSolutionHtml(problem, options);
@@ -668,11 +855,11 @@ export async function copyCanonicalSolutionToClipboard(
 }
 
 /**
- * Copy Plain Text Solution to Clipboard ("ចម្លងអត្ថបទ")
+ * Copy Plain Text Solution to Clipboard ("Copy Clean Text" / "ចម្លងអត្ថបទស្អាត")
  * Writes strictly plain text with line breaks and NO HTML tags.
  */
-export async function copyCanonicalSolutionPlainTextToClipboard(
-  problem: MathSolverProblem,
+export async function copyCleanTextToClipboard(
+  problem: MathSolverProblem | MathSolution,
   options?: RenderSolutionOptions
 ): Promise<boolean> {
   const plainText = renderCanonicalSolutionPlainText(problem, options);
@@ -692,3 +879,9 @@ export async function copyCanonicalSolutionPlainTextToClipboard(
 
   return copyTextFallback(plainText);
 }
+
+// Canonical Aliases for complete interoperability
+export const copyCanonicalSolutionToClipboard = copyStyledHtmlToClipboard;
+export const copyCanonicalSolutionPlainTextToClipboard = copyCleanTextToClipboard;
+export const renderStyledHtml = renderCanonicalSolutionHtml;
+export const renderCleanText = renderCanonicalSolutionPlainText;

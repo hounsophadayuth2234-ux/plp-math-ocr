@@ -15,23 +15,92 @@ import {
   fromKhmerNumeral,
 } from "./deterministic-math-verifier";
 
-export type CalculationRole =
+export type MathOperation =
+  | "addition"
+  | "subtraction"
+  | "multiplication"
+  | "division"
+  | "fraction"
+  | "decimal"
+  | "geometry"
+  | "other";
+
+export type VerticalRowRole =
+  | "carry"
+  | "borrow"
   | "operand"
-  | "operator"
+  | "partial-product"
   | "separator"
   | "result"
+  | "quotient"
+  | "remainder"
+  | "working";
+
+export type CalculationRole =
+  | VerticalRowRole
+  | "operator"
   | "carrying"
   | "borrowing"
-  | "quotient"
-  | "step"
-  | "remainder";
+  | "step";
+
+export interface VerticalRow {
+  role: VerticalRowRole;
+  operator?: string;
+  cells: string[];
+  borderBottom?: boolean;
+}
+
+export interface VerticalCalculation {
+  operation: "addition" | "subtraction" | "multiplication" | "division";
+  columns: string[];
+  rows: VerticalRow[];
+}
+
+export interface MathStep {
+  stepNumber: number;
+  titleKhmer: string;
+  explanationKhmer: string;
+  calculationText?: string;
+  calculationHtml?: string;
+}
+
+export interface MathSolution {
+  problemStatement: string;
+  operation: MathOperation;
+  finalAnswer?: string;
+  explanationKhmer?: string;
+  steps: MathStep[];
+  verticalCalculations: VerticalCalculation[];
+  verification?: string;
+  id?: string;
+  mode?: "solve" | "generate" | "verify";
+  inferredGrade?: string;
+  inferredGradeKhmer?: string;
+  visualInterpretation?: any;
+  given?: string;
+  toFind?: string;
+  formulas?: string;
+  extractedAnswer?: string;
+  answerStatus?: "correct" | "incorrect" | "unverifiable";
+  answerStatusKhmer?: string;
+  incorrectStep?: string;
+  errorExplanationKhmer?: string;
+  correctedStep?: string;
+  confidence?: "high" | "medium" | "low";
+  confidenceKhmer?: string;
+  ambiguousParts?: string[];
+  reviewSuggestions?: string[];
+  deterministicResult?: any;
+}
 
 export interface StructuredCalculationRow {
   role: CalculationRole;
   operator?: string;
   digits: string[]; // Length equals columns.length. Empty string "" for blank cells
+  cells?: string[]; // Canonical alias for digits
   label?: string;
   highlight?: boolean;
+  borderBottom?: boolean;
 }
 
 export interface FractionStep {
@@ -136,52 +205,108 @@ export function buildStructuredIntegerArithmetic(
 
   const rows: StructuredCalculationRow[] = [];
 
+  // Borrowing row for subtraction with borrowing
+  if (opSymbol === "−") {
+    const aRev = String(Math.abs(Math.round(aNum))).split("").map(Number).reverse();
+    const bRev = String(Math.abs(Math.round(bNum))).split("").map(Number).reverse();
+    const currentA = [...aRev];
+    let hasBorrow = false;
+
+    for (let i = 0; i < maxDigits; i++) {
+      const colA = currentA[i] ?? 0;
+      const colB = bRev[i] ?? 0;
+      if (colA < colB) {
+        hasBorrow = true;
+        let borrowIdx = i + 1;
+        while (borrowIdx < currentA.length && currentA[borrowIdx] === 0) {
+          borrowIdx++;
+        }
+        if (borrowIdx < currentA.length) {
+          currentA[borrowIdx]--;
+          for (let k = borrowIdx - 1; k > i; k--) {
+            currentA[k] = 9;
+          }
+          currentA[i] += 10;
+        }
+      }
+    }
+
+    if (hasBorrow) {
+      const resultRev = currentA.map((v) => (v !== undefined ? toKhmerNumeral(v) : ""));
+      while (resultRev.length < maxDigits) {
+        resultRev.push("");
+      }
+      const borrowCells = resultRev.reverse();
+      rows.push({
+        role: "borrow",
+        operator: "",
+        digits: borrowCells,
+        cells: borrowCells,
+        label: "ខ្ចី (Borrowing)",
+      });
+    }
+  }
+
   // Row 1: First operand (top number)
+  const aDigitsPadded = padLeading(aDigitsKhmer, maxDigits);
   rows.push({
     role: "operand",
     operator: "",
-    digits: padLeading(aDigitsKhmer, maxDigits),
+    digits: aDigitsPadded,
+    cells: aDigitsPadded,
   });
 
   // Row 2: Second operand with operator in operator column
+  const bDigitsPadded = padLeading(bDigitsKhmer, maxDigits);
   rows.push({
     role: "operand",
     operator: opSymbol,
-    digits: padLeading(bDigitsKhmer, maxDigits),
+    digits: bDigitsPadded,
+    cells: bDigitsPadded,
   });
 
   // Multi-digit multiplication: add partial product rows if bNum has >= 2 digits
   if (opSymbol === "×" && Math.abs(bNum) >= 10) {
     const bDigitsRaw = String(Math.abs(bNum)).split("").reverse();
+    const sep1 = Array(maxDigits).fill("─");
     rows.push({
       role: "separator",
-      digits: Array(maxDigits).fill("─"),
+      digits: sep1,
+      cells: sep1,
+      borderBottom: true,
     });
 
     for (let i = 0; i < bDigitsRaw.length; i++) {
       const d = parseInt(bDigitsRaw[i], 10);
       const partial = aNum * d * Math.pow(10, i);
       const partialKhmer = toKhmerNumeral(partial).split("");
+      const partialDigits = padLeading(partialKhmer, maxDigits);
       rows.push({
-        role: "step",
+        role: "partial-product",
         operator: i === 0 ? "" : "+",
-        digits: padLeading(partialKhmer, maxDigits),
+        digits: partialDigits,
+        cells: partialDigits,
         label: `ផលគុណផ្នែកទី ${toKhmerNumeral(i + 1)}`,
       });
     }
   }
 
   // Separator bar row
+  const sepEnd = Array(maxDigits).fill("─");
   rows.push({
     role: "separator",
-    digits: Array(maxDigits).fill("─"),
+    digits: sepEnd,
+    cells: sepEnd,
+    borderBottom: true,
   });
 
   // Result row
+  const resDigitsPadded = padLeading(resDigitsKhmer, maxDigits);
   rows.push({
     role: "result",
     operator: "",
-    digits: padLeading(resDigitsKhmer, maxDigits),
+    digits: resDigitsPadded,
+    cells: resDigitsPadded,
   });
 
   return {
@@ -592,34 +717,46 @@ export function detectAndBuildStructuredCalculation(
 
 /**
  * SECTION 4: Exported HTML Table Generator
- * Produces semantic HTML table matching exactly the visible UI grid
+ * Produces semantic HTML table matching exactly the visible UI grid.
+ * If options.inlineStyles is true, embeds inline CSS attributes for rich text editors (Jodit, Word, Docs).
  */
-export function renderColumnCalculationHtml(calc: StructuredCalculation): string {
+export function renderColumnCalculationHtml(
+  calc: StructuredCalculation,
+  options?: { inlineStyles?: boolean }
+): string {
   if (calc.type === "fraction" && calc.fractionData) {
     return renderFractionCalculationHtml(calc);
   }
 
+  const inline = !!options?.inlineStyles;
   const numCols = calc.columns.length;
   const parts: string[] = [];
 
-  parts.push('<table class="column-calculation" role="math" aria-label="ការគណនាជួរឈរ">\n');
+  const tableStyle = inline ? ' style="border-collapse:collapse; font-family:monospace; font-size:18px; text-align:right;"' : "";
+  parts.push(`<table class="column-calculation" role="math" aria-label="ការគណនាជួរឈរ"${tableStyle}>\n`);
   parts.push('  <tbody>\n');
 
   for (const row of calc.rows) {
     if (row.role === "separator") {
-      parts.push(`    <tr class="separator-row"><td colspan="${numCols + 1}"></td></tr>\n`);
+      const sepStyle = inline
+        ? ' style="border-bottom:2px solid #000; height:6px; padding:0;"'
+        : ' style="border-bottom:2px solid #000; height:6px;"';
+      parts.push(`    <tr class="separator-row"><td colspan="${numCols + 1}"${sepStyle}></td></tr>\n`);
       continue;
     }
 
     const rowClass = `math-row ${row.role}`;
     parts.push(`    <tr class="${rowClass}">\n`);
-    parts.push(`      <td class="operator-cell">${row.operator || ""}</td>\n`);
+    const opStyle = inline ? ' style="width:24px; text-align:center;"' : "";
+    parts.push(`      <td class="operator-cell"${opStyle}>${row.operator || ""}</td>\n`);
 
+    const cellList = (row.cells && row.cells.length > 0) ? row.cells : (row.digits || []);
     for (let i = 0; i < numCols; i++) {
-      const val = row.digits[i] !== undefined && row.digits[i] !== null ? row.digits[i] : "";
+      const val = cellList[i] !== undefined && cellList[i] !== null ? cellList[i] : "";
       const isPoint = val === ".";
       const cellClass = isPoint ? "digit-cell point-cell" : "digit-cell";
-      parts.push(`      <td class="${cellClass}">${val}</td>\n`);
+      const digitStyle = inline ? ' style="width:32px; text-align:center;"' : "";
+      parts.push(`      <td class="${cellClass}"${digitStyle}>${val}</td>\n`);
     }
 
     parts.push('    </tr>\n');
@@ -691,7 +828,8 @@ export function renderColumnCalculationText(calc: StructuredCalculation): string
 
     // Digit columns
     for (let c = 0; c < numCols; c++) {
-      const digit = row.digits[c] || " ";
+      const cellList = row.cells || row.digits || [];
+      const digit = cellList[c] || " ";
       line += digit.padStart(colWidth, " ");
     }
 
@@ -727,3 +865,271 @@ function renderFractionCalculationText(calc: StructuredCalculation): string {
 
   return `${lineNum}\n${lineBar}\n${lineDen}`;
 }
+
+/**
+ * Build structured multiplication with explicit partial product rows (e.g. 24 × 3)
+ */
+export function buildStructuredMultiplicationWithPartialProducts(
+  aNum: number,
+  bNum: number
+): StructuredCalculation {
+  const calculatedRes = aNum * bNum;
+  const aDigitsKhmer = toKhmerNumeral(Math.abs(Math.round(aNum))).split("");
+  const bDigitsKhmer = toKhmerNumeral(Math.abs(Math.round(bNum))).split("");
+  const resDigitsKhmer = toKhmerNumeral(Math.abs(Math.round(calculatedRes))).split("");
+
+  const maxDigits = Math.max(aDigitsKhmer.length, bDigitsKhmer.length, resDigitsKhmer.length, 3);
+  const columns: string[] = [];
+  for (let i = maxDigits - 1; i >= 0; i--) {
+    columns.push(INTEGER_PLACE_NAMES[i] || `col_${i}`);
+  }
+
+  const rows: StructuredCalculationRow[] = [];
+  const pad = (digits: string[]) => padLeading(digits, maxDigits, " ");
+
+  // Multiplicand
+  const aPadded = pad(aDigitsKhmer);
+  rows.push({
+    role: "operand",
+    operator: "",
+    digits: aPadded,
+    cells: aPadded,
+  });
+
+  // Multiplier
+  const bPadded = pad(bDigitsKhmer);
+  rows.push({
+    role: "operand",
+    operator: "×",
+    digits: bPadded,
+    cells: bPadded,
+  });
+
+  // Top separator
+  const sepBar = Array(maxDigits).fill("─");
+  rows.push({
+    role: "separator",
+    digits: sepBar,
+    cells: sepBar,
+    borderBottom: true,
+  });
+
+  // Break down into partial products
+  const bDigitsRaw = String(Math.abs(bNum)).split("").reverse();
+  const aDigitsRaw = String(Math.abs(aNum)).split("").reverse();
+
+  if (bDigitsRaw.length === 1 && aDigitsRaw.length > 1) {
+    const m = parseInt(bDigitsRaw[0], 10);
+    for (let i = 0; i < aDigitsRaw.length; i++) {
+      const d = parseInt(aDigitsRaw[i], 10);
+      const partial = d * Math.pow(10, i) * m;
+      const partialKhmer = toKhmerNumeral(partial).split("");
+      const pDigits = pad(partialKhmer);
+      rows.push({
+        role: "partial-product",
+        operator: i === 0 ? "" : "+",
+        digits: pDigits,
+        cells: pDigits,
+        label: `ផលគុណផ្នែកទី ${toKhmerNumeral(i + 1)}`,
+      });
+    }
+  } else {
+    for (let i = 0; i < bDigitsRaw.length; i++) {
+      const d = parseInt(bDigitsRaw[i], 10);
+      const partial = aNum * d * Math.pow(10, i);
+      const partialKhmer = toKhmerNumeral(partial).split("");
+      const pDigits = pad(partialKhmer);
+      rows.push({
+        role: "partial-product",
+        operator: i === 0 ? "" : "+",
+        digits: pDigits,
+        cells: pDigits,
+        label: `ផលគុណផ្នែកទី ${toKhmerNumeral(i + 1)}`,
+      });
+    }
+  }
+
+  // Bottom separator
+  rows.push({
+    role: "separator",
+    digits: sepBar,
+    cells: sepBar,
+    borderBottom: true,
+  });
+
+  // Final result
+  const resPadded = pad(resDigitsKhmer);
+  rows.push({
+    role: "result",
+    operator: "",
+    digits: resPadded,
+    cells: resPadded,
+  });
+
+  return {
+    type: "arithmetic",
+    columns,
+    rows,
+    captionKhmer: `ផលគុណផ្នែកតាមជួរឈរ៖ ${toKhmerNumeral(aNum)} × ${toKhmerNumeral(bNum)} = ${toKhmerNumeral(calculatedRes)}`,
+  };
+}
+
+/**
+ * Converts a StructuredCalculation to the canonical VerticalCalculation data model
+ */
+export function structuredToVerticalCalculation(calc: StructuredCalculation): VerticalCalculation {
+  let op: "addition" | "subtraction" | "multiplication" | "division" = "addition";
+  if (calc.type === "division") {
+    op = "division";
+  } else {
+    const opRow = calc.rows.find((r) => r.operator);
+    if (opRow?.operator === "−" || opRow?.operator === "-") op = "subtraction";
+    else if (opRow?.operator === "×" || opRow?.operator === "*") op = "multiplication";
+    else if (opRow?.operator === "÷" || opRow?.operator === "/") op = "division";
+  }
+
+  const rows: VerticalRow[] = calc.rows.map((r) => {
+    let role: VerticalRowRole = "operand";
+    if (r.role === "separator") role = "separator";
+    else if (r.role === "result") role = "result";
+    else if (r.role === "carry" || r.role === "carrying") role = "carry";
+    else if (r.role === "borrow" || r.role === "borrowing") role = "borrow";
+    else if (r.role === "quotient") role = "quotient";
+    else if (r.role === "remainder") role = "remainder";
+    else if (r.role === "partial-product" || (r.role === "step" && op === "multiplication"))
+      role = "partial-product";
+    else if (r.role === "step") role = "working";
+    else role = "operand";
+
+    const cells = r.cells || r.digits || [];
+    return {
+      role,
+      operator: r.operator,
+      cells: [...cells],
+      borderBottom: r.borderBottom ?? (r.role === "separator"),
+    };
+  });
+
+  return {
+    operation: op,
+    columns: [...calc.columns],
+    rows,
+  };
+}
+
+/**
+ * Converts a canonical VerticalCalculation back to StructuredCalculation
+ */
+export function verticalToStructuredCalculation(vert: VerticalCalculation): StructuredCalculation {
+  return {
+    type: vert.operation === "division" ? "division" : "arithmetic",
+    columns: [...vert.columns],
+    rows: vert.rows.map((r) => ({
+      role: r.role,
+      operator: r.operator,
+      digits: [...r.cells],
+      cells: [...r.cells],
+      borderBottom: r.borderBottom,
+    })),
+  };
+}
+
+/**
+ * Transforms any MathSolverProblem or partial object into a strict canonical MathSolution
+ */
+export function toMathSolution(
+  problem: any,
+  options?: { solverMode?: "solve" | "generate" | "verify" }
+): MathSolution {
+  if (
+    problem &&
+    "problemStatement" in problem &&
+    "verticalCalculations" in problem &&
+    Array.isArray(problem.verticalCalculations) &&
+    Array.isArray(problem.steps)
+  ) {
+    return problem as MathSolution;
+  }
+
+  const problemStatement =
+    problem?.extractedProblem || problem?.problemStatement || "";
+
+  // Infer operation
+  let operation: MathOperation = "other";
+  const norm = fromKhmerNumeral(problemStatement).replace(/\s+/g, "");
+  if (norm.includes("/")) {
+    operation = /^\d+\/\d+[+\-*/÷]\d+\/\d+$/.test(norm) ? "fraction" : "division";
+  } else if (norm.includes("+")) {
+    operation = norm.includes(".") ? "decimal" : "addition";
+  } else if (norm.includes("-") || norm.includes("−")) {
+    operation = norm.includes(".") ? "decimal" : "subtraction";
+  } else if (norm.includes("×") || norm.includes("*") || norm.toLowerCase().includes("x")) {
+    operation = norm.includes(".") ? "decimal" : "multiplication";
+  } else if (norm.includes("÷") || norm.includes(":")) {
+    operation = "division";
+  }
+
+  const verticalCalculations: VerticalCalculation[] = [];
+  const structured =
+    problem?.structuredCalculation ||
+    detectAndBuildStructuredCalculation(
+      problemStatement,
+      problem?.finalAnswer,
+      problem?.verticalLines
+    );
+
+  if (structured) {
+    verticalCalculations.push(structuredToVerticalCalculation(structured));
+  }
+
+  // Parse steps from solution explanation
+  const steps: MathStep[] = [];
+  const explanation = problem?.solutionKhmer || problem?.solution || "";
+  if (explanation) {
+    const rawSteps = explanation.split(/\n\n+/).filter((s: string) => s.trim().length > 0);
+    rawSteps.forEach((stepText: string, idx: number) => {
+      const titleMatch = stepText.match(/^(?:ជំហានទី\s*([០-៩\d]+)[—:៖-]?\s*)([^\n]+)/);
+      const title = titleMatch ? titleMatch[2].trim() : `ជំហានទី ${toKhmerNumeral(idx + 1)}`;
+      steps.push({
+        stepNumber: idx + 1,
+        titleKhmer: title,
+        explanationKhmer: stepText.trim(),
+        calculationText: stepText.includes("=") ? stepText.split("=")[0].trim() : undefined,
+      });
+    });
+  }
+
+  return {
+    problemStatement,
+    operation,
+    finalAnswer: problem?.finalAnswer,
+    explanationKhmer: problem?.solutionKhmer || problem?.solution,
+    steps,
+    verticalCalculations,
+    verification: problem?.verification,
+    id: problem?.id,
+    mode: problem?.mode || options?.solverMode,
+    inferredGrade: problem?.inferredGrade,
+    inferredGradeKhmer: problem?.inferredGradeKhmer,
+    visualInterpretation: problem?.visualInterpretation,
+    given: problem?.given,
+    toFind: problem?.toFind,
+    formulas: problem?.formulas,
+    extractedAnswer: problem?.extractedAnswer,
+    answerStatus: problem?.answerStatus,
+    answerStatusKhmer: problem?.answerStatusKhmer,
+    incorrectStep: problem?.incorrectStep,
+    errorExplanationKhmer: problem?.errorExplanationKhmer,
+    correctedStep: problem?.correctedStep,
+    confidence: problem?.confidence,
+    confidenceKhmer: problem?.confidenceKhmer,
+    ambiguousParts: problem?.ambiguousParts,
+    reviewSuggestions: problem?.reviewSuggestions,
+    deterministicResult: problem?.deterministicResult,
+  };
+}
+
+// Aliases for explicit semantic builder naming
+export const buildStructuredIntegerDivision = buildStructuredLongDivision;
+export const buildStructuredFractionArithmetic = buildStructuredFraction;
+

@@ -9,8 +9,14 @@ import {
 } from "@/lib/deterministic-math-verifier";
 import {
   type StructuredCalculation,
+  type VerticalCalculation,
+  type MathSolution,
   detectAndBuildStructuredCalculation,
+  verticalToStructuredCalculation,
+  structuredToVerticalCalculation,
+  toMathSolution,
 } from "@/lib/column-calculation";
+import { validateVerticalCalculation } from "@/lib/math-solution-html";
 
 export const maxDuration = 60;
 
@@ -65,6 +71,8 @@ export interface MathSolverProblem {
   verification?: string;
   deterministicResult?: DeterministicVerificationResult;
   structuredCalculation?: StructuredCalculation;
+  verticalCalculations?: VerticalCalculation[];
+  mathSolution?: MathSolution;
   confidence: "high" | "medium" | "low";
   confidenceKhmer: string;
   ambiguousParts?: string[];
@@ -379,6 +387,8 @@ GRADE LEVEL CONTEXT:
 ${gradeGuidance}
 
 VISUAL UNDERSTANDING RULES (MANDATORY):
+- Accurately solve mathematical problems.
+- Understand visual math problems, typed Khmer numerals (០-៩), Arabic numerals (0-9), handwritten arithmetic, visual objects, fractions, and basic geometry.
 - Images often contain NO text at all. You must infer the mathematical problem directly from visual patterns:
   1. Object Counting: counted fruits, toys, stars, dots, animals, place-value blocks.
   2. Visual Addition: combining two groups of objects.
@@ -389,6 +399,55 @@ VISUAL UNDERSTANDING RULES (MANDATORY):
   7. Number Lines: jumps or intervals on a number line.
   8. Geometry & Measurement: labelled diagrams showing length, width, radius, angles, perimeter, or area.
   9. Ambiguity Invariant: If a visual layout has multiple valid interpretations, DO NOT GUESS. Note the possibilities in "possibleAlternatives" and ask user to confirm.
+
+PLACE-VALUE ALIGNMENT FOR VERTICAL ARITHMETIC (MANDATORY):
+When the problem is vertical arithmetic involving addition (+), subtraction (−), multiplication (×), or division (÷):
+- Return place-value-aligned structured data in "verticalCalculations".
+- Every digit must be represented individually in its own place-value cell/column.
+- Every operator (+, −, ×, ÷) must be represented individually in its own operator column. Do not put the operator inside a digit cell.
+- Carry values ("carry") and borrow values ("borrow") must be represented individually in dedicated rows.
+- Every horizontal line must be represented as a separator row, never as guessed spaces.
+- Explain each step in correct, age-appropriate Khmer.
+- Never use random whitespace as the alignment mechanism.
+- Never rely on proportional-font spacing.
+- Never put multiple digits from one place-value column into one cell.
+- Never put a whole number such as "431" into one cell.
+- Never return application UI, debug information, API metadata, model details, request IDs, or diagnostics.
+
+EXPLICIT ALIGNMENT RULES:
+- For ៤៣១ + ៦៥: The ៦ goes under ៣ (tens column). The ៥ goes under ១ (ones column). The ៤ stays under hundreds. The result ៤, ៩, ៦ stays under hundreds, tens, and ones respectively.
+- For ៧៩៥ − ៥៤: The ៥ goes under ៩, ៤ goes under ៥. Result ៧, ៤, ១ under hundreds, tens, and ones respectively.
+- For ៧០២ − ២៧៨: Handles borrowing rows (ones borrows from tens, tens from hundreds).
+- For ២៤ × ៣: Partial products rows aligned by place value.
+- For ៨៤ ÷ ៤: Division quotient and working steps aligned.
+- For decimals (e.g. ១២.៥ + ៣.៧៥): Align decimal points in their own dedicated column.
+- For fractions (e.g. ១/២ + ១/៤): Preserve numerator and denominator structure.
+- Use Khmer minus "−" or ASCII "-" consistently.
+
+STRUCTURED JSON SCHEMA:
+If returning vertical calculations, include "verticalCalculations": [
+  {
+    "operation": "addition" | "subtraction" | "multiplication" | "division",
+    "columns": ["hundreds", "tens", "ones"],
+    "rows": [
+      { "role": "operand", "operator": "", "cells": ["៤", "៣", "១"] },
+      { "role": "operand", "operator": "+", "cells": ["០", "៦", "៥"] },
+      { "role": "separator", "cells": ["", "", ""], "borderBottom": true },
+      { "role": "result", "operator": "", "cells": ["៤", "៩", "៦"] }
+    ]
+  }
+]
+
+HTML TABLE STYLES (IF RETURNING HTML REPRESENTATION):
+- Vertical arithmetic must be represented as a strict HTML table.
+- Use one <td> per logical place-value cell with fixed width (e.g., style="width:32px; text-align:center;").
+- Use one <td> for the operator column (e.g., style="width:24px; text-align:center;").
+- Table style must include: style="border-collapse:collapse; font-family:monospace; font-size:18px; text-align:right;"
+- Separator line must use: <tr class="separator-row"><td colspan="N" style="border-bottom:2px solid #000; height:6px;"></td></tr>
+- Do NOT use <pre> as the primary alignment mechanism.
+- Do NOT use repeated spaces for alignment.
+- Do NOT use Tailwind classes or external CSS.
+- Do NOT return <script>, onclick, onerror, iframes, forms, or unsafe HTML.
 
 ZERO-GUESSING RULES:
 - Never invent numbers or guess unreadable digits or signs.
@@ -808,7 +867,7 @@ Return a valid JSON object matching the standard schema.`;
         }
         // MODE 3 retains all fields
 
-        return {
+        const probBase = {
           id,
           mode: solverMode,
           extractedProblem,
@@ -844,16 +903,60 @@ Return a valid JSON object matching the standard schema.`;
           finalAnswer: responseFinalAnswer,
           verification: (p.verification as string) || "",
           deterministicResult,
-          structuredCalculation:
-            solverMode === "solve"
-              ? undefined
-              : deterministicResult?.structuredCalculation ||
-                detectAndBuildStructuredCalculation(
-                  extractedProblem,
-                  finalAnswer,
-                  responseVerticalLines
-                ) ||
-                undefined,
+        };
+
+        // Resolve vertical calculations and canonical MathSolution
+        let structuredCalc: StructuredCalculation | undefined = undefined;
+        let verticalCalculations: VerticalCalculation[] | undefined = undefined;
+
+        if (solverMode !== "solve") {
+          // Check if model returned valid verticalCalculations
+          const modelVerts = (p.verticalCalculations || p.vertical_calculations) as any[];
+          if (Array.isArray(modelVerts) && modelVerts.length > 0) {
+            const validVerts: VerticalCalculation[] = [];
+            for (const v of modelVerts) {
+              const valRes = validateVerticalCalculation(v);
+              if (valRes.valid) {
+                validVerts.push(v);
+              }
+            }
+            if (validVerts.length > 0) {
+              verticalCalculations = validVerts;
+              structuredCalc = verticalToStructuredCalculation(validVerts[0]);
+            }
+          }
+
+          // Fallback to deterministic calculation or detection
+          if (!structuredCalc) {
+            structuredCalc =
+              deterministicResult?.structuredCalculation ||
+              detectAndBuildStructuredCalculation(
+                extractedProblem,
+                finalAnswer,
+                responseVerticalLines
+              ) ||
+              undefined;
+
+            if (structuredCalc) {
+              verticalCalculations = [structuredToVerticalCalculation(structuredCalc)];
+            }
+          }
+        }
+
+        const mathSolution = toMathSolution(
+          {
+            ...probBase,
+            structuredCalculation: structuredCalc,
+            verticalCalculations,
+          },
+          { solverMode }
+        );
+
+        return {
+          ...probBase,
+          structuredCalculation: structuredCalc,
+          verticalCalculations: mathSolution.verticalCalculations,
+          mathSolution,
           confidence: ((p.confidence as string) || "medium") as "high" | "medium" | "low",
           confidenceKhmer:
             (p.confidenceKhmer as string) ||
