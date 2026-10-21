@@ -55,6 +55,7 @@ export interface MathSolverProblem {
   solution: string;
   solutionKhmer: string;
   alignedWorking?: string;
+  verticalLines?: string[];
   finalAnswer: string;
   verification: string;
   deterministicResult?: DeterministicVerificationResult;
@@ -654,7 +655,7 @@ Return a valid JSON object matching the standard schema.`;
           (p.extracted_problem as string) ||
           problemTextInput ||
           "";
-        const finalAnswer = (p.finalAnswer as string) || (p.final_answer as string) || "";
+        let finalAnswer = (p.finalAnswer as string) || (p.final_answer as string) || "";
         const extractedAnswer =
           (p.extractedAnswer as string) ||
           (p.extracted_answer as string) ||
@@ -697,6 +698,11 @@ Return a valid JSON object matching the standard schema.`;
         let deterministicResult: DeterministicVerificationResult | undefined = undefined;
         let alignedWorking =
           (p.alignedWorking as string) || (p.aligned_working as string) || undefined;
+        let verticalLines: string[] | undefined = Array.isArray(p.verticalLines)
+          ? p.verticalLines
+          : Array.isArray(p.vertical_lines)
+          ? p.vertical_lines
+          : undefined;
 
         if (action !== "extract" && (extractedProblem || finalAnswer)) {
           try {
@@ -706,13 +712,24 @@ Return a valid JSON object matching the standard schema.`;
               { existingStudentAnswer: extractedAnswer }
             );
 
-            // If deterministic calculator has aligned working and AI didn't provide one, use it!
-            if (!alignedWorking && deterministicResult.alignedWorking) {
+            // Always prioritize deterministic vertical lines and aligned working if available
+            if (deterministicResult.verticalLines && deterministicResult.verticalLines.length > 0) {
+              verticalLines = deterministicResult.verticalLines;
+              alignedWorking = deterministicResult.alignedWorking || deterministicResult.verticalLines.join("\n");
+            } else if (deterministicResult.alignedWorking) {
               alignedWorking = deterministicResult.alignedWorking;
+              verticalLines = alignedWorking.split("\n");
             }
           } catch (detErr) {
             console.warn("Deterministic verifier error:", detErr);
           }
+        }
+
+        // If verticalLines is still missing but alignedWorking has newlines, split it
+        if (!verticalLines && alignedWorking && alignedWorking.includes("\n")) {
+          verticalLines = alignedWorking.split("\n");
+        } else if (verticalLines && !alignedWorking) {
+          alignedWorking = verticalLines.join("\n");
         }
 
         const ambiguousParts =
@@ -725,6 +742,25 @@ Return a valid JSON object matching the standard schema.`;
           reviewSuggestions.push(
             `ប្រព័ន្ធគណនាសុក្រឹតបានរកឃើញភាពខុសគ្នា៖ ចម្លើយគណនាគឺ ${deterministicResult.computedAnswerKhmer}`
           );
+        }
+
+        // Pedagogical Khmer explanation for elementary math
+        let solutionKhmer = (p.solutionKhmer as string) || (p.solution_khmer as string) || "";
+        if (
+          deterministicResult?.detailedKhmerExplanation &&
+          (gradeLevel === "auto" ||
+            gradeLevel === "grade_1" ||
+            gradeLevel === "grade_2" ||
+            gradeLevel === "grade_3" ||
+            solutionKhmer.length < 120 ||
+            !solutionKhmer.includes("ខ្ទង់"))
+        ) {
+          solutionKhmer = deterministicResult.detailedKhmerExplanation;
+        }
+
+        // If finalAnswer was missing or empty, use deterministic computed answer
+        if (!finalAnswer && deterministicResult?.computedAnswerKhmer) {
+          finalAnswer = deterministicResult.computedAnswerKhmer;
         }
 
         return {
@@ -756,8 +792,9 @@ Return a valid JSON object matching the standard schema.`;
             undefined,
           correctedStep: (p.correctedStep as string) || (p.corrected_step as string) || undefined,
           solution: (p.solution as string) || "",
-          solutionKhmer: (p.solutionKhmer as string) || (p.solution_khmer as string) || "",
+          solutionKhmer,
           alignedWorking,
+          verticalLines,
           finalAnswer,
           verification: (p.verification as string) || "",
           deterministicResult,

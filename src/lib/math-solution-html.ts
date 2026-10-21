@@ -253,14 +253,21 @@ export function renderCanonicalSolutionHtml(
   );
 
   // Aligned column working (vertical addition, subtraction with borrowing, multiplication, fractions)
-  if (problem.alignedWorking) {
+  const vertText =
+    problem.verticalLines && problem.verticalLines.length > 0
+      ? problem.verticalLines.join("\n")
+      : problem.alignedWorking;
+
+  if (vertText) {
     parts.push(
-      `<div class="aligned-working-block" style="margin-top: 14px; background: #0f172a; color: #f8fafc; border-radius: 8px; padding: 14px; font-family: 'Courier New', Courier, monospace; font-size: 14px; line-height: 1.5; white-space: pre; overflow-x: auto;">`
+      `<div class="aligned-working-block" style="margin-top: 14px; background: #0f172a; color: #f8fafc; border-radius: 8px; padding: 14px; overflow-x: auto;">`
     );
     parts.push(
       `<div style="color: #94a3b8; font-size: 11px; margin-bottom: 6px; text-transform: uppercase; font-family: ${fontStack};">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>`
     );
-    parts.push(escapeHtml(problem.alignedWorking));
+    parts.push(
+      `<pre style="margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 14px; line-height: 1.5; white-space: pre; color: #6ee7b7;">${escapeHtml(vertText)}</pre>`
+    );
     parts.push(`</div>`);
   }
   parts.push(`</div>`);
@@ -409,9 +416,14 @@ export function renderCanonicalSolutionPlainText(
   lines.push(problem.solutionKhmer || problem.solution);
   lines.push("");
 
-  if (problem.alignedWorking) {
+  const vertText =
+    problem.verticalLines && problem.verticalLines.length > 0
+      ? problem.verticalLines.join("\n")
+      : problem.alignedWorking;
+
+  if (vertText) {
     lines.push("ការគណនាតាមជួរឈរ (Vertical Calculation):");
-    lines.push(problem.alignedWorking);
+    lines.push(vertText);
     lines.push("");
   }
 
@@ -443,9 +455,32 @@ export function renderCanonicalSolutionPlainText(
 }
 
 /**
+ * Fallback for browser copying when ClipboardItem / navigator.clipboard is unavailable
+ */
+export function copyTextFallback(text: string): boolean {
+  if (typeof document === "undefined") return false;
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.top = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const successful = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return successful;
+  } catch (e) {
+    console.error("Textarea copy fallback error:", e);
+    return false;
+  }
+}
+
+/**
  * Universal Dual-Type Clipboard Copy
  * Writes both text/html and text/plain to clipboard if supported,
- * falling back to navigator.clipboard.writeText.
+ * falling back to navigator.clipboard.writeText, then copyTextFallback.
  */
 export async function copyCanonicalSolutionToClipboard(
   problem: MathSolverProblem,
@@ -454,31 +489,38 @@ export async function copyCanonicalSolutionToClipboard(
   const htmlContent = renderCanonicalSolutionHtml(problem, options);
   const textContent = renderCanonicalSolutionPlainText(problem, options);
 
-  if (typeof window === "undefined" || !navigator.clipboard) {
+  if (typeof window === "undefined") {
     return false;
   }
 
-  try {
-    if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
-      const blobHtml = new Blob([htmlContent], { type: "text/html" });
-      const blobText = new Blob([textContent], { type: "text/plain" });
-      const item = new ClipboardItem({
-        "text/html": blobHtml,
-        "text/plain": blobText,
-      });
-      await navigator.clipboard.write([item]);
-      return true;
+  // 1. Primary: ClipboardItem dual-write
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    try {
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+        const blobHtml = new Blob([htmlContent], { type: "text/html" });
+        const blobText = new Blob([textContent], { type: "text/plain" });
+        const item = new ClipboardItem({
+          "text/html": blobHtml,
+          "text/plain": blobText,
+        });
+        await navigator.clipboard.write([item]);
+        return true;
+      }
+    } catch (err) {
+      console.warn("ClipboardItem write failed, falling back to writeText:", err);
     }
-  } catch (err) {
-    console.warn("ClipboardItem write failed, falling back to text copy:", err);
+
+    // 2. Secondary: writeText fallback
+    try {
+      if (navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(htmlContent);
+        return true;
+      }
+    } catch (err) {
+      console.warn("writeText failed, falling back to textarea fallback:", err);
+    }
   }
 
-  // Fallback to text copy
-  try {
-    await navigator.clipboard.writeText(htmlContent);
-    return true;
-  } catch (err) {
-    console.error("Clipboard copy failed completely:", err);
-    return false;
-  }
+  // 3. Fallback: document.execCommand textarea copy
+  return copyTextFallback(htmlContent);
 }

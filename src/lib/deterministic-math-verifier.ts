@@ -24,6 +24,8 @@ export interface DeterministicVerificationResult {
   verificationMethod: string;
   verificationMethodKhmer: string;
   alignedWorking?: string;
+  verticalLines?: string[];
+  detailedKhmerExplanation?: string;
   reviewPoints: string[];
 }
 
@@ -119,42 +121,178 @@ export function formatFraction(f: Fraction, useKhmer = false): string {
 }
 
 // -----------------------------------------------------------
-// Vertical Column Arithmetic Builders
+// Vertical Column Arithmetic Builders & Pedagogical Explanations
 // -----------------------------------------------------------
-export function formatColumnAddition(a: number, b: number, useKhmer = true): string {
-  const sum = a + b;
-  const aStr = String(a);
-  const bStr = String(b);
-  const sumStr = String(sum);
-  const maxLen = Math.max(aStr.length, bStr.length, sumStr.length) + 2;
+export function buildPedagogicalArithmeticExplanation(
+  a: number,
+  op: "+" | "-" | "−" | "*",
+  b: number,
+  useKhmer = true
+): {
+  verticalLines: string[];
+  alignedWorking: string;
+  detailedKhmerExplanation: string;
+  hasRegrouping: boolean;
+} {
+  const normOp = op === "−" ? "-" : op;
+  let res = 0;
+  if (normOp === "+") res = a + b;
+  else if (normOp === "-") res = a - b;
+  else if (normOp === "*") res = a * b;
 
-  const padA = aStr.padStart(maxLen, " ");
-  const padB = ("+ " + bStr).padStart(maxLen, " ");
-  const line = "-".repeat(maxLen);
-  const padSum = sumStr.padStart(maxLen, " ");
+  const aKhmer = toKhmerNumeral(a);
+  const bKhmer = toKhmerNumeral(b);
+  const resKhmer = toKhmerNumeral(res);
+  const opSymbol = normOp === "+" ? "+" : normOp === "-" ? "−" : "×";
 
-  // Check carrying
-  let hasCarry = false;
-  let carry = 0;
-  const aRev = aStr.split("").reverse();
-  const bRev = bStr.split("").reverse();
-  const maxDigits = Math.max(aRev.length, bRev.length);
-  for (let i = 0; i < maxDigits; i++) {
-    const digitA = parseInt(aRev[i] || "0", 10);
-    const digitB = parseInt(bRev[i] || "0", 10);
-    const colSum = digitA + digitB + carry;
-    if (colSum >= 10) {
-      hasCarry = true;
-      carry = Math.floor(colSum / 10);
-    } else {
-      carry = 0;
+  // Build perfectly padded vertical lines
+  const topStr = useKhmer ? aKhmer : String(a);
+  const botStr = useKhmer ? bKhmer : String(b);
+  const resStr = useKhmer ? resKhmer : String(res);
+  const maxNumLen = Math.max(topStr.length, botStr.length, resStr.length);
+
+  const line0 = "  " + topStr.padStart(maxNumLen, " ");
+  const line1 = `${opSymbol} ` + botStr.padStart(maxNumLen, " ");
+  const line2 = "─".repeat(maxNumLen + 2);
+  const line3 = "  " + resStr.padStart(maxNumLen, " ");
+  const verticalLines = [line0, line1, line2, line3];
+  const alignedWorking = verticalLines.join("\n");
+
+  const placeNames = ["ខ្ទង់ឯកតា", "ខ្ទង់ដប់", "ខ្ទង់រយ", "ខ្ទង់ពាន់", "ខ្ទង់ម៉ឺន"];
+  const stepPrefixes = ["ជំហានទី១", "ជំហានទី២", "ជំហានទី៣", "ជំហានទី៤", "ជំហានទី៥"];
+
+  let hasRegrouping = false;
+  const steps: string[] = [];
+
+  if (normOp === "-") {
+    // Subtraction column by column
+    const aDigits = String(Math.abs(Math.round(a))).split("").map(Number).reverse();
+    const bDigits = String(Math.abs(Math.round(b))).split("").map(Number).reverse();
+    const maxCols = Math.max(aDigits.length, bDigits.length);
+
+    // Working copy for borrowing
+    const currentA = [...aDigits];
+
+    for (let i = 0; i < maxCols; i++) {
+      const pName = placeNames[i] || `ខ្ទង់ទី ${toKhmerNumeral(i + 1)}`;
+      const sPrefix = stepPrefixes[i] || `ជំហានទី ${toKhmerNumeral(i + 1)}`;
+      const colB = bDigits[i] ?? 0;
+      const colA = currentA[i] ?? 0;
+
+      if (colA >= colB) {
+        const diff = colA - colB;
+        if (i === 0) {
+          steps.push(
+            `${sPrefix} — ${pName}៖\n${toKhmerNumeral(colA)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)}${
+              colA >= colB && bDigits.length > 0
+                ? ` (ដោយសារ ${toKhmerNumeral(colA)} ធំជាង ឬស្មើ ${toKhmerNumeral(colB)} អាចធ្វើការដកបានភ្លាមៗ ដោយមិនបាច់ខ្ចីទេ)`
+                : ""
+            }`
+          );
+        } else if (colB === 0 && i >= bDigits.length) {
+          steps.push(
+            `${sPrefix} — ${pName}៖\n${toKhmerNumeral(colA)} នៅសល់ ${toKhmerNumeral(diff)} (ព្រោះគ្មានតួដកក្នុង${pName})`
+          );
+        } else {
+          steps.push(
+            `${sPrefix} — ${pName}៖\n${toKhmerNumeral(colA)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)}`
+          );
+        }
+      } else {
+        hasRegrouping = true;
+        // Need to borrow from next non-zero digit
+        let borrowIdx = i + 1;
+        while (borrowIdx < currentA.length && currentA[borrowIdx] === 0) {
+          borrowIdx++;
+        }
+
+        let borrowNote = "";
+        if (borrowIdx < currentA.length) {
+          const fromDigit = currentA[borrowIdx];
+          currentA[borrowIdx]--;
+          for (let k = borrowIdx - 1; k > i; k--) {
+            currentA[k] = 9;
+          }
+          currentA[i] += 10;
+          const borrowedVal = currentA[i];
+          const diff = borrowedVal - colB;
+
+          if (borrowIdx === i + 1) {
+            borrowNote = `ដោយសារ ${toKhmerNumeral(colA)} តូចជាង ${toKhmerNumeral(colB)} (មិនអាចដកបាន) ត្រូវខ្ចី ១ ពី${placeNames[i + 1]} (ស្មើនឹង ១០) មកបូកបន្ថែមបាន ${toKhmerNumeral(borrowedVal)}។\nបន្ទាប់មកយក ${toKhmerNumeral(borrowedVal)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)} (សរសេរ ${toKhmerNumeral(diff)})`;
+          } else {
+            borrowNote = `- ខ្ចី ១ ពី${placeNames[borrowIdx]} (លេខ ${toKhmerNumeral(fromDigit)} ក្លាយជា ${toKhmerNumeral(fromDigit - 1)})\n- បំប្លែង ${toKhmerNumeral(fromDigit)} រយ ទៅជា ${toKhmerNumeral(fromDigit - 1)} រយ និង ១០ ដប់\n- ខ្ចី ១ ដប់ ពីខ្ទង់ដប់ (ខ្ទង់ដប់នៅសល់ ៩) មកខ្ទង់ឯកតា (បាន ១០ បូក ${toKhmerNumeral(colA)} = ${toKhmerNumeral(borrowedVal)})\n- យក ${toKhmerNumeral(borrowedVal)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)} (សរសេរ ${toKhmerNumeral(diff)})`;
+          }
+          steps.push(`${sPrefix} — ${pName}៖\n${borrowNote}`);
+        } else {
+          const diff = colA - colB;
+          steps.push(`${sPrefix} — ${pName}៖\n${toKhmerNumeral(colA)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)}`);
+        }
+      }
+    }
+  } else if (normOp === "+") {
+    // Addition column by column
+    const aDigits = String(Math.abs(Math.round(a))).split("").map(Number).reverse();
+    const bDigits = String(Math.abs(Math.round(b))).split("").map(Number).reverse();
+    const maxCols = Math.max(aDigits.length, bDigits.length);
+    let carry = 0;
+
+    for (let i = 0; i < maxCols; i++) {
+      const pName = placeNames[i] || `ខ្ទង់ទី ${toKhmerNumeral(i + 1)}`;
+      const sPrefix = stepPrefixes[i] || `ជំហានទី${toKhmerNumeral(i + 1)}`;
+      const colA = aDigits[i] ?? 0;
+      const colB = bDigits[i] ?? 0;
+      const prevCarry = carry;
+      const colSum = colA + colB + prevCarry;
+
+      if (colSum >= 10) {
+        hasRegrouping = true;
+        carry = Math.floor(colSum / 10);
+        const writeDigit = colSum % 10;
+        const carryStr = prevCarry > 0 ? ` + ${toKhmerNumeral(prevCarry)} (ត្រាទុក)` : "";
+        steps.push(
+          `${sPrefix} — ${pName}៖\n${toKhmerNumeral(colA)} + ${toKhmerNumeral(colB)}${carryStr} = ${toKhmerNumeral(colSum)} (សរសេរ ${toKhmerNumeral(writeDigit)} ត្រាទុក ${toKhmerNumeral(carry)} ទៅ${placeNames[i + 1] || "ខ្ទង់បន្ទាប់"})`
+        );
+      } else {
+        carry = 0;
+        const carryStr = prevCarry > 0 ? ` + ${toKhmerNumeral(prevCarry)} (ត្រាទុក)` : "";
+        steps.push(
+          `${sPrefix} — ${pName}៖\n${toKhmerNumeral(colA)} + ${toKhmerNumeral(colB)}${carryStr} = ${toKhmerNumeral(colSum)} (សរសេរ ${toKhmerNumeral(colSum)})`
+        );
+      }
+    }
+
+    if (carry > 0) {
+      const pName = placeNames[maxCols] || `ខ្ទង់បន្ទាប់`;
+      const sPrefix = stepPrefixes[maxCols] || `ជំហានបន្ទាប់`;
+      steps.push(`${sPrefix} — ${pName}៖\nទម្លាក់លេខ ${toKhmerNumeral(carry)} ដែលនៅសល់ពីការត្រាទុក (សរសេរ ${toKhmerNumeral(carry)})`);
     }
   }
 
-  const raw = `${padA}\n${padB}\n${line}\n${padSum}${
-    hasCarry ? (useKhmer ? "\n(មានត្រាទុកខ្ទង់បន្ទាប់)" : "\n(With carrying)") : ""
-  }`;
-  return useKhmer ? toKhmerNumeral(raw) : raw;
+  // Compile the 7 canonical educational sections
+  const sec1 = `១. ប្រមាណវិធី៖\n${aKhmer} ${opSymbol} ${bKhmer}`;
+  const sec2 = `២. រៀបជាជួរឈរ៖\n${alignedWorking}`;
+  const stepSections = steps.map((s, idx) => `${toKhmerNumeral(idx + 3)}. ${s}`);
+  const secAns = `${toKhmerNumeral(steps.length + 3)}. ចម្លើយចុងក្រោយ៖\n${aKhmer} ${opSymbol} ${bKhmer} = ${resKhmer}`;
+  const secCheck =
+    normOp === "-"
+      ? `${toKhmerNumeral(steps.length + 4)}. ពិនិត្យចម្លើយឡើងវិញ៖\n${resKhmer} + ${bKhmer} = ${aKhmer} ✓ (ត្រឹមត្រូវ)`
+      : `${toKhmerNumeral(steps.length + 4)}. ពិនិត្យចម្លើយឡើងវិញ៖\n${resKhmer} − ${bKhmer} = ${aKhmer} ✓ (ត្រឹមត្រូវ)`;
+
+  const sections: string[] = [sec1, sec2, ...stepSections, secAns, secCheck];
+
+  const detailedKhmerExplanation = sections.join("\n\n");
+
+  return {
+    verticalLines,
+    alignedWorking,
+    detailedKhmerExplanation,
+    hasRegrouping,
+  };
+}
+
+export function formatColumnAddition(a: number, b: number, useKhmer = true): string {
+  const ped = buildPedagogicalArithmeticExplanation(a, "+", b, useKhmer);
+  return ped.hasRegrouping ? `${ped.alignedWorking}\n(មានត្រាទុក)` : ped.alignedWorking;
 }
 
 export function buildColumnAddition(a: number, b: number, useKhmer = true): string {
@@ -162,37 +300,8 @@ export function buildColumnAddition(a: number, b: number, useKhmer = true): stri
 }
 
 export function formatColumnSubtraction(a: number, b: number, useKhmer = true): string {
-  const diff = a - b;
-  const aStr = String(a);
-  const bStr = String(b);
-  const diffStr = String(diff);
-  const maxLen = Math.max(aStr.length, bStr.length, diffStr.length) + 2;
-
-  const padA = aStr.padStart(maxLen, " ");
-  const padB = ("- " + bStr).padStart(maxLen, " ");
-  const line = "-".repeat(maxLen);
-  const padDiff = diffStr.padStart(maxLen, " ");
-
-  // Check borrowing
-  let hasBorrow = false;
-  let borrow = 0;
-  const aRev = aStr.split("").reverse();
-  const bRev = bStr.split("").reverse();
-  for (let i = 0; i < aRev.length; i++) {
-    const digitA = parseInt(aRev[i] || "0", 10) - borrow;
-    const digitB = parseInt(bRev[i] || "0", 10);
-    if (digitA < digitB) {
-      hasBorrow = true;
-      borrow = 1;
-    } else {
-      borrow = 0;
-    }
-  }
-
-  const raw = `${padA}\n${padB}\n${line}\n${padDiff}${
-    hasBorrow ? (useKhmer ? "\n(មានខ្ចីពីខ្ទង់ខាងមុខ)" : "\n(With borrowing)") : ""
-  }`;
-  return useKhmer ? toKhmerNumeral(raw) : raw;
+  const ped = buildPedagogicalArithmeticExplanation(a, "-", b, useKhmer);
+  return ped.hasRegrouping ? `${ped.alignedWorking}\n(មានខ្ចី)` : ped.alignedWorking;
 }
 
 export function buildColumnSubtraction(a: number, b: number, useKhmer = true): string {
@@ -200,19 +309,7 @@ export function buildColumnSubtraction(a: number, b: number, useKhmer = true): s
 }
 
 export function formatColumnMultiplication(a: number, b: number, useKhmer = true): string {
-  const prod = a * b;
-  const aStr = String(a);
-  const bStr = String(b);
-  const prodStr = String(prod);
-  const maxLen = Math.max(aStr.length, bStr.length, prodStr.length) + 2;
-
-  const padA = aStr.padStart(maxLen, " ");
-  const padB = ("× " + bStr).padStart(maxLen, " ");
-  const line = "-".repeat(maxLen);
-  const padProd = prodStr.padStart(maxLen, " ");
-
-  const raw = `${padA}\n${padB}\n${line}\n${padProd}`;
-  return useKhmer ? toKhmerNumeral(raw) : raw;
+  return buildPedagogicalArithmeticExplanation(a, "*", b, useKhmer).alignedWorking;
 }
 
 export function buildColumnMultiplication(a: number, b: number, useKhmer = true): string {
@@ -228,6 +325,8 @@ export function evaluateBasicArithmetic(expression: string): {
   operation?: string;
   operands?: number[];
   alignedWorking?: string;
+  verticalLines?: string[];
+  detailedKhmerExplanation?: string;
 } {
   // Normalize Khmer numerals to Arabic
   const norm = fromKhmerNumeral(expression)
@@ -248,25 +347,36 @@ export function evaluateBasicArithmetic(expression: string): {
   if (isNaN(a) || isNaN(b)) return { success: false };
 
   let res = 0;
-  let aligned = "";
+  let aligned: string | undefined = undefined;
+  let lines: string[] | undefined = undefined;
+  let detailed: string | undefined = undefined;
 
   switch (op) {
     case "+":
       res = a + b;
       if (Number.isInteger(a) && Number.isInteger(b)) {
-        aligned = buildColumnAddition(a, b, true);
+        const ped = buildPedagogicalArithmeticExplanation(a, "+", b, true);
+        aligned = ped.alignedWorking;
+        lines = ped.verticalLines;
+        detailed = ped.detailedKhmerExplanation;
       }
       break;
     case "-":
       res = a - b;
       if (Number.isInteger(a) && Number.isInteger(b)) {
-        aligned = buildColumnSubtraction(a, b, true);
+        const ped = buildPedagogicalArithmeticExplanation(a, "-", b, true);
+        aligned = ped.alignedWorking;
+        lines = ped.verticalLines;
+        detailed = ped.detailedKhmerExplanation;
       }
       break;
     case "*":
       res = a * b;
       if (Number.isInteger(a) && Number.isInteger(b)) {
-        aligned = buildColumnMultiplication(a, b, true);
+        const ped = buildPedagogicalArithmeticExplanation(a, "*", b, true);
+        aligned = ped.alignedWorking;
+        lines = ped.verticalLines;
+        detailed = ped.detailedKhmerExplanation;
       }
       break;
     case "/":
@@ -284,7 +394,9 @@ export function evaluateBasicArithmetic(expression: string): {
     result: cleanRes,
     operation: op,
     operands: [a, b],
-    alignedWorking: aligned || undefined,
+    alignedWorking: aligned,
+    verticalLines: lines,
+    detailedKhmerExplanation: detailed,
   };
 }
 
@@ -445,6 +557,8 @@ export function verifyMathResultDeterministically(
       verificationMethod: "Deterministic Arithmetic Engine",
       verificationMethodKhmer: methodKhmer,
       alignedWorking: arith.alignedWorking,
+      verticalLines: arith.verticalLines,
+      detailedKhmerExplanation: arith.detailedKhmerExplanation,
       reviewPoints,
     };
   }

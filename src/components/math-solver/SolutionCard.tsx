@@ -14,11 +14,14 @@ import {
   BookOpen,
   Code2,
   Sparkles,
+  Download,
 } from "lucide-react";
 import type { MathSolverProblem } from "@/app/api/math-solver/route";
 import {
   copyCanonicalSolutionToClipboard,
   renderCanonicalSolutionPlainText,
+  renderCanonicalSolutionHtml,
+  copyTextFallback,
 } from "@/lib/math-solution-html";
 
 interface SolutionCardProps {
@@ -48,11 +51,19 @@ export function SolutionCard({
       solverModeTitle,
     });
     try {
-      await navigator.clipboard.writeText(text);
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setCopiedText(true);
+        setTimeout(() => setCopiedText(false), 2000);
+        return;
+      }
+    } catch {
+      console.warn("Clipboard text copy failed, trying fallback");
+    }
+    const success = copyTextFallback(text);
+    if (success) {
       setCopiedText(true);
       setTimeout(() => setCopiedText(false), 2000);
-    } catch {
-      console.warn("Clipboard text copy failed");
     }
   };
 
@@ -69,6 +80,27 @@ export function SolutionCard({
       }
     } catch (err) {
       console.error("Failed to copy HTML:", err);
+    }
+  };
+
+  // Download HTML
+  const handleDownloadHtml = () => {
+    try {
+      const htmlContent = renderCanonicalSolutionHtml(problem, {
+        gradeTitle,
+        solverModeTitle,
+      });
+      const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `math-solution-${problem.id || "problem"}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to download HTML:", err);
     }
   };
 
@@ -319,13 +351,22 @@ export function SolutionCard({
           </div>
 
           {/* Aligned vertical working (for column addition, subtraction, multiplication, fractions) */}
-          {problem.alignedWorking && (
+          {(Boolean(problem.verticalLines && problem.verticalLines.length > 0) || Boolean(problem.alignedWorking)) && (
             <div className="rounded-lg border border-slate-700 bg-slate-950 p-4 overflow-x-auto">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2 font-sans">
                 ការគណនាតាមជួរឈរ (Vertical Calculation):
               </span>
-              <pre className="font-mono text-sm text-emerald-300 leading-tight whitespace-pre">
-                {problem.alignedWorking}
+              <pre
+                data-testid="vertical-calculation-pre"
+                className="font-mono text-sm text-emerald-300 leading-relaxed whitespace-pre font-semibold"
+                style={{
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                  whiteSpace: "pre",
+                }}
+              >
+                {problem.verticalLines && problem.verticalLines.length > 0
+                  ? problem.verticalLines.join("\n")
+                  : problem.alignedWorking}
               </pre>
             </div>
           )}
@@ -445,7 +486,7 @@ export function SolutionCard({
           </div>
         )}
 
-        {/* Action Buttons: Copy Text & Copy as HTML */}
+        {/* Action Buttons: Copy Text, Copy as HTML, Download HTML */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
           <div className="text-xs text-slate-400">
             {copiedHtml && (
@@ -456,8 +497,8 @@ export function SolutionCard({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Copy Plain Text */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1. Copy Plain Text */}
             <button
               type="button"
               onClick={handleCopyText}
@@ -476,7 +517,7 @@ export function SolutionCard({
               )}
             </button>
 
-            {/* Copy as HTML */}
+            {/* 2. Copy as HTML */}
             <button
               type="button"
               onClick={handleCopyHtml}
@@ -484,6 +525,16 @@ export function SolutionCard({
             >
               <Code2 className="h-3.5 w-3.5 text-indigo-400" />
               ចម្លងជា HTML
+            </button>
+
+            {/* 3. Download HTML */}
+            <button
+              type="button"
+              onClick={handleDownloadHtml}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:border-violet-500/40 hover:text-violet-300 transition-colors"
+            >
+              <Download className="h-3.5 w-3.5 text-slate-400" />
+              ទាញយក HTML
             </button>
           </div>
         </div>

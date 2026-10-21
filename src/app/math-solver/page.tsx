@@ -900,32 +900,13 @@ export default function MathSolverPage() {
               </div>
             </div>
 
-            {/* Universal Solution Actions: Copy HTML, Copy Text, Download HTML */}
+            {/* Universal Solution Actions: Copy Text, Copy HTML, Download HTML */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Copy as HTML */}
-              <button
-                type="button"
-                onClick={handleCopyHtml}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/50 bg-indigo-600/25 px-3 py-1.5 text-xs font-bold text-indigo-200 hover:bg-indigo-600/40 hover:text-white transition-colors min-h-[36px] shadow-sm"
-              >
-                {copiedHtml ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="text-emerald-300">បានចម្លងជា HTML រួចរាល់!</span>
-                  </>
-                ) : (
-                  <>
-                    <Code2 className="h-3.5 w-3.5 text-indigo-400" />
-                    <span>ចម្លងជា HTML</span>
-                  </>
-                )}
-              </button>
-
-              {/* Copy plain text */}
+              {/* 1. Copy plain text */}
               <button
                 type="button"
                 onClick={handleCopyText}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
               >
                 {copiedText ? (
                   <>
@@ -940,11 +921,30 @@ export default function MathSolverPage() {
                 )}
               </button>
 
-              {/* Download as HTML */}
+              {/* 2. Copy as HTML */}
+              <button
+                type="button"
+                onClick={handleCopyHtml}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/50 bg-indigo-600/25 px-3.5 py-1.5 text-xs font-bold text-indigo-200 hover:bg-indigo-600/40 hover:text-white transition-colors min-h-[36px] shadow-sm"
+              >
+                {copiedHtml ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-emerald-300">បានចម្លងជា HTML រួចរាល់!</span>
+                  </>
+                ) : (
+                  <>
+                    <Code2 className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>ចម្លងជា HTML</span>
+                  </>
+                )}
+              </button>
+
+              {/* 3. Download as HTML */}
               <button
                 type="button"
                 onClick={handleDownloadHtml}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
               >
                 <Download className="h-3.5 w-3.5 text-slate-400" />
                 <span>ទាញយក HTML</span>
