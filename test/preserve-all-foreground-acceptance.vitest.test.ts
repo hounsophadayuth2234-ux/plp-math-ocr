@@ -376,7 +376,7 @@ describe("AGY Production Acceptance Suite: Preserve All Foreground, Remove Only 
     const mask = new Uint8ClampedArray([255, 0, 255, 0]);
 
     // Composite to white
-    const whiteComp = compositeRgbaBuffer(sourceRgba, mask, width, height, "white");
+    const whiteComp = compositeRgbaBuffer(sourceRgba, mask, width, height, "white", { r: 255, g: 255, b: 255 });
     // Top-left foreground pixel RGB is identical to source
     expect(whiteComp[0]).toBe(200);
     expect(whiteComp[1]).toBe(30);

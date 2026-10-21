@@ -424,7 +424,7 @@ describe("AGY Production Acceptance Suite: Manual-Assisted Background Remover", 
       ]);
       const mask = new Uint8ClampedArray([255, 128, 0, 255]);
 
-      const whiteOut = compositeRgbaBuffer(srcRgba, mask, width, height, "white");
+      const whiteOut = compositeRgbaBuffer(srcRgba, mask, width, height, "white", { r: 255, g: 255, b: 255 });
 
       // Pixel 0: a=255 -> exact source (200, 100, 50)
       expect(whiteOut[0]).toBe(200);
