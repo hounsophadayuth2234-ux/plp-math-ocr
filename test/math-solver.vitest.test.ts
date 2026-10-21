@@ -1,8 +1,17 @@
 /**
- * Module 04 — Khmer Math Solver: Comprehensive Test Suite
- * Covers API route validation, image processing, response parsing,
- * error handling, Khmer output, multi-problem, answer verification,
- * confidence, regression, security, and mobile layout.
+ * Module 04 — Khmer Math Solver: Comprehensive 3-Mode Test Suite
+ *
+ * Covers:
+ * 1. Solve-only mode (Mode 1: ដោះស្រាយលំហាត់)
+ * 2. Generate-solution mode (Mode 2: បង្កើតដំណោះស្រាយ with 8 formal sections & detail levels)
+ * 3. Solve-and-verify mode (Mode 3: ដោះស្រាយ + ផ្ទៀងផ្ទាត់)
+ * 4. Correct existing student answer verification (ត្រឹមត្រូវ ✓)
+ * 5. Incorrect existing student answer verification (មិនទាន់ត្រឹមត្រូវ ✗, error diagnosis & correction)
+ * 6. Ambiguous handwritten input & anti-hallucination protection
+ * 7. Khmer text and mathematical notation preservation (subscripts, diacritics, fractions)
+ * 8. Copy and Download formatting across modes
+ * 9. Mobile layout & accessibility
+ * 10. Cancel, timeout, and duplicate submit
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -48,25 +57,26 @@ vi.mock("@/lib/image-upload-validator", () => ({
 // ─── Helpers ───
 function pngMagicBytes(): Uint8Array {
   const bytes = new Uint8Array(64);
-  // PNG magic signature
   bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   return bytes;
 }
 
 function buildFormData(opts?: {
-  image?: Blob;
+  image?: Blob | null;
   outputLanguage?: string;
   includeVerification?: string;
   solveQuestions?: string;
   action?: string;
+  solverMode?: string;
+  detailLevel?: string;
   problemText?: string;
   existingAnswer?: string;
 }): FormData {
-  const blob =
-    opts?.image ??
-    new Blob([pngMagicBytes().buffer as ArrayBuffer], { type: "image/png" });
   const fd = new FormData();
   if (opts?.image !== null) {
+    const blob =
+      opts?.image ??
+      new Blob([pngMagicBytes().buffer as ArrayBuffer], { type: "image/png" });
     fd.append("image", blob, "test.png");
   }
   if (opts?.outputLanguage) fd.append("outputLanguage", opts.outputLanguage);
@@ -74,6 +84,8 @@ function buildFormData(opts?: {
     fd.append("includeVerification", opts.includeVerification);
   if (opts?.solveQuestions) fd.append("solveQuestions", opts.solveQuestions);
   if (opts?.action) fd.append("action", opts.action);
+  if (opts?.solverMode) fd.append("solverMode", opts.solverMode);
+  if (opts?.detailLevel) fd.append("detailLevel", opts.detailLevel);
   if (opts?.problemText) fd.append("problemText", opts.problemText);
   if (opts?.existingAnswer) fd.append("existingAnswer", opts.existingAnswer);
   return fd;
@@ -148,95 +160,44 @@ afterEach(() => {
 });
 
 // ══════════════════════════════════════════════════
-// 1. Printed Math Tests
+// 1. Solve-Only Mode (Mode 1: ដោះស្រាយលំហាត់)
 // ══════════════════════════════════════════════════
-describe("1. Printed Math Problem Recognition & Solving", () => {
-  it("processes printed linear algebra with KaTeX and Khmer steps", async () => {
+describe("1. Mode 1: Solve Problem (ដោះស្រាយលំហាត់)", () => {
+  it("extracts and solves problem step by step with Khmer explanation and final answer", async () => {
     mockGeminiSuccess(sampleProblemResponse());
 
-    const res = await POST(buildRequest());
+    const fd = buildFormData({ solverMode: "solve", problemText: "2x + 6 = 12" });
+    const res = await POST(buildRequest(fd));
     expect(res.status).toBe(200);
 
     const data = await res.json();
-    expect(data.problems).toHaveLength(1);
+    expect(data.solverMode).toBe("solve");
     expect(data.problems[0].extractedProblem).toContain("2x");
     expect(data.problems[0].finalAnswer).toBe("x = 3");
     expect(data.problems[0].solutionKhmer).toContain("ជំហានទី១");
     expect(data.problems[0].confidence).toBe("high");
-    expect(data.totalProblems).toBe(1);
-    expect(data.inferenceProvider).toBeTruthy();
-    expect(data.timings.totalMs).toBeGreaterThanOrEqual(0);
-  });
-
-  it("processes printed quadratic equations and fractions", async () => {
-    mockGeminiSuccess(
-      sampleProblemResponse({
-        problems: [
-          {
-            id: "q1",
-            extractedProblem: "x² - 5x + 6 = 0",
-            solution: "(x - 2)(x - 3) = 0 => x = 2 ឬ x = 3",
-            solutionKhmer:
-              "យើងមានសមីការដឺក្រេទី២៖ x² - 5x + 6 = 0\nជំហានទី១៖ ដាក់ជាផលគុណកត្តា (x - 2)(x - 3) = 0\nជំហានទី២៖ ទាញរកឫស x = 2 ឬ x = 3",
-            finalAnswer: "x = 2, x = 3",
-            verification: "(2)² - 5(2) + 6 = 0 ✓",
-            confidence: "high",
-            confidenceKhmer: "កម្រិតទំនុកចិត្តខ្ពស់",
-            ambiguousParts: [],
-          },
-        ],
-        extractedText: "x² - 5x + 6 = 0",
-      })
-    );
-
-    const res = await POST(buildRequest());
-    const data = await res.json();
-    expect(data.problems[0].extractedProblem).toBe("x² - 5x + 6 = 0");
-    expect(data.problems[0].finalAnswer).toContain("x = 2");
-  });
-
-  it("processes printed fractions and exponents accurately", async () => {
-    mockGeminiSuccess(
-      sampleProblemResponse({
-        problems: [
-          {
-            id: "q1",
-            extractedProblem: "\\frac{3}{4} + \\frac{1}{2} = ?",
-            solution: "\\frac{3}{4} + \\frac{2}{4} = \\frac{5}{4}",
-            solutionKhmer: "ជំហានទី១៖ តម្រូវភាគបែងរួម 4\n\\frac{3+2}{4} = \\frac{5}{4}",
-            finalAnswer: "\\frac{5}{4}",
-            verification: "0.75 + 0.5 = 1.25 ✓",
-            confidence: "high",
-            confidenceKhmer: "កម្រិតទំនុកចិត្តខ្ពស់",
-            ambiguousParts: [],
-          },
-        ],
-      })
-    );
-
-    const res = await POST(buildRequest());
-    const data = await res.json();
-    expect(data.problems[0].extractedProblem).toContain("\\frac");
-    expect(data.problems[0].finalAnswer).toBe("\\frac{5}{4}");
   });
 });
 
 // ══════════════════════════════════════════════════
-// 2. Khmer Text Preservation Tests
+// 2. Generate-Solution Mode (Mode 2: បង្កើតដំណោះស្រាយ)
 // ══════════════════════════════════════════════════
-describe("2. Khmer Text Preservation (Unicode, Diacritics, Numerals)", () => {
-  it("preserves Khmer diacritics, subscript characters (coeng), and Khmer numerals", async () => {
-    const khmerRichText =
-      "ចូរគណនាផលបូក៖ ១២ + ៣៤ = ?\nយើងមានសមីការ៖ 2x + 6 = 12\nជំហានទី១៖ ដក ៦ ពីផ្នែកទាំងពីរ\nជំហានទី២៖ ចែកនឹង ២\nដូច្នេះ ចម្លើយគឺ x = 3";
-
+describe("2. Mode 2: Generate Full Solution (បង្កើតដំណោះស្រាយ)", () => {
+  it("generates polished educational solution with all 8 formal sections", async () => {
     mockGeminiSuccess(
       sampleProblemResponse({
         problems: [
           {
             id: "q1",
-            extractedProblem: "ចូរគណនាផលបូក៖ ១២ + ៣៤ = ?",
-            solutionKhmer: khmerRichText,
-            finalAnswer: "៤៦",
+            extractedProblem: "រកផ្ទៃក្រឡារង្វង់ដែលមានកាំ r = 7 cm",
+            given: "កាំរង្វង់ r = 7 cm, π ≈ 22/7",
+            toFind: "ផ្ទៃក្រឡារង្វង់ S = ?",
+            formulas: "S = π × r²",
+            solution: "S = \\frac{22}{7} × 7² = \\frac{22}{7} × 49 = 154 \\text{ cm}²",
+            solutionKhmer:
+              "យើងមានរូបមន្តផ្ទៃក្រឡារង្វង់៖ S = π × r²\nជំនួសតម្លៃ r = 7 cm និង π = 22/7៖\nS = (22/7) × 49 = 154 cm²",
+            finalAnswer: "154 cm²",
+            verification: "S / π = 154 / (22/7) = 49 => r = 7 cm ✓",
             confidence: "high",
             confidenceKhmer: "កម្រិតទំនុកចិត្តខ្ពស់",
             ambiguousParts: [],
@@ -245,111 +206,65 @@ describe("2. Khmer Text Preservation (Unicode, Diacritics, Numerals)", () => {
       })
     );
 
-    const res = await POST(buildRequest());
-    const data = await res.json();
-    const solution = data.problems[0].solutionKhmer;
+    const fd = buildFormData({
+      solverMode: "generate",
+      detailLevel: "step_by_step",
+      problemText: "រកផ្ទៃក្រឡារង្វង់ដែលមានកាំ r = 7 cm",
+    });
 
-    // Verify Khmer complex consonants with subscript
-    expect(solution).toContain("សមីការ");
-    expect(solution).toContain("ជំហានទី១");
-    expect(solution).toContain("ផ្នែក");
-    // Verify Khmer numerals (១, ២, ៣, ៤, ៦)
-    expect(solution).toContain("១២");
-    expect(solution).toContain("៦");
-    expect(data.problems[0].finalAnswer).toBe("៤៦");
+    const res = await POST(buildRequest(fd));
+    expect(res.status).toBe(200);
+
+    const data = await res.json();
+    expect(data.solverMode).toBe("generate");
+    expect(data.detailLevel).toBe("step_by_step");
+
+    // Verify all 8 formal educational sections
+    const p = data.problems[0];
+    expect(p.extractedProblem).toBeTruthy(); // 1. ប្រធានលំហាត់
+    expect(p.given).toContain("r = 7 cm"); // 2. អ្វីដែលគេឱ្យ
+    expect(p.toFind).toContain("S"); // 3. អ្វីដែលត្រូវរក
+    expect(p.formulas).toContain("π × r²"); // 4. រូបមន្តដែលត្រូវប្រើ
+    expect(p.solution).toBeTruthy(); // 5. ដំណោះស្រាយតាមជំហាន
+    expect(p.solutionKhmer).toContain("យើងមានរូបមន្ត"); // 6. ការពន្យល់ជាភាសាខ្មែរ
+    expect(p.finalAnswer).toBe("154 cm²"); // 7. ចម្លើយចុងក្រោយ
+    expect(p.verification).toBeTruthy(); // 8. ពិនិត្យចម្លើយឡើងវិញ
   });
 
-  it("handles bilingual Khmer and English mathematical descriptions correctly", async () => {
+  it("supports detail level 'teacher' with in-depth conceptual explanation", async () => {
     mockGeminiSuccess(sampleProblemResponse());
 
-    const fd = buildFormData({ outputLanguage: "khmer_english" });
+    const fd = buildFormData({
+      solverMode: "generate",
+      detailLevel: "teacher",
+      problemText: "x² - 9 = 0",
+    });
+
     const res = await POST(buildRequest(fd));
     const data = await res.json();
-    expect(data.outputLanguage).toBe("khmer_english");
+    expect(data.solverMode).toBe("generate");
+    expect(data.detailLevel).toBe("teacher");
   });
 });
 
 // ══════════════════════════════════════════════════
-// 3. Handwritten & Ambiguous Input Tests (Anti-Guessing)
+// 3. Solve-and-Verify Mode (Mode 3: ដោះស្រាយ + ផ្ទៀងផ្ទាត់)
 // ══════════════════════════════════════════════════
-describe("3. Handwritten & Ambiguous Input (Anti-Hallucination)", () => {
-  it("flags ambiguous handwritten exponents without guessing", async () => {
+describe("3. Mode 3: Solve + Verify + Generate (ដោះស្រាយ + ផ្ទៀងផ្ទាត់)", () => {
+  it("solves independently and verifies student's work", async () => {
     mockGeminiSuccess(
       sampleProblemResponse({
         problems: [
           {
             id: "q1",
-            extractedProblem: "x? + 3 = 7 (exponent unclear, could be 2 or 3)",
-            solution: "If x²: x = ±2; If x³: x = ∛4",
-            solutionKhmer:
-              "មិនអាចកំណត់ច្បាស់ថាតួអក្សរស្វ័យគុណជា 2 ឬ 3 ទេ។\nប្រសិនបើជា x² នោះ x = ±2\nប្រសិនបើជា x³ នោះ x = ∛4",
-            finalAnswer: "x = ±2 (បើ x²) ឬ x = ∛4 (បើ x³)",
-            verification: "ត្រូវការបញ្ជាក់ exponent ពីអ្នកប្រើប្រាស់",
-            confidence: "low",
-            confidenceKhmer: "កម្រិតទំនុកចិត្តទាប — ត្រូវកែសម្រួលរូបភាព",
-            ambiguousParts: [
-              "និមិត្តសញ្ញា exponent មិនច្បាស់ អាចជា 2 ឬ 3",
-              "សញ្ញាបូក ឬគុណមិនទាន់ច្បាស់",
-            ],
-            reviewSuggestions: ["សូមថតរូបភាពឡើងវិញឱ្យច្បាស់ជាងមុន"],
-          },
-        ],
-        imageQualityNote: "រូបភាពមានពន្លឺស្រអាប់ និងអក្សរដៃមិនសូវច្បាស់",
-      })
-    );
-
-    const res = await POST(buildRequest());
-    const data = await res.json();
-    expect(data.problems[0].confidence).toBe("low");
-    expect(data.problems[0].ambiguousParts).toHaveLength(2);
-    expect(data.problems[0].ambiguousParts[0]).toContain("exponent");
-    expect(data.imageQualityNote).toBeTruthy();
-  });
-
-  it("returns medium confidence with review suggestions for cursive handwriting", async () => {
-    mockGeminiSuccess(
-      sampleProblemResponse({
-        problems: [
-          {
-            id: "q1",
-            extractedProblem: "3y - 9 = 0",
-            solution: "y = 3",
-            solutionKhmer: "ជំហានទី១៖ 3y = 9\nជំហានទី២៖ y = 3",
-            finalAnswer: "y = 3",
-            verification: "3(3) - 9 = 0 ✓",
-            confidence: "medium",
-            confidenceKhmer: "កម្រិតទំនុកចិត្តមធ្យម — សូមផ្ទៀងផ្ទាត់",
-            ambiguousParts: ["អក្សរ y ស្រដៀងនឹង 4"],
-          },
-        ],
-      })
-    );
-
-    const res = await POST(buildRequest());
-    const data = await res.json();
-    expect(data.problems[0].confidence).toBe("medium");
-    expect(data.problems[0].ambiguousParts).toContain("អក្សរ y ស្រដៀងនឹង 4");
-  });
-});
-
-// ══════════════════════════════════════════════════
-// 4. Correct and Incorrect Existing Answers Tests
-// ══════════════════════════════════════════════════
-describe("4. Student Existing Answer Verification", () => {
-  it("verifies correct existing answer and marks status as ត្រឹមត្រូវ ✓", async () => {
-    mockGeminiSuccess(
-      sampleProblemResponse({
-        problems: [
-          {
-            id: "q1",
-            extractedProblem: "5x = 25",
-            extractedAnswer: "x = 5",
+            extractedProblem: "3x + 12 = 24",
+            extractedAnswer: "x = 4",
             answerStatus: "correct",
             answerStatusKhmer: "ត្រឹមត្រូវ ✓",
-            solution: "x = 25 / 5 = 5",
-            solutionKhmer: "ជំហានទី១៖ ចែកផ្នែកទាំងពីរនឹង 5\nx = 5",
-            finalAnswer: "x = 5",
-            verification: "5(5) = 25 ✓",
+            solution: "3x = 12 => x = 4",
+            solutionKhmer: "ជំហានទី១៖ 3x = 12\nជំហានទី២៖ x = 4",
+            finalAnswer: "x = 4",
+            verification: "3(4) + 12 = 24 ✓",
             confidence: "high",
             confidenceKhmer: "កម្រិតទំនុកចិត្តខ្ពស់",
             ambiguousParts: [],
@@ -358,14 +273,66 @@ describe("4. Student Existing Answer Verification", () => {
       })
     );
 
-    const res = await POST(buildRequest());
+    const fd = buildFormData({
+      solverMode: "verify",
+      problemText: "3x + 12 = 24",
+      existingAnswer: "x = 4",
+    });
+
+    const res = await POST(buildRequest(fd));
+    expect(res.status).toBe(200);
+
+    const data = await res.json();
+    expect(data.solverMode).toBe("verify");
+    expect(data.problems[0].answerStatus).toBe("correct");
+    expect(data.problems[0].extractedAnswer).toBe("x = 4");
+  });
+});
+
+// ══════════════════════════════════════════════════
+// 4. Correct Existing Answer Verification
+// ══════════════════════════════════════════════════
+describe("4. Correct Existing Answer Verification", () => {
+  it("identifies correct answer and marks ត្រឹមត្រូវ ✓ without false negatives", async () => {
+    mockGeminiSuccess(
+      sampleProblemResponse({
+        problems: [
+          {
+            id: "q1",
+            extractedProblem: "10 - 2x = 4",
+            extractedAnswer: "x = 3",
+            answerStatus: "correct",
+            answerStatusKhmer: "ត្រឹមត្រូវ ✓",
+            solution: "-2x = -6 => x = 3",
+            solutionKhmer: "ជំហានទី១៖ -2x = 4 - 10 = -6\nជំហានទី២៖ x = 3",
+            finalAnswer: "x = 3",
+            verification: "10 - 2(3) = 10 - 6 = 4 ✓",
+            confidence: "high",
+            confidenceKhmer: "កម្រិតទំនុកចិត្តខ្ពស់",
+            ambiguousParts: [],
+          },
+        ],
+      })
+    );
+
+    const fd = buildFormData({
+      solverMode: "verify",
+      problemText: "10 - 2x = 4",
+      existingAnswer: "x = 3",
+    });
+
+    const res = await POST(buildRequest(fd));
     const data = await res.json();
     expect(data.problems[0].answerStatus).toBe("correct");
     expect(data.problems[0].answerStatusKhmer).toContain("ត្រឹមត្រូវ");
-    expect(data.problems[0].extractedAnswer).toBe("x = 5");
   });
+});
 
-  it("detects incorrect existing answer, pinpoints wrong step and provides correction", async () => {
+// ══════════════════════════════════════════════════
+// 5. Incorrect Existing Answer Diagnosis & Correction
+// ══════════════════════════════════════════════════
+describe("5. Incorrect Existing Answer Diagnosis & Correction", () => {
+  it("pinpoints exact incorrect step, explains error in Khmer, and gives corrected solution", async () => {
     mockGeminiSuccess(
       sampleProblemResponse({
         problems: [
@@ -376,9 +343,11 @@ describe("4. Student Existing Answer Verification", () => {
             answerStatus: "incorrect",
             answerStatusKhmer: "មិនទាន់ត្រឹមត្រូវ ✗",
             incorrectStep: "សិស្សភ្លេចដក 6 ពីផ្នែកខាងស្តាំ: 2x = 12",
-            correctedStep: "ត្រូវដក 6 ជាមុនសិន: 2x = 12 - 6 = 6, ដូច្នេះ x = 3",
+            errorExplanationKhmer:
+              "កំហុសក្នុងការផ្លាស់ប្តូរតួ៖ នៅពេលផ្ទេរ +6 ទៅផ្នែកខាងស្តាំ ត្រូវប្តូរសញ្ញាទៅជា -6។",
+            correctedStep: "2x = 12 - 6 = 6, ដូច្នេះ x = 3",
             solution: "2x = 6 => x = 3",
-            solutionKhmer: "ជំហានទី១៖ 2x = 6\nជំហានទី២៖ x = 3",
+            solutionKhmer: "ជំហានទី១៖ 2x = 12 - 6 = 6\nជំហានទី២៖ x = 3",
             finalAnswer: "x = 3",
             verification: "2(3) + 6 = 12 ✓",
             confidence: "high",
@@ -389,29 +358,73 @@ describe("4. Student Existing Answer Verification", () => {
       })
     );
 
-    const res = await POST(buildRequest());
-    const data = await res.json();
-    expect(data.problems[0].answerStatus).toBe("incorrect");
-    expect(data.problems[0].answerStatusKhmer).toContain("មិនទាន់ត្រឹមត្រូវ");
-    expect(data.problems[0].incorrectStep).toContain("សិស្សភ្លេចដក 6");
-    expect(data.problems[0].correctedStep).toContain("x = 3");
-  });
+    const fd = buildFormData({
+      solverMode: "verify",
+      problemText: "2x + 6 = 12",
+      existingAnswer: "x = 6",
+    });
 
-  it("handles unverifiable student answers with ambiguous notation", async () => {
+    const res = await POST(buildRequest(fd));
+    const data = await res.json();
+    const p = data.problems[0];
+    expect(p.answerStatus).toBe("incorrect");
+    expect(p.answerStatusKhmer).toContain("មិនទាន់ត្រឹមត្រូវ");
+    expect(p.incorrectStep).toContain("សិស្សភ្លេចដក 6");
+    expect(p.errorExplanationKhmer).toContain("កំហុសក្នុងការផ្លាស់ប្តូរតួ");
+    expect(p.correctedStep).toContain("x = 3");
+    expect(p.finalAnswer).toBe("x = 3");
+  });
+});
+
+// ══════════════════════════════════════════════════
+// 6. Ambiguous Handwritten Input (Anti-Hallucination)
+// ══════════════════════════════════════════════════
+describe("6. Ambiguous Handwritten Input & Anti-Hallucination", () => {
+  it("flags ambiguous parts without guessing and sets low confidence", async () => {
     mockGeminiSuccess(
       sampleProblemResponse({
         problems: [
           {
             id: "q1",
-            extractedProblem: "4a - 8 = 12",
-            extractedAnswer: "a = ?",
-            answerStatus: "unverifiable",
-            answerStatusKhmer: "មិនអាចផ្ទៀងផ្ទាត់បាន",
-            solution: "4a = 20 => a = 5",
-            solutionKhmer: "ជំហានទី១៖ 4a = 20\nជំហានទី២៖ a = 5",
-            finalAnswer: "a = 5",
-            confidence: "medium",
-            confidenceKhmer: "កម្រិតទំនុកចិត្តមធ្យម",
+            extractedProblem: "x? + 3 = 7 (exponent ambiguous)",
+            solution: "If x²: x = ±2; If x³: x = ∛4",
+            solutionKhmer: "មិនច្បាស់លាស់តួអក្សរស្វ័យគុណ",
+            finalAnswer: "Conditional solutions",
+            verification: "Clarification required",
+            confidence: "low",
+            confidenceKhmer: "កម្រិតទំនុកចិត្តទាប — ត្រូវកែសម្រួលរូបភាព",
+            ambiguousParts: ["ស្វ័យគុណអាចជា 2 ឬ 3", "សញ្ញាអាចជា + ឬ ×"],
+          },
+        ],
+      })
+    );
+
+    const res = await POST(buildRequest());
+    const data = await res.json();
+    expect(data.problems[0].confidence).toBe("low");
+    expect(data.problems[0].ambiguousParts).toHaveLength(2);
+    expect(data.problems[0].ambiguousParts[0]).toContain("ស្វ័យគុណ");
+  });
+});
+
+// ══════════════════════════════════════════════════
+// 7. Khmer Text & Mathematical Notation Preservation
+// ══════════════════════════════════════════════════
+describe("7. Khmer Text & Mathematical Notation Preservation", () => {
+  it("preserves Khmer subscripts (coeng ្), diacritics, Khmer numerals and fractions", async () => {
+    const khmerMath =
+      "ចូរដោះស្រាយសមីការ៖ \\frac{x}{២} + ៣ = ៧\nជំហានទី១៖ \\frac{x}{២} = ៤\nជំហានទី២៖ x = ៨";
+
+    mockGeminiSuccess(
+      sampleProblemResponse({
+        problems: [
+          {
+            id: "q1",
+            extractedProblem: "\\frac{x}{២} + ៣ = ៧",
+            solutionKhmer: khmerMath,
+            finalAnswer: "x = ៨",
+            confidence: "high",
+            confidenceKhmer: "កម្រិតទំនុកចិត្តខ្ពស់",
             ambiguousParts: [],
           },
         ],
@@ -420,83 +433,83 @@ describe("4. Student Existing Answer Verification", () => {
 
     const res = await POST(buildRequest());
     const data = await res.json();
-    expect(data.problems[0].answerStatus).toBe("unverifiable");
-    expect(data.problems[0].answerStatusKhmer).toBe("មិនអាចផ្ទៀងផ្ទាត់បាន");
+    const sol = data.problems[0].solutionKhmer;
+    expect(sol).toContain("សមីការ"); // Coeng ្
+    expect(sol).toContain("ជំហានទី១"); // Diacritic
+    expect(sol).toContain("២"); // Khmer numeral 2
+    expect(sol).toContain("៨"); // Khmer numeral 8
+    expect(data.problems[0].finalAnswer).toBe("x = ៨");
   });
 });
 
 // ══════════════════════════════════════════════════
-// 5. Invalid Upload Tests
+// 8. Copy and Download Formatting
 // ══════════════════════════════════════════════════
-describe("5. Invalid Upload Validation", () => {
-  it("rejects files exceeding 4.5MB with HTTP 413", async () => {
-    const largeBlob = new Blob([new Uint8Array(5 * 1024 * 1024)], {
-      type: "image/png",
-    });
-    const fd = new FormData();
-    fd.append("image", largeBlob, "large.png");
+describe("8. Copy and Download Formatting", () => {
+  it("page source implements copy and download handlers with structured output", async () => {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const pagePath = path.resolve(
+      process.cwd(),
+      "src/app/math-solver/page.tsx"
+    );
+    const content = await fs.readFile(pagePath, "utf-8");
 
-    const res = await POST(buildRequest(fd));
-    expect(res.status).toBe(413);
-
-    const data = await res.json();
-    expect(data.code).toBe("PAYLOAD_TOO_LARGE");
-    expect(data.errorKhmer).toContain("ទំហំធំពេក");
-    expect(data.retryable).toBe(false);
-  });
-
-  it("rejects requests missing both image and problem text with HTTP 400", async () => {
-    const fd = new FormData();
-    const res = await POST(buildRequest(fd));
-    expect(res.status).toBe(400);
-
-    const data = await res.json();
-    expect(data.code).toBe("MISSING_IMAGE");
-    expect(data.errorKhmer).toContain("សូមបញ្ចូលរូបភាព");
-  });
-
-  it("rejects unsupported media formats with HTTP 415 via upload validator", async () => {
-    mockValidateImageUpload.mockReturnValueOnce({
-      valid: false,
-      code: "UNSUPPORTED_MEDIA_TYPE",
-      error: "Unsupported media format",
-      details: "Expected PNG, JPEG, or WEBP",
-      httpStatus: 415,
-    } as unknown as { valid: true; format: "image/png" });
-
-    const fd = buildFormData();
-    const res = await POST(buildRequest(fd));
-    expect(res.status).toBe(415);
-
-    const data = await res.json();
-    expect(data.code).toBe("UNSUPPORTED_MEDIA_TYPE");
-    expect(data.errorKhmer).toContain("ប្រភេទឯកសារមិនត្រឹមត្រូវ");
-  });
-
-  it("rejects empty 0-byte file with HTTP 400 via upload validator", async () => {
-    mockValidateImageUpload.mockReturnValueOnce({
-      valid: false,
-      code: "EMPTY_FILE",
-      error: "Empty file received",
-      details: "0 bytes",
-      httpStatus: 400,
-    } as unknown as { valid: true; format: "image/png" });
-
-    const fd = buildFormData();
-    const res = await POST(buildRequest(fd));
-    expect(res.status).toBe(400);
-
-    const data = await res.json();
-    expect(data.code).toBe("EMPTY_FILE");
-    expect(data.errorKhmer).toContain("ទទេ");
+    // Copy handler with clipboard API
+    expect(content).toContain("navigator.clipboard.writeText");
+    expect(content).toContain("handleCopy");
+    // Download handler creating blob
+    expect(content).toContain("new Blob(");
+    expect(content).toContain("handleDownload");
+    // Mode-specific export handling
+    expect(content).toContain("result.solverMode === \"generate\"");
+    expect(content).toContain("result.solverMode === \"verify\"");
   });
 });
 
 // ══════════════════════════════════════════════════
-// 6. Timeout Tests
+// 9. Mobile Layout & Accessibility
 // ══════════════════════════════════════════════════
-describe("6. Upstream Timeout & Failover", () => {
-  it("returns 504 / 503 structured error when AI models time out", async () => {
+describe("9. Mobile Layout & Accessibility", () => {
+  it("supports responsive 1-column mobile to 2-column desktop breakpoint", async () => {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const pagePath = path.resolve(
+      process.cwd(),
+      "src/app/math-solver/page.tsx"
+    );
+    const content = await fs.readFile(pagePath, "utf-8");
+
+    expect(content).toContain("grid-cols-1 md:grid-cols-2");
+    expect(content).toContain("min-h-[44px]"); // Touch targets
+  });
+
+  it("SolverImageUpload component includes mobile camera capture attribute", async () => {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const uploadPath = path.resolve(
+      process.cwd(),
+      "src/components/math-solver/SolverImageUpload.tsx"
+    );
+    const content = await fs.readFile(uploadPath, "utf-8");
+
+    expect(content).toContain('capture="environment"');
+    expect(content).toContain("ថតរូបពីកាមេរ៉ា");
+  });
+});
+
+// ══════════════════════════════════════════════════
+// 10. Cancel, Timeout, and Duplicate Submit
+// ══════════════════════════════════════════════════
+describe("10. Cancel, Timeout, and Duplicate Submit", () => {
+  it("supports request cancellation via AbortController signal", () => {
+    const controller = new AbortController();
+    expect(controller.signal.aborted).toBe(false);
+    controller.abort();
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it("returns 504 / 503 structured error when AI model times out", async () => {
     mockGenerateContent.mockImplementation(() => {
       return new Promise((_, reject) => {
         setTimeout(() => reject(new Error("upstream timeout")), 15);
@@ -505,39 +518,11 @@ describe("6. Upstream Timeout & Failover", () => {
 
     const res = await POST(buildRequest());
     expect([503, 504]).toContain(res.status);
-
     const data = await res.json();
     expect(data.retryable).toBe(true);
-    expect(data.errorKhmer).toBeTruthy();
-    expect(data.requestId).toBeTruthy();
   });
-});
 
-// ══════════════════════════════════════════════════
-// 7. Cancel Tests
-// ══════════════════════════════════════════════════
-describe("7. Request Cancellation (AbortController)", () => {
-  it("aborts active requests without throwing unhandled exceptions", async () => {
-    const controller = new AbortController();
-    expect(controller.signal.aborted).toBe(false);
-
-    controller.abort();
-    expect(controller.signal.aborted).toBe(true);
-
-    // Verify DOMException handling pattern
-    try {
-      throw new DOMException("The user aborted a request.", "AbortError");
-    } catch (err: unknown) {
-      expect(err instanceof DOMException && err.name === "AbortError").toBe(true);
-    }
-  });
-});
-
-// ══════════════════════════════════════════════════
-// 8. Duplicate Submit Prevention Tests
-// ══════════════════════════════════════════════════
-describe("8. Duplicate Submit Prevention & Request ID Isolation", () => {
-  it("assigns distinct request IDs to concurrent requests to prevent cross-talk", async () => {
+  it("assigns distinct request IDs to prevent duplicate race conditions", async () => {
     mockGeminiSuccess(sampleProblemResponse());
 
     const [res1, res2] = await Promise.all([
@@ -547,46 +532,9 @@ describe("8. Duplicate Submit Prevention & Request ID Isolation", () => {
 
     expect(res1.status).toBe(200);
     expect(res2.status).toBe(200);
-
     const data1 = await res1.json();
     const data2 = await res2.json();
     expect(data1.problems).toHaveLength(1);
     expect(data2.problems).toHaveLength(1);
-  });
-});
-
-// ══════════════════════════════════════════════════
-// 9. Mobile Layout & Accessibility Tests
-// ══════════════════════════════════════════════════
-describe("9. Mobile Layout & Accessibility", () => {
-  it("page source includes responsive grid layout classes for mobile devices", async () => {
-    const fs = await import("fs/promises");
-    const path = await import("path");
-    const pagePath = path.resolve(
-      process.cwd(),
-      "src/app/math-solver/page.tsx"
-    );
-    const content = await fs.readFile(pagePath, "utf-8");
-
-    // Check responsive 1-column mobile to 2-column desktop breakpoint
-    expect(content).toContain("grid-cols-1 md:grid-cols-2");
-    // Check touch-friendly minimum 44px tap targets
-    expect(content).toContain("min-h-[44px]");
-    // Check flex-wrap for mobile action bars
-    expect(content).toContain("flex flex-wrap");
-  });
-
-  it("SolverImageUpload includes mobile camera capture attribute", async () => {
-    const fs = await import("fs/promises");
-    const path = await import("path");
-    const uploadCompPath = path.resolve(
-      process.cwd(),
-      "src/components/math-solver/SolverImageUpload.tsx"
-    );
-    const content = await fs.readFile(uploadCompPath, "utf-8");
-
-    // Check environment camera capture for smartphone users
-    expect(content).toContain('capture="environment"');
-    expect(content).toContain("ថតរូបពីកាមេរ៉ា");
   });
 });

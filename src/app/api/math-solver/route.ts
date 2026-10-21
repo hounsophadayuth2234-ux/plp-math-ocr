@@ -9,14 +9,24 @@ export const maxDuration = 60;
 // -----------------------------------------------------------
 // Response and Error Interfaces
 // -----------------------------------------------------------
+export type SolverMode = "solve" | "generate" | "verify";
+export type DetailLevel = "short" | "step_by_step" | "teacher";
+
 export interface MathSolverProblem {
   id: string;
   extractedProblem: string;
+  // Mode 2: Generate Full Solution fields
+  given?: string; // អ្វីដែលគេឱ្យ
+  toFind?: string; // អ្វីដែលត្រូវរក
+  formulas?: string; // រូបមន្តដែលត្រូវប្រើ
+  // Mode 3: Verification fields
   extractedAnswer?: string;
   answerStatus?: "correct" | "incorrect" | "unverifiable";
   answerStatusKhmer?: string;
   incorrectStep?: string;
+  errorExplanationKhmer?: string;
   correctedStep?: string;
+  // Core solving & explanation
   solution: string;
   solutionKhmer: string;
   finalAnswer: string;
@@ -31,6 +41,8 @@ export interface MathSolverResponse {
   problems: MathSolverProblem[];
   totalProblems: number;
   outputLanguage: "khmer" | "khmer_english" | "english";
+  solverMode: SolverMode;
+  detailLevel?: DetailLevel;
   extractedText: string;
   imageQualityNote?: string;
   inferenceProvider: string;
@@ -56,77 +68,11 @@ export interface MathSolverError {
 // -----------------------------------------------------------
 // Gemini Vision Prompts
 // -----------------------------------------------------------
-const FULL_SOLVER_PROMPT = `You are an expert Khmer mathematics tutor and problem solver with deep expertise in both Khmer-language education and mathematical reasoning.
-
-Your task is to:
-1. Extract all mathematical problems from the uploaded image
-2. Solve each problem step by step
-3. If an existing answer is visible, verify whether it is correct or incorrect
-4. Provide clear Khmer explanations suitable for students
-
-CRITICAL RULES:
-
-EXTRACTION:
-- Extract all visible mathematical content faithfully
-- Handle printed Khmer, printed English, handwritten text, Arabic numerals, Khmer numerals
-- Detect fractions, decimals, percentages, negative numbers, algebra, equations, inequalities, exponents, radicals, functions, sequences, calculus, geometry, trigonometry, word problems, tables, matrices
-- If a diagram is present, describe its relevant information
-- If multiple problems exist, number and separate them
-
-ANTI-HALLUCINATION:
-- If any symbol, number, exponent, fraction, sign, or character is ambiguous or unreadable, DO NOT GUESS
-- Mark ambiguous parts in "ambiguousParts" array
-- Provide possible interpretations and ask user to confirm
-- Set confidence appropriately: "high" (>90% sure), "medium" (70-90%), "low" (<70%)
-- Never invent missing numbers, invisible signs, unknown exponents, unreadable denominators, or diagram measurements
-
-ANSWER VERIFICATION:
-- If the image contains an existing written answer:
-  1. Identify the original problem
-  2. Identify the student's answer
-  3. Solve independently
-  4. Compare answers
-  5. If incorrect: identify the exact wrong step, explain why it's wrong, provide correction
-- Never mark an answer correct just because it visually looks plausible
-
-KHMER EXPLANATION:
-- Use natural educational Khmer, not machine translation
-- Preserve Khmer diacritics and subscript characters
-- Use clear numbered steps
-- Use Khmer for explanation, standard mathematical notation for equations
-- Style: "យើងមានសមីការ៖", "ជំហានទី១៖", "ដូច្នេះ ចម្លើយគឺ៖", "ពិនិត្យឡើងវិញ៖"
-
-Return a valid JSON object with this structure:
-{
-  "problems": [
-    {
-      "id": "q1",
-      "extractedProblem": "the exact problem extracted",
-      "extractedAnswer": "student's existing answer if visible, or null",
-      "answerStatus": "correct" | "incorrect" | "unverifiable" | null,
-      "answerStatusKhmer": "ត្រឹមត្រូវ" | "មិនទាន់ត្រឹមត្រូវ" | "មិនអាចផ្ទៀងផ្ទាត់បាន" | null,
-      "incorrectStep": "description of wrong step if answer is incorrect, or null",
-      "correctedStep": "correct version of the wrong step, or null",
-      "solution": "step-by-step solution in mathematical notation",
-      "solutionKhmer": "step-by-step solution explained in Khmer",
-      "finalAnswer": "the final numerical or algebraic answer",
-      "verification": "verification/check work",
-      "confidence": "high" | "medium" | "low",
-      "confidenceKhmer": "កម្រិតទំនុកចិត្តខ្ពស់" | "កម្រិតទំនុកចិត្តមធ្យម" | "កម្រិតទំនុកចិត្តទាប",
-      "ambiguousParts": [],
-      "reviewSuggestions": []
-    }
-  ],
-  "totalProblems": 1,
-  "extractedText": "full raw extracted text from image",
-  "imageQualityNote": "note about image quality if relevant"
-}`;
-
 const EXTRACTION_ONLY_PROMPT = `You are a mathematical document OCR engine specializing in Khmer and mathematical notation.
 
 Your task is to:
 1. Accurately transcribe all mathematical problems from the image verbatim into "extractedProblem".
-2. If an existing student answer is visible (handwritten or typed), extract it into "extractedAnswer".
+2. If an existing student answer or handwritten work is visible, extract it into "extractedAnswer".
 3. ANTI-HALLUCINATION: If any symbol, exponent, sign, fraction, or character is ambiguous or unreadable, DO NOT GUESS. List them in "ambiguousParts".
 4. Set confidence: "high" (>90% sure), "medium" (70-90%), "low" (<70%).
 5. Leave "solution", "solutionKhmer", "finalAnswer", and "verification" as empty strings.
@@ -141,6 +87,7 @@ Return a valid JSON object:
       "answerStatus": null,
       "answerStatusKhmer": null,
       "incorrectStep": null,
+      "errorExplanationKhmer": null,
       "correctedStep": null,
       "solution": "",
       "solutionKhmer": "",
@@ -156,6 +103,22 @@ Return a valid JSON object:
   "extractedText": "full raw extracted text from image",
   "imageQualityNote": null
 }`;
+
+const FULL_SOLVER_PROMPT = `You are an expert Khmer mathematics tutor and problem solver with deep expertise in both Khmer-language education and mathematical reasoning.
+
+Your task is to:
+1. Extract all mathematical problems from the uploaded image
+2. Solve each problem step by step
+3. If an existing answer is visible, verify whether it is correct or incorrect
+4. Provide clear Khmer explanations suitable for students
+
+CRITICAL RULES:
+- Extract all visible mathematical content faithfully.
+- ANTI-HALLUCINATION: If any symbol, number, exponent, fraction, sign, or character is ambiguous, DO NOT GUESS. List in "ambiguousParts".
+- ANSWER VERIFICATION: If the image contains an existing written answer, verify it independently and compare. Never mark an answer correct just because it looks plausible.
+- KHMER EXPLANATION: Use natural educational Khmer ("យើងមានសមីការ៖", "ជំហានទី១៖", "ដូច្នេះ ចម្លើយគឺ៖", "ពិនិត្យឡើងវិញ៖").
+
+Return a valid JSON object matching the standard schema.`;
 
 // -----------------------------------------------------------
 // Helper: timeout wrapper
@@ -176,8 +139,14 @@ function isTransientError(err: unknown): boolean {
   if (!err) return false;
   const msg = err instanceof Error ? err.message : String(err);
   if (/\b(429|500|502|503|504)\b/i.test(msg)) return true;
-  if (/high demand|temporarily unavailable|service unavailable|overloaded|resource exhausted|rate limit|too many requests|quota|is not available/i.test(msg)) return true;
-  if (/timeout|timed out|fetch failed|network|econnreset|econnrefused|socket hang up|abort/i.test(msg)) return true;
+  if (
+    /high demand|temporarily unavailable|service unavailable|overloaded|resource exhausted|rate limit|too many requests|quota|is not available/i.test(
+      msg
+    )
+  )
+    return true;
+  if (/timeout|timed out|fetch failed|network|econnreset|econnrefused|socket hang up|abort/i.test(msg))
+    return true;
   return false;
 }
 
@@ -215,6 +184,8 @@ export async function POST(req: NextRequest) {
     }
 
     const action = ((formData.get("action") as string) || "full").toLowerCase(); // "extract" | "solve" | "full"
+    const solverMode = ((formData.get("solverMode") as string) || "solve").toLowerCase() as SolverMode; // "solve" | "generate" | "verify"
+    const detailLevel = ((formData.get("detailLevel") as string) || "step_by_step").toLowerCase() as DetailLevel;
     const imageFile = formData.get("image") as File | null;
     const problemTextInput = (formData.get("problemText") as string) || "";
     const existingAnswerInput = (formData.get("existingAnswer") as string) || "";
@@ -227,8 +198,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json<MathSolverError>(
         {
           ok: false,
-          error: "No image provided",
-          errorKhmer: "សូមបញ្ចូលរូបភាពមុនចុចដោះស្រាយ។",
+          error: "No image or problem text provided",
+          errorKhmer: "សូមបញ្ចូលរូបភាព ឬវាយបញ្ចូលអត្ថបទលំហាត់មុនចុចដំណើរការ។",
           code: "MISSING_IMAGE",
           retryable: false,
           requestId,
@@ -313,26 +284,24 @@ export async function POST(req: NextRequest) {
     // Language instruction
     let languageInstruction = "";
     if (outputLanguage === "khmer") {
-      languageInstruction = "Provide ALL explanations in Khmer. Use standard mathematical notation for equations.";
+      languageInstruction = "Provide ALL explanations in natural, grammatically correct Khmer. Use standard mathematical notation for equations.";
     } else if (outputLanguage === "khmer_english") {
       languageInstruction = "Provide explanations in Khmer with English mathematical terms where appropriate.";
     } else {
       languageInstruction = "Provide explanations in English.";
     }
 
-    const questionFilter = solveQuestions && solveQuestions !== "all"
-      ? `\nOnly solve these specific questions: ${solveQuestions}. Extract all problems but only solve the specified ones.`
-      : "";
-
-    const verificationNote = includeVerification
-      ? "\nIf any existing answer is visible or provided, verify it and report whether it is correct or incorrect."
-      : "\nDo not perform answer verification even if existing answers are visible.";
+    const questionFilter =
+      solveQuestions && solveQuestions !== "all"
+        ? `\nOnly solve these specific questions: ${solveQuestions}. Extract all problems but only solve the specified ones.`
+        : "";
 
     // Build Gemini request parts
     const genAI = new GoogleGenerativeAI(apiKey);
     const parts: Part[] = [];
 
     if (action === "extract") {
+      // Fast extraction stage
       parts.push({ text: EXTRACTION_ONLY_PROMPT });
       if (imageBytes) {
         const base64Image = Buffer.from(imageBytes).toString("base64");
@@ -346,35 +315,112 @@ export async function POST(req: NextRequest) {
       parts.push({
         text: "Extract all mathematical problems from this image without guessing. Return the result in valid JSON.",
       });
-    } else if (action === "solve" && problemTextInput) {
-      // Solving specific user-reviewed problem text
-      const SOLVE_TEXT_PROMPT = `You are an expert Khmer mathematics tutor and problem solver with deep expertise in both Khmer-language education and mathematical reasoning.
+    } else if (solverMode === "generate") {
+      // MODE 2: GENERATE FULL SOLUTION
+      const GENERATE_PROMPT = `You are a master Cambodian mathematics educator and textbook author creating a comprehensive, polished educational solution for students and teachers in Cambodia.
+Detail Level Requested: "${detailLevel}"
+- "short": Concise answer with essential steps.
+- "step_by_step": Standard pedagogical step-by-step solution.
+- "teacher": In-depth conceptual explanation with teaching commentary, mathematical properties, and check work.
 
-Solve the following mathematical problem step by step with clear explanations in Khmer:
+${problemTextInput ? `PROBLEM STATEMENT:\n${problemTextInput}` : "Extract the problem from the image and generate the full educational solution."}
 
-PROBLEM TO SOLVE:
-${problemTextInput}
+You MUST structure the educational solution with the following 8 formal sections:
+1. "extractedProblem": ប្រធានលំហាត់ (Full problem statement)
+2. "given": អ្វីដែលគេឱ្យ (Values, parameters, given constants, or conditions)
+3. "toFind": អ្វីដែលត្រូវរក (Variable, quantity, or expression to find)
+4. "formulas": រូបមន្តដែលត្រូវប្រើ (Formulas, theorems, rules required)
+5. "solution": ដំណោះស្រាយតាមជំហាន (Step-by-step algebra/calculus/geometry working)
+6. "solutionKhmer": ការពន្យល់ជាភាសាខ្មែរ (Clear pedagogical Khmer explanation tailored to detail level: ${detailLevel})
+7. "finalAnswer": ចម្លើយចុងក្រោយ (The final computed value or simplified form)
+8. "verification": ពិនិត្យចម្លើយឡើងវិញ (Verification by substituting back into original equation)
 
+CRITICAL RULES:
+- Use natural, grammatically correct Khmer. Preserve vowels, diacritics, subscripts, and Khmer numerals where appropriate.
+- Anti-hallucination: If any information is missing or ambiguous, flag in "ambiguousParts".
+- ${languageInstruction}
+
+Return a valid JSON object matching the MathSolverResponse schema with fields given, toFind, formulas, solution, solutionKhmer, finalAnswer, and verification.`;
+
+      parts.push({ text: GENERATE_PROMPT });
+      if (imageBytes) {
+        const base64Image = Buffer.from(imageBytes).toString("base64");
+        parts.push({
+          inlineData: {
+            mimeType: verifiedMimeType,
+            data: base64Image,
+          },
+        });
+      }
+      parts.push({
+        text: `Generate the complete educational solution now for detail level "${detailLevel}". Return valid JSON.`,
+      });
+    } else if (solverMode === "verify") {
+      // MODE 3: SOLVE + VERIFY + GENERATE
+      const VERIFY_PROMPT = `You are an expert Khmer mathematics evaluator and tutor assessing a student's submission.
+
+${problemTextInput ? `ORIGINAL PROBLEM:\n${problemTextInput}` : "Extract the original problem from the image."}
+${existingAnswerInput ? `STUDENT'S EXISTING ANSWER / WORK:\n${existingAnswerInput}` : "Extract the student's written work from the image."}
+
+Your task:
+1. Solve the original problem independently from scratch.
+2. Carefully compare the student's existing answer/work with the independent verified solution.
+3. Determine "answerStatus":
+   - "correct": Student's answer and steps are mathematically correct.
+   - "incorrect": Student made an arithmetic, algebraic, sign, or logical error.
+   - "unverifiable": Student's work is illegible, incomplete, or ambiguous.
+   Set "answerStatusKhmer": "ត្រឹមត្រូវ ✓" | "មិនទាន់ត្រឹមត្រូវ ✗" | "មិនអាចផ្ទៀងផ្ទាត់បាន"
+   RULE: Never mark an answer correct only because it visually looks similar!
+4. If incorrect:
+   - Identify the exact wrong step in "incorrectStep".
+   - Explain the error in polite, clear Khmer in "errorExplanationKhmer".
+   - Provide the corrected step in "correctedStep".
+5. Generate the complete corrected solution in "solutionKhmer" with clear numbered steps.
+6. State the final verified answer in "finalAnswer".
+7. Provide verification in "verification".
+8. Set confidence: "high" | "medium" | "low". If ambiguous, list in "ambiguousParts".
+
+${languageInstruction}
+
+Return a valid JSON object following the schema.`;
+
+      parts.push({ text: VERIFY_PROMPT });
+      if (imageBytes) {
+        const base64Image = Buffer.from(imageBytes).toString("base64");
+        parts.push({
+          inlineData: {
+            mimeType: verifiedMimeType,
+            data: base64Image,
+          },
+        });
+      }
+      parts.push({
+        text: "Perform independent solving, student answer verification, error diagnosis, and corrected solution generation. Return valid JSON.",
+      });
+    } else {
+      // MODE 1: SOLVE PROBLEM (Default)
+      const SOLVE_PROMPT = `You are an expert Khmer mathematics tutor and problem solver with deep expertise in Khmer-language education and mathematical reasoning.
+
+${problemTextInput ? `PROBLEM TO SOLVE:\n${problemTextInput}` : "Extract the problem from the image and solve it step by step."}
 ${
-  existingAnswerInput
-    ? `EXISTING STUDENT ANSWER TO VERIFY:\n${existingAnswerInput}\nVerify whether this answer is correct or incorrect. If incorrect, pinpoint the exact incorrect step and provide the correction.`
-    : "No existing student answer to verify."
+  existingAnswerInput && includeVerification
+    ? `EXISTING ANSWER TO VERIFY:\n${existingAnswerInput}`
+    : ""
 }
 
 CRITICAL RULES:
-1. Provide complete step-by-step reasoning in Khmer ("យើងមានសមីការ៖", "ជំហានទី១៖", "ជំហានទី២៖", "ដូច្នេះ ចម្លើយគឺ៖").
+1. Solve independently and show complete numbered steps in Khmer ("យើងមានសមីការ៖", "ជំហានទី១៖", "ជំហានទី២៖", "ដូច្នេះ ចម្លើយគឺ៖").
 2. State final answer clearly in "finalAnswer".
 3. Provide verification/check work in "verification".
-4. ANTI-HALLUCINATION: If the problem contains ambiguous or missing numbers, DO NOT GUESS. Mark them in "ambiguousParts".
+4. ANTI-HALLUCINATION: If the problem contains ambiguous, unclear, or missing symbols/exponents, DO NOT GUESS. Mark them in "ambiguousParts".
 5. Set confidence: "high" (>90%), "medium" (70-90%), "low" (<70%).
-
-${languageInstruction}${verificationNote}
+6. ${languageInstruction}${questionFilter}
 
 Return a valid JSON object matching the standard schema.`;
 
-      parts.push({ text: SOLVE_TEXT_PROMPT });
+      parts.push({ text: FULL_SOLVER_PROMPT });
+      parts.push({ text: SOLVE_PROMPT });
       if (imageBytes) {
-        // Also attach image for visual context (diagrams, geometry) if available
         const base64Image = Buffer.from(imageBytes).toString("base64");
         parts.push({
           inlineData: {
@@ -386,24 +432,9 @@ Return a valid JSON object matching the standard schema.`;
       parts.push({
         text: "Solve this problem now and return valid JSON following the schema.",
       });
-    } else {
-      // Default full extract + solve (used by automated tests and direct flow)
-      parts.push({ text: FULL_SOLVER_PROMPT });
-      if (imageBytes) {
-        const base64Image = Buffer.from(imageBytes).toString("base64");
-        parts.push({
-          inlineData: {
-            mimeType: verifiedMimeType,
-            data: base64Image,
-          },
-        });
-      }
-      parts.push({
-        text: `Extract all mathematical problems from this image and solve them step by step.\n${languageInstruction}${verificationNote}${questionFilter}\n\nReturn the result as a valid JSON object following the schema in the system prompt.`,
-      });
     }
 
-    // Try candidate models with failover
+    // Candidate models with failover
     const candidateModels = [
       "gemini-flash-lite-latest",
       "gemini-flash-latest",
@@ -509,12 +540,23 @@ Return a valid JSON object matching the standard schema.`;
         problems = parsed.problems.map((p: Record<string, unknown>, i: number) => ({
           id: (p.id as string) || `q${i + 1}`,
           extractedProblem:
-            (p.extractedProblem as string) || (p.extracted_problem as string) || problemTextInput || "",
+            (p.extractedProblem as string) ||
+            (p.extracted_problem as string) ||
+            problemTextInput ||
+            "",
+          given: (p.given as string) || undefined,
+          toFind: (p.toFind as string) || (p.to_find as string) || undefined,
+          formulas: (p.formulas as string) || undefined,
           extractedAnswer:
-            (p.extractedAnswer as string) || (p.extracted_answer as string) || existingAnswerInput || undefined,
+            (p.extractedAnswer as string) ||
+            (p.extracted_answer as string) ||
+            existingAnswerInput ||
+            undefined,
           answerStatus: (p.answerStatus as string) || (p.answer_status as string) || undefined,
           answerStatusKhmer: (p.answerStatusKhmer as string) || (p.answer_status_khmer as string) || undefined,
           incorrectStep: (p.incorrectStep as string) || (p.incorrect_step as string) || undefined,
+          errorExplanationKhmer:
+            (p.errorExplanationKhmer as string) || (p.error_explanation_khmer as string) || undefined,
           correctedStep: (p.correctedStep as string) || (p.corrected_step as string) || undefined,
           solution: (p.solution as string) || "",
           solutionKhmer: (p.solutionKhmer as string) || (p.solution_khmer as string) || "",
@@ -531,11 +573,16 @@ Return a valid JSON object matching the standard schema.`;
             id: "q1",
             extractedProblem:
               parsed.extractedProblem || parsed.extracted_problem || problemTextInput || "",
+            given: parsed.given || undefined,
+            toFind: parsed.toFind || parsed.to_find || undefined,
+            formulas: parsed.formulas || undefined,
             extractedAnswer:
               parsed.extractedAnswer || parsed.extracted_answer || existingAnswerInput || undefined,
             answerStatus: parsed.answerStatus || parsed.answer_status || undefined,
             answerStatusKhmer: parsed.answerStatusKhmer || parsed.answer_status_khmer || undefined,
             incorrectStep: parsed.incorrectStep || parsed.incorrect_step || undefined,
+            errorExplanationKhmer:
+              parsed.errorExplanationKhmer || parsed.error_explanation_khmer || undefined,
             correctedStep: parsed.correctedStep || parsed.corrected_step || undefined,
             solution: parsed.solution || "",
             solutionKhmer: parsed.solutionKhmer || parsed.solution_khmer || "",
@@ -553,6 +600,8 @@ Return a valid JSON object matching the standard schema.`;
         problems,
         totalProblems: problems.length,
         outputLanguage: outputLanguage as "khmer" | "khmer_english" | "english",
+        solverMode,
+        detailLevel: solverMode === "generate" ? detailLevel : undefined,
         extractedText: parsed.extractedText || parsed.extracted_text || problemTextInput || "",
         imageQualityNote: parsed.imageQualityNote || parsed.image_quality_note,
         inferenceProvider: `Serverless Gemini Vision (${selectedModel})`,
@@ -571,6 +620,7 @@ Return a valid JSON object matching the standard schema.`;
           event: "math_solver_success",
           selectedModel,
           action,
+          solverMode,
           totalProblems: problems.length,
           durationMs: totalMs,
         })
