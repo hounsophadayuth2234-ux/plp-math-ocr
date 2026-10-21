@@ -393,7 +393,7 @@ export default function BgRemoverPage() {
 
       const { createAlphaMaskDataUrl } = await import("@/lib/bg-removal-client");
       const maskUrl = createAlphaMaskDataUrl(initialMask, w, h);
-      const { dataUrl: whiteUrl } = await compositeWithSolidColor(imageFile, "#FFFFFF");
+      const { dataUrl: whiteUrl } = await compositeWithSolidColor(imageFile, "#F4F5F7");
 
       canvas.toBlob((blob) => {
         if (!blob) return;
@@ -460,7 +460,7 @@ export default function BgRemoverPage() {
 
         const { dataUrl: whiteUrl } = await compositeWithSolidColor(
           refinedOutput.transparentBlob,
-          "#FFFFFF"
+          "#F4F5F7"
         );
 
         setPreviousResult(cachedResult);
@@ -830,8 +830,8 @@ export default function BgRemoverPage() {
         );
       }
 
-      // Composite initially onto White #FFFFFF
-      const { dataUrl } = await compositeWithSolidColor(output.transparentBlob, "#FFFFFF");
+      // Composite initially onto Off-White #F4F5F7
+      const { dataUrl } = await compositeWithSolidColor(output.transparentBlob, "#F4F5F7");
 
       if (
         requestGenerationIdRef.current !== currentGenerationId ||
@@ -1684,7 +1684,7 @@ export default function BgRemoverPage() {
                   if (previousResult) {
                     setCachedResult(previousResult);
                     if (previousResult.transparentBlob) {
-                      compositeWithSolidColor(previousResult.transparentBlob, "#FFFFFF")
+                      compositeWithSolidColor(previousResult.transparentBlob, "#F4F5F7")
                         .then(({ dataUrl }) => setInitialCompositeUrl(dataUrl))
                         .catch(() => {});
                     }

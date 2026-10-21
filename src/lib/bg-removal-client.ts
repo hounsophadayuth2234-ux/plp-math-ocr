@@ -1122,15 +1122,15 @@ export async function recompositeAlphaMask(
       out[pIdx + 3] = a;
     } else if (targetBg === "white") {
       const aNorm = a / 255;
-      out[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-      out[pIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
-      out[pIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
+      out[pIdx] = Math.round(r * aNorm + 244 * (1 - aNorm));
+      out[pIdx + 1] = Math.round(g * aNorm + 245 * (1 - aNorm));
+      out[pIdx + 2] = Math.round(b * aNorm + 247 * (1 - aNorm));
       out[pIdx + 3] = 255;
     } else if (targetBg === "pink") {
       const aNorm = a / 255;
-      out[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-      out[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
-      out[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
+      out[pIdx] = Math.round(r * aNorm + 250 * (1 - aNorm));
+      out[pIdx + 1] = Math.round(g * aNorm + 218 * (1 - aNorm));
+      out[pIdx + 2] = Math.round(b * aNorm + 221 * (1 - aNorm));
       out[pIdx + 3] = 255;
     }
   }

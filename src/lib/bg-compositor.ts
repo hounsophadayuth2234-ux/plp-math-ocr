@@ -23,8 +23,8 @@ export interface RgbColor {
 }
 
 export const SOLID_BACKGROUNDS: Record<"white" | "pink", RgbColor> = {
-  white: { r: 255, g: 255, b: 255 }, // #FFFFFF (Question background)
-  pink: { r: 255, g: 240, b: 245 },  // #FFF0F5 (Solution background - LavenderBlush)
+  white: { r: 244, g: 245, b: 247 }, // #F4F5F7 (Off-White / Light Gray)
+  pink: { r: 250, g: 218, b: 221 },  // #FADADD (Soft Portrait Pink)
 };
 
 /**

@@ -9,13 +9,14 @@ pinned: false
 license: mit
 ---
 
-# ✂️ PLP Math Content — Background Removal Core (Pure FastAPI)
+# ✂️ PLP Math Content — Multi-Model Core (Pure FastAPI)
 
-100% Free Open-Source Background Removal Microservice powered by FastAPI and `rembg` (U2Net).
+100% Free Open-Source Microservice for Educational Background Removal and Real AI Image Super-Resolution.
 
 ## 🚀 API Endpoints
 
-- **GET `/health`**: Health check endpoint (`{"status": "ok", "model_loaded": true}`)
-- **POST `/api/remove`**: Accepts multipart/form-data with `image` file, returns transparent PNG binary.
+- **GET `/health`**: Health check endpoint returning model readiness (`{"status": "ok", "model_loaded": true, "upscaler_loaded": true}`).
+- **POST `/api/remove`**: Background removal endpoint (rembg), returns transparent PNG binary.
 - **POST `/api/remove-bg`**: Alias for `/api/remove`.
+- **POST `/api/upscale`**: Real AI 4x Super-Resolution endpoint (Real-ESRGAN Compact ONNX), returns 4x upscaled PNG binary.
 - **GET `/docs`**: Automatic OpenAPI / Swagger UI interactive documentation.

@@ -404,10 +404,10 @@ export function ColorStudio({
     };
   }, [initialAlphaBuffer, transparentUrl, width, height, sourceImageData]);
 
-  // Pre-generate initial pink composite
+  // Pre-generate initial pink composite (#FADADD)
   useEffect(() => {
     let cancelled = false;
-    compositeWithSolidColor(transparentBlob, "#FFF0F5").then(({ dataUrl }) => {
+    compositeWithSolidColor(transparentBlob, "#FADADD").then(({ dataUrl }) => {
       if (!cancelled) setPinkCompositeUrl(dataUrl);
     });
     return () => {
@@ -613,10 +613,11 @@ export function ColorStudio({
         data[pIdx + 2] = b;
         data[pIdx + 3] = a;
       } else if (activeChannel === "pink") {
+        // Soft Portrait Pink #FADADD (250, 218, 221)
         const aNorm = a / 255;
-        data[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-        data[pIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
-        data[pIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
+        data[pIdx] = Math.round(r * aNorm + 250 * (1 - aNorm));
+        data[pIdx + 1] = Math.round(g * aNorm + 218 * (1 - aNorm));
+        data[pIdx + 2] = Math.round(b * aNorm + 221 * (1 - aNorm));
         data[pIdx + 3] = 255;
       } else if (activeChannel === "overlay") {
         // 3-color diagnostic overlay:
@@ -654,11 +655,11 @@ export function ColorStudio({
         data[pIdx + 2] = Math.round(b * aNorm + cB * (1 - aNorm));
         data[pIdx + 3] = 255;
       } else {
-        // Default white composite #FFFFFF
+        // Default Off-White / Light Gray composite #F4F5F7 (244, 245, 247)
         const aNorm = a / 255;
-        data[pIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-        data[pIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
-        data[pIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
+        data[pIdx] = Math.round(r * aNorm + 244 * (1 - aNorm));
+        data[pIdx + 1] = Math.round(g * aNorm + 245 * (1 - aNorm));
+        data[pIdx + 2] = Math.round(b * aNorm + 247 * (1 - aNorm));
         data[pIdx + 3] = 255;
       }
     }
@@ -719,10 +720,11 @@ export function ColorStudio({
             data[dIdx + 2] = b;
             data[dIdx + 3] = a;
           } else if (activeChannel === "pink") {
+            // Soft Portrait Pink #FADADD (250, 218, 221)
             const aNorm = a / 255;
-            data[dIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-            data[dIdx + 1] = Math.round(g * aNorm + 240 * (1 - aNorm));
-            data[dIdx + 2] = Math.round(b * aNorm + 245 * (1 - aNorm));
+            data[dIdx] = Math.round(r * aNorm + 250 * (1 - aNorm));
+            data[dIdx + 1] = Math.round(g * aNorm + 218 * (1 - aNorm));
+            data[dIdx + 2] = Math.round(b * aNorm + 221 * (1 - aNorm));
             data[dIdx + 3] = 255;
           } else if (activeChannel === "overlay") {
             if (a > 200) {
@@ -747,11 +749,11 @@ export function ColorStudio({
             data[dIdx + 2] = b;
             data[dIdx + 3] = 255;
           } else {
-            // Default white composite #FFFFFF
+            // Default Off-White / Light Gray composite #F4F5F7 (244, 245, 247)
             const aNorm = a / 255;
-            data[dIdx] = Math.round(r * aNorm + 255 * (1 - aNorm));
-            data[dIdx + 1] = Math.round(g * aNorm + 255 * (1 - aNorm));
-            data[dIdx + 2] = Math.round(b * aNorm + 255 * (1 - aNorm));
+            data[dIdx] = Math.round(r * aNorm + 244 * (1 - aNorm));
+            data[dIdx + 1] = Math.round(g * aNorm + 245 * (1 - aNorm));
+            data[dIdx + 2] = Math.round(b * aNorm + 247 * (1 - aNorm));
             data[dIdx + 3] = 255;
           }
           dIdx += 4;
@@ -1566,112 +1568,121 @@ export function ColorStudio({
     }
   }, [sourceImageData, onConfirmMask, edgeRefinementMode, selectionMode, recompositeAll, redrawCanvas, updateForegroundPercentage]);
 
-  // 1-Click Download for active preview channel or forced specific purpose
-  const handleDownload = useCallback(async (forcedChannel?: ViewChannel) => {
-    const targetChannel: ViewChannel = forcedChannel || activeChannel;
-    cyberAudio.playClick();
-    const timestamp = Date.now();
-    let downloadUrl = "";
-    let filename = "";
-    let isTempUrl = false;
-    const activeMask = alphaMaskRef.current;
+  // Export the current HTML5 Canvas composition locally using canvas.toBlob("image/png")
+  const handleDownloadHdCanvasPng = useCallback(
+    (forcedChannel?: ViewChannel) => {
+      const targetChannel = forcedChannel || activeChannel;
+      cyberAudio.playClick();
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    if (
-      originalFile &&
-      activeMask &&
-      (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink" || targetChannel === "custom")
-    ) {
-      try {
-        const fullRes = await exportAtFullResolution(
-          originalFile,
-          activeMask,
-          width,
-          height,
-          targetChannel === "custom" ? customColor : targetChannel,
-          { autoCrop: autoCropExport }
-        );
-        downloadUrl = fullRes.dataUrl;
-        isTempUrl = true;
-      } catch (err) {
-        console.warn("Full-resolution export error, falling back to canvas:", err);
-      }
-    }
+      const w = width;
+      const h = height;
 
-    if (!downloadUrl) {
-      if (targetChannel === "transparent") {
-        downloadUrl = currentTransparentUrl || transparentUrl;
-      } else if (targetChannel === "pink") {
-        downloadUrl = pinkCompositeUrl || activeDisplayUrl;
-      } else if (targetChannel === "custom") {
-        try {
-          const comp = await compositeWithSolidColor(transparentBlob, customColor);
-          downloadUrl = comp.dataUrl;
-          isTempUrl = true;
-        } catch {
-          downloadUrl = whiteCompositeUrl || activeDisplayUrl;
-        }
-      } else if (targetChannel === "mask") {
-        downloadUrl = currentAlphaMaskUrl || initialAlphaMaskUrl || transparentUrl;
+      const triggerBlobDownload = (exportCanvas: HTMLCanvasElement, presetSuffix: string) => {
+        exportCanvas.toBlob((blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          const baseStem = originalFile?.name
+            ? originalFile.name.replace(/\.[a-zA-Z0-9]+$/i, "")
+            : "plp-cutout";
+          const sanitizedBase = customExportFilename.trim().replace(/\.[a-zA-Z0-9]+$/i, "");
+          const filename = sanitizedBase
+            ? `${sanitizedBase}-${presetSuffix}.png`
+            : `${baseStem}-${presetSuffix}-${w}x${h}.png`;
+
+          link.download = filename;
+          link.href = url;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          cyberAudio.playMetallicDing();
+
+          // Revoke temporary download URL after use to avoid memory leaks
+          setTimeout(() => {
+            try {
+              URL.revokeObjectURL(url);
+            } catch {}
+          }, 3000);
+        }, "image/png");
+      };
+
+      if (targetChannel === activeChannel) {
+        // Direct export from current active HTML5 Canvas
+        const presetSuffix =
+          targetChannel === "transparent"
+            ? "transparent"
+            : targetChannel === "pink"
+            ? "soft-portrait-pink"
+            : targetChannel === "white"
+            ? "off-white"
+            : targetChannel;
+        triggerBlobDownload(canvas, presetSuffix);
       } else {
-        downloadUrl = whiteCompositeUrl || activeDisplayUrl;
-      }
-    }
-
-    if (targetChannel === "transparent" || targetChannel === "white" || targetChannel === "pink" || targetChannel === "custom") {
-      const sanitizedBase = customExportFilename.trim().replace(/\.[a-zA-Z0-9]+$/i, "");
-      if (sanitizedBase) {
-        filename = `${sanitizedBase}.png`;
-      } else {
-        filename = `${generateBgRemoverSmartName({
-          originalName: originalFile?.name || "image",
-          channel: targetChannel,
-          mode,
-          width: originalFile && (sourceWidth || sourceHeight) ? (sourceWidth || width) : width,
-          height: originalFile && (sourceWidth || sourceHeight) ? (sourceHeight || height) : height,
-        })}.png`;
-      }
-    } else {
-      filename = `PLP-AlphaMask-Debug-${width}x${height}-${mode}-${timestamp}.png`;
-    }
-
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    cyberAudio.playMetallicDing();
-
-    // Clean up temporary Object URL ONLY if created dynamically and not stored in state
-    if (isTempUrl && downloadUrl.startsWith("blob:")) {
-      setTimeout(() => {
-        try {
-          URL.revokeObjectURL(downloadUrl);
-        } catch {
-          // Ignore revocation errors
+        // Offscreen canvas composite matching current mask and requested preset at processed canvas resolution
+        const offCanvas = document.createElement("canvas");
+        offCanvas.width = w;
+        offCanvas.height = h;
+        const oCtx = offCanvas.getContext("2d");
+        if (!oCtx || !alphaMaskRef.current || !sourceImageData) {
+          triggerBlobDownload(canvas, "processed");
+          return;
         }
-      }, 5000);
-    }
-  }, [
-    originalFile,
-    activeChannel,
-    width,
-    height,
-    sourceWidth,
-    sourceHeight,
-    customExportFilename,
-    mode,
-    currentTransparentUrl,
-    transparentUrl,
-    pinkCompositeUrl,
-    activeDisplayUrl,
-    currentAlphaMaskUrl,
-    initialAlphaMaskUrl,
-    whiteCompositeUrl,
-    customColor,
-    autoCropExport,
-    transparentBlob,
-  ]);
+
+        const mask = alphaMaskRef.current;
+        const sPixels = sourceImageData.data;
+        const imgData = oCtx.createImageData(w, h);
+        const data = imgData.data;
+        const total = w * h;
+
+        let rBg = 244, gBg = 245, bBg = 247;
+        let isTrans = false;
+        if (targetChannel === "pink") {
+          rBg = 250; gBg = 218; bBg = 221;
+        } else if (targetChannel === "custom") {
+          rBg = parseInt(customColor.slice(1, 3), 16) || 0;
+          gBg = parseInt(customColor.slice(3, 5), 16) || 0;
+          bBg = parseInt(customColor.slice(5, 7), 16) || 0;
+        } else if (targetChannel === "transparent" || targetChannel === "cutout") {
+          isTrans = true;
+        }
+
+        for (let i = 0; i < total; i++) {
+          const pIdx = i * 4;
+          const a = mask[i];
+          const r = sPixels[pIdx];
+          const g = sPixels[pIdx + 1];
+          const b = sPixels[pIdx + 2];
+          if (isTrans) {
+            data[pIdx] = r;
+            data[pIdx + 1] = g;
+            data[pIdx + 2] = b;
+            data[pIdx + 3] = a;
+          } else {
+            const aNorm = a / 255;
+            data[pIdx] = Math.round(r * aNorm + rBg * (1 - aNorm));
+            data[pIdx + 1] = Math.round(g * aNorm + gBg * (1 - aNorm));
+            data[pIdx + 2] = Math.round(b * aNorm + bBg * (1 - aNorm));
+            data[pIdx + 3] = 255;
+          }
+        }
+        oCtx.putImageData(imgData, 0, 0);
+        const presetSuffix =
+          targetChannel === "transparent"
+            ? "transparent"
+            : targetChannel === "pink"
+            ? "soft-portrait-pink"
+            : targetChannel === "white"
+            ? "off-white"
+            : targetChannel;
+        triggerBlobDownload(offCanvas, presetSuffix);
+      }
+    },
+    [activeChannel, width, height, originalFile, customExportFilename, sourceImageData, customColor]
+  );
+
+  const handleDownload = handleDownloadHdCanvasPng;
 
   // "Export Transparent PNG": Full resolution composite with genuine alpha channel
   const handleExportTransparentPng = useCallback(async () => {
@@ -2116,48 +2127,73 @@ export function ColorStudio({
 
       {/* ── Primary Output Purpose Selector (Khmer-First, accessible min 44px) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 rounded-none border border-cyan-500/30 bg-slate-950 p-2 text-xs">
-        {/* 1. White Background */}
+        {/* 1. Off-White / Light Gray Background */}
         <button
           type="button"
           data-channel="white"
           data-testid="bg-color-white"
+          aria-label="Select Off-White / Light Gray preset (#F4F5F7)"
           onClick={() => handleSelectChannel("white")}
-          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
+          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
             activeChannel === "white"
-              ? "bg-slate-900 border-2 border-cyan-400 text-white shadow-[0_0_12px_rgba(0,240,255,0.3)] font-bold"
+              ? "bg-slate-900 border-2 border-cyan-400 text-white shadow-[0_0_12px_rgba(0,240,255,0.3)] font-bold ring-1 ring-cyan-400/50"
               : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
           }`}
         >
           <div className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-none border border-slate-300 bg-white shrink-0" />
-            <span className="text-white font-bold">រូបសំណួរ — ផ្ទៃស</span>
+            <span
+              className="h-3 w-3 rounded-none border border-slate-300 shrink-0"
+              style={{ backgroundColor: "#F4F5F7" }}
+            />
+            <span className="text-white font-bold">Off-White / Light Gray</span>
           </div>
-          <span className="text-[10px] text-slate-400 font-mono">#FFFFFF Solid White</span>
+          <span className="text-[10px] text-slate-300 font-mono">#F4F5F7 Preset</span>
         </button>
 
-        {/* 2. Pink Background */}
+        {/* 2. Soft Portrait Pink Background */}
         <button
           type="button"
           data-channel="pink"
           data-testid="bg-color-pink"
+          aria-label="Select Soft Portrait Pink preset (#FADADD)"
           onClick={() => handleSelectChannel("pink")}
-          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
+          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-pink-400 ${
             activeChannel === "pink"
-              ? "bg-slate-900 border-2 border-pink-400 text-white shadow-[0_0_12px_rgba(255,105,180,0.3)] font-bold"
+              ? "bg-slate-900 border-2 border-pink-400 text-white shadow-[0_0_12px_rgba(255,105,180,0.3)] font-bold ring-1 ring-pink-400/50"
               : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
           }`}
         >
           <div className="flex items-center gap-1.5">
             <span
               className="h-3 w-3 rounded-none border border-pink-300 shrink-0"
-              style={{ backgroundColor: "#FFF0F5" }}
+              style={{ backgroundColor: "#FADADD" }}
             />
-            <span className="text-white font-bold">រូបដំណោះស្រាយ — ផ្ទៃផ្កាឈូក</span>
+            <span className="text-white font-bold">Soft Portrait Pink</span>
           </div>
-          <span className="text-[10px] text-pink-300/80 font-mono">#FFF0F5 Solid Pink</span>
+          <span className="text-[10px] text-pink-300 font-mono">#FADADD Preset</span>
         </button>
 
-        {/* 3. Custom Color */}
+        {/* 3. Transparent Checkerboard */}
+        <button
+          type="button"
+          data-channel="transparent"
+          data-testid="bg-color-transparent"
+          aria-label="Select Transparent preset"
+          onClick={() => handleSelectChannel("transparent")}
+          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+            activeChannel === "transparent"
+              ? "bg-slate-900 border-2 border-indigo-400 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] font-bold ring-1 ring-indigo-400/50"
+              : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <Grid className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+            <span className="text-white font-bold">Transparent</span>
+          </div>
+          <span className="text-[10px] text-indigo-300 font-mono">Pure Alpha PNG</span>
+        </button>
+
+        {/* 4. Custom Color */}
         <div
           data-channel="custom"
           data-testid="bg-color-custom"
@@ -2180,29 +2216,10 @@ export function ColorStudio({
               className="h-4 w-4 rounded-none cursor-pointer border border-slate-300 bg-transparent p-0"
               title="Pick custom background color"
             />
-            <span className="text-white font-bold">ពណ៌ផ្ទាល់ខ្លួន</span>
+            <span className="text-white font-bold">Custom</span>
           </div>
           <span className="text-[10px] text-emerald-300/80 font-mono uppercase">{customColor} Custom</span>
         </div>
-
-        {/* 4. Transparent Checkerboard */}
-        <button
-          type="button"
-          data-channel="transparent"
-          data-testid="bg-color-transparent"
-          onClick={() => handleSelectChannel("transparent")}
-          className={`min-h-[44px] flex flex-col items-center justify-center gap-1 rounded-none py-2 px-2 transition-all font-mono tracking-wider ${
-            activeChannel === "transparent"
-              ? "bg-slate-900 border-2 border-indigo-400 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] font-bold"
-              : "border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900/40"
-          }`}
-        >
-          <div className="flex items-center gap-1.5">
-            <Grid className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-            <span className="text-white font-bold">រូបថ្លា — គ្មានផ្ទៃ</span>
-          </div>
-          <span className="text-[10px] text-indigo-300/80 font-mono">Transparent Cutout</span>
-        </button>
 
         {/* 5. Original Photo */}
         <button
@@ -2216,9 +2233,8 @@ export function ColorStudio({
         >
           <div className="flex items-center gap-1.5">
             <Eye className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <span className="text-white font-bold">រូបដើម (Original)</span>
+            <span className="text-white font-bold">Original</span>
           </div>
-          <span className="text-[10px] text-slate-400 font-mono">ប្រៀបធៀបរូបដើម</span>
         </button>
       </div>
 
@@ -2895,13 +2911,13 @@ export function ColorStudio({
             />
             <span className="uppercase font-bold text-white">
               {activeChannel === "white"
-                ? "រូបសំណួរ — ផ្ទៃស (#FFFFFF)"
+                ? "Off-White / Light Gray (#F4F5F7)"
                 : activeChannel === "pink"
-                ? "រូបដំណោះស្រាយ — ផ្ទៃផ្កាឈូក (#FFF0F5)"
+                ? "Soft Portrait Pink (#FADADD)"
                 : activeChannel === "custom"
-                ? `ពណ៌ផ្ទាល់ខ្លួន — ${customColor.toUpperCase()}`
+                ? `Custom Color — ${customColor.toUpperCase()}`
                 : activeChannel === "transparent"
-                ? "រូបថ្លា — គ្មានផ្ទៃ (TRANSPARENT PNG)"
+                ? "Transparent Cutout (Alpha PNG)"
                 : activeChannel === "mask"
                 ? "ALPHA MASK DEBUG"
                 : "ORIGINAL IMAGE"}
@@ -2919,7 +2935,7 @@ export function ColorStudio({
               <span className="text-slate-300">Crop to Content</span>
             </label>
             <span>
-              Export: <strong className="text-white">{originalFile && (sourceWidth || sourceHeight) ? `${sourceWidth || width}×${sourceHeight || height}px` : `${width}×${height}px`}</strong>
+              Export: <strong className="text-white">{width}×{height}px</strong>
             </span>
           </div>
         </div>
@@ -2965,77 +2981,95 @@ export function ColorStudio({
           </button>
         </div>
 
-        {/* Primary Download Button for Current View */}
-        <button
-          type="button"
-          data-testid="primary-download"
-          onClick={() => handleDownload()}
-          disabled={isCompositing}
-          className={`min-h-[48px] flex w-full items-center justify-center gap-2 rounded-none px-5 py-3.5 text-xs font-black tracking-wider uppercase text-white shadow-lg transition-all duration-200 active:scale-[0.98] font-mono ${
-            activeChannel === "pink"
-              ? "bg-gradient-to-r from-pink-600 via-rose-600 to-fuchsia-600 shadow-pink-900/40 hover:shadow-pink-500/25 ring-1 ring-pink-400/40"
-              : activeChannel === "custom"
-              ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 shadow-emerald-900/40 hover:shadow-emerald-500/25 ring-1 ring-emerald-400/40"
-              : activeChannel === "transparent"
-              ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 shadow-indigo-900/40 hover:shadow-indigo-500/25 ring-1 ring-indigo-400/40"
-              : "bg-gradient-to-r from-cyan-600 via-indigo-600 to-blue-600 shadow-cyan-900/40 hover:shadow-cyan-500/25 ring-1 ring-cyan-400/40"
-          }`}
-        >
-          <Download className="h-4 w-4" />
-          <span>
-            {activeChannel === "transparent"
-              ? "ទាញយករូបថ្លា — គ្មានផ្ទៃ (EXPORT TRANSPARENT PNG)"
-              : activeChannel === "pink"
-              ? "ទាញយករូបដំណោះស្រាយ — ផ្ទៃផ្កាឈូក (#FFF0F5)"
-              : activeChannel === "custom"
-              ? `ទាញយកពណ៌ផ្ទាល់ខ្លួន (${customColor.toUpperCase()})`
-              : activeChannel === "mask"
-              ? "ទាញយកម៉ាសអាល់ហ្វា (ALPHA MASK DEBUG)"
-              : "ទាញយករូបសំណួរ — ផ្ទៃស (#FFFFFF)"}
-          </span>
-        </button>
+        {/* Primary Download Button: Download HD PNG / ទាញយក PNG គុណភាពខ្ពស់ */}
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            data-testid="download-hd-png-btn"
+            aria-label="Download HD PNG with current preset composition"
+            onClick={() => handleDownloadHdCanvasPng()}
+            disabled={isCompositing}
+            className={`min-h-[48px] flex w-full items-center justify-center gap-2 rounded-none px-5 py-3.5 text-xs font-black tracking-wider uppercase text-white shadow-lg transition-all duration-200 active:scale-[0.98] font-mono focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
+              activeChannel === "pink"
+                ? "bg-gradient-to-r from-pink-600 via-rose-600 to-fuchsia-600 shadow-pink-900/40 hover:shadow-pink-500/25 ring-1 ring-pink-400/40"
+                : activeChannel === "custom"
+                ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 shadow-emerald-900/40 hover:shadow-emerald-500/25 ring-1 ring-emerald-400/40"
+                : activeChannel === "transparent"
+                ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 shadow-indigo-900/40 hover:shadow-indigo-500/25 ring-1 ring-indigo-400/40"
+                : "bg-gradient-to-r from-cyan-600 via-indigo-600 to-blue-600 shadow-cyan-900/40 hover:shadow-cyan-500/25 ring-1 ring-cyan-400/40"
+            }`}
+          >
+            <Download className="h-4 w-4" />
+            <span>
+              {activeChannel === "transparent"
+                ? "Download HD PNG — Transparent / ទាញយក PNG គុណភាពខ្ពស់ (ថ្លា)"
+                : activeChannel === "pink"
+                ? "Download HD PNG — Soft Portrait Pink (#FADADD) / ទាញយក PNG គុណភាពខ្ពស់ (ផ្កាឈូក)"
+                : activeChannel === "custom"
+                ? `Download HD PNG — Custom (${customColor.toUpperCase()})`
+                : activeChannel === "mask"
+                ? "Download Alpha Mask Debug"
+                : "Download HD PNG — Off-White / Light Gray (#F4F5F7) / ទាញយក PNG គុណភាពខ្ពស់ (ប្រផេះស្រាល)"}
+            </span>
+          </button>
+          <button
+            type="button"
+            data-testid="primary-download"
+            onClick={() => handleDownloadHdCanvasPng()}
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+          />
+          <div className="text-[10px] text-slate-400 font-mono text-center">
+            Processed resolution: {width}×{height}px {wasDownscaled ? "(Inference downscaled proportionally)" : "(100% native resolution preserved)"}
+          </div>
+        </div>
 
         {/* Direct Quick Download Row */}
         <div className="space-y-1.5 pt-1">
           <div className="text-[10px] text-slate-400 font-mono tracking-wider">
-            ទាញយកភ្លាមៗតាមតម្រូវការ (1-CLICK QUICK DOWNLOAD):
+            ទាញយកភ្លាមៗតាមពណ៌ (1-CLICK INSTANT PRESET DOWNLOAD):
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
             <button
               type="button"
               data-testid="quick-download-white"
-              onClick={() => handleDownload("white")}
+              aria-label="Download Off-White / Light Gray PNG"
+              onClick={() => handleDownloadHdCanvasPng("white")}
               className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-cyan-400 hover:text-white transition-colors"
             >
-              <span className="h-2.5 w-2.5 bg-white border border-slate-400" />
-              <span>ទាញយករូបសំណួរ (ស)</span>
+              <span className="h-2.5 w-2.5 border border-slate-400 shrink-0" style={{ backgroundColor: "#F4F5F7" }} />
+              <span>Off-White (#F4F5F7)</span>
             </button>
             <button
               type="button"
               data-testid="quick-download-pink"
-              onClick={() => handleDownload("pink")}
+              aria-label="Download Soft Portrait Pink PNG"
+              onClick={() => handleDownloadHdCanvasPng("pink")}
               className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-pink-400 hover:text-white transition-colors"
             >
-              <span className="h-2.5 w-2.5 border border-pink-400" style={{ backgroundColor: "#FFF0F5" }} />
-              <span>ទាញយក (ផ្កាឈូក)</span>
-            </button>
-            <button
-              type="button"
-              data-testid="quick-download-custom"
-              onClick={() => handleDownload("custom")}
-              className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-emerald-400 hover:text-white transition-colors"
-            >
-              <span className="h-2.5 w-2.5 border border-slate-400" style={{ backgroundColor: customColor }} />
-              <span>ពណ៌ផ្ទាល់ខ្លួន</span>
+              <span className="h-2.5 w-2.5 border border-pink-400 shrink-0" style={{ backgroundColor: "#FADADD" }} />
+              <span>Soft Pink (#FADADD)</span>
             </button>
             <button
               type="button"
               data-testid="quick-download-transparent"
-              onClick={() => handleDownload("transparent")}
+              aria-label="Download Transparent PNG"
+              onClick={() => handleDownloadHdCanvasPng("transparent")}
               className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-indigo-400 hover:text-white transition-colors"
             >
-              <Grid className="h-3.5 w-3.5 text-indigo-400" />
-              <span>រូបថ្លា (PNG)</span>
+              <Grid className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <span>Transparent (PNG)</span>
+            </button>
+            <button
+              type="button"
+              data-testid="quick-download-custom"
+              aria-label="Download Custom Color PNG"
+              onClick={() => handleDownloadHdCanvasPng("custom")}
+              className="min-h-[44px] flex items-center justify-center gap-2 border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-slate-100 hover:border-emerald-400 hover:text-white transition-colors"
+            >
+              <span className="h-2.5 w-2.5 border border-slate-400 shrink-0" style={{ backgroundColor: customColor }} />
+              <span>Custom Color</span>
             </button>
           </div>
         </div>

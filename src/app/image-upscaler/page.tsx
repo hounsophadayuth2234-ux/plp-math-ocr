@@ -484,18 +484,7 @@ export default function ImageUpscalerPage() {
     const downloadUrl = URL.createObjectURL(downloadBlob);
     const link = document.createElement("a");
     const sanitizedBase = customFilename.trim().replace(/\.[a-zA-Z0-9]+$/i, "");
-    const finalStem =
-      sanitizedBase ||
-      generateUpscaleSmartName({
-        originalName: imageFile?.name,
-        preset: config.preset,
-        isSmoothObject: result.diagnostics.isSmoothObjectLikely,
-        isDocument: result.diagnostics.isDocumentLikely,
-        skinToneRatio: result.diagnostics.skinToneRatio,
-        scale: result.scale,
-        outputWidth: result.outputWidth,
-        outputHeight: result.outputHeight,
-      });
+    const finalStem = sanitizedBase || "plp-ai-upscaled";
     link.href = downloadUrl;
     link.download = `${finalStem}.${extension}`;
     document.body.appendChild(link);
@@ -530,20 +519,20 @@ export default function ImageUpscalerPage() {
             </Link>
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded bg-amber-500/15 px-2 py-0.5 font-mono text-xs font-bold text-amber-400 border border-amber-500/30">
+                <span className="rounded bg-cyan-500/15 px-2 py-0.5 font-mono text-xs font-bold text-cyan-400 border border-cyan-500/30">
                   MODULE 03
                 </span>
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                  HD Resize & Sharpen (ពង្រីកទំហំ & បង្កើនភាពច្បាស់)
+                  Real AI Super-Resolution (Real-ESRGAN 4X)
                 </h1>
               </div>
               <p className="mt-0.5 text-xs text-slate-400">
-                Lanczos-3 High-Order Resampling & PDE Shock Sharpening · Client-Side Web Worker
+                Deep Convolutional Neural Network (SRVGGNetCompact) Super-Resolution · FastAPI AI Backend
               </p>
             </div>
           </div>
 
-          {/* Unified Status Area (Requirement 4) */}
+          {/* Unified Status Area */}
           <div className="flex items-center gap-2 font-mono text-xs">
             <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 flex items-center gap-2 shadow-sm">
               <span className="text-slate-400">STATUS:</span>
@@ -567,20 +556,20 @@ export default function ImageUpscalerPage() {
           </div>
         </div>
 
-        {/* Engine Limitation Notice (Requirement: Module 03 Real Image Quality) */}
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-950/30 p-3.5 font-mono text-xs text-amber-200">
-          <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+        {/* Engine Notice: Real AI Super-Resolution */}
+        <div className="flex items-start gap-3 rounded-xl border border-cyan-500/30 bg-cyan-950/30 p-3.5 font-mono text-xs text-cyan-200">
+          <Sparkles className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="font-bold uppercase text-amber-300">
-                Engine Notice: Algorithmic HD Resize &amp; Sharpen
+              <span className="font-bold uppercase text-cyan-300">
+                Engine: Real-ESRGAN Compact ONNX Neural Super-Resolution (4X)
               </span>
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
-                Deterministic Resampling
+              <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+                AI Neural Network
               </span>
             </div>
-            <p className="text-[11px] text-amber-100/80 leading-relaxed">
-              This client-side engine executes continuous 3-lobed Lanczos-3 interpolation, Kuwahara edge-preserving smoothing, and PDE shock filtering running in a Web Worker. It is not a generative neural network (such as Real-ESRGAN). It scales image dimensions accurately and enhances edge contrast without hallucinating synthetic textures.
+            <p className="text-[11px] text-cyan-100/80 leading-relaxed">
+              This system executes authentic 4x Real-ESRGAN deep neural network inference on the FastAPI backend. It reconstructs genuine high-frequency textures, sharp text strokes, and clean contours. Large images exceeding 1200px are capped proportionally to protect CPU memory.
             </p>
           </div>
         </div>
@@ -682,21 +671,19 @@ export default function ImageUpscalerPage() {
               </div>
             )}
 
-            {/* Live Progress Scanner HUD (Decorative animations paused during processing if needed) */}
+            {/* Live Progress Scanner HUD */}
             {isLoading && (
               <RoboticScanner
                 active={true}
-                moduleName="HD RESIZE & SHARPEN // [LANCZOS-3 & PDE SHOCK]"
+                moduleName="REAL AI SUPER-RESOLUTION // [REAL-ESRGAN 4X]"
                 steps={[
-                  "STAGE 1/5: SMART IMAGE DIAGNOSTICS & NOISE ESTIMATE...",
-                  "STAGE 2/5: PRE-UPSCALE ARTIFACT REMOVAL (KUWAHARA FILTER)...",
-                  `STAGE 3/5: STEPPED PYRAMID RESAMPLING (${config.factor}X) & PDE SHOCK...`,
-                  "STAGE 4/5: MULTI-SCALE MICRO-CONTRAST & HALO-FREE CLAMPING...",
-                  config.preset === "text"
-                    ? "STAGE 5/5: KHMER TEXT & FORMULA STROKE CRISPNESS BOOSTER..."
-                    : "STAGE 5/5: ADAPTIVE LUMINANCE UNSHARP MASKING PASS...",
+                  "STAGE 1/5: SMART IMAGE DIAGNOSTICS & RESOLUTION CHECK...",
+                  "STAGE 2/5: DISPATCHING PAYLOAD TO FASTAPI AI BACKEND...",
+                  "STAGE 3/5: REAL-ESRGAN 4X NEURAL INFERENCE (SRVGGNET)...",
+                  "STAGE 4/5: HIGH-PRECISION TEXTURE RECONSTRUCTION...",
+                  "STAGE 5/5: PNG STREAMING & CLIENT BLOB RENDERING...",
                 ]}
-                subtext="Multi-stage deterministic Lanczos-3 resampling running in Web Worker"
+                subtext="Authentic Real-ESRGAN neural super-resolution running on FastAPI backend"
               />
             )}
 
@@ -725,8 +712,8 @@ export default function ImageUpscalerPage() {
                   beforeLabel="BEFORE (រូបដើម)"
                   afterLabel={
                     result.isFallback
-                      ? `AFTER (${result.scale}X HD · ${result.requestedScale}X unavailable)`
-                      : `AFTER (${result.scale}X HD)`
+                      ? `AFTER (${result.scale}X Real-ESRGAN AI · Capped at 1200px)`
+                      : `AFTER (${result.scale}X Real-ESRGAN AI)`
                   }
                   srcWidth={result.srcWidth}
                   srcHeight={result.srcHeight}

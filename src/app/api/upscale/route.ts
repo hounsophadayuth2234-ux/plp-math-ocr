@@ -73,9 +73,12 @@ export async function POST(req: NextRequest) {
     const scale = Math.min(4, Math.max(2, parseInt(scaleStr ?? "4", 10)));
     const replicateToken = process.env.REPLICATE_API_TOKEN?.trim();
     const workerUrl = (
+      process.env.NEXT_PUBLIC_HF_UPSCALE_URL ||
+      process.env.HF_UPSCALE_SPACE_URL ||
+      process.env.REMBG_SPACE_URL ||
       process.env.UPSCALER_WORKER_URL ||
       process.env.LOCAL_UPSCALER_URL ||
-      ""
+      "https://dayuth-plp-math-content.hf.space"
     )
       .trim()
       .replace(/^["']|["']$/g, "")
@@ -98,7 +101,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Check for Local Worker
+    // 2. Check for AI Super-Resolution Worker / Hugging Face Space
     if (workerUrl && !workerUrl.includes("your_worker_url")) {
       try {
         const workerFormData = new FormData();
@@ -106,31 +109,54 @@ export async function POST(req: NextRequest) {
         workerFormData.append("image", fileBlob, validation.sanitizedFilename);
         workerFormData.append("scale", scale.toString());
 
-        const workerToken = process.env.UPSCALER_WORKER_TOKEN?.trim();
+        const workerToken = process.env.UPSCALER_WORKER_TOKEN?.trim() || process.env.HF_SPACE_TOKEN?.trim();
         const headers: Record<string, string> = {};
         if (workerToken) {
           headers["Authorization"] = `Bearer ${workerToken}`;
         }
 
-        const workerRes = await fetch(
-          workerUrl.endsWith("/api/upscale") ? workerUrl : `${workerUrl}/api/upscale`,
-          {
-            method: "POST",
-            headers,
-            body: workerFormData,
-          }
-        );
+        const targetEndpoint = workerUrl.endsWith("/api/upscale")
+          ? workerUrl
+          : `${workerUrl}/api/upscale`;
+
+        const workerRes = await fetch(targetEndpoint, {
+          method: "POST",
+          headers,
+          body: workerFormData,
+        });
 
         if (!workerRes.ok) {
           const errText = await workerRes.text().catch(() => "");
           throw new Error(
-            `Local worker returned ${workerRes.status}: ${errText.slice(0, 200)}`
+            `Worker returned ${workerRes.status}: ${errText.slice(0, 200)}`
           );
         }
 
         const contentType = workerRes.headers.get("content-type") || "";
-        let resultUrl = "";
+        const acceptHeader = req.headers.get("accept") || "";
+        const wantsRawImage =
+          acceptHeader.includes("image/") || req.headers.get("x-raw-response") === "true";
 
+        if (wantsRawImage && !contentType.includes("application/json")) {
+          const workerBlob = await workerRes.blob();
+          const workerBytes = await workerBlob.arrayBuffer();
+          return new NextResponse(workerBytes, {
+            status: 200,
+            headers: {
+              "Content-Type": "image/png",
+              "Cache-Control": "no-store",
+              "X-Model-Used": workerRes.headers.get("x-model-used") || "realesr-general-x4v3",
+              "X-Upscale-Factor": workerRes.headers.get("x-upscale-factor") || "4",
+              "X-Processed-Width": workerRes.headers.get("x-processed-width") || "",
+              "X-Processed-Height": workerRes.headers.get("x-processed-height") || "",
+              "X-Output-Width": workerRes.headers.get("x-output-width") || "",
+              "X-Output-Height": workerRes.headers.get("x-output-height") || "",
+              "X-Was-Downscaled": workerRes.headers.get("x-was-downscaled") || "false",
+            },
+          });
+        }
+
+        let resultUrl = "";
         if (contentType.includes("application/json")) {
           const json = await workerRes.json();
           resultUrl = json.outputUrl || json.url || json.image;
@@ -144,8 +170,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json<UpscaleSuccess>(
           {
             outputUrl: resultUrl,
-            model: "Real-ESRGAN 4x (Local AI Worker)",
-            scale,
+            model: "Real-ESRGAN 4x (AI Super-Resolution Worker)",
+            scale: 4,
             label: "Local worker result",
           },
           { status: 200 }
@@ -154,7 +180,7 @@ export async function POST(req: NextRequest) {
         const msg = workerErr instanceof Error ? workerErr.message : String(workerErr);
         return NextResponse.json<UpscaleError>(
           {
-            error: `Local Upscaler Worker error: ${msg}`,
+            error: `Upscaler Worker error: ${msg}`,
             code: "WORKER_ERROR",
           },
           { status: 502 }
