@@ -823,6 +823,7 @@ export default function MathSolverPage() {
             <div className="grid grid-cols-2 gap-2">
               {/* Primary Action Button */}
               <button
+                id="solve-submit-btn"
                 type="button"
                 onClick={handleSolveOrGenerate}
                 disabled={(!extractedProblemText.trim() && !imageFile) || isBusy}
