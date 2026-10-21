@@ -113,12 +113,26 @@ export default function MathSolverPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("ai-processing-change", {
-          detail: { isProcessing: isBusy },
-        })
+        new CustomEvent("math-solver-busy", { detail: { isBusy } })
       );
     }
   }, [isBusy]);
+
+  // Mode Change Handler: Immediately clears stale results, verification, copies, and resets state
+  const handleModeChange = useCallback(
+    (newMode: SolverMode) => {
+      if (newMode === solverMode) return;
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      setSolverMode(newMode);
+      setResult(null);
+      setError(null);
+      setCopiedText(false);
+      setCopiedHtml(false);
+      setShowTopHtmlModal(false);
+      setInferredGradeDisplay(null);
+    },
+    [solverMode]
+  );
 
   // Cancel in-flight request
   const handleCancel = useCallback(() => {
@@ -311,15 +325,12 @@ export default function MathSolverPage() {
       }
 
       if (!response.ok) {
-        const errData = data as MathSolverError | null;
         setError({
           stage: "solve",
-          message: errData?.error || "Processing failed.",
+          message: "Generation failed.",
           messageKhmer:
-            errData?.errorKhmer ||
-            "ការដំណើរការជួបបញ្ហា។ សូមព្យាយាមម្ដងទៀត។",
-          retryable: errData?.retryable ?? true,
-          requestId: errData?.requestId,
+            "ការបង្កើតដំណោះស្រាយមិនបានសម្រេច។ សូមពិនិត្យបញ្ហា ហើយសាកល្បងម្ដងទៀត។",
+          retryable: true,
         });
         return;
       }
@@ -338,7 +349,7 @@ export default function MathSolverPage() {
         stage: "solve",
         message: err instanceof Error ? err.message : "Network error",
         messageKhmer:
-          "ការតភ្ជាប់មានបញ្ហា។ សូមពិនិត្យអ៊ីនធឺណិតរួចព្យាយាមម្ដងទៀត។",
+          "ការបង្កើតដំណោះស្រាយមិនបានសម្រេច។ សូមពិនិត្យបញ្ហា ហើយសាកល្បងម្ដងទៀត។",
         retryable: true,
       });
     } finally {
@@ -502,7 +513,7 @@ export default function MathSolverPage() {
             {/* Mode 1 */}
             <button
               type="button"
-              onClick={() => setSolverMode("solve")}
+              onClick={() => handleModeChange("solve")}
               className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
                 solverMode === "solve"
                   ? "border-violet-500 bg-violet-950/60 text-white shadow-[0_0_15px_rgba(139,92,246,0.25)] ring-1 ring-violet-500/40"
@@ -523,7 +534,7 @@ export default function MathSolverPage() {
             {/* Mode 2 */}
             <button
               type="button"
-              onClick={() => setSolverMode("generate")}
+              onClick={() => handleModeChange("generate")}
               className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
                 solverMode === "generate"
                   ? "border-violet-500 bg-violet-950/60 text-white shadow-[0_0_15px_rgba(139,92,246,0.25)] ring-1 ring-violet-500/40"
@@ -544,7 +555,7 @@ export default function MathSolverPage() {
             {/* Mode 3 */}
             <button
               type="button"
-              onClick={() => setSolverMode("verify")}
+              onClick={() => handleModeChange("verify")}
               className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
                 solverMode === "verify"
                   ? "border-violet-500 bg-violet-950/60 text-white shadow-[0_0_15px_rgba(139,92,246,0.25)] ring-1 ring-violet-500/40"
@@ -600,31 +611,29 @@ export default function MathSolverPage() {
         <div
           role="alert"
           aria-live="assertive"
-          className="rounded-xl border border-rose-500/40 bg-rose-950/60 p-4 text-rose-200 shadow-lg space-y-3"
+          data-testid="math-solver-error-alert"
+          className="rounded-2xl border border-amber-500/40 bg-amber-950/40 p-4 sm:p-5 text-amber-200 shadow-xl space-y-3"
         >
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 shrink-0 text-rose-400 mt-0.5" />
+            <AlertCircle className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
             <div className="space-y-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-rose-300">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-300 font-sans">
                 {error.stage === "extract"
-                  ? "កំហុសក្នុងការស្រង់អត្ថបទ (Extraction Error)"
-                  : "កំហុសក្នុងការដំណើរការ (Execution Error)"}
+                  ? "កំហុសក្នុងការស្រង់អត្ថបទ"
+                  : "ការបង្កើតដំណោះស្រាយមិនបានសម្រេច"}
               </p>
-              <p className="text-sm text-rose-100 font-medium">
-                {error.messageKhmer || error.message}
+              <p className="text-sm text-slate-100 font-medium font-sans leading-relaxed">
+                {error.messageKhmer || "ការបង្កើតដំណោះស្រាយមិនបានសម្រេច។ សូមពិនិត្យបញ្ហា ហើយសាកល្បងម្ដងទៀត។"}
               </p>
-              {error.message && error.messageKhmer && (
-                <p className="text-xs text-rose-300/80 font-mono">{error.message}</p>
-              )}
             </div>
           </div>
-          <div className="flex items-center gap-2 pt-2 border-t border-rose-500/20">
+          <div className="flex items-center gap-2 pt-2 border-t border-amber-500/20">
             {error.retryable && (
               <button
                 type="button"
                 onClick={handleRetry}
                 disabled={isBusy}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-rose-500 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-indigo-500 transition-colors"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>ព្យាយាមម្ដងទៀត (Retry)</span>
@@ -633,7 +642,7 @@ export default function MathSolverPage() {
             <button
               type="button"
               onClick={handleClear}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-white transition-colors"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>សម្អាត (Clear)</span>
@@ -870,25 +879,46 @@ export default function MathSolverPage() {
         </div>
       </div>
 
+      {/* Fresh Empty State when no result is present */}
+      {!problemResult && !isBusy && !error && (
+        <div
+          data-testid="math-solver-empty-state"
+          className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center space-y-3"
+        >
+          <div className="mx-auto w-12 h-12 rounded-full bg-slate-800/80 border border-slate-700/80 flex items-center justify-center text-slate-400">
+            <BookOpen className="w-5 h-5 text-indigo-400" />
+          </div>
+          <p className="text-sm font-medium text-slate-300 font-sans">
+            សូមចុច ដោះស្រាយ ឬ បង្កើតដំណោះស្រាយ
+          </p>
+        </div>
+      )}
+
       {/* STAGE 3: Solution Results Display */}
       {problemResult && (
         <div className="space-y-6">
           {/* Top Result Action Bar */}
-          <div className="rounded-2xl border border-violet-500/30 bg-slate-950/90 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl">
+          <div className="rounded-2xl border border-indigo-500/30 bg-slate-950/90 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600/20 text-violet-400 border border-violet-500/30">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">
+                <h3 className="text-base font-bold text-white font-sans">
                   {result.solverMode === "generate"
-                    ? "ដំណោះស្រាយអប់រំពេញលេញ (Full Educational Solution)"
+                    ? "ដំណោះស្រាយអប់រំ (Educational Solution Worksheet)"
                     : result.solverMode === "verify"
                     ? "លទ្ធផលផ្ទៀងផ្ទាត់ & ដំណោះស្រាយកែតម្រូវ"
                     : "ដំណោះស្រាយលំហាត់ (Math Solution)"}
                 </h3>
-                <p className="text-xs text-slate-400 font-mono">
-                  {result.inferredGradeKhmer || "ថ្នាក់បឋមសិក្សា"} · {result.solverMode.toUpperCase()}
+                <p className="text-xs text-slate-400 font-sans">
+                  {result.inferredGradeKhmer || "ថ្នាក់បឋមសិក្សា"} · {
+                    result.solverMode === "solve"
+                      ? "ដោះស្រាយលំហាត់ (ចម្លើយ)"
+                      : result.solverMode === "generate"
+                      ? "បង្កើតដំណោះស្រាយ (វិធីដោះស្រាយ)"
+                      : "ដោះស្រាយ + ផ្ទៀងផ្ទាត់ (ពេញលេញ)"
+                  }
                 </p>
               </div>
             </div>

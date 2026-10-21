@@ -86,7 +86,7 @@ export function renderCanonicalSolutionHtml(
   const isMode2 = mode === "generate";
   const isMode3 = mode === "verify";
 
-  const docTitle = options?.documentTitle || "ដំណោះស្រាយគណិតវិទ្យា — ថ្នាក់បឋមសិក្សា";
+  const docTitle = options?.documentTitle || "PLP Math Content — សន្លឹកដំណោះស្រាយគណិតវិទ្យា";
   const gradeLabel = options?.gradeTitle || problem.inferredGradeKhmer || "ថ្នាក់បឋមសិក្សា";
   const modeLabel =
     options?.solverModeTitle ||
@@ -326,10 +326,12 @@ body {
   parts.push("</head>\n");
   parts.push("<body>\n");
   parts.push('<article class="solution">\n');
+  parts.push('  <main class="plp-solution-sheet">\n');
 
   // Document Title / Header
-  parts.push('  <header class="solution-header">\n');
-  parts.push(`    <h1>${escapeHtml(docTitle)}</h1>\n`);
+  parts.push('  <header class="solution-header plp-header">\n');
+  parts.push('    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4338ca; margin-bottom: 4px;">PLP Math Content</div>\n');
+  parts.push(`    <h1 style="margin: 0 0 6px 0; color: #1e1b4b; font-size: 20px; font-weight: 800;">${escapeHtml(docTitle)}</h1>\n`);
   parts.push('    <div class="badges">\n');
   parts.push(`      <span class="badge-grade">${escapeHtml(gradeLabel)}</span>\n`);
   parts.push(`      <span class="badge-mode">${escapeHtml(modeLabel)}</span>\n`);
@@ -469,10 +471,12 @@ body {
   }
 
   // 7. Footer
-  parts.push('  <footer class="footer">\n');
-  parts.push("    DYT ECOSYSTEM • កម្មវិធីដោះស្រាយគណិតវិទ្យាថ្នាក់បឋមសិក្សា (Module 04: Khmer Math Solver)\n");
+  parts.push('  <footer class="footer plp-footer" style="border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748b;">\n');
+  parts.push('    <div style="font-weight: 600; color: #312e81;">PLP Math Content · DYT ECOSYSTEM</div>\n');
+  parts.push('    <div style="color: #94a3b8; font-style: italic;">សម្រាប់ការសិក្សា</div>\n');
   parts.push("  </footer>\n");
-  parts.push("</article>\n");
+  parts.push('  </main>\n');
+  parts.push('</article>\n');
   parts.push("</body>\n");
   parts.push("</html>");
 
@@ -498,7 +502,7 @@ export function renderCanonicalSolutionPlainText(
   const lines: string[] = [];
 
   lines.push("==================================================");
-  lines.push(options?.documentTitle || "ដំណោះស្រាយគណិតវិទ្យា — ថ្នាក់បឋមសិក្សា");
+  lines.push(options?.documentTitle || "PLP Math Content — សន្លឹកដំណោះស្រាយគណិតវិទ្យា");
   if (options?.gradeTitle) lines.push(`កម្រិតថ្នាក់៖ ${options.gradeTitle}`);
   if (options?.solverModeTitle) lines.push(`ទម្រង់៖ ${options.solverModeTitle}`);
   lines.push("==================================================");

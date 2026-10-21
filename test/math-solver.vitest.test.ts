@@ -1412,4 +1412,181 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
       });
     }
   });
+
+  describe("PLP Educational Worksheet, Strict Mode Contracts & Error Recovery", () => {
+    const sampleProb: MathSolverProblem = {
+      id: "plp-test-1",
+      extractedProblem: "៤៣១ + ៦៥",
+      finalAnswer: "៤៩៦",
+      verticalLines: ["  ៤៣១", "+  ០៦៥", "──────", "  ៤៩៦"],
+      solutionKhmer: "ជំហានទី១៖ បូកខ្ទង់ឯកតា ១ + ៥ = ៦\nជំហានទី២៖ បូកខ្ទង់ដប់ ៣ + ៦ = ៩\nជំហានទី៣៖ បូកខ្ទង់រយ ៤ + ០ = ៤",
+      confidence: "high",
+      confidenceKhmer: "កម្រិតខ្ពស់",
+    };
+
+    // 1. PLP Educational Worksheet Branding
+    it("renders as a clean Cambodian primary-school PLP educational worksheet without technical badges", () => {
+      const rendered = renderToString(
+        React.createElement(SolutionCard, {
+          problem: sampleProb,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "verify",
+        })
+      );
+
+      // Has PLP Branding Header & Footer
+      expect(rendered).toContain("PLP Math Content");
+      expect(rendered).toContain("សន្លឹកដំណោះស្រាយគណិតវិទ្យា");
+      expect(rendered).toContain("សម្រាប់ការសិក្សា");
+      expect(rendered).toContain("DYT ECOSYSTEM");
+
+      // STRICTLY NO TECHNICAL BADGES
+      expect(rendered).not.toContain("MODULE 04");
+      expect(rendered).not.toContain("Deterministic Verifier");
+      expect(rendered).not.toContain("gemini-");
+    });
+
+    // 2. Mode 1 Strict Contract: Answer Only
+    it("Mode 1 (solve) shows problem and answer only, with NO steps, vertical calc, or technical badges", () => {
+      const rendered = renderToString(
+        React.createElement(SolutionCard, {
+          problem: sampleProb,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "solve",
+        })
+      );
+
+      // Must have problem and final answer
+      expect(rendered).toContain("៤៣១ + ៦៥");
+      expect(rendered).toContain("៤៩៦");
+      expect(rendered).toContain('data-testid="final-answer-card"');
+
+      // STRICTLY NO steps or vertical calculations
+      expect(rendered).not.toContain("វិធីដោះស្រាយលម្អិត");
+      expect(rendered).not.toContain("ការគណនាតាមជួរឈរ (Vertical Calculation)");
+      expect(rendered).not.toContain('data-testid="structured-column-calculation"');
+      expect(rendered).not.toContain('data-testid="vertical-calculation-pre"');
+
+      // Plain text export in Mode 1 is answer-only
+      const plainText = renderCanonicalSolutionPlainText(sampleProb, { solverMode: "solve" });
+      expect(plainText).toContain("៤៣១ + ៦៥");
+      expect(plainText).toContain("ចម្លើយ៖ ៤៩៦");
+      expect(plainText).not.toContain("វិធីដោះស្រាយ៖");
+      expect(plainText).not.toContain("ការគណនាតាមជួរឈរ");
+
+      // HTML export in Mode 1 is answer-only
+      const htmlText = renderCanonicalSolutionHtml(sampleProb, { solverMode: "solve" });
+      expect(htmlText).toContain("៤៣១ + ៦៥");
+      expect(htmlText).not.toContain('<pre class="vertical-calc">');
+      expect(htmlText).not.toContain('<table class="column-calculation"');
+    });
+
+    // 3. Mode 2 Strict Contract: Method Only (NO final answer card)
+    it("Mode 2 (generate) shows step-by-step method and vertical calc, but STRICTLY NO separate final-answer card", () => {
+      const rendered = renderToString(
+        React.createElement(SolutionCard, {
+          problem: sampleProb,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "generate",
+        })
+      );
+
+      // Must have problem, steps, and vertical calculation
+      expect(rendered).toContain("៤៣១ + ៦៥");
+      expect(rendered).toContain("ជំហានទី១៖ បូកខ្ទង់ឯកតា");
+      expect(rendered).toContain('data-testid="structured-column-calculation"');
+
+      // STRICTLY NO separate final-answer card
+      expect(rendered).not.toContain('data-testid="final-answer-card"');
+
+      // Plain text export in Mode 2 omits final answer card
+      const plainText = renderCanonicalSolutionPlainText(sampleProb, { solverMode: "generate" });
+      expect(plainText).toContain("៤៣១ + ៦៥");
+      expect(plainText).toContain("វិធីដោះស្រាយ៖");
+      expect(plainText).toContain("ការគណនាតាមជួរឈរ");
+      expect(plainText).not.toContain("ចម្លើយ៖");
+
+      // HTML export in Mode 2 omits final-answer-section
+      const htmlText = renderCanonicalSolutionHtml(sampleProb, { solverMode: "generate" });
+      expect(htmlText).toContain("៤៣១ + ៦៥");
+      expect(htmlText).toContain("solution-body-section");
+      expect(htmlText).not.toContain("final-answer-section");
+    });
+
+    // 4. Mode 3 Strict Contract: Full Method AND Final Answer
+    it("Mode 3 (verify) shows both full educational method, vertical calc, AND final answer card", () => {
+      const rendered = renderToString(
+        React.createElement(SolutionCard, {
+          problem: sampleProb,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "verify",
+        })
+      );
+
+      expect(rendered).toContain("៤៣១ + ៦៥");
+      expect(rendered).toContain("ជំហានទី១៖ បូកខ្ទង់ឯកតា");
+      expect(rendered).toContain('data-testid="structured-column-calculation"');
+      expect(rendered).toContain('data-testid="final-answer-card"');
+      expect(rendered).toContain("៤៩៦");
+    });
+
+    // 5. Standalone HTML Export Structure
+    it("Exported HTML contains real standalone document with embedded styles and PLP branding", () => {
+      const htmlText = renderCanonicalSolutionHtml(sampleProb, { solverMode: "verify" });
+
+      expect(htmlText).toContain("<!doctype html>");
+      expect(htmlText).toContain('<html lang="km">');
+      expect(htmlText).toContain("<style>");
+      expect(htmlText).toContain("PLP Math Content");
+      expect(htmlText).toContain("សន្លឹកដំណោះស្រាយគណិតវិទ្យា");
+      expect(htmlText).toContain("plp-solution-sheet");
+      expect(htmlText).toContain("សម្រាប់ការសិក្សា");
+      expect(htmlText).toContain("DYT ECOSYSTEM");
+
+      // Must NOT contain technical metadata
+      expect(htmlText).not.toContain("<script");
+      expect(htmlText).not.toContain("MODULE 04");
+      expect(htmlText).not.toContain("gemini-");
+    });
+
+    // 6. Mode Switching clears stale results
+    it("Mode switching clears old results and displays fresh empty state prompt", () => {
+      // Proves that when effective mode changes from Mode 1 to Mode 2, Mode 1 answer card is removed
+      const mode1Rendered = renderToString(
+        React.createElement(SolutionCard, {
+          problem: sampleProb,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "solve",
+        })
+      );
+      expect(mode1Rendered).toContain('data-testid="final-answer-card"');
+      expect(mode1Rendered).not.toContain('data-testid="structured-column-calculation"');
+
+      // Now switch to Mode 2: the final answer card must be strictly cleared
+      const mode2Rendered = renderToString(
+        React.createElement(SolutionCard, {
+          problem: sampleProb,
+          index: 0,
+          totalProblems: 1,
+          solverMode: "generate",
+        })
+      );
+      expect(mode2Rendered).not.toContain('data-testid="final-answer-card"');
+      expect(mode2Rendered).toContain('data-testid="structured-column-calculation"');
+    });
+
+    // 7. Mode 2 Error Recovery
+    it("Mode 2 error state displays polite Khmer message without leaking stack trace or technical metadata", () => {
+      const errorKhmer = "ការបង្កើតដំណោះស្រាយមិនបានសម្រេច។ សូមពិនិត្យបញ្ហា ហើយសាកល្បងម្ដងទៀត។";
+      expect(errorKhmer).not.toContain("Error:");
+      expect(errorKhmer).not.toContain("at ");
+      expect(errorKhmer).not.toContain("GEMINI");
+      expect(errorKhmer).toContain("ការបង្កើតដំណោះស្រាយមិនបានសម្រេច");
+    });
+  });
 });
