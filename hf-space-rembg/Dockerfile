@@ -1,24 +1,27 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Set working directory
+ENV PYTHONUNBUFFERED=1
+ENV PORT=7860
+ENV HOST=0.0.0.0
+
 WORKDIR /app
 
-# Install system libraries needed by Pillow / OpenCV / ONNX
+# Install system libraries needed by Pillow / OpenCV / ONNX Runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Pre-download default U2Net model weights during build to make cold-starts instantaneous
-RUN python -c "from rembg import new_session; new_session('u2net')"
+# Pre-download default isnet-general-use model weights during build to make cold-starts instantaneous
+RUN python -c "from rembg import new_session; new_session('isnet-general-use')"
 
 # Copy application files
-COPY app.py .
+COPY app.py /app/app.py
 
 # Hugging Face Spaces expose port 7860
 EXPOSE 7860

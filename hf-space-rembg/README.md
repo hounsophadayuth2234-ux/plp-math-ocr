@@ -1,5 +1,5 @@
 ---
-title: PLP Rembg Core
+title: Plp Math Content
 emoji: ✂️
 colorFrom: indigo
 colorTo: cyan
@@ -11,18 +11,11 @@ license: mit
 
 # ✂️ PLP Math Content — Background Removal Core (Pure FastAPI)
 
-100% Free Open-Source Background Removal Microservice powered by FastAPI and `rembg` (U2Net / BiRefNet).
+100% Free Open-Source Background Removal Microservice powered by FastAPI and `rembg` (U2Net).
 
 ## 🚀 API Endpoints
 
-- **GET `/`**: Mandatory root health check (`{"status": "alive"}`) for Hugging Face proxy.
+- **GET `/health`**: Health check endpoint (`{"status": "ok", "model_loaded": true}`)
 - **POST `/api/remove`**: Accepts multipart/form-data with `image` file, returns transparent PNG binary.
+- **POST `/api/remove-bg`**: Alias for `/api/remove`.
 - **GET `/docs`**: Automatic OpenAPI / Swagger UI interactive documentation.
-
-## 🔗 Connecting to Next.js Vercel App
-
-In your Next.js project's `.env.local` or Vercel Environment Variables:
-
-```env
-REMBG_SPACE_URL=https://<your-username>-<your-space-name>.hf.space
-```
