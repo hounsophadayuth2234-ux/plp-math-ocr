@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { SettingsModal } from "./SettingsModal";
+import { HelpGuideModal } from "./HelpGuideModal";
 import { MechanicalCyberBackground } from "@/components/ui/MechanicalCyberBackground";
 
 interface DashboardShellProps {
@@ -15,6 +16,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Standalone external-style bypass: When on /login, bypass DashboardShell completely.
   // Do NOT render sidebar, top navigation, dashboard content, module cards, logout button,
@@ -34,6 +36,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <Header
           onOpenSidebar={() => setSidebarOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenHelp={() => setHelpOpen(true)}
         />
 
         <div className="relative flex-1 min-h-0 overflow-hidden">
@@ -47,6 +50,11 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+      />
+
+      <HelpGuideModal
+        isOpen={helpOpen}
+        onClose={() => setHelpOpen(false)}
       />
     </div>
   );

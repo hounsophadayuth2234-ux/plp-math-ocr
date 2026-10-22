@@ -37,6 +37,7 @@ import { bgWorkerManager } from "@/lib/bg-removal-worker-manager";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ObjectUrlRegistry } from "@/lib/processing-utils";
 import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
+import { BgProcessingCard } from "@/components/bg-remover/BgProcessingCard";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import { recordExecutionTelemetry } from "@/lib/hardware-diagnostics";
@@ -542,61 +543,18 @@ export default function BgRemoverPage() {
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
 
-    // ── Stage Deadlines & Stall Detection ──
-    // 1. Soft slow notice at 20 seconds: Informational only, does NOT fail or abort
-    const slowTimer = setTimeout(() => {
+    // ── Hard Timeout Enforcement using AbortController (20s Fast, 35s High Quality) ──
+    const hardTimeoutMs = mode === "preview" ? 20000 : 35000;
+    const hardTimeoutTimer = setTimeout(() => {
       if (activeAbortControllerRef.current === abortController) {
-        setSlowNotice(
-          `SYS_NOTICE: Model processing taking longer than usual on this device (elapsed: ${STAGE_DEADLINES.SLOW_NOTICE_SEC}s)...`
-        );
-      }
-    }, STAGE_DEADLINES.SLOW_NOTICE_SEC * 1000);
-
-    // 1b. Hard slow warning at 30 seconds with recovery option (Requirement 10)
-    const slow30Timer = setTimeout(() => {
-      if (activeAbortControllerRef.current === abortController) {
-        setSlowNotice(
-          "WARNING: Processing has exceeded 30 seconds. On-device WASM or remote server may be under heavy load. You can switch to Fast mode or cancel."
-        );
-      }
-    }, 30000);
-
-    // 2. Cold asset download deadline: 120 seconds
-    let assetLoadTimer: NodeJS.Timeout | null = setTimeout(() => {
-      if (activeAbortControllerRef.current === abortController) {
-        console.log(`[bg-remover] Asset download deadline reached (${STAGE_DEADLINES.COLD_ASSET_LOAD_SEC}s)`);
+        console.warn(`[bg-remover] Hard timeout triggered after ${hardTimeoutMs / 1000}s`);
         abortController.abort(
           new Error(
-            `ASSET_LOAD_TIMEOUT: Model asset loading timed out after ${STAGE_DEADLINES.COLD_ASSET_LOAD_SEC}s. Please check network connection and retry.`
+            `TIMEOUT: ដំណើរការលើសកំណត់ពេល (${hardTimeoutMs / 1000} វិនាទី)។ Processing exceeded ${hardTimeoutMs / 1000}s deadline. Please retry with Fast Mode or use Browser AI.`
           )
         );
       }
-    }, STAGE_DEADLINES.COLD_ASSET_LOAD_SEC * 1000);
-
-    // 3. Inference deadline: 60s for preview, 90s for final
-    let inferenceTimer: NodeJS.Timeout | null = null;
-    const startInferenceDeadline = () => {
-      if (assetLoadTimer) {
-        clearTimeout(assetLoadTimer);
-        assetLoadTimer = null;
-      }
-      if (!inferenceTimer) {
-        const infDuration =
-          mode === "preview"
-            ? STAGE_DEADLINES.INFERENCE_PREVIEW_SEC
-            : STAGE_DEADLINES.INFERENCE_FINAL_SEC;
-        inferenceTimer = setTimeout(() => {
-          if (activeAbortControllerRef.current === abortController) {
-            console.log(`[bg-remover] Inference deadline reached (${infDuration}s)`);
-            abortController.abort(
-              new Error(
-                `INFERENCE_TIMEOUT: Model inference timed out after ${infDuration}s on this device. You can retry or open Manual Mask Mode.`
-              )
-            );
-          }
-        }, infDuration * 1000);
-      }
-    };
+    }, hardTimeoutMs);
 
     try {
       console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, mode=${mode}`);
@@ -728,9 +686,6 @@ export default function BgRemoverPage() {
           signal: abortController.signal,
           onProgress: (p) => {
             setProgressInfo(p);
-            if (p.stage === "Segmenting" || p.stage === "Refining mask") {
-              startInferenceDeadline();
-            }
           },
         });
 
@@ -944,10 +899,7 @@ export default function BgRemoverPage() {
       );
     } finally {
       setQueueStatus(null);
-      clearTimeout(slowTimer);
-      clearTimeout(slow30Timer);
-      if (assetLoadTimer) clearTimeout(assetLoadTimer);
-      if (inferenceTimer) clearTimeout(inferenceTimer);
+      clearTimeout(hardTimeoutTimer);
       setSlowNotice(null);
 
       if (activeAbortControllerRef.current === abortController) {
@@ -1332,7 +1284,7 @@ export default function BgRemoverPage() {
                   }`}
                 >
                   <Zap className="h-3.5 w-3.5 text-cyan-400" />
-                  <span className="font-semibold text-xs">Fast (⚡ &lt;10s)</span>
+                  <span className="font-semibold text-xs">Fast (Usually under 10s)</span>
                 </button>
 
                 <button
@@ -1352,7 +1304,7 @@ export default function BgRemoverPage() {
                   }`}
                 >
                   <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                  <span className="font-semibold text-xs">High Quality (✨ &lt;20s)</span>
+                  <span className="font-semibold text-xs">High Quality (Usually under 25s)</span>
                 </button>
               </div>
             </div>
@@ -1557,28 +1509,53 @@ export default function BgRemoverPage() {
 
         {/* ── RIGHT: Preview & Interactive Mask Studio Deck ── */}
         <div className="lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-2 flex flex-col gap-5">
-          {/* Error Banner with Retry */}
+          {/* ── Deterministic Recovery Card on Error / Timeout / Cancel ── */}
           {error && (
-            <div className="flex flex-col gap-2 rounded-none border border-rose-500/50 bg-rose-950/40 p-4 shadow-[0_0_20px_rgba(244,63,94,0.2)] font-mono">
+            <div
+              data-testid="recovery-card"
+              className="flex flex-col gap-3 rounded-2xl border border-rose-500/40 bg-slate-900/95 p-5 shadow-xl backdrop-blur-md font-sans"
+            >
               <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 shrink-0 text-rose-400 mt-0.5" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-400">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
                 <div className="space-y-1">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-rose-300">
-                    SEGMENTATION ERROR
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>ការកាត់រូបភាពជួបបញ្ហា</span>
+                    <span className="text-xs text-rose-300 font-normal">(Processing Issue / Timeout)</span>
                   </h4>
-                  <p className="text-[11px] text-rose-200/80 leading-relaxed font-mono">{error}</p>
+                  <p className="text-xs text-slate-300 leading-relaxed">{error}</p>
+                  <p className="text-[11px] text-slate-400">
+                    រូបភាពដើមរបស់អ្នកត្រូវបានរក្សាទុក។ សូមជ្រើសរើសជម្រើសស្ដារឡើងវិញខាងក្រោម៖
+                  </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
+
+              {/* 4 Explicit Recovery Actions */}
+              <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-800">
                 <button
                   type="button"
                   data-testid="error-retry-btn"
                   onClick={() => handleRunSegmentation(processingMode)}
-                  className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-rose-500/50 bg-rose-900/60 px-3 py-2 text-xs font-bold text-white hover:bg-rose-900/90 transition-colors uppercase font-mono"
+                  className="flex items-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-900/40 px-3.5 py-2 text-xs font-bold text-white hover:bg-rose-900/70 transition-all cursor-pointer"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
-                  <span>ព្យាយាមម្តងទៀត (RETRY)</span>
+                  <span>ព្យាយាមម្តងទៀត (Retry)</span>
                 </button>
+
+                <button
+                  type="button"
+                  data-testid="retry-fast-mode-btn"
+                  onClick={() => {
+                    setSimplifiedQuality("fast");
+                    handleRunSegmentation("preview", 1024);
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl border border-cyan-500/50 bg-cyan-950/60 px-3.5 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-900/70 transition-all cursor-pointer"
+                >
+                  <Zap className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>ប្តូរទៅ Fast Mode (Switch to Fast Mode)</span>
+                </button>
+
                 <button
                   type="button"
                   data-testid="retry-browser-ai-btn"
@@ -1586,94 +1563,36 @@ export default function BgRemoverPage() {
                     setSelectedEngine("browser");
                     handleRunSegmentation("preview");
                   }}
-                  className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-emerald-500/50 bg-emerald-950/60 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-900/70 transition-colors uppercase font-mono"
+                  className="flex items-center gap-1.5 rounded-xl border border-emerald-500/50 bg-emerald-950/60 px-3.5 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-900/70 transition-all cursor-pointer"
                 >
-                  <Zap className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>ប្តូរទៅ BROWSER AI (RETRY USING BROWSER AI)</span>
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>ប្រើ Browser AI (Use Browser AI)</span>
                 </button>
+
                 <button
                   type="button"
-                  data-testid="retry-1024-btn"
-                  onClick={() => handleRunSegmentation("preview", 1024)}
-                  className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-cyan-500/50 bg-cyan-950/60 px-3 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-900/70 transition-colors uppercase font-mono"
-                >
-                  <Zap className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>កម្រិត 1024PX (RETRY AT 1024PX)</span>
-                </button>
-                <button
-                  type="button"
-                  data-testid="error-cancel-btn"
-                  onClick={handleCancel}
-                  className="min-h-[44px] flex items-center gap-1 rounded-none border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:text-white transition-colors uppercase font-mono"
-                >
-                  <XCircle className="h-3.5 w-3.5 text-slate-400" />
-                  <span>បោះបង់ (CANCEL)</span>
-                </button>
-                <button
-                  type="button"
-                  data-testid="error-reset-btn"
+                  data-testid="choose-another-image-btn"
                   onClick={handleReset}
-                  className="min-h-[44px] flex items-center gap-1.5 rounded-none border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:text-white transition-colors uppercase font-mono"
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs text-slate-300 hover:text-white transition-all cursor-pointer"
                 >
-                  <span>កំណត់ឡើងវិញ (RESET)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setError(null)}
-                  className="min-h-[44px] flex items-center gap-1 rounded-none border border-slate-800 bg-slate-950 px-2.5 py-2 text-xs text-slate-400 hover:text-white transition-colors uppercase font-mono"
-                >
-                  <span>បិទសារ (DISMISS)</span>
+                  <ImageOff className="h-3.5 w-3.5 text-slate-400" />
+                  <span>ជ្រើសរើសរូបភាពផ្សេង (Choose Another Image)</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* High-Tech Robotic Scanner View with Laser Animation */}
+          {/* ── Deterministic Stage-based Processing Card (Replaces infinite laser stall) ── */}
           {isProcessing && (
-            <div data-testid="processing-scanner" className="relative overflow-hidden rounded-none border border-cyan-500/40 bg-slate-950/95 shadow-[0_0_35px_rgba(0,240,255,0.15)] font-mono">
-              {/* Corner target reticles */}
-              <div className="pointer-events-none absolute top-1.5 left-1.5 h-3 w-3 border-t-2 border-l-2 border-cyan-400 z-30" />
-              <div className="pointer-events-none absolute top-1.5 right-1.5 h-3 w-3 border-t-2 border-r-2 border-cyan-400 z-30" />
-              <div className="pointer-events-none absolute bottom-1.5 left-1.5 h-3 w-3 border-b-2 border-l-2 border-cyan-400 z-30" />
-              <div className="pointer-events-none absolute bottom-1.5 right-1.5 h-3 w-3 border-b-2 border-r-2 border-cyan-400 z-30" />
-
-              {/* Laser Scanning Beam & Scanlines */}
-              <div className="animate-laser-scan opacity-90" />
-              <div className="pointer-events-none absolute inset-0 cyber-scanlines opacity-30 z-20" />
-
-              {/* Live Image Preview Under Active Scan */}
-              {originalUrl && (
-                <div className="relative flex items-center justify-center p-6 min-h-[300px] bg-slate-950/60">
-                  <img
-                    src={originalUrl}
-                    alt="Scanning in progress"
-                    className="max-h-[360px] max-w-full object-contain opacity-70 filter brightness-90 contrast-125"
-                  />
-                </div>
-              )}
-
-              {/* Robotic Scanner telemetry console */}
-              <div className="p-4 border-t border-cyan-500/30 bg-slate-900/90">
-                <RoboticScanner
-                  active={true}
-                  moduleName={
-                    processingMode === "worker"
-                      ? "REMOTE WORKER SERVICE"
-                      : processingMode === "final"
-                      ? "CLEAN CUT MATTING"
-                      : "FAST PREVIEW"
-                  }
-                  steps={scannerSteps}
-                  subtext={
-                    processingMode === "worker"
-                      ? "Remote background removal microservice"
-                      : processingMode === "final"
-                      ? "Local edge refinement and color decontamination"
-                      : "High-speed preview segmentation with browser model caching"
-                  }
-                />
-              </div>
-            </div>
+            <BgProcessingCard
+              isProcessing={isProcessing}
+              processingMode={processingMode}
+              progressInfo={progressInfo}
+              slowNotice={slowNotice}
+              onCancel={handleCancel}
+              onReset={handleReset}
+              originalUrl={originalUrl}
+            />
           )}
 
           {/* 5. RESULT PANEL: Download Transparent PNG bar */}

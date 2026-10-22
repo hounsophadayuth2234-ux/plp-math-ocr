@@ -222,8 +222,8 @@ export function BgStudioNav({
                   isProcessing ? "bg-amber-400 animate-ping" : "bg-emerald-400 animate-pulse"
                 }`}
               />
-              <span className={isProcessing ? "text-amber-300 font-bold" : "text-emerald-400"}>
-                {isProcessing ? "INFERENCE MATRIX SCANNING..." : "STATUS: READY FOR INTAKE"}
+              <span className={isProcessing ? "text-amber-300 font-bold font-sans" : "text-emerald-400 font-sans"}>
+                {isProcessing ? "កំពុងដំណើរការ... (Processing...)" : "ត្រៀមរួចរាល់ (Ready)"}
               </span>
             </div>
           </div>
@@ -534,7 +534,7 @@ export function BgStudioNav({
             aria-label="Open Studio Settings"
           >
             <Settings className="h-4 w-4 text-slate-400" />
-            <span className="hidden sm:inline font-mono text-[10px] font-bold">CALIBRATE</span>
+            <span className="hidden sm:inline font-sans text-xs font-semibold">ការកំណត់ (Settings)</span>
           </button>
         </div>
       </div>

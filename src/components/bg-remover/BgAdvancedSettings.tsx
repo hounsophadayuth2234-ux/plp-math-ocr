@@ -117,8 +117,8 @@ export function BgAdvancedSettings({
       {/* Internal Panel Layout (2 columns on desktop, 1 on mobile) */}
       <div className="pt-4 border-t border-slate-800/80 mt-2 space-y-4 text-xs">
         <div className="flex items-center justify-between pb-1">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-            Fine-tuned Control Deck
+          <span className="text-[11px] text-slate-300 font-bold font-sans">
+            ការកំណត់កម្រិតខ្ពស់ (Advanced Settings)
           </span>
           <button
             type="button"

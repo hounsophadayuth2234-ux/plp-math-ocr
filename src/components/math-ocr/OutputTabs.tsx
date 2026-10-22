@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Copy, Check, Eye, Code2, FileCode, Binary, AlertTriangle, Download } from "lucide-react";
+import { Copy, Check, Eye, Code2, FileCode, Binary, Download, FileText } from "lucide-react";
 import { sanitizeJoditHtml } from "@/lib/math-ocr-utils";
 import { sanitizeMathHtml, sanitizeMathLatex, sanitizeMathMLMarkup } from "@/lib/math-ocr-normalizer";
 
@@ -18,7 +18,7 @@ interface OutputTabsProps {
   isStale?: boolean;
 }
 
-export type TabId = "latex" | "joditHtml" | "mathml" | "preview";
+export type TabId = "preview" | "text" | "latex" | "joditHtml" | "mathml";
 
 export function OutputTabs({
   latex,
@@ -28,17 +28,18 @@ export function OutputTabs({
   rawDescription,
   transcription,
   uncertainParts,
-  isDemoMode,
+  isDemoMode: _isDemoMode,
   elapsedSeconds,
   isStale,
 }: OutputTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("latex");
+  const [activeTab, setActiveTab] = useState<TabId>("preview");
   const [copied, setCopied] = useState<TabId | null>(null);
   const [copyFailed, setCopyFailed] = useState<string | null>(null);
 
   const cleanLatex = sanitizeMathLatex(latex);
   const cleanHtml = sanitizeMathHtml(joditHtml || sanitizeJoditHtml(joditHtml));
   const cleanMathML = sanitizeMathMLMarkup(mathml);
+  const cleanText = transcription || rawDescription || cleanLatex;
 
   const copyText = async (text: string, tab: TabId) => {
     setCopyFailed(null);
@@ -48,7 +49,6 @@ export function OutputTabs({
         setCopied(tab);
         setTimeout(() => setCopied(null), 2000);
       } else if (typeof document !== "undefined") {
-        // Fallback for older browsers / iframe restrictions
         const textarea = document.createElement("textarea");
         textarea.value = text;
         textarea.style.position = "fixed";
@@ -94,119 +94,84 @@ export function OutputTabs({
     accent: string;
   }[] = [
     {
+      id: "preview",
+      label: "Visual Preview",
+      badge: "WYSIWYG",
+      icon: Eye,
+      accent: "text-indigo-400",
+    },
+    {
+      id: "text",
+      label: "Extracted Text",
+      badge: "Text",
+      icon: FileText,
+      accent: "text-sky-400",
+    },
+    {
       id: "latex",
       label: "LaTeX",
-      badge: "Option 1",
+      badge: "LaTeX",
       icon: FileCode,
       accent: "text-emerald-400",
     },
     {
       id: "joditHtml",
-      label: "Jodit HTML",
-      badge: "Option 2",
+      label: "Sanitized HTML",
+      badge: "HTML",
       icon: Code2,
       accent: "text-amber-400",
     },
     {
       id: "mathml",
       label: "MathML",
-      badge: "Option 3",
+      badge: "MathML",
       icon: Binary,
       accent: "text-cyan-400",
     },
-    {
-      id: "preview",
-      label: "Preview",
-      badge: "WYSIWYG",
-      icon: Eye,
-      accent: "text-indigo-400",
-    },
   ];
 
-  const currentTabLabel = TABS.find((t) => t.id === activeTab)?.label || "Code";
-
   return (
-    <div className="cyber-glass-panel relative z-10 flex flex-col rounded-2xl border border-cyan-500/30 overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.7)] min-w-0 max-w-full w-full">
+    <div className="relative z-10 flex flex-col rounded-2xl border border-slate-800 bg-slate-950/90 overflow-hidden shadow-2xl min-w-0 max-w-full w-full font-sans">
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-cyan-500/20 bg-slate-950/40 backdrop-blur-[6px] px-4 py-3 min-w-0 max-w-full">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 min-w-0 max-w-full bg-slate-900/60">
         <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
           {isStale && (
             <span
               data-testid="math-ocr-stale-badge"
-              className="rounded-md bg-slate-700/60 border border-slate-600 px-2.5 py-1 text-xs font-mono text-slate-300"
+              className="rounded-md bg-slate-800 border border-slate-700 px-2.5 py-1 text-xs font-mono text-slate-300"
             >
               [លទ្ធផលមុន / Previous Result]
             </span>
           )}
-          <span className="rounded-md bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30">
+          <span className="rounded-lg bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-300 border border-indigo-500/30">
             Detected: {detectedType}
           </span>
-          {transcription && (
-            <span className="rounded-md bg-cyan-500/15 px-2.5 py-1 text-xs font-mono font-medium text-cyan-300 ring-1 ring-cyan-500/30 truncate max-w-full">
-              Transcription: {transcription}
-            </span>
-          )}
           {elapsedSeconds !== undefined && elapsedSeconds > 0 && (
             <span
-              className="rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-mono font-medium text-emerald-300 ring-1 ring-emerald-500/30"
+              className="rounded-lg bg-emerald-500/15 px-2.5 py-1 text-xs font-mono font-medium text-emerald-300 border border-emerald-500/30"
               data-testid="math-ocr-elapsed-badge"
             >
               Elapsed: {elapsedSeconds.toFixed(2)}s
             </span>
           )}
           {uncertainParts && uncertainParts.length > 0 && (
-            <span className="rounded-md bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-300 ring-1 ring-amber-500/30">
+            <span className="rounded-lg bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-300 border border-amber-500/30">
               Unclear: {uncertainParts.join(", ")}
             </span>
           )}
-          {isDemoMode && (
-            <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300 ring-1 ring-amber-500/30">
-              Interactive Demo
+          {copyFailed && (
+            <span className="rounded-lg bg-rose-500/20 px-2.5 py-1 text-xs font-semibold text-rose-300 border border-rose-500/30">
+              {copyFailed}
             </span>
           )}
-          <p className="text-xs text-slate-400 max-w-full truncate">{rawDescription}</p>
         </div>
-
-        {/* Quick copy active tab */}
-        {activeTab !== "preview" && (
-          <div className="flex items-center gap-2 shrink-0">
-            {copyFailed && (
-              <span className="text-[11px] text-rose-400 font-mono flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" /> Copy failed
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                if (activeTab === "latex") copyText(cleanLatex, "latex");
-                else if (activeTab === "joditHtml") copyText(cleanHtml, "joditHtml");
-                else if (activeTab === "mathml") copyText(cleanMathML, "mathml");
-              }}
-              aria-label={`Copy ${currentTabLabel} to clipboard`}
-              title={`Copy ${currentTabLabel} to clipboard`}
-              className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-950/40 backdrop-blur-[4px] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-cyan-900/60 hover:text-white hover:border-cyan-400 transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none"
-            >
-              {copied === activeTab ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                  <span>បានចម្លងរួចរាល់</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>ចម្លង {currentTabLabel}</span>
-                </>
-              )}
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* 4 Tabs Bar - Constrained horizontally on mobile with responsive touch scrolling */}
+      {/* 5 Tab Navigation Bar */}
       <div
         role="tablist"
         aria-label="Math Output Formats"
-        className="flex border-b border-cyan-500/20 bg-slate-950/35 backdrop-blur-[4px] overflow-x-auto min-w-0 max-w-full w-full scrollbar-thin"
+        className="flex border-b border-slate-800 bg-slate-950/80 overflow-x-auto min-w-0 max-w-full w-full scrollbar-thin"
       >
         {TABS.map((tab, idx) => {
           const Icon = tab.icon;
@@ -236,15 +201,15 @@ export function OutputTabs({
                   document.getElementById(`tab-${prevTab.id}`)?.focus();
                 }
               }}
-              className={`flex items-center gap-2 whitespace-nowrap px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-all focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0 min-h-[44px] ${
+              className={`flex items-center gap-2 whitespace-nowrap px-4 sm:px-5 py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 shrink-0 min-h-[44px] ${
                 isActive
-                  ? "border-cyan-400 text-white bg-cyan-950/40 shadow-xs"
-                  : "border-transparent text-slate-400 hover:text-slate-200 hover:border-cyan-500/40"
+                  ? "border-cyan-400 text-white bg-cyan-950/30"
+                  : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
               }`}
             >
               <Icon className={`h-4 w-4 ${tab.accent} shrink-0`} aria-hidden="true" />
               <span>{tab.label}</span>
-              <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono text-slate-400 shrink-0">
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono text-slate-400 shrink-0">
                 {tab.badge}
               </span>
             </button>
@@ -254,17 +219,127 @@ export function OutputTabs({
 
       {/* Tab Panels */}
       <div className="min-h-72 min-w-0 max-w-full w-full">
-        {/* --- 1. LaTeX Code Panel --- */}
+        {/* --- 1. Visual Preview Tab --- */}
+        {activeTab === "preview" && (
+          <div
+            id="tabpanel-preview"
+            role="tabpanel"
+            aria-labelledby="tab-preview"
+            className="flex flex-col h-full min-w-0 max-w-full w-full"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 bg-slate-900/40 min-w-0 max-w-full">
+              <span className="text-xs font-semibold text-slate-300 truncate">
+                Visual Preview (Sandboxed WYSIWYG Rendering)
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-testid="copy-preview-btn"
+                  onClick={() => copyText(cleanHtml, "preview")}
+                  aria-label="Copy preview HTML to clipboard"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                >
+                  {copied === "preview" ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>បានចម្លងរួចរាល់</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>Copy HTML</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(cleanHtml, "equation.html", "text/html")}
+                  aria-label="Download HTML file"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5 text-indigo-400" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-white p-4 min-w-0 max-w-full overflow-hidden">
+              <iframe
+                title="Jodit HTML Preview"
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:16px;background:#ffffff;overflow-wrap:break-word;word-break:break-word;color:#0f172a;font-family:system-ui,-apple-system,sans-serif;}</style></head><body>${cleanHtml}</body></html>`}
+                sandbox=""
+                className="h-full w-full min-h-72 min-w-0 max-w-full"
+                style={{ border: "none", minHeight: "320px", maxWidth: "100%" }}
+              />
+            </div>
+            <div className="border-t border-slate-800 bg-slate-950/60 px-4 py-2 text-[11px] text-slate-400">
+              ✓ Sandboxed visual output rendered directly with inline styling.
+            </div>
+          </div>
+        )}
+
+        {/* --- 2. Extracted Text Tab --- */}
+        {activeTab === "text" && (
+          <div
+            id="tabpanel-text"
+            role="tabpanel"
+            aria-labelledby="tab-text"
+            className="flex flex-col h-full min-w-0 max-w-full w-full"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 bg-slate-900/40 min-w-0 max-w-full">
+              <span className="text-xs font-semibold text-slate-300 truncate">
+                Extracted Text / Mathematical Content
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-testid="copy-text-btn"
+                  onClick={() => copyText(cleanText, "text")}
+                  aria-label="Copy extracted text to clipboard"
+                  className="flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                >
+                  {copied === "text" ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>បានចម្លងរួចរាល់</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>ចម្លង Text</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(cleanText, "extracted-text.txt", "text/plain")}
+                  aria-label="Download text file"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5 text-sky-400" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
+              </div>
+            </div>
+            <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-sky-300 font-mono bg-slate-950/80 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
+              {cleanText}
+            </pre>
+            <div className="border-t border-slate-800 bg-slate-950/60 px-4 py-2 text-[11px] text-slate-400">
+              Clean Unicode text extracted from OCR with Khmer character &amp; mathematical symbol preservation.
+            </div>
+          </div>
+        )}
+
+        {/* --- 3. LaTeX Tab --- */}
         {activeTab === "latex" && (
           <div
             id="tabpanel-latex"
             role="tabpanel"
             aria-labelledby="tab-latex"
-            className="relative flex flex-col h-full min-w-0 max-w-full w-full"
+            className="flex flex-col h-full min-w-0 max-w-full w-full"
           >
-            <div className="flex items-center justify-between border-b border-slate-800/60 px-4 py-2.5 bg-slate-950/30 min-w-0 max-w-full">
-              <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider truncate">
-                Output 1 · LaTeX Math Syntax (KaTeX 0.19.0 Verified)
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 bg-slate-900/40 min-w-0 max-w-full">
+              <span className="text-xs font-semibold text-slate-300 truncate">
+                LaTeX Math Syntax (KaTeX 0.19.0+ Verified)
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
@@ -272,17 +347,16 @@ export function OutputTabs({
                   data-testid="copy-latex-btn"
                   onClick={() => copyText(cleanLatex, "latex")}
                   aria-label="Copy LaTeX code to clipboard"
-                  title="Copy LaTeX code to clipboard"
-                  className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 transition-colors focus:ring-2 focus:ring-emerald-400 focus:outline-none shrink-0"
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 shrink-0"
                 >
                   {copied === "latex" ? (
                     <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
                       <span>បានចម្លងរួចរាល់</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Copy className="h-3.5 w-3.5" />
                       <span>ចម្លង LaTeX</span>
                     </>
                   )}
@@ -291,62 +365,50 @@ export function OutputTabs({
                   type="button"
                   onClick={() => downloadFile(cleanLatex, "equation.tex", "text/plain")}
                   aria-label="Download LaTeX file"
-                  title="Download equation.tex"
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-emerald-400 focus:outline-none shrink-0"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 shrink-0"
                 >
-                  <Download className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                  <Download className="h-3.5 w-3.5 text-emerald-400" />
                   <span className="hidden sm:inline">Download</span>
                 </button>
               </div>
             </div>
-            <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-emerald-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
+            <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-emerald-300 font-mono bg-slate-950/80 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
               {cleanLatex}
             </pre>
-            <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-2 text-[11px] text-slate-400">
-              Compatible with KaTeX (0.19.0+), Overleaf, MathJax, Markdown documents, and standard LaTeX compilers.
+            <div className="border-t border-slate-800 bg-slate-950/60 px-4 py-2 text-[11px] text-slate-400">
+              Compatible with KaTeX, Overleaf, MathJax, Markdown documents, and standard LaTeX compilers.
             </div>
           </div>
         )}
 
-        {/* --- 2. Jodit HTML / Inline CSS Panel --- */}
+        {/* --- 4. Sanitized HTML Tab --- */}
         {activeTab === "joditHtml" && (
           <div
             id="tabpanel-joditHtml"
             role="tabpanel"
             aria-labelledby="tab-joditHtml"
-            className="relative flex flex-col h-full min-w-0 max-w-full w-full"
+            className="flex flex-col h-full min-w-0 max-w-full w-full"
           >
-            <div className="flex items-center justify-between border-b border-slate-800/60 px-4 py-2.5 bg-slate-950/30 min-w-0 max-w-full">
-              <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider truncate">
-                Output 2 · Jodit HTML + Strict Inline CSS
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 bg-slate-900/40 min-w-0 max-w-full">
+              <span className="text-xs font-semibold text-slate-300 truncate">
+                Sanitized HTML + Strict Inline CSS
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setActiveTab("preview")}
-                  aria-label="Switch to Visual Preview tab"
-                  title="Switch to Visual Preview tab"
-                  className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-slate-400 focus:outline-none"
-                >
-                  <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>View Render</span>
-                </button>
-                <button
-                  type="button"
                   data-testid="copy-jodit-btn"
                   onClick={() => copyText(cleanHtml, "joditHtml")}
-                  aria-label="Copy Jodit HTML code to clipboard"
-                  title="Copy Jodit HTML code to clipboard"
-                  className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors focus:ring-2 focus:ring-amber-400 focus:outline-none"
+                  aria-label="Copy Jodit HTML to clipboard"
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                 >
                   {copied === "joditHtml" ? (
                     <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
                       <span>បានចម្លងរួចរាល់</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Copy className="h-3.5 w-3.5" />
                       <span>ចម្លង HTML</span>
                     </>
                   )}
@@ -354,35 +416,34 @@ export function OutputTabs({
                 <button
                   type="button"
                   onClick={() => downloadFile(cleanHtml, "equation.html", "text/html")}
-                  aria-label="Download Jodit HTML file"
-                  title="Download equation.html"
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-amber-400 focus:outline-none shrink-0"
+                  aria-label="Download HTML file"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 shrink-0"
                 >
-                  <Download className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
+                  <Download className="h-3.5 w-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Download</span>
                 </button>
               </div>
             </div>
-            <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-amber-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
+            <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-amber-300 font-mono bg-slate-950/80 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
               {cleanHtml}
             </pre>
-            <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-2 text-[11px] text-slate-400">
-              Paste directly into Jodit WYSIWYG editor in educational LMS platforms. Zero external stylesheets.
+            <div className="border-t border-slate-800 bg-slate-950/60 px-4 py-2 text-[11px] text-slate-400">
+              Paste directly into Jodit or other rich-text LMS editors. Preserves vertical alignment with zero external CSS dependencies.
             </div>
           </div>
         )}
 
-        {/* --- 3. MathML Code Panel --- */}
+        {/* --- 5. MathML Tab --- */}
         {activeTab === "mathml" && (
           <div
             id="tabpanel-mathml"
             role="tabpanel"
             aria-labelledby="tab-mathml"
-            className="relative flex flex-col h-full min-w-0 max-w-full w-full"
+            className="flex flex-col h-full min-w-0 max-w-full w-full"
           >
-            <div className="flex items-center justify-between border-b border-slate-800/60 px-4 py-2.5 bg-slate-950/30 min-w-0 max-w-full">
-              <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider truncate">
-                Output 3 · W3C Standard MathML Markup
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 bg-slate-900/40 min-w-0 max-w-full">
+              <span className="text-xs font-semibold text-slate-300 truncate">
+                W3C Standard MathML Markup
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
@@ -390,17 +451,16 @@ export function OutputTabs({
                   data-testid="copy-mathml-btn"
                   onClick={() => copyText(cleanMathML, "mathml")}
                   aria-label="Copy MathML code to clipboard"
-                  title="Copy MathML code to clipboard"
-                  className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0"
+                  className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 shrink-0"
                 >
                   {copied === "mathml" ? (
                     <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
                       <span>បានចម្លងរួចរាល់</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Copy className="h-3.5 w-3.5" />
                       <span>ចម្លង MathML</span>
                     </>
                   )}
@@ -409,69 +469,18 @@ export function OutputTabs({
                   type="button"
                   onClick={() => downloadFile(cleanMathML, "equation.xml", "application/xml")}
                   aria-label="Download MathML file"
-                  title="Download equation.xml"
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none shrink-0"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 shrink-0"
                 >
-                  <Download className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
+                  <Download className="h-3.5 w-3.5 text-cyan-400" />
                   <span className="hidden sm:inline">Download</span>
                 </button>
               </div>
             </div>
-            <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-cyan-300 font-mono bg-slate-950/60 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
+            <pre className="flex-1 overflow-x-auto p-4 sm:p-5 text-xs sm:text-sm leading-relaxed text-cyan-300 font-mono bg-slate-950/80 whitespace-pre-wrap break-all max-h-96 min-w-0 max-w-full">
               {cleanMathML}
             </pre>
-            <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-2 text-[11px] text-slate-400">
-              Standard Mathematical Markup Language with W3C namespace for accessibility, modern browsers, and e-learning.
-            </div>
-          </div>
-        )}
-
-        {/* --- 4. Visual Preview Panel --- */}
-        {activeTab === "preview" && (
-          <div
-            id="tabpanel-preview"
-            role="tabpanel"
-            aria-labelledby="tab-preview"
-            className="flex flex-col h-full min-w-0 max-w-full w-full"
-          >
-            <div className="flex items-center justify-between border-b border-slate-800/60 px-4 py-2.5 bg-slate-950/30 min-w-0 max-w-full">
-              <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider truncate">
-                Sandboxed Visual Preview · Jodit HTML + Inline CSS
-              </span>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  data-testid="copy-preview-btn"
-                  onClick={() => copyText(cleanHtml, "preview")}
-                  aria-label="Copy preview HTML code to clipboard"
-                  title="Copy preview HTML code to clipboard"
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors focus:ring-2 focus:ring-slate-400 focus:outline-none"
-                >
-                  {copied === "preview" ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                      <span>បានចម្លងរួចរាល់</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>ចម្លង HTML</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 bg-white p-2 min-w-0 max-w-full overflow-hidden">
-              <iframe
-                title="Jodit HTML Preview"
-                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:16px;background:#ffffff;overflow-wrap:break-word;word-break:break-word;}</style></head><body>${cleanHtml}</body></html>`}
-                sandbox=""
-                className="h-full w-full min-h-72 min-w-0 max-w-full"
-                style={{ border: "none", minHeight: "320px", maxWidth: "100%" }}
-              />
-            </div>
-            <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-2 text-[11px] text-slate-400">
-              ✓ Sandboxed iframe (script-disabled) · Sanitized against active scripts and unsafe content.
+            <div className="border-t border-slate-800 bg-slate-950/60 px-4 py-2 text-[11px] text-slate-400">
+              Standard Mathematical Markup Language (W3C) for accessibility, screen readers, and modern browser rendering.
             </div>
           </div>
         )}

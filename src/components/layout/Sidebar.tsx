@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -12,9 +12,13 @@ import {
   Code2,
   Brain,
   Cpu,
-  Users,
+  Shield,
   X,
   ChevronRight,
+  ChevronDown,
+  Clock,
+  Activity,
+  History,
 } from "lucide-react";
 import { CORE_TOOLS, TEAM_MEMBERS, ToolModule } from "@/config/tools";
 
@@ -35,6 +39,12 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = React.useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [checkedTime, setCheckedTime] = useState<string>("Just now");
+
+  React.useEffect(() => {
+    setCheckedTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+  }, []);
 
   React.useEffect(() => {
     let mounted = true;
@@ -62,6 +72,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
+  const recentTools = [
+    { name: "OCR to LaTeX", href: "/plp-math-content", icon: Calculator, color: "text-cyan-400" },
+    { name: "Canvas Cutout", href: "/bg-remover", icon: Eraser, color: "text-emerald-400" },
+    { name: "4x HD Upscale", href: "/image-upscaler", icon: Sparkles, color: "text-amber-400" },
+    { name: "Khmer Math Solver", href: "/math-solver", icon: Brain, color: "text-violet-400" },
+  ];
+
   return (
     <>
       {/* Mobile backdrop overlay */}
@@ -75,23 +92,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar container */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-cyan-500/20 bg-[rgba(3,7,18,0.25)] backdrop-blur-[8px] text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shadow-[4px_0_30px_rgba(0,0,0,0.7)] ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-800 bg-slate-950/95 text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shadow-xl ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between border-b border-cyan-500/20 px-5 bg-slate-950/40 backdrop-blur-sm">
+        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-5 bg-slate-950/40 backdrop-blur-sm">
           <Link href="/" className="flex items-center gap-3" onClick={onClose}>
-            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 via-indigo-600 to-violet-600 text-white shadow-[0_0_15px_rgba(0,240,255,0.4)]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 via-indigo-600 to-violet-600 text-white shadow-md">
               <Cpu className="h-5 w-5" />
-              <div className="absolute -inset-0.5 rounded-xl border border-cyan-300/40 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-base font-bold tracking-tight text-white">
+                <span className="text-base font-bold tracking-tight text-white font-sans">
                   PLP Math Content
                 </span>
-                <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold tracking-wider text-cyan-400 uppercase ring-1 ring-cyan-500/40 shadow-[0_0_6px_rgba(0,240,255,0.2)]">
+                <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold tracking-wider text-cyan-400 uppercase border border-cyan-500/30">
                   PLP
                 </span>
               </div>
@@ -104,7 +120,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden focus:ring-2 focus:ring-cyan-400 focus:outline-none"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
             aria-label="Close navigation sidebar"
             title="Close navigation sidebar"
           >
@@ -112,68 +128,36 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation Links */}
-        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
-          {/* Overview Section */}
+        {/* Navigation Content */}
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+          {/* Section 1: Dashboard Overview */}
           <div>
-            <p className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
-              Workspace
-            </p>
             <Link
               href="/"
               onClick={onClose}
               className={`group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                 pathname === "/"
-                  ? "bg-indigo-600/15 text-white ring-1 ring-indigo-500/40"
-                  : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                  ? "bg-indigo-600/20 text-white border border-indigo-500/40"
+                  : "text-slate-300 hover:bg-slate-900 hover:text-white"
               }`}
             >
-              <span className="flex items-center gap-3">
+              <span className="flex items-center gap-2.5">
                 <LayoutDashboard
                   className={`h-4 w-4 ${
-                    pathname === "/"
-                      ? "text-indigo-400"
-                      : "text-slate-400 group-hover:text-slate-200"
+                    pathname === "/" ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200"
                   }`}
                 />
-                <span>ផ្ទាំងគ្រប់គ្រងទូទៅ</span>
+                <span className="font-sans">ផ្ទាំងគ្រប់គ្រង (Dashboard)</span>
               </span>
-              {pathname === "/" && (
-                <ChevronRight className="h-4 w-4 text-indigo-400" />
-              )}
+              {pathname === "/" && <ChevronRight className="h-4 w-4 text-indigo-400" />}
             </Link>
-
-            {/* Admin Panel Link for Administrators */}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                onClick={onClose}
-                className={`mt-1.5 group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
-                  pathname === "/admin"
-                    ? "bg-indigo-600/20 text-white ring-1 ring-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.25)]"
-                    : "text-indigo-300/80 hover:bg-indigo-950/40 hover:text-indigo-200"
-                }`}
-              >
-                <span className="flex items-center gap-3">
-                  <Cpu
-                    className={`h-4 w-4 ${
-                      pathname === "/admin" ? "text-indigo-400" : "text-indigo-400/80 group-hover:text-indigo-300"
-                    }`}
-                  />
-                  <span>គ្រប់គ្រងប្រព័ន្ធ (Admin)</span>
-                </span>
-                {pathname === "/admin" && (
-                  <ChevronRight className="h-4 w-4 text-indigo-400" />
-                )}
-              </Link>
-            )}
           </div>
 
-          {/* Active Functional Modules */}
+          {/* Section 2: Workspace Modules 01–04 */}
           <div>
-            <div className="mb-2 flex items-center justify-between px-3">
-              <p className="text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
-                Active Modules ({CORE_TOOLS.filter((t) => !t.disabled).length})
+            <div className="mb-2 px-3 flex items-center justify-between">
+              <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-sans">
+                ម៉ូឌុលការងារ (Modules 01–04)
               </p>
             </div>
             <div className="space-y-1.5">
@@ -191,105 +175,148 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       WebkitBackdropFilter: "blur(10px) saturate(140%)",
                       backdropFilter: "blur(10px) saturate(140%)",
                     }}
-                    className={`group relative flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950 ${
+                    className={`group relative flex items-center justify-between rounded-xl px-3 py-2 text-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950 ${
                       isActive
-                        ? "sidebar-module-glass is-active text-white"
-                        : "sidebar-module-glass text-slate-100 hover:text-white"
+                        ? "sidebar-module-glass is-active text-white border border-cyan-500/50 bg-cyan-950/30"
+                        : "sidebar-module-glass text-slate-200 hover:text-white hover:bg-slate-900/60"
                     }`}
                   >
-                    <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
                       <div
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${
                           tool.accentColor
-                        } ${
-                          isActive
-                            ? "text-white shadow-[0_0_12px_rgba(0,240,255,0.40)]"
-                            : "text-white group-hover:shadow-[0_0_8px_rgba(0,240,255,0.25)]"
-                        }`}
+                        } text-white`}
                       >
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span
-                            className={`text-[10px] font-mono transition-colors ${
-                              isActive
-                                ? "text-cyan-300 font-bold"
-                                : "text-slate-400 group-hover:text-cyan-300"
+                            className={`text-[10px] font-mono ${
+                              isActive ? "text-cyan-300 font-bold" : "text-slate-400 group-hover:text-cyan-300"
                             }`}
                           >
                             0{tool.number}
                           </span>
-                          <p
-                            className={`truncate font-medium transition-colors ${
-                              isActive
-                                ? "text-white"
-                                : "text-slate-100 group-hover:text-white"
-                            }`}
-                          >
-                            {tool.shortTitle}
-                          </p>
+                          <p className="truncate font-medium font-sans text-xs">{tool.shortTitle}</p>
                         </div>
-                        <p
-                          className={`truncate text-[11px] transition-colors ${
-                            isActive
-                              ? "text-cyan-200/90 font-medium"
-                              : "text-slate-400 group-hover:text-slate-300"
-                          }`}
-                        >
-                          {tool.badge}
-                        </p>
+                        <p className="truncate text-[10px] text-slate-400">{tool.badge}</p>
                       </div>
                     </div>
 
                     {isActive && (
-                      <span className="h-2 w-2 shrink-0 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(0,240,255,0.9)] animate-pulse" />
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-cyan-400 animate-pulse" />
                     )}
                   </Link>
                 );
               })}
             </div>
+          </div>
 
-            {/* Maintenance notice */}
-            <div className="mt-3 px-3 py-2.5 rounded-xl border border-amber-500/25 bg-amber-950/25 text-[11px] font-mono text-amber-300/90 leading-relaxed">
-              <span className="text-amber-400 font-semibold">NOTE:</span> Module 05 (Web Cloner) is temporarily under maintenance.
+          {/* Section 3: Recent Tools / Quick Access */}
+          <div>
+            <div className="mb-2 px-3">
+              <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-sans flex items-center gap-1.5">
+                <History className="h-3 w-3 text-slate-400" />
+                <span>ឧបករណ៍ញឹកញាប់ (Recent Tools)</span>
+              </p>
             </div>
+            <div className="grid grid-cols-2 gap-1.5 px-1">
+              {recentTools.map((t) => {
+                const ToolIcon = t.icon;
+                return (
+                  <Link
+                    key={t.name}
+                    href={t.href}
+                    onClick={onClose}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-800/80 bg-slate-900/40 p-2 text-[11px] text-slate-300 hover:bg-slate-850 hover:text-white transition-colors"
+                  >
+                    <ToolIcon className={`h-3 w-3 ${t.color} shrink-0`} />
+                    <span className="truncate">{t.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Section 4: Simple System Status */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 font-sans">ស្ថានភាពប្រព័ន្ធ:</span>
+              <span className="flex items-center gap-1 text-emerald-400 font-medium font-mono text-[11px]">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                ដំណើរការល្អ
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 font-mono">
+              <Clock className="h-3 w-3 text-slate-400" />
+              <span>Checked: {checkedTime}</span>
+            </p>
+          </div>
+
+          {/* Module 05 Notice */}
+          <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-2.5 text-[11px] font-sans text-amber-300/80 leading-relaxed">
+            <span className="text-amber-400 font-semibold">ម៉ូឌុល ០៥:</span> កំពុងជួសជុល (Under Maintenance)
           </div>
         </nav>
 
-        {/* DYT ECOSYSTEM Nodes Footer */}
-        <div className="border-t border-cyan-500/20 p-4 bg-slate-950/60 backdrop-blur-sm">
-          <div className="rounded-xl sidebar-module-glass p-3.5 shadow-[0_0_15px_rgba(0,240,255,0.05)]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="h-3.5 w-3.5 text-cyan-400" />
-                <span className="font-mono text-xs font-bold text-slate-200">
-                  DYT ECOSYSTEM (4 Nodes)
-                </span>
-              </div>
-              <span className="flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                LINKED
-              </span>
-            </div>
+        {/* Collapsed-by-Default Diagnostics Drawer */}
+        <div className="border-t border-slate-800 p-3 bg-slate-950/70">
+          <button
+            type="button"
+            onClick={() => setDiagnosticsOpen(!diagnosticsOpen)}
+            className="flex w-full items-center justify-between rounded-lg p-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <span className="flex items-center gap-2 font-mono text-[11px]">
+              <Activity className="h-3.5 w-3.5 text-cyan-400" />
+              <span>ការវិភាគ (Diagnostics)</span>
+            </span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${
+                diagnosticsOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
 
-            <div className="mt-3 flex items-center justify-between">
-              <div className="flex -space-x-2">
-                {TEAM_MEMBERS.map((member) => (
-                  <div
-                    key={member.initials}
-                    title={`${member.name} — ${member.role}`}
-                    className={`flex h-7 w-7 items-center justify-center rounded-full ${member.color} font-mono text-[10px] font-bold text-slate-950 ring-2 ring-slate-950 shadow-[0_0_8px_rgba(0,240,255,0.3)]`}
-                  >
-                    {member.initials}
-                  </div>
-                ))}
+          {diagnosticsOpen && (
+            <div className="mt-2.5 rounded-xl border border-slate-800 bg-slate-900/80 p-3 text-xs space-y-2 font-mono">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Cluster:</span>
+                <span className="text-cyan-300">DYT-ECOSYSTEM</span>
               </div>
-              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-cyan-400/90">
-                PLP SECURE
-              </span>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">WASM Runtime:</span>
+                <span className="text-emerald-400">ONNX Ready</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Nodes (4):</span>
+                <div className="flex -space-x-1.5">
+                  {TEAM_MEMBERS.map((member) => (
+                    <div
+                      key={member.initials}
+                      title={`${member.name} — ${member.role}`}
+                      className={`flex h-5 w-5 items-center justify-center rounded-full ${member.color} text-[9px] font-bold text-slate-950 ring-1 ring-slate-900`}
+                    >
+                      {member.initials}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {isAdmin && (
+                <div className="pt-2 border-t border-slate-800">
+                  <Link
+                    href="/admin"
+                    onClick={onClose}
+                    className="flex items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold transition-colors"
+                  >
+                    <Shield className="h-3 w-3" />
+                    <span>Admin Management Hub &rarr;</span>
+                  </Link>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </aside>
     </>

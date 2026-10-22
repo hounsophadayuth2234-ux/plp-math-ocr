@@ -267,7 +267,7 @@ export function BgUploadZone({
           {/* Chamber Status Indicator */}
           <div className="pointer-events-none absolute top-2 right-2 flex items-center gap-1.5 text-[9px] text-slate-400 uppercase font-mono">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>INTAKE READY</span>
+            <span>បញ្ចូលរូបភាព (Upload Image)</span>
           </div>
 
           {/* Robotic Aperture & Rotating Scan Ring */}

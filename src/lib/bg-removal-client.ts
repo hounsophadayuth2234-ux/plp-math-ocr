@@ -117,6 +117,36 @@ export const BACKGROUND_REMOVAL_SEGMENTATION_V2 =
     ? process.env.BACKGROUND_REMOVAL_SEGMENTATION_V2 === "true"
     : false;
 
+export type ProcessingStage =
+  | "idle"
+  | "preparing"
+  | "loading_model"
+  | "segmenting"
+  | "refining"
+  | "compositing"
+  | "exporting"
+  | "complete"
+  | "failed"
+  | "cancelled"
+  | "timed_out";
+
+export const STAGE_DEFINITIONS: Record<
+  ProcessingStage,
+  { labelEn: string; labelKm: string; stepNumber: number; description: string }
+> = {
+  idle: { labelEn: "Ready", labelKm: "រួចរាល់", stepNumber: 1, description: "Ready to process" },
+  preparing: { labelEn: "Preparing image", labelKm: "កំពុងរៀបចំរូបភាព", stepNumber: 1, description: "Decoding & scaling input image" },
+  loading_model: { labelEn: "Loading AI model", labelKm: "កំពុងផ្ទុកម៉ូដែល AI", stepNumber: 2, description: "Initializing neural network weights" },
+  segmenting: { labelEn: "Segmenting foreground", labelKm: "កំពុងកាត់ផ្ទៃខាងក្រោយ", stepNumber: 3, description: "Detecting subject boundary" },
+  refining: { labelEn: "Refining edges", labelKm: "កំពុងសម្រួលគែម", stepNumber: 4, description: "Sub-pixel alpha matting & feathering" },
+  compositing: { labelEn: "Compositing canvas", labelKm: "កំពុងបញ្ចូលពណ៌ផ្ទៃ", stepNumber: 5, description: "Rendering preview with chosen background" },
+  exporting: { labelEn: "Preparing export", labelKm: "កំពុងរៀបចំទាញយក", stepNumber: 5, description: "Generating final download file" },
+  complete: { labelEn: "Complete", labelKm: "បានបញ្ចប់", stepNumber: 5, description: "Result is ready to review & export" },
+  failed: { labelEn: "Failed", labelKm: "បានបរាជ័យ", stepNumber: 0, description: "Processing encountered an issue" },
+  cancelled: { labelEn: "Cancelled", labelKm: "បានបោះបង់", stepNumber: 0, description: "Operation was cancelled by user" },
+  timed_out: { labelEn: "Timed out", labelKm: "ផុតកំណត់ពេល", stepNumber: 0, description: "Operation exceeded maximum allowable duration" },
+};
+
 export interface BgRemovalProgress {
   key: string;
   current: number;
@@ -130,7 +160,10 @@ export interface BgRemovalProgress {
     | "Loading model"
     | "Segmenting"
     | "Refining mask"
-    | "Ready";
+    | "Ready"
+    | "Refining edges"
+    | "Compositing";
+  stageKey?: ProcessingStage;
   message?: string;
   modelLoadingPercent?: number;
   processingPercent?: number;
@@ -619,6 +652,7 @@ export async function removeBackgroundBrowser(
     total: 100,
     percent: 10,
     stage: "Preparing image",
+    stageKey: "preparing",
   });
 
   const tDecodeStart = performance.now();
@@ -646,10 +680,11 @@ export async function removeBackgroundBrowser(
 
   options?.onProgress?.({
     key: "load",
-    current: 20,
+    current: 25,
     total: 100,
-    percent: 20,
-    stage: isAlreadyCached ? "Quick cut in progress" : "Loading model",
+    percent: 25,
+    stage: isAlreadyCached ? "Segmenting" : "Loading model",
+    stageKey: isAlreadyCached ? "segmenting" : "loading_model",
   });
 
   // Track progress by aggregate byte metrics across individual shards
@@ -668,10 +703,13 @@ export async function removeBackgroundBrowser(
     }
 
     const isFetch = key.includes("fetch") || key.includes("model") || key.includes("wasm");
-    const stage: BgRemovalProgress["stage"] = isFetch ? "Loading model" : "Quick cut in progress";
+    const stage: BgRemovalProgress["stage"] = isFetch ? "Loading model" : "Segmenting";
+    const stageKey: ProcessingStage = isFetch ? "loading_model" : "segmenting";
 
     const calcPercent = sumTotal > 0 ? Math.round((sumCurrent / sumTotal) * 100) : 50;
-    const boundedPct = Math.min(92, Math.max(15, calcPercent));
+    const boundedPct = isFetch
+      ? Math.min(60, Math.max(15, Math.round(calcPercent * 0.6)))
+      : Math.min(85, Math.max(60, 60 + Math.round(calcPercent * 0.25)));
 
     options?.onProgress?.({
       key,
@@ -679,8 +717,9 @@ export async function removeBackgroundBrowser(
       total: sumTotal,
       percent: boundedPct,
       stage,
-      modelLoadingPercent: isFetch ? boundedPct : 100,
-      processingPercent: isFetch ? 0 : boundedPct,
+      stageKey,
+      modelLoadingPercent: isFetch ? calcPercent : 100,
+      processingPercent: isFetch ? 0 : calcPercent,
     });
   };
 
@@ -805,26 +844,17 @@ export async function removeBackgroundBrowser(
       throw createAbortError("Aborted by user.");
     }
 
-    // Step 3: Fast usable preview ready
-    options?.onProgress?.({
-      key: "preview_ready",
-      current: 90,
-      total: 100,
-      percent: 90,
-      stage: "Preview ready",
-      modelLoadingPercent: 100,
-      processingPercent: 90,
-    });
-
-    // Step 4: Optional edge refinement
+    // Step 3: Sub-pixel alpha matting and edge refinement
     options?.onProgress?.({
       key: "refine",
-      current: 94,
+      current: 85,
       total: 100,
-      percent: 94,
+      percent: 85,
       stage: "Optional edge refinement",
+      stageKey: "refining",
+      message: "Refining edges & alpha matting...",
       modelLoadingPercent: 100,
-      processingPercent: 95,
+      processingPercent: 85,
     });
 
     const tRefStart = performance.now();
@@ -867,6 +897,8 @@ export async function removeBackgroundBrowser(
       total: 100,
       percent: 100,
       stage: "Ready",
+      stageKey: "complete",
+      message: "Processing complete",
       modelLoadingPercent: 100,
       processingPercent: 100,
     });

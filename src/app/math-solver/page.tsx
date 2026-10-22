@@ -28,6 +28,8 @@ import {
   Settings,
   Eye,
   X,
+  Printer,
+  PlusCircle,
 } from "lucide-react";
 import { SolverImageUpload } from "@/components/math-solver/SolverImageUpload";
 import { SolutionCard } from "@/components/math-solver/SolutionCard";
@@ -58,12 +60,22 @@ const GRADE_OPTIONS: { id: GradeLevel; label: string; sublabel: string }[] = [
   { id: "grade_6", label: "ថ្នាក់ទី ៦", sublabel: "Grade 6" },
 ];
 
+const GRADE_SAMPLES: { grade: GradeLevel; gradeLabel: string; sample: string }[] = [
+  { grade: "grade_1", gradeLabel: "ថ្នាក់ទី ១", sample: "៥ + ៣ = ?" },
+  { grade: "grade_2", gradeLabel: "ថ្នាក់ទី ២", sample: "២៥ + ៣៨ = ?" },
+  { grade: "grade_3", gradeLabel: "ថ្នាក់ទី ៣", sample: "១២៥ × ៦ = ?" },
+  { grade: "grade_4", gradeLabel: "ថ្នាក់ទី ៤", sample: "៤៥០ ÷ ៥ = ?" },
+  { grade: "grade_5", gradeLabel: "ថ្នាក់ទី ៥", sample: "២/៣ + ៤/៥ = ?" },
+  { grade: "grade_6", gradeLabel: "ថ្នាក់ទី ៦", sample: "៣ × (x + ៤) = ២៤" },
+];
+
 export default function MathSolverPage() {
   // Mode & Grade selection state
   const [solverMode, setSolverMode] = useState<SolverMode>("solve");
   const [detailLevel, setDetailLevel] = useState<DetailLevel>("step_by_step");
   const [gradeLevel, setGradeLevel] = useState<GradeLevel>("auto");
   const [inferredGradeDisplay, setInferredGradeDisplay] = useState<string | null>(null);
+  const [selectedProblemIndex, setSelectedProblemIndex] = useState<number>(0);
 
   // Input State
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -130,6 +142,7 @@ export default function MathSolverPage() {
       setCopiedHtml(false);
       setShowTopHtmlModal(false);
       setInferredGradeDisplay(null);
+      setSelectedProblemIndex(0);
     },
     [solverMode]
   );
@@ -156,6 +169,7 @@ export default function MathSolverPage() {
     setResult(null);
     setError(null);
     setInferredGradeDisplay(null);
+    setSelectedProblemIndex(0);
   }, [handleCancel]);
 
   // STAGE 1: Extract Problem Text & Visual Structure from Image
@@ -438,7 +452,7 @@ export default function MathSolverPage() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, [result, gradeLevel]);
 
-  const problemResult = result?.problems?.[0];
+  const problemResult = result?.problems?.[selectedProblemIndex] || result?.problems?.[0];
 
   return (
     <div className="space-y-6 min-w-0 max-w-5xl mx-auto w-full pb-12 font-sans">
@@ -502,6 +516,29 @@ export default function MathSolverPage() {
               </button>
             ))}
           </div>
+
+          {/* 1-Click Sample Problems */}
+          <div className="pt-2 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
+              <Sparkles className="h-3 w-3 text-violet-400" />
+              <span>លំហាត់គំរូ (1-Click Samples):</span>
+            </span>
+            {GRADE_SAMPLES.map((s) => (
+              <button
+                key={s.grade}
+                type="button"
+                onClick={() => {
+                  setGradeLevel(s.grade);
+                  setExtractedProblemText(s.sample);
+                }}
+                className="rounded-lg border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[11px] font-mono text-slate-300 hover:border-violet-500 hover:text-white transition-colors cursor-pointer"
+                title={`ដាក់លំហាត់គំរូ ${s.gradeLabel}: ${s.sample}`}
+              >
+                <span className="text-violet-400 mr-1">{s.gradeLabel}:</span>
+                <span>{s.sample}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ── Mode Selector ── */}
@@ -514,20 +551,22 @@ export default function MathSolverPage() {
             <button
               type="button"
               onClick={() => handleModeChange("solve")}
-              className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
+              className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all ${
                 solverMode === "solve"
                   ? "border-violet-500 bg-violet-950/60 text-white shadow-[0_0_15px_rgba(139,92,246,0.25)] ring-1 ring-violet-500/40"
                   : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700"
               }`}
             >
               <Calculator
-                className={`h-4 w-4 ${
+                className={`h-4 w-4 mt-0.5 shrink-0 ${
                   solverMode === "solve" ? "text-violet-400" : "text-slate-500"
                 }`}
               />
               <div>
-                <p className="text-xs font-bold">១. ដោះស្រាយលំហាត់</p>
-                <p className="text-[10px] text-slate-400">Solve Problem</p>
+                <p className="text-xs font-bold">១. ដោះស្រាយលំហាត់ (Solve Problem)</p>
+                <p className="text-[10.5px] text-slate-400 mt-0.5 leading-relaxed">
+                  គណនារកចម្លើយចុងក្រោយ និងបង្ហាញតារាងប្រមាណវិធីបញ្ឈរត្រឹមត្រូវ។
+                </p>
               </div>
             </button>
 
@@ -535,20 +574,22 @@ export default function MathSolverPage() {
             <button
               type="button"
               onClick={() => handleModeChange("generate")}
-              className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
+              className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all ${
                 solverMode === "generate"
                   ? "border-violet-500 bg-violet-950/60 text-white shadow-[0_0_15px_rgba(139,92,246,0.25)] ring-1 ring-violet-500/40"
                   : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700"
               }`}
             >
               <BookOpen
-                className={`h-4 w-4 ${
+                className={`h-4 w-4 mt-0.5 shrink-0 ${
                   solverMode === "generate" ? "text-violet-400" : "text-slate-500"
                 }`}
               />
               <div>
-                <p className="text-xs font-bold">២. បង្កើតដំណោះស្រាយ</p>
-                <p className="text-[10px] text-slate-400">Generate Full Solution (8 Sections)</p>
+                <p className="text-xs font-bold">២. បង្កើតដំណោះស្រាយ (Generate Full Solution)</p>
+                <p className="text-[10.5px] text-slate-400 mt-0.5 leading-relaxed">
+                  បង្កើតការពន្យល់ជំហានម្តងៗពេញលេញសម្រាប់បង្រៀន ឬរៀបចំកិច្ចការផ្ទះ។
+                </p>
               </div>
             </button>
 
@@ -556,20 +597,22 @@ export default function MathSolverPage() {
             <button
               type="button"
               onClick={() => handleModeChange("verify")}
-              className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
+              className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all ${
                 solverMode === "verify"
                   ? "border-violet-500 bg-violet-950/60 text-white shadow-[0_0_15px_rgba(139,92,246,0.25)] ring-1 ring-violet-500/40"
                   : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700"
               }`}
             >
               <ShieldCheck
-                className={`h-4 w-4 ${
+                className={`h-4 w-4 mt-0.5 shrink-0 ${
                   solverMode === "verify" ? "text-violet-400" : "text-slate-500"
                 }`}
               />
               <div>
-                <p className="text-xs font-bold">៣. ដោះស្រាយ + ផ្ទៀងផ្ទាត់</p>
-                <p className="text-[10px] text-slate-400">Solve &amp; Verify Student Work</p>
+                <p className="text-xs font-bold">៣. ដោះស្រាយ + ផ្ទៀងផ្ទាត់ (Solve &amp; Verify)</p>
+                <p className="text-[10.5px] text-slate-400 mt-0.5 leading-relaxed">
+                  ផ្ទៀងផ្ទាត់ចម្លើយ ឬស្នាដៃរបស់សិស្ស រួមទាំងចង្អុលបង្ហាញកំហុស។
+                </p>
               </div>
             </button>
           </div>
@@ -742,30 +785,32 @@ export default function MathSolverPage() {
               </div>
             )}
 
-            {/* Uncertainty Warning Notice (Anti-Guessing) */}
-            {ambiguousParts.length > 0 && (
+            {/* Uncertainty Warning Notice (Anti-Guessing / Low Confidence Safeguard) */}
+            {(ambiguousParts.length > 0 || extractionConfidence === "low") && (
               <div className="rounded-xl border border-amber-500/40 bg-amber-950/40 p-3 text-xs text-amber-200 space-y-1.5">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
                   <div>
                     <span className="font-semibold text-amber-300">
-                      ការរកឃើញមិនច្បាស់លាស់ (Uncertainty Notice)
+                      សូមពិនិត្យនិងកែសម្រួលអក្សរដែលបានស្កេនមុននឹងគណនា (Please review the highlighted text before solving)
                     </span>
                     <p className="text-[11px] text-amber-300/80 mt-0.5">
-                      សញ្ញាឬតួអក្សរខាងក្រោមមិនសូវច្បាស់។ សូមពិនិត្យផ្ទៀងផ្ទាត់ឡើងវិញក្នុងប្រអប់អត្ថបទមុនចុចដំណើរការ៖
+                      សញ្ញាឬតួអក្សរមួយចំនួនមិនសូវច្បាស់។ សូមពិនិត្យផ្ទៀងផ្ទាត់ឡើងវិញក្នុងប្រអប់អត្ថបទមុនចុចដំណើរការ៖
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {ambiguousParts.map((item, idx) => (
-                    <span
-                      key={idx}
-                      className="rounded bg-amber-900/60 border border-amber-600/40 px-2 py-0.5 text-[11px] font-mono text-amber-200"
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
+                {ambiguousParts.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {ambiguousParts.map((item, idx) => (
+                      <span
+                        key={idx}
+                        className="rounded bg-amber-900/60 border border-amber-600/40 px-2 py-0.5 text-[11px] font-mono text-amber-200"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -897,6 +942,34 @@ export default function MathSolverPage() {
       {/* STAGE 3: Solution Results Display */}
       {problemResult && (
         <div className="space-y-6">
+          {/* Multiple Math Problems Selector */}
+          {result?.problems && result.problems.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 p-3.5 rounded-2xl border border-violet-500/40 bg-slate-950/90 shadow-lg">
+              <span className="text-xs font-bold text-violet-300 font-mono">
+                បញ្ហាគណិតវិទ្យាដែលបានរកឃើញ ({result.problems.length}):
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {result.problems.map((p, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedProblemIndex(idx)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      selectedProblemIndex === idx
+                        ? "bg-violet-600 text-white shadow-md ring-1 ring-violet-400"
+                        : "bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+                    }`}
+                  >
+                    <span>លំហាត់ទី {idx + 1}</span>
+                    <span className="text-[10px] opacity-75 font-mono truncate max-w-[120px]">
+                      ({p.extractedProblem.slice(0, 15)}...)
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Top Result Action Bar */}
           <div className="rounded-2xl border border-indigo-500/30 bg-slate-950/90 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl">
             <div className="flex items-center gap-3">
@@ -923,7 +996,7 @@ export default function MathSolverPage() {
               </div>
             </div>
 
-            {/* Universal Solution Actions: ចម្លងអត្ថបទ, ចម្លងកូដ HTML, ទាញយកឯកសារ HTML, មើល HTML Source */}
+            {/* Universal Solution Actions: ចម្លងអត្ថបទ, ចម្លងកូដ HTML, ទាញយកឯកសារ HTML, មើល HTML Source, បោះពុម្ព, ចាប់ផ្តើមលំហាត់ថ្មី */}
             <div className="flex flex-wrap items-center gap-2">
               {/* 1. Copy plain text */}
               <button
@@ -939,7 +1012,7 @@ export default function MathSolverPage() {
                 ) : (
                   <>
                     <Copy className="h-3.5 w-3.5 text-slate-400" />
-                    <span>ចម្លងអត្ថបទ</span>
+                    <span>Copy Clean Text (ចម្លងអត្ថបទ)</span>
                   </>
                 )}
               </button>
@@ -958,7 +1031,7 @@ export default function MathSolverPage() {
                 ) : (
                   <>
                     <Code2 className="h-3.5 w-3.5 text-indigo-400" />
-                    <span>ចម្លងកូដ HTML</span>
+                    <span>Copy Styled HTML (ចម្លងកូដ HTML)</span>
                   </>
                 )}
               </button>
@@ -970,27 +1043,37 @@ export default function MathSolverPage() {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
               >
                 <Download className="h-3.5 w-3.5 text-slate-400" />
-                <span>ទាញយកឯកសារ HTML</span>
+                <span>Download (ទាញយក)</span>
               </button>
 
-              {/* 4. View HTML Source */}
+              {/* 4. Print */}
+              <button
+                type="button"
+                onClick={() => typeof window !== "undefined" && window.print()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
+              >
+                <Printer className="h-3.5 w-3.5 text-slate-400" />
+                <span>Print (បោះពុម្ព)</span>
+              </button>
+
+              {/* 5. Start New Problem */}
+              <button
+                type="button"
+                onClick={handleClear}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/40 bg-violet-950/40 px-3.5 py-1.5 text-xs font-bold text-violet-300 hover:bg-violet-900/60 hover:text-white transition-colors min-h-[36px]"
+              >
+                <PlusCircle className="h-3.5 w-3.5 text-violet-400" />
+                <span>Start New Problem (លំហាត់ថ្មី)</span>
+              </button>
+
+              {/* 6. View HTML Source */}
               <button
                 type="button"
                 onClick={() => setShowTopHtmlModal(true)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors min-h-[36px]"
               >
                 <Eye className="h-3.5 w-3.5 text-slate-400" />
-                <span>មើល HTML Source</span>
-              </button>
-
-              {/* Clear */}
-              <button
-                type="button"
-                onClick={handleClear}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-rose-300 hover:border-rose-500/40 transition-colors min-h-[36px]"
-              >
-                <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
-                <span>សម្អាត</span>
+                <span>HTML Source</span>
               </button>
             </div>
           </div>
