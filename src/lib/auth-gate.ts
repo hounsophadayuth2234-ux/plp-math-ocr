@@ -270,8 +270,8 @@ export async function checkRateLimitAndLockout(
   hashedId: string
 ): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
   const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
-  const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const redisUrl = process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const redisToken = process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
   if (redisUrl && redisToken) {
     try {
@@ -318,8 +318,8 @@ export async function recordFailedAttempt(
   hashedId: string
 ): Promise<{ locked: boolean; retryAfterSeconds?: number; attempts: number }> {
   const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
-  const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const redisUrl = process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const redisToken = process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
   if (redisUrl && redisToken) {
     try {
@@ -379,8 +379,8 @@ export async function recordFailedAttempt(
  */
 export async function clearFailedAttempts(hashedId: string): Promise<void> {
   const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
-  const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const redisUrl = process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const redisToken = process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
   if (redisUrl && redisToken) {
     try {
