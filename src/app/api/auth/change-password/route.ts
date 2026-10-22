@@ -6,6 +6,7 @@ import { UserStore } from "@/lib/user-store";
 import { validatePasswordStrength } from "@/lib/password-rules";
 import { AuditLogger } from "@/lib/audit-logger";
 import { getClientIp } from "@/lib/auth-gate";
+import { encryptManagedPassword } from "@/lib/managed-credential-vault";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -68,9 +69,14 @@ export async function POST(req: NextRequest) {
   }
 
   const newHash = bcrypt.hashSync(newPassword, 12);
+  const managedPasswordEncrypted = encryptManagedPassword(newPassword);
+  const now = Date.now();
+
   await UserStore.updateUser(fullUser.id, {
     passwordHash: newHash,
+    managedPasswordEncrypted,
     mustChangePassword: false,
+    passwordChangedAt: now,
   });
 
   await AuditLogger.logEvent({

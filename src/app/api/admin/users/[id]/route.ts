@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { requireAdmin } from "@/lib/auth-session";
 import { validateCsrfToken } from "@/lib/auth-csrf";
-import { UserStore, toSafeUser } from "@/lib/user-store";
+import { UserStore, toSafeUser, toAdminSafeUser } from "@/lib/user-store";
+import { encryptManagedPassword } from "@/lib/managed-credential-vault";
+import { validateAdminManagedPassword } from "@/lib/password-rules";
 import {
   validateEmail,
   validateDisplayName,
@@ -59,6 +62,16 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     updates.email = emailVal.value;
   }
 
+  if (body?.password !== undefined && typeof body.password === "string" && body.password.trim()) {
+    const passwordVal = validateAdminManagedPassword(body.password.trim(), existing.username);
+    if (!passwordVal.valid) {
+      return NextResponse.json({ error: passwordVal.errors[0] || "Invalid password", details: passwordVal.errors }, { status: 400 });
+    }
+    updates.passwordHash = bcrypt.hashSync(body.password.trim(), 12);
+    updates.managedPasswordEncrypted = encryptManagedPassword(body.password.trim());
+    updates.passwordChangedAt = Date.now();
+  }
+
   // Handle Role change with final active admin guard
   if (body?.role !== undefined && body.role !== existing.role) {
     const roleVal = validateRole(body.role);
@@ -107,7 +120,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
   return NextResponse.json({
     success: true,
-    user: toSafeUser(updatedUser),
+    user: toAdminSafeUser(updatedUser),
     message: "បានកែប្រែគណនីដោយជោគជ័យ (Account updated successfully)",
   });
 }

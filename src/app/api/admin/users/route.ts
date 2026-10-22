@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { requireAdmin } from "@/lib/auth-session";
 import { validateCsrfToken } from "@/lib/auth-csrf";
-import { UserStore, toSafeUser } from "@/lib/user-store";
+import { UserStore, toSafeUser, toAdminSafeUser } from "@/lib/user-store";
+import { encryptManagedPassword } from "@/lib/managed-credential-vault";
 import {
   validateUsername,
   validateEmail,
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
   }
 
   const users = await UserStore.listUsers();
-  const safeUsers = users.map(toSafeUser);
+  const safeUsers = users.map(toAdminSafeUser);
 
   return NextResponse.json({
     success: true,
@@ -114,12 +115,14 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = bcrypt.hashSync(plainPassword, 12);
+  const managedPasswordEncrypted = encryptManagedPassword(plainPassword);
 
   const newUser = await UserStore.createUser({
     username: usernameVal.value!,
     email: emailVal.value!,
     displayName: nameVal.value!,
     passwordHash,
+    managedPasswordEncrypted,
     role: roleVal.value!,
     status: statusVal.value!,
     mustChangePassword: isTemporary,
@@ -142,8 +145,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(
     {
       success: true,
-      user: toSafeUser(newUser),
+      user: toAdminSafeUser(newUser),
       temporaryPassword: isTemporary ? plainPassword : undefined,
+      visiblePassword: plainPassword,
       message: "បានបង្កើតគណនីថ្មីដោយជោគជ័យ (Account created successfully)",
     },
     { status: 201 }

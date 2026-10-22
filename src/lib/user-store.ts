@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { decryptManagedPassword } from "./managed-credential-vault";
 
 export type UserRole = "ADMIN" | "USER";
 export type UserStatus = "ACTIVE" | "DISABLED";
@@ -10,6 +11,7 @@ export interface UserRecord {
   email: string; // lowercase
   displayName: string;
   passwordHash: string; // bcrypt hash
+  managedPasswordEncrypted?: string; // AES-256-GCM reversible encrypted password
   role: UserRole;
   status: UserStatus;
   mustChangePassword: boolean;
@@ -21,11 +23,23 @@ export interface UserRecord {
   activeSessionsCount?: number;
 }
 
-export type SafeUser = Omit<UserRecord, "passwordHash">;
+export type SafeUser = Omit<UserRecord, "passwordHash" | "managedPasswordEncrypted"> & {
+  visiblePassword?: string | null;
+};
 
 export function toSafeUser(user: UserRecord): SafeUser {
-  const { passwordHash: _hash, ...safe } = user;
+  const { passwordHash: _hash, managedPasswordEncrypted: _enc, ...safe } = user;
   return safe;
+}
+
+export function toAdminSafeUser(user: UserRecord): SafeUser {
+  const { passwordHash: _hash, managedPasswordEncrypted, ...safe } = user;
+  return {
+    ...safe,
+    visiblePassword: managedPasswordEncrypted
+      ? decryptManagedPassword(managedPasswordEncrypted)
+      : null,
+  };
 }
 
 // ============================================================================
@@ -217,6 +231,7 @@ export class UserStore {
     email: string;
     displayName: string;
     passwordHash: string;
+    managedPasswordEncrypted?: string;
     role: UserRole;
     status?: UserStatus;
     mustChangePassword?: boolean;
@@ -243,6 +258,7 @@ export class UserStore {
       email,
       displayName: params.displayName.trim(),
       passwordHash: params.passwordHash,
+      managedPasswordEncrypted: params.managedPasswordEncrypted,
       role: params.role,
       status: params.status || "ACTIVE",
       mustChangePassword: params.mustChangePassword ?? false,

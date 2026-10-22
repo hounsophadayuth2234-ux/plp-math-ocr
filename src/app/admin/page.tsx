@@ -17,6 +17,8 @@ import {
   Copy,
   Check,
   Activity,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 interface SafeUser {
@@ -30,6 +32,7 @@ interface SafeUser {
   createdAt: number;
   updatedAt: number;
   lastLoginAt?: number;
+  visiblePassword?: string | null;
 }
 
 interface AuditEvent {
@@ -69,6 +72,30 @@ export default function AdminPage() {
     password: string;
     isCopied: boolean;
   } | null>(null);
+
+  // Managed Password Visibility State
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState("");
+
+  const togglePasswordVisibility = (userId: string) => {
+    setRevealedPasswords((prev) => ({
+      ...prev,
+      [userId]: !prev[userId],
+    }));
+  };
+
+  const handleCopyPassword = async (userId: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPasswordId(userId);
+      setTimeout(() => {
+        setCopiedPasswordId((prev) => (prev === userId ? null : prev));
+      }, 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
   // Create User Form State
   const [newUsername, setNewUsername] = useState("");
@@ -277,18 +304,26 @@ export default function AdminPage() {
       } else if (type === "resetPassword") {
         const res = await fetch(`/api/admin/users/${user.id}/reset-password`, {
           method: "POST",
-          headers: { "x-csrf-token": csrfToken },
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
+          body: JSON.stringify({
+            password: resetPasswordInput.trim() || undefined,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to reset password");
 
-        if (data.temporaryPassword) {
+        const displayPass = data.temporaryPassword || data.visiblePassword;
+        if (displayPass) {
           setTempPasswordDisplay({
             username: user.username,
-            password: data.temporaryPassword,
+            password: displayPass,
             isCopied: false,
           });
         }
+        setResetPasswordInput("");
       }
 
       setConfirmDialog(null);
@@ -456,6 +491,7 @@ export default function AdminPage() {
                   <th className="py-3.5 px-4">User Details</th>
                   <th className="py-3.5 px-4">Role</th>
                   <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4">Password / Access Key</th>
                   <th className="py-3.5 px-4">Created Date</th>
                   <th className="py-3.5 px-4">Last Login</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -464,7 +500,7 @@ export default function AdminPage() {
               <tbody className="divide-y divide-slate-800/60 font-sans">
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-500 text-sm">
+                    <td colSpan={7} className="py-12 text-center text-slate-500 text-sm">
                       {loading ? "កំពុងទាញយកទិន្នន័យ... (Loading...)" : "រកមិនឃើញគណនីទេ (No accounts found)"}
                     </td>
                   </tr>
@@ -513,6 +549,63 @@ export default function AdminPage() {
                           {u.mustChangePassword && (
                             <div className="text-[9px] text-amber-400 font-mono mt-0.5">
                               ⚠️ Temp Password
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Password / Access Key */}
+                        <td className="py-3 px-4">
+                          {u.visiblePassword ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs text-cyan-200 bg-slate-950/80 border border-slate-800 rounded px-2 py-1 tracking-wider select-all font-semibold max-w-[130px] truncate inline-block">
+                                {revealedPasswords[u.id] ? u.visiblePassword : "••••••••"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => togglePasswordVisibility(u.id)}
+                                title={revealedPasswords[u.id] ? "Hide password" : "Show password"}
+                                className="rounded-lg border border-slate-700 bg-slate-800/80 p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                              >
+                                {revealedPasswords[u.id] ? (
+                                  <EyeOff className="h-3.5 w-3.5 text-amber-400" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5 text-cyan-400" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyPassword(u.id, u.visiblePassword!)}
+                                title="Copy password to clipboard"
+                                className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                              >
+                                {copiedPasswordId === u.id ? (
+                                  <>
+                                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                    <span className="text-[10px] text-emerald-400 font-bold">Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3.5 w-3.5" />
+                                    <span className="text-[10px]">Copy</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-mono text-amber-300">
+                                Set once to enable view
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setResetPasswordInput("");
+                                  setConfirmDialog({ type: "resetPassword", user: u });
+                                }}
+                                className="text-[11px] font-mono font-bold text-cyan-400 hover:text-cyan-300 hover:underline"
+                              >
+                                Set Password
+                              </button>
                             </div>
                           )}
                         </td>
@@ -934,9 +1027,23 @@ export default function AdminPage() {
                     : confirmDialog.type === "enable"
                     ? `តើអ្នកចង់បើកដំណើរការគណនី @${confirmDialog.user.username} ឡើងវិញមែនទេ?`
                     : confirmDialog.type === "resetPassword"
-                    ? `កំណត់ពាក្យសម្ងាត់បណ្តោះអាសន្នថ្មីសម្រាប់ @${confirmDialog.user.username}? អ្នកប្រើប្រាស់នឹងត្រូវផ្លាស់ប្តូរពាក្យសម្ងាត់ពេលចូលលើកដំបូង។`
+                    ? `កំណត់ពាក្យសម្ងាត់ថ្មី ឬពាក្យសម្ងាត់បណ្តោះអាសន្នសម្រាប់ @${confirmDialog.user.username} (ពាក្យសម្ងាត់នឹងត្រូវរក្សាទុកក្នុង Reversible Vault សម្រាប់ Admin មើលឃើញពេលក្រោយ)៖`
                     : `ប្តូរតួនាទីរបស់ @${confirmDialog.user.username} ទៅជា ${confirmDialog.newRole}?`}
                 </p>
+                {confirmDialog.type === "resetPassword" && (
+                  <div className="mt-3 space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-300 font-sans">
+                      ពាក្យសម្ងាត់ថ្មី (New Password - ទុកទំនេរដើម្បីបង្កើតពាក្យសម្ងាត់ស្វ័យប្រវត្តិ):
+                    </label>
+                    <input
+                      type="text"
+                      value={resetPasswordInput}
+                      onChange={(e) => setResetPasswordInput(e.target.value)}
+                      placeholder="Leave empty for auto-generated temporary password"
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
