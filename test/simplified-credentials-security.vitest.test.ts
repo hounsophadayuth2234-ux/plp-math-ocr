@@ -384,4 +384,63 @@ describe("Simplified Account Credential Policy & Security Verification (23 Items
       expect(fs.existsSync(full)).toBe(true);
     }
   });
+
+  // 24. Exact test cases requested for Admin Create Account UI policy
+  describe("Exact Admin Account Creation Test Cases", () => {
+    it("username: user1, password: abcd, confirm: abcd -> must pass validation", () => {
+      const uVal = validateUsername("user1");
+      expect(uVal.valid).toBe(true);
+      const pVal = validateAdminManagedPassword("abcd", "user1", "abcd");
+      expect(pVal.valid).toBe(true);
+    });
+
+    it("username: dayuth, password: 1234, confirm: 1234 -> must pass validation", () => {
+      const uVal = validateUsername("dayuth");
+      expect(uVal.valid).toBe(true);
+      const pVal = validateAdminManagedPassword("1234", "dayuth", "1234");
+      expect(pVal.valid).toBe(true);
+    });
+
+    it("password: abc -> must fail (< 4 characters)", () => {
+      const pVal = validateAdminManagedPassword("abc", "user2", "abc");
+      expect(pVal.valid).toBe(false);
+      expect(pVal.errors[0]).toContain("ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
+    });
+
+    it("password: abcd, confirm: abce -> must fail (confirmation mismatch)", () => {
+      const pVal = validateAdminManagedPassword("abcd", "user3", "abce");
+      expect(pVal.valid).toBe(false);
+      expect(pVal.errors[0]).toContain("ពាក្យសម្ងាត់ទាំងពីរមិនដូចគ្នា");
+    });
+
+    it("password: plp2026 -> must pass", () => {
+      const pVal = validateAdminManagedPassword("plp2026", "dayuth2", "plp2026");
+      expect(pVal.valid).toBe(true);
+    });
+
+    it("API: Admin creates account with minimal fields (no email or displayName blocking)", async () => {
+      const req = new NextRequest("http://localhost/api/admin/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `dyt_gate_session=${adminToken}; dyt_csrf_token=${csrfToken}`,
+          "x-csrf-token": csrfToken,
+        },
+        body: JSON.stringify({
+          username: "dayuth4",
+          password: "abcd",
+          confirmPassword: "abcd",
+          role: "USER",
+        }),
+      });
+
+      const res = await adminUsersPost(req);
+      expect(res.status).toBe(201);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.user.username).toBe("dayuth4");
+      expect(data.user.email).toBe("dayuth4@dyt.local");
+      expect(data.user.displayName).toBe("dayuth4");
+    });
+  });
 });

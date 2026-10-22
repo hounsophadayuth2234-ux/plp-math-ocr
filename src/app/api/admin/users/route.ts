@@ -60,12 +60,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: usernameVal.error }, { status: 400 });
   }
 
-  const emailVal = validateEmail(body?.email);
+  const rawEmail = typeof body?.email === "string" && body.email.trim()
+    ? body.email.trim()
+    : `${usernameVal.value}@dyt.local`;
+  const emailVal = validateEmail(rawEmail);
   if (!emailVal.valid) {
     return NextResponse.json({ error: emailVal.error }, { status: 400 });
   }
 
-  const nameVal = validateDisplayName(body?.displayName);
+  const rawDisplayName = typeof body?.displayName === "string" && body.displayName.trim()
+    ? body.displayName.trim()
+    : usernameVal.value;
+  const nameVal = validateDisplayName(rawDisplayName);
   if (!nameVal.valid) {
     return NextResponse.json({ error: nameVal.error }, { status: 400 });
   }

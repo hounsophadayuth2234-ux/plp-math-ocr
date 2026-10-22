@@ -86,8 +86,27 @@ export default function AdminPage() {
   const [newConfirmPassword, setNewConfirmPassword] = useState("");
   const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [showCreateConfirmPassword, setShowCreateConfirmPassword] = useState(false);
+  const [createPasswordCopied, setCreatePasswordCopied] = useState(false);
+  const [showOptionalDetails, setShowOptionalDetails] = useState(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const handleGenerateSimplePassword = () => {
+    const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+    let pass = "";
+    for (let i = 0; i < 6; i++) {
+      pass += chars[Math.floor(Math.random() * chars.length)];
+    }
+    setCustomPassword(pass);
+    setNewConfirmPassword(pass);
+  };
+
+  const handleCopyCreatePassword = () => {
+    if (!customPassword) return;
+    navigator.clipboard.writeText(customPassword);
+    setCreatePasswordCopied(true);
+    setTimeout(() => setCreatePasswordCopied(false), 2000);
+  };
 
   // Fetch Session & CSRF
   const initSession = useCallback(async () => {
@@ -176,15 +195,17 @@ export default function AdminPage() {
       return;
     }
 
-    if (customPassword.trim()) {
-      if (customPassword.trim().length < 4) {
-        setFormError("ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
-        return;
-      }
-      if (customPassword.trim() !== newConfirmPassword.trim()) {
-        setFormError("ពាក្យសម្ងាត់ទាំងពីរមិនដូចគ្នា");
-        return;
-      }
+    if (!customPassword) {
+      setFormError("សូមបញ្ចូលពាក្យសម្ងាត់");
+      return;
+    }
+    if (customPassword.length < 4) {
+      setFormError("ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
+      return;
+    }
+    if (customPassword !== newConfirmPassword) {
+      setFormError("ពាក្យសម្ងាត់ទាំងពីរមិនដូចគ្នា");
+      return;
     }
 
     setFormSubmitting(true);
@@ -198,11 +219,11 @@ export default function AdminPage() {
         },
         body: JSON.stringify({
           username: cleanUsername,
-          email: newEmail.trim(),
-          displayName: newDisplayName.trim(),
+          email: newEmail.trim() || undefined,
+          displayName: newDisplayName.trim() || undefined,
           role: newRole,
-          password: customPassword.trim() || undefined,
-          confirmPassword: newConfirmPassword.trim() || undefined,
+          password: customPassword,
+          confirmPassword: newConfirmPassword,
         }),
       });
 
@@ -217,6 +238,8 @@ export default function AdminPage() {
       setNewDisplayName("");
       setCustomPassword("");
       setNewConfirmPassword("");
+      setShowOptionalDetails(false);
+      setCreatePasswordCopied(false);
 
       // If temporary password was returned, show it once
       if (data.temporaryPassword) {
@@ -394,6 +417,15 @@ export default function AdminPage() {
               data-testid="create-user-btn"
               onClick={() => {
                 setFormError(null);
+                setNewUsername("");
+                setNewEmail("");
+                setNewDisplayName("");
+                setCustomPassword("");
+                setNewConfirmPassword("");
+                setShowCreatePassword(false);
+                setShowCreateConfirmPassword(false);
+                setCreatePasswordCopied(false);
+                setShowOptionalDetails(false);
                 setCreateModalOpen(true);
               }}
               className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2 text-xs font-bold text-white shadow-[0_0_15px_rgba(0,240,255,0.25)] hover:brightness-110 active:scale-95 transition-all"
@@ -764,6 +796,7 @@ export default function AdminPage() {
             )}
 
             <form onSubmit={handleCreateUser} className="mt-4 space-y-4">
+              {/* 1. Name */}
               <div>
                 <label className="text-xs font-semibold text-slate-300">
                   Name · ឈ្មោះអ្នកប្រើប្រាស់
@@ -772,36 +805,95 @@ export default function AdminPage() {
                   type="text"
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
-                  placeholder="e.g. user1, dayuth, admin (យ៉ាងហោចណាស់ ៤ តួអក្សរ)"
-                  required
+                  placeholder="e.g. user1, dayuth, plp1, admin"
                   className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
                 />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  យ៉ាងហោចណាស់ ៤ តួអក្សរ
+                </p>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-300">Display Name</label>
-                <input
-                  type="text"
-                  value={newDisplayName}
-                  onChange={(e) => setNewDisplayName(e.target.value)}
-                  placeholder="e.g. John Doe / លោក សុខ"
-                  required
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
-                />
+              {/* 2. Password */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Password · ពាក្យសម្ងាត់
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {customPassword && (
+                      <button
+                        type="button"
+                        onClick={handleCopyCreatePassword}
+                        className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 transition-colors"
+                        title="Copy password"
+                      >
+                        {createPasswordCopied ? (
+                          <>
+                            <Check className="h-3 w-3 text-emerald-400" />
+                            <span className="text-emerald-400">បានចម្លង</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3" />
+                            <span>ចម្លង (Copy)</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleGenerateSimplePassword}
+                      className="text-[11px] text-slate-400 hover:text-cyan-300 underline transition-colors"
+                    >
+                      បង្កើតស្វ័យប្រវត្តិ (Generate)
+                    </button>
+                  </div>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showCreatePassword ? "text" : "password"}
+                    value={customPassword}
+                    onChange={(e) => setCustomPassword(e.target.value)}
+                    placeholder="e.g. abcd, 1234, user1, plp2026"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-10 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePassword(!showCreatePassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-300"
+                  >
+                    {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  យ៉ាងហោចណាស់ ៤ តួអក្សរ
+                </p>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-300">Email</label>
-                <input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="e.g. user@dyt-ecosystem.local"
-                  required
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
-                />
+              {/* 3. Confirm Password */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Confirm Password · បញ្ជាក់ពាក្យសម្ងាត់
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCreateConfirmPassword ? "text" : "password"}
+                    value={newConfirmPassword}
+                    onChange={(e) => setNewConfirmPassword(e.target.value)}
+                    placeholder="Confirm Password (បញ្ជាក់ពាក្យសម្ងាត់)"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-10 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateConfirmPassword(!showCreateConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-300"
+                  >
+                    {showCreateConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
+              {/* 4. Role */}
               <div>
                 <label className="text-xs font-semibold text-slate-300">Role</label>
                 <select
@@ -814,52 +906,50 @@ export default function AdminPage() {
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">
-                  Password · ពាក្យសម្ងាត់ (ទុកទំនេរដើម្បីបង្កើតស្វ័យប្រវត្តិ)
-                </label>
-                <div className="relative">
-                  <input
-                    type={showCreatePassword ? "text" : "password"}
-                    value={customPassword}
-                    onChange={(e) => setCustomPassword(e.target.value)}
-                    placeholder="Password (យ៉ាងហោចណាស់ ៤ តួអក្សរ ឬទុកទំនេរ)"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-10 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCreatePassword(!showCreatePassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-300"
-                  >
-                    {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+              {/* 5. Optional Details: Display Name & Email */}
+              <div className="pt-2 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setShowOptionalDetails(!showOptionalDetails)}
+                  className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 transition-colors"
+                >
+                  <span>
+                    {showOptionalDetails
+                      ? "− លាក់ព័ត៌មានបន្ថែម (Hide Optional Details)"
+                      : "+ ព័ត៌មានបន្ថែម (Display Name & Email - Optional)"}
+                  </span>
+                </button>
+                {showOptionalDetails && (
+                  <div className="mt-3 space-y-3 pl-2 border-l border-slate-800">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-400">
+                        Display Name <span className="text-[10px] text-slate-500">(Optional / មិនបាច់ក៏បាន)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={newDisplayName}
+                        onChange={(e) => setNewDisplayName(e.target.value)}
+                        placeholder="e.g. John Doe / លោក សុខ"
+                        className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-400">
+                        Email <span className="text-[10px] text-slate-500">(Optional / មិនបាច់ក៏បាន)</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="e.g. user@dyt-ecosystem.local"
+                        className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {customPassword && (
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Confirm Password · បញ្ជាក់ពាក្យសម្ងាត់
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showCreateConfirmPassword ? "text" : "password"}
-                      value={newConfirmPassword}
-                      onChange={(e) => setNewConfirmPassword(e.target.value)}
-                      placeholder="Confirm Password (បញ្ជាក់ពាក្យសម្ងាត់)"
-                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-10 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateConfirmPassword(!showCreateConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-300"
-                    >
-                      {showCreateConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-              )}
-
+              {/* Actions */}
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
