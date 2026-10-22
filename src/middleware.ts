@@ -21,6 +21,8 @@ export async function middleware(req: NextRequest) {
   // 1. Unrestricted Public Endpoints
   const isPublicAuthRoute =
     pathname === "/login" ||
+    pathname === "/admin/recovery" ||
+    pathname === "/api/auth/admin-recovery" ||
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
     pathname === "/api/auth/session" ||
@@ -90,8 +92,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Enforce ADMIN role on /admin and /api/admin/*
-  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+  // 5. Enforce ADMIN role on /admin and /api/admin/* (excluding public recovery page)
+  if (
+    (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) &&
+    pathname !== "/admin/recovery"
+  ) {
     if (userRole !== "ADMIN") {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(

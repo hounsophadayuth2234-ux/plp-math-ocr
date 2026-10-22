@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Lock,
@@ -619,10 +620,18 @@ function LoginContent() {
               )}
 
               {/* Exact Khmer Helper Text below the Form */}
-              <div className="mt-6 pt-4 border-t border-slate-800/80 text-center">
+              <div className="mt-6 pt-4 border-t border-slate-800/80 text-center space-y-2">
                 <p className="text-xs text-slate-400 font-khmer leading-relaxed select-none">
                   សម្រាប់ការបង្កើតគណនីយ សូមទាក់ទងអ្នកគ្រប់គ្រង
                 </p>
+                <div className="pt-1">
+                  <Link
+                    href="/admin/recovery"
+                    className="text-[11px] text-cyan-400/70 hover:text-cyan-300 font-mono transition-colors"
+                  >
+                    ត្រូវការសង្គ្រោះគណនី Admin? (Admin Recovery)
+                  </Link>
+                </div>
               </div>
 
             </div>
