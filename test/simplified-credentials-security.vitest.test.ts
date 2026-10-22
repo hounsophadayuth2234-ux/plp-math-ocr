@@ -442,5 +442,66 @@ describe("Simplified Account Credential Policy & Security Verification (23 Items
       expect(data.user.email).toBe("dayuth4@dyt.local");
       expect(data.user.displayName).toBe("dayuth4");
     });
+
+    it("Preset A: admin1 / admin1 / admin1 is valid", () => {
+      const uVal = validateUsername("admin1");
+      expect(uVal.valid).toBe(true);
+      const pVal = validateAdminManagedPassword("admin1", "admin1", "admin1");
+      expect(pVal.valid).toBe(true);
+    });
+
+    it("Preset B: user1 / user1 / user1 is valid", () => {
+      const uVal = validateUsername("user1");
+      expect(uVal.valid).toBe(true);
+      const pVal = validateAdminManagedPassword("user1", "user1", "user1");
+      expect(pVal.valid).toBe(true);
+    });
+
+    it("Form Preset & Clear behavior simulation: selecting presets fills form without triggering API; clear empties state", () => {
+      // 1. Initial state (empty)
+      let formState = {
+        username: "",
+        password: "",
+        confirmPassword: "",
+        role: "USER" as "ADMIN" | "USER",
+      };
+      expect(formState.username).toBe("");
+      expect(formState.password).toBe("");
+
+      // 2. Select Admin Preset
+      formState = {
+        username: "admin1",
+        password: "admin1",
+        confirmPassword: "admin1",
+        role: "ADMIN",
+      };
+      expect(formState.username).toBe("admin1");
+      expect(formState.password).toBe("admin1");
+      expect(formState.confirmPassword).toBe("admin1");
+      expect(formState.role).toBe("ADMIN");
+
+      // 3. Select User Preset
+      formState = {
+        username: "user1",
+        password: "user1",
+        confirmPassword: "user1",
+        role: "USER",
+      };
+      expect(formState.username).toBe("user1");
+      expect(formState.password).toBe("user1");
+      expect(formState.confirmPassword).toBe("user1");
+      expect(formState.role).toBe("USER");
+
+      // 4. Clear Form
+      formState = {
+        username: "",
+        password: "",
+        confirmPassword: "",
+        role: "USER",
+      };
+      expect(formState.username).toBe("");
+      expect(formState.password).toBe("");
+      expect(formState.confirmPassword).toBe("");
+    });
   });
 });

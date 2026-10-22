@@ -108,6 +108,33 @@ export default function AdminPage() {
     setTimeout(() => setCreatePasswordCopied(false), 2000);
   };
 
+  const handleUseAdminExample = () => {
+    setNewUsername("admin1");
+    setCustomPassword("admin1");
+    setNewConfirmPassword("admin1");
+    setNewRole("ADMIN");
+    setFormError(null);
+  };
+
+  const handleUseUserExample = () => {
+    setNewUsername("user1");
+    setCustomPassword("user1");
+    setNewConfirmPassword("user1");
+    setNewRole("USER");
+    setFormError(null);
+  };
+
+  const handleClearForm = () => {
+    setNewUsername("");
+    setCustomPassword("");
+    setNewConfirmPassword("");
+    setNewDisplayName("");
+    setNewEmail("");
+    setNewRole("USER");
+    setFormError(null);
+    setCreatePasswordCopied(false);
+  };
+
   // Fetch Session & CSRF
   const initSession = useCallback(async () => {
     try {
@@ -796,6 +823,34 @@ export default function AdminPage() {
             )}
 
             <form onSubmit={handleCreateUser} className="mt-4 space-y-4">
+              {/* Sample Presets */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] font-semibold text-slate-400">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={handleUseAdminExample}
+                    className="rounded-lg border border-indigo-500/30 bg-indigo-950/50 px-2.5 py-1 text-[11px] font-medium text-indigo-300 hover:bg-indigo-900/70 transition-colors"
+                  >
+                    Use Admin Example
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUseUserExample}
+                    className="rounded-lg border border-cyan-500/30 bg-cyan-950/50 px-2.5 py-1 text-[11px] font-medium text-cyan-300 hover:bg-cyan-900/70 transition-colors"
+                  >
+                    Use User Example
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearForm}
+                  className="text-[11px] text-slate-400 hover:text-rose-400 transition-colors underline"
+                >
+                  Clear Form
+                </button>
+              </div>
+
               {/* 1. Name */}
               <div>
                 <label className="text-xs font-semibold text-slate-300">
@@ -950,21 +1005,30 @@ export default function AdminPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setCreateModalOpen(false)}
-                  className="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300 hover:text-white"
+                  onClick={handleClearForm}
+                  className="text-xs text-slate-400 hover:text-rose-400 transition-colors underline"
                 >
-                  Cancel
+                  Clear Form
                 </button>
-                <button
-                  type="submit"
-                  disabled={formSubmitting}
-                  className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 text-xs font-bold text-white shadow hover:brightness-110 disabled:opacity-50"
-                >
-                  {formSubmitting ? "Creating..." : "Create Account"}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCreateModalOpen(false)}
+                    className="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={formSubmitting}
+                    className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 text-xs font-bold text-white shadow hover:brightness-110 disabled:opacity-50"
+                  >
+                    {formSubmitting ? "Creating..." : "Create Account"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
