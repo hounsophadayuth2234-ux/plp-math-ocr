@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { decryptManagedPassword } from "./managed-credential-vault";
 
 export type UserRole = "ADMIN" | "USER";
 export type UserStatus = "ACTIVE" | "DISABLED";
@@ -33,13 +32,7 @@ export function toSafeUser(user: UserRecord): SafeUser {
 }
 
 export function toAdminSafeUser(user: UserRecord): SafeUser {
-  const { passwordHash: _hash, managedPasswordEncrypted, ...safe } = user;
-  return {
-    ...safe,
-    visiblePassword: managedPasswordEncrypted
-      ? decryptManagedPassword(managedPasswordEncrypted)
-      : null,
-  };
+  return toSafeUser(user);
 }
 
 // ============================================================================

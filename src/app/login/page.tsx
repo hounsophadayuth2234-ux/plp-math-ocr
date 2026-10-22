@@ -201,12 +201,31 @@ function LoginContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading || isLocked || !password.trim()) return;
+    if (loading || isLocked) return;
+
+    const identifier = usernameOrEmail.trim();
+    if (!identifier) {
+      setError("សូមបញ្ចូលឈ្មោះអ្នកប្រើប្រាស់");
+      return;
+    }
+
+    if (identifier.length < 4) {
+      setError("ឈ្មោះអ្នកប្រើប្រាស់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
+      return;
+    }
+
+    if (!password.trim()) {
+      setError("សូមបញ្ចូលពាក្យសម្ងាត់");
+      return;
+    }
+
+    if (password.length < 4) {
+      setError("ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
+      return;
+    }
 
     setLoading(true);
     setError(null);
-
-    const identifier = usernameOrEmail.trim() || "admin";
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -260,13 +279,18 @@ function LoginContent() {
     e.preventDefault();
     if (changingPassword) return;
 
-    if (newPassword !== confirmPassword) {
-      setChangeError("ពាក្យសម្ងាត់ផ្ទៀងផ្ទាត់មិនដូចគ្នាទេ");
+    if (!newPassword.trim()) {
+      setChangeError("សូមបញ្ចូលពាក្យសម្ងាត់");
       return;
     }
 
-    if (newPassword.length < 10) {
-      setChangeError("ពាក្យសម្ងាត់ត្រូវតែមានយ៉ាងតិច 10 តួអក្សរ");
+    if (newPassword.length < 4) {
+      setChangeError("ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setChangeError("ពាក្យសម្ងាត់ទាំងពីរមិនដូចគ្នា");
       return;
     }
 
@@ -280,6 +304,7 @@ function LoginContent() {
         body: JSON.stringify({
           currentPassword: password.trim(),
           newPassword: newPassword.trim(),
+          confirmPassword: confirmPassword.trim(),
         }),
       });
 
@@ -485,13 +510,13 @@ function LoginContent() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-200 font-khmer">
-                      ពាក្យសម្ងាត់ថ្មី (New Password)
+                      Password · ពាក្យសម្ងាត់
                     </label>
                     <input
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="បញ្ចូលពាក្យសម្ងាត់ថ្មី (យ៉ាងតិច 10 តួ)"
+                      placeholder="ពាក្យសម្ងាត់ (យ៉ាងហោចណាស់ ៤ តួអក្សរ)"
                       required
                       className="w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 font-mono"
                     />
@@ -499,13 +524,13 @@ function LoginContent() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-200 font-khmer">
-                      បញ្ជាក់ពាក្យសម្ងាត់ (Confirm Password)
+                      Confirm Password · បញ្ជាក់ពាក្យសម្ងាត់
                     </label>
                     <input
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="វាយពាក្យសម្ងាត់ថ្មីម្តងទៀត"
+                      placeholder="បញ្ជាក់ពាក្យសម្ងាត់"
                       required
                       className="w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 font-mono"
                     />
@@ -516,7 +541,7 @@ function LoginContent() {
                     disabled={changingPassword || !newPassword || !confirmPassword}
                     className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 py-3.5 text-sm font-bold text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:brightness-110 disabled:opacity-50 transition-all font-khmer"
                   >
-                    {changingPassword ? "កំពុងរក្សាទុក..." : "រក្សាទុក និង បន្ត (Set Password & Continue)"}
+                    {changingPassword ? "កំពុងរក្សាទុក..." : "Save (រក្សាទុក)"}
                   </button>
                 </form>
               ) : (
@@ -529,7 +554,7 @@ function LoginContent() {
                       className="flex items-center gap-1.5 text-xs sm:text-[13px] font-semibold text-slate-200 font-khmer"
                     >
                       <User className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
-                      <span>Name</span>
+                      <span>Name · ឈ្មោះអ្នកប្រើប្រាស់</span>
                     </label>
 
                     <input
@@ -541,10 +566,10 @@ function LoginContent() {
                       value={usernameOrEmail}
                       onChange={(e) => setUsernameOrEmail(e.target.value)}
                       disabled={loading || isLocked}
-                      placeholder="បញ្ចូលឈ្មោះ ឬ Username"
+                      placeholder="ឈ្មោះអ្នកប្រើប្រាស់ (Name, e.g. user1, dayuth, admin)"
                       autoComplete="username"
                       autoFocus
-                      aria-label="Name or Username"
+                      aria-label="Name"
                       className="w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 disabled:cursor-not-allowed disabled:opacity-50 transition-all shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] font-khmer"
                     />
                   </div>
@@ -556,7 +581,7 @@ function LoginContent() {
                       className="flex items-center gap-1.5 text-xs sm:text-[13px] font-semibold text-slate-200 font-khmer"
                     >
                       <Lock className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
-                      <span>Password</span>
+                      <span>Password · ពាក្យសម្ងាត់</span>
                     </label>
 
                     <div className="relative">

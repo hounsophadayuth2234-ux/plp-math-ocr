@@ -32,11 +32,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: csrf.error }, { status: 403 });
   }
 
-  const { currentPassword, newPassword } = body || {};
+  const { currentPassword, newPassword, confirmPassword } = body || {};
 
   if (!currentPassword || !newPassword) {
     return NextResponse.json(
-      { error: "សូមបញ្ចូលពាក្យសម្ងាត់បច្ចុប្បន្ន និងពាក្យសម្ងាត់ថ្មី (Current password and new password are required)" },
+      { error: "សូមបញ្ចូលពាក្យសម្ងាត់ (Password is required)" },
+      { status: 400 }
+    );
+  }
+
+  if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+    return NextResponse.json(
+      { error: "ពាក្យសម្ងាត់ទាំងពីរមិនដូចគ្នា (Passwords do not match)" },
       { status: 400 }
     );
   }
@@ -61,7 +68,7 @@ export async function POST(req: NextRequest) {
   if (!strength.valid) {
     return NextResponse.json(
       {
-        error: strength.errors[0] || "ពាក្យសម្ងាត់មិនស្របតាមស្តង់ដារសុវត្ថិភាព (Password does not meet complexity requirements)",
+        error: strength.errors[0] || "ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ",
         details: strength.errors,
       },
       { status: 400 }
@@ -69,12 +76,10 @@ export async function POST(req: NextRequest) {
   }
 
   const newHash = bcrypt.hashSync(newPassword, 12);
-  const managedPasswordEncrypted = encryptManagedPassword(newPassword);
   const now = Date.now();
 
   await UserStore.updateUser(fullUser.id, {
     passwordHash: newHash,
-    managedPasswordEncrypted,
     mustChangePassword: false,
     passwordChangedAt: now,
   });

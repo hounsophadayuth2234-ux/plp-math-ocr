@@ -73,29 +73,9 @@ export default function AdminPage() {
     isCopied: boolean;
   } | null>(null);
 
-  // Managed Password Visibility State
-  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
-  const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
+  // Reset password inputs
   const [resetPasswordInput, setResetPasswordInput] = useState("");
-
-  const togglePasswordVisibility = (userId: string) => {
-    setRevealedPasswords((prev) => ({
-      ...prev,
-      [userId]: !prev[userId],
-    }));
-  };
-
-  const handleCopyPassword = async (userId: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedPasswordId(userId);
-      setTimeout(() => {
-        setCopiedPasswordId((prev) => (prev === userId ? null : prev));
-      }, 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
-  };
+  const [resetConfirmPasswordInput, setResetConfirmPasswordInput] = useState("");
 
   // Create User Form State
   const [newUsername, setNewUsername] = useState("");
@@ -103,6 +83,9 @@ export default function AdminPage() {
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newRole, setNewRole] = useState<"ADMIN" | "USER">("USER");
   const [customPassword, setCustomPassword] = useState("");
+  const [newConfirmPassword, setNewConfirmPassword] = useState("");
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showCreateConfirmPassword, setShowCreateConfirmPassword] = useState(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -181,8 +164,30 @@ export default function AdminPage() {
   // Action: Create User
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormSubmitting(true);
     setFormError(null);
+
+    const cleanUsername = newUsername.trim();
+    if (!cleanUsername) {
+      setFormError("សូមបញ្ចូលឈ្មោះអ្នកប្រើប្រាស់");
+      return;
+    }
+    if (cleanUsername.length < 4) {
+      setFormError("ឈ្មោះអ្នកប្រើប្រាស់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
+      return;
+    }
+
+    if (customPassword.trim()) {
+      if (customPassword.trim().length < 4) {
+        setFormError("ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
+        return;
+      }
+      if (customPassword.trim() !== newConfirmPassword.trim()) {
+        setFormError("ពាក្យសម្ងាត់ទាំងពីរមិនដូចគ្នា");
+        return;
+      }
+    }
+
+    setFormSubmitting(true);
 
     try {
       const res = await fetch("/api/admin/users", {
@@ -192,11 +197,12 @@ export default function AdminPage() {
           "x-csrf-token": csrfToken,
         },
         body: JSON.stringify({
-          username: newUsername.trim(),
+          username: cleanUsername,
           email: newEmail.trim(),
           displayName: newDisplayName.trim(),
           role: newRole,
           password: customPassword.trim() || undefined,
+          confirmPassword: newConfirmPassword.trim() || undefined,
         }),
       });
 
@@ -210,6 +216,7 @@ export default function AdminPage() {
       setNewEmail("");
       setNewDisplayName("");
       setCustomPassword("");
+      setNewConfirmPassword("");
 
       // If temporary password was returned, show it once
       if (data.temporaryPassword) {
@@ -266,6 +273,18 @@ export default function AdminPage() {
   const handleExecuteConfirm = async () => {
     if (!confirmDialog) return;
     const { type, user, newRole } = confirmDialog;
+
+    if (type === "resetPassword" && resetPasswordInput.trim()) {
+      if (resetPasswordInput.trim().length < 4) {
+        alert("ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ");
+        return;
+      }
+      if (resetPasswordInput.trim() !== resetConfirmPasswordInput.trim()) {
+        alert("ពាក្យសម្ងាត់ទាំងពីរមិនដូចគ្នា");
+        return;
+      }
+    }
+
     setFormSubmitting(true);
 
     try {
@@ -310,6 +329,7 @@ export default function AdminPage() {
           },
           body: JSON.stringify({
             password: resetPasswordInput.trim() || undefined,
+            confirmPassword: resetConfirmPasswordInput.trim() || undefined,
           }),
         });
         const data = await res.json();
@@ -324,6 +344,7 @@ export default function AdminPage() {
           });
         }
         setResetPasswordInput("");
+        setResetConfirmPasswordInput("");
       }
 
       setConfirmDialog(null);
@@ -491,7 +512,6 @@ export default function AdminPage() {
                   <th className="py-3.5 px-4">User Details</th>
                   <th className="py-3.5 px-4">Role</th>
                   <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4">Password / Access Key</th>
                   <th className="py-3.5 px-4">Created Date</th>
                   <th className="py-3.5 px-4">Last Login</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -500,7 +520,7 @@ export default function AdminPage() {
               <tbody className="divide-y divide-slate-800/60 font-sans">
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-500 text-sm">
+                    <td colSpan={6} className="py-12 text-center text-slate-500 text-sm">
                       {loading ? "កំពុងទាញយកទិន្នន័យ... (Loading...)" : "រកមិនឃើញគណនីទេ (No accounts found)"}
                     </td>
                   </tr>
@@ -549,63 +569,6 @@ export default function AdminPage() {
                           {u.mustChangePassword && (
                             <div className="text-[9px] text-amber-400 font-mono mt-0.5">
                               ⚠️ Temp Password
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Password / Access Key */}
-                        <td className="py-3 px-4">
-                          {u.visiblePassword ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono text-xs text-cyan-200 bg-slate-950/80 border border-slate-800 rounded px-2 py-1 tracking-wider select-all font-semibold max-w-[130px] truncate inline-block">
-                                {revealedPasswords[u.id] ? u.visiblePassword : "••••••••"}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => togglePasswordVisibility(u.id)}
-                                title={revealedPasswords[u.id] ? "Hide password" : "Show password"}
-                                className="rounded-lg border border-slate-700 bg-slate-800/80 p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-                              >
-                                {revealedPasswords[u.id] ? (
-                                  <EyeOff className="h-3.5 w-3.5 text-amber-400" />
-                                ) : (
-                                  <Eye className="h-3.5 w-3.5 text-cyan-400" />
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyPassword(u.id, u.visiblePassword!)}
-                                title="Copy password to clipboard"
-                                className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                              >
-                                {copiedPasswordId === u.id ? (
-                                  <>
-                                    <Check className="h-3.5 w-3.5 text-emerald-400" />
-                                    <span className="text-[10px] text-emerald-400 font-bold">Copied</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="h-3.5 w-3.5" />
-                                    <span className="text-[10px]">Copy</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-mono text-amber-300">
-                                Set once to enable view
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setResetPasswordInput("");
-                                  setConfirmDialog({ type: "resetPassword", user: u });
-                                }}
-                                className="text-[11px] font-mono font-bold text-cyan-400 hover:text-cyan-300 hover:underline"
-                              >
-                                Set Password
-                              </button>
                             </div>
                           )}
                         </td>
@@ -802,6 +765,20 @@ export default function AdminPage() {
 
             <form onSubmit={handleCreateUser} className="mt-4 space-y-4">
               <div>
+                <label className="text-xs font-semibold text-slate-300">
+                  Name · ឈ្មោះអ្នកប្រើប្រាស់
+                </label>
+                <input
+                  type="text"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  placeholder="e.g. user1, dayuth, admin (យ៉ាងហោចណាស់ ៤ តួអក្សរ)"
+                  required
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
+                />
+              </div>
+
+              <div>
                 <label className="text-xs font-semibold text-slate-300">Display Name</label>
                 <input
                   type="text"
@@ -810,18 +787,6 @@ export default function AdminPage() {
                   placeholder="e.g. John Doe / លោក សុខ"
                   required
                   className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-300">Username</label>
-                <input
-                  type="text"
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                  placeholder="e.g. johndoe (3-30 lowercase characters)"
-                  required
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
                 />
               </div>
 
@@ -849,18 +814,51 @@ export default function AdminPage() {
                 </select>
               </div>
 
-              <div>
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-300">
-                  Initial Password (ទុកទំនេរដើម្បីបង្កើតពាក្យសម្ងាត់បណ្តោះអាសន្នស្វ័យប្រវត្តិ)
+                  Password · ពាក្យសម្ងាត់ (ទុកទំនេរដើម្បីបង្កើតស្វ័យប្រវត្តិ)
                 </label>
-                <input
-                  type="password"
-                  value={customPassword}
-                  onChange={(e) => setCustomPassword(e.target.value)}
-                  placeholder="Leave empty for auto-generated temporary password"
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type={showCreatePassword ? "text" : "password"}
+                    value={customPassword}
+                    onChange={(e) => setCustomPassword(e.target.value)}
+                    placeholder="Password (យ៉ាងហោចណាស់ ៤ តួអក្សរ ឬទុកទំនេរ)"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-10 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePassword(!showCreatePassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-300"
+                  >
+                    {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
+
+              {customPassword && (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Confirm Password · បញ្ជាក់ពាក្យសម្ងាត់
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showCreateConfirmPassword ? "text" : "password"}
+                      value={newConfirmPassword}
+                      onChange={(e) => setNewConfirmPassword(e.target.value)}
+                      placeholder="Confirm Password (បញ្ជាក់ពាក្យសម្ងាត់)"
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-10 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateConfirmPassword(!showCreateConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-300"
+                    >
+                      {showCreateConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
@@ -1027,21 +1025,37 @@ export default function AdminPage() {
                     : confirmDialog.type === "enable"
                     ? `តើអ្នកចង់បើកដំណើរការគណនី @${confirmDialog.user.username} ឡើងវិញមែនទេ?`
                     : confirmDialog.type === "resetPassword"
-                    ? `កំណត់ពាក្យសម្ងាត់ថ្មី ឬពាក្យសម្ងាត់បណ្តោះអាសន្នសម្រាប់ @${confirmDialog.user.username} (ពាក្យសម្ងាត់នឹងត្រូវរក្សាទុកក្នុង Reversible Vault សម្រាប់ Admin មើលឃើញពេលក្រោយ)៖`
+                    ? `កំណត់ពាក្យសម្ងាត់ថ្មី ឬពាក្យសម្ងាត់បណ្តោះអាសន្នសម្រាប់ @${confirmDialog.user.username} (យ៉ាងហោចណាស់ ៤ តួអក្សរ ឬទុកទំនេរដើម្បីបង្កើតស្វ័យប្រវត្តិ)៖`
                     : `ប្តូរតួនាទីរបស់ @${confirmDialog.user.username} ទៅជា ${confirmDialog.newRole}?`}
                 </p>
                 {confirmDialog.type === "resetPassword" && (
-                  <div className="mt-3 space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-300 font-sans">
-                      ពាក្យសម្ងាត់ថ្មី (New Password - ទុកទំនេរដើម្បីបង្កើតពាក្យសម្ងាត់ស្វ័យប្រវត្តិ):
-                    </label>
-                    <input
-                      type="text"
-                      value={resetPasswordInput}
-                      onChange={(e) => setResetPasswordInput(e.target.value)}
-                      placeholder="Leave empty for auto-generated temporary password"
-                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
-                    />
+                  <div className="mt-3 space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-300 font-sans">
+                        Password · ពាក្យសម្ងាត់ (ទុកទំនេរដើម្បីបង្កើតស្វ័យប្រវត្តិ):
+                      </label>
+                      <input
+                        type="text"
+                        value={resetPasswordInput}
+                        onChange={(e) => setResetPasswordInput(e.target.value)}
+                        placeholder="Password (e.g. 1234, abcd, user1 - យ៉ាងហោចណាស់ ៤ តួ)"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
+                      />
+                    </div>
+                    {resetPasswordInput.trim() && (
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-300 font-sans">
+                          Confirm Password · បញ្ជាក់ពាក្យសម្ងាត់:
+                        </label>
+                        <input
+                          type="text"
+                          value={resetConfirmPasswordInput}
+                          onChange={(e) => setResetConfirmPasswordInput(e.target.value)}
+                          placeholder="Confirm Password (បញ្ជាក់ពាក្យសម្ងាត់)"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white font-mono focus:border-cyan-400 focus:outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

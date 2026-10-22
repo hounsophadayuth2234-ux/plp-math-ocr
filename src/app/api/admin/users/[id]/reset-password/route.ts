@@ -46,7 +46,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     chosenPassword = generateTemporaryPassword();
     isTemporary = true;
   } else {
-    const validation = validateAdminManagedPassword(chosenPassword, target.username);
+    const validation = validateAdminManagedPassword(
+      chosenPassword,
+      target.username,
+      typeof body?.confirmPassword === "string" ? body.confirmPassword.trim() : undefined
+    );
     if (!validation.valid) {
       return NextResponse.json(
         { error: validation.errors[0] || "Invalid password", details: validation.errors },
@@ -56,12 +60,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 
   const passwordHash = bcrypt.hashSync(chosenPassword, 12);
-  const managedPasswordEncrypted = encryptManagedPassword(chosenPassword);
 
   const now = Date.now();
   await UserStore.updateUser(id, {
     passwordHash,
-    managedPasswordEncrypted,
     mustChangePassword: isTemporary || body?.mustChangePassword === true,
     passwordChangedAt: now,
     sessionRevokedAt: now,
@@ -83,8 +85,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   return NextResponse.json({
     success: true,
-    temporaryPassword: isTemporary ? chosenPassword : undefined,
-    visiblePassword: chosenPassword,
+    temporaryPassword: chosenPassword,
     message: isTemporary
       ? "បានបង្កើតពាក្យសម្ងាត់បណ្តោះអាសន្នដោយជោគជ័យ (Temporary password generated successfully)"
       : "បានកំណត់ពាក្យសម្ងាត់ថ្មីដោយជោគជ័យ (Password updated successfully)",

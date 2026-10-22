@@ -203,7 +203,7 @@ describe("Account Management & RBAC Security Suite", () => {
       expect(await bcrypt.compare("BrandNewPassword2026#Secure", updated!.passwordHash)).toBe(true);
     });
 
-    it("8. Changing password rejects weak passwords (< 10 chars, common)", async () => {
+    it("8. Changing password rejects weak passwords (< 4 chars)", async () => {
       const req = new NextRequest("http://localhost/api/auth/change-password", {
         method: "POST",
         headers: {
@@ -213,7 +213,7 @@ describe("Account Management & RBAC Security Suite", () => {
         },
         body: JSON.stringify({
           currentPassword: "UserPass2026!Strong",
-          newPassword: "password123", // Weak common password
+          newPassword: "abc", // Shorter than 4 chars
         }),
       });
 
@@ -279,7 +279,7 @@ describe("Account Management & RBAC Security Suite", () => {
       expect(data.user.username).toBe("staff01");
       expect(data.user.mustChangePassword).toBe(true);
       expect(data.temporaryPassword).toBeDefined();
-      expect(data.temporaryPassword.length).toBeGreaterThanOrEqual(16);
+      expect(data.temporaryPassword.length).toBeGreaterThanOrEqual(8);
     });
 
     it("4. ADMIN can disable and enable an account", async () => {

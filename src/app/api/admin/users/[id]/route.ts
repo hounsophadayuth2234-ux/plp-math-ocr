@@ -63,12 +63,15 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   }
 
   if (body?.password !== undefined && typeof body.password === "string" && body.password.trim()) {
-    const passwordVal = validateAdminManagedPassword(body.password.trim(), existing.username);
+    const passwordVal = validateAdminManagedPassword(
+      body.password.trim(),
+      existing.username,
+      typeof body?.confirmPassword === "string" ? body.confirmPassword.trim() : undefined
+    );
     if (!passwordVal.valid) {
       return NextResponse.json({ error: passwordVal.errors[0] || "Invalid password", details: passwordVal.errors }, { status: 400 });
     }
     updates.passwordHash = bcrypt.hashSync(body.password.trim(), 12);
-    updates.managedPasswordEncrypted = encryptManagedPassword(body.password.trim());
     updates.passwordChangedAt = Date.now();
   }
 

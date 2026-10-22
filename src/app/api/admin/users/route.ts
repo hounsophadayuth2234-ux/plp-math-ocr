@@ -105,24 +105,26 @@ export async function POST(req: NextRequest) {
     plainPassword = generateTemporaryPassword();
     isTemporary = true;
   } else {
-    const strength = validateAdminManagedPassword(plainPassword, usernameVal.value);
+    const strength = validateAdminManagedPassword(
+      plainPassword,
+      usernameVal.value,
+      typeof body?.confirmPassword === "string" ? body.confirmPassword.trim() : undefined
+    );
     if (!strength.valid) {
       return NextResponse.json(
-        { error: strength.errors[0] || "Invalid password strength", details: strength.errors },
+        { error: strength.errors[0] || "Invalid password", details: strength.errors },
         { status: 400 }
       );
     }
   }
 
   const passwordHash = bcrypt.hashSync(plainPassword, 12);
-  const managedPasswordEncrypted = encryptManagedPassword(plainPassword);
 
   const newUser = await UserStore.createUser({
     username: usernameVal.value!,
     email: emailVal.value!,
     displayName: nameVal.value!,
     passwordHash,
-    managedPasswordEncrypted,
     role: roleVal.value!,
     status: statusVal.value!,
     mustChangePassword: isTemporary,
@@ -145,9 +147,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(
     {
       success: true,
-      user: toAdminSafeUser(newUser),
-      temporaryPassword: isTemporary ? plainPassword : undefined,
-      visiblePassword: plainPassword,
+      user: toSafeUser(newUser),
+      temporaryPassword: plainPassword,
       message: "បានបង្កើតគណនីថ្មីដោយជោគជ័យ (Account created successfully)",
     },
     { status: 201 }

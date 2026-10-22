@@ -10,14 +10,14 @@ export interface ValidationIssue {
 
 export function validateUsername(username: unknown): { valid: boolean; value?: string; error?: string } {
   if (typeof username !== "string" || !username.trim()) {
-    return { valid: false, error: "ឈ្មោះអ្នកប្រើប្រាស់មិនអាចទទេបានទេ (Username is required)" };
+    return { valid: false, error: "សូមបញ្ចូលឈ្មោះអ្នកប្រើប្រាស់ (Username is required)" };
   }
   const clean = username.trim().toLowerCase();
-  if (clean.length < 3 || clean.length > 30) {
-    return { valid: false, error: "ឈ្មោះអ្នកប្រើប្រាស់ត្រូវតែមានចន្លោះ 3 ដល់ 30 តួអក្សរ (Username must be 3-30 characters)" };
+  if (clean.length < 4) {
+    return { valid: false, error: "ឈ្មោះអ្នកប្រើប្រាស់ត្រូវមានយ៉ាងហោចណាស់ ៤ តួអក្សរ (Username must be at least 4 characters)" };
   }
   if (!/^[a-z0-9_.-]+$/.test(clean)) {
-    return { valid: false, error: "ឈ្មោះអ្នកប្រើប្រាស់អាចផ្ទុកតែអក្សរ លេខ សញ្ញាចុច និងសញ្ញា _ (Username can only contain a-z, 0-9, _, -, .)" };
+    return { valid: false, error: "ឈ្មោះអ្នកប្រើប្រាស់អាចផ្ទុកតែអក្សរ និងលេខ (Username can only contain letters and numbers)" };
   }
   return { valid: true, value: clean };
 }
