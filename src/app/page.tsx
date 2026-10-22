@@ -92,9 +92,9 @@ export default function DashboardOverviewPage() {
           <span className="font-bold text-white truncate">VISION ISNET READY</span>
         </div>
         <div className="flex items-center gap-2 border border-slate-800/80 bg-slate-900/70 px-3 py-2">
-          <span className="h-2 w-2 rounded-none bg-amber-400 animate-pulse" />
+          <span className="h-2 w-2 rounded-none bg-emerald-400" />
           <span className="text-slate-400">MOD-03:</span>
-          <span className="font-bold text-amber-300 truncate">MAINTENANCE</span>
+          <span className="font-bold text-emerald-300 truncate">HD RESIZE READY</span>
         </div>
         <div className="flex items-center gap-2 border border-slate-800/80 bg-slate-900/70 px-3 py-2">
           <span className="h-2 w-2 rounded-none bg-violet-400" />
@@ -318,7 +318,7 @@ export default function DashboardOverviewPage() {
         <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
         <span className="font-semibold text-amber-400">NOTE:</span>
         <span>
-          Modules 03 &amp; 05 (Image Upscaler &amp; Web Cloner) are temporarily under scheduled maintenance.
+          Module 05 (Web Cloner) is temporarily under scheduled maintenance.
         </span>
       </div>
 

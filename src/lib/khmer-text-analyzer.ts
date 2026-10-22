@@ -313,7 +313,7 @@ export function resolveAutoQualityWorkingResolution(params: {
   if (edgeQuality === "fine_details") {
     return {
       resolution: 1536,
-      reason: "Fine details profile: high-precision 1536px working resolution.",
+      reason: "Fine details profile: high-precision 1536px safe working resolution.",
       fallbackTriggered: false,
     };
   }

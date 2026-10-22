@@ -56,7 +56,7 @@ export function BgProcessingCard({
             <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
           </span>
           <span className="font-bold text-cyan-300 uppercase tracking-wider text-[11px]">
-            {progressInfo?.stage || "Processing Image Matrix..."}
+            {progressInfo?.message || progressInfo?.stage || "Processing Image Matrix..."}
           </span>
         </div>
 

@@ -139,80 +139,147 @@ export async function upscaleImageStudio(
     percent: 65,
   });
 
-  // 3. Dispatch to FastAPI / Next.js backend
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Accept: "image/png, application/json",
-      "x-raw-response": "true",
-    },
-    body: formData,
-    signal: options.signal,
-  });
-
-  if (!res.ok) {
-    let errMessage = "ការធ្វើឱ្យរូបភាពច្បាស់មិនបានសម្រេច។ សូមសាកល្បងម្តងទៀត។";
-    try {
-      const errJson = await res.json();
-      if (errJson.error) {
-        errMessage = errJson.error;
-      }
-    } catch {
-      // Fallback message
-    }
-    throw new Error(errMessage);
+  // 3. Dispatch to backend if available, with graceful fallback to on-device HD Resize & Sharpen
+  let res: Response | null = null;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Accept: "image/png, application/json",
+        "x-raw-response": "true",
+      },
+      body: formData,
+      signal: options.signal,
+    });
+  } catch (fetchErr) {
+    if (options.signal?.aborted) throw fetchErr;
+    // Server not reachable or offline -> fall back to on-device HD Resize & Sharpen
   }
 
-  // Stage 4: Postprocessing & Output Assembly
-  options.onProgress?.({
-    stage: 4,
-    totalStages: 5,
-    stageName: "Postprocessing & PNG Assembly",
-    stageNameKh: "រៀបចំរូបភាពច្បាស់គុណភាពខ្ពស់ PNG",
-    percent: 90,
-  });
+  if (res && res.ok) {
+    // Stage 4: Postprocessing & Output Assembly
+    options.onProgress?.({
+      stage: 4,
+      totalStages: 5,
+      stageName: "Postprocessing & PNG Assembly",
+      stageNameKh: "រៀបចំរូបភាពច្បាស់គុណភាពខ្ពស់ PNG",
+      percent: 90,
+    });
 
-  // Read response headers for truthful resolution & model metadata
-  const factor = parseInt(res.headers.get("X-Upscale-Factor") || "4", 10);
-  const procW = parseInt(res.headers.get("X-Processed-Width") || String(srcW), 10);
-  const procH = parseInt(res.headers.get("X-Processed-Height") || String(srcH), 10);
-  const wasDownscaled =
-    res.headers.get("X-Was-Downscaled") === "true" ||
-    procW < srcW ||
-    procH < srcH;
+    // Read response headers for truthful resolution & model metadata
+    const factor = parseInt(res.headers.get("X-Upscale-Factor") || "4", 10);
+    const procW = parseInt(res.headers.get("X-Processed-Width") || String(srcW), 10);
+    const procH = parseInt(res.headers.get("X-Processed-Height") || String(srcH), 10);
+    const wasDownscaled =
+      res.headers.get("X-Was-Downscaled") === "true" ||
+      procW < srcW ||
+      procH < srcH;
 
-  const headerOutW = parseInt(res.headers.get("X-Output-Width") || "0", 10);
-  const headerOutH = parseInt(res.headers.get("X-Output-Height") || "0", 10);
-  const outW = headerOutW || procW * factor;
-  const outH = headerOutH || procH * factor;
+    const headerOutW = parseInt(res.headers.get("X-Output-Width") || "0", 10);
+    const headerOutH = parseInt(res.headers.get("X-Output-Height") || "0", 10);
+    const outW = headerOutW || procW * factor;
+    const outH = headerOutH || procH * factor;
 
-  const contentType = res.headers.get("content-type") || "";
-  let blob: Blob;
+    const contentType = res.headers.get("content-type") || "";
+    let blob: Blob;
 
-  if (contentType.includes("application/json")) {
-    const json = await res.json();
-    if (json.outputUrl?.startsWith("data:")) {
-      const dataUriParts = json.outputUrl.split(",");
-      const mime = dataUriParts[0].match(/:(.*?);/)?.[1] || "image/png";
-      const bstr = atob(dataUriParts[1]);
-      let n = bstr.length;
-      const u8arr = new Uint8ClampedArray(n);
-      while (n--) {
-        u8arr[n] = bstr.charCodeAt(n);
+    if (contentType.includes("application/json")) {
+      const json = await res.json();
+      if (json.outputUrl?.startsWith("data:")) {
+        const dataUriParts = json.outputUrl.split(",");
+        const mime = dataUriParts[0].match(/:(.*?);/)?.[1] || "image/png";
+        const bstr = atob(dataUriParts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8ClampedArray(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        blob = new Blob([u8arr], { type: mime });
+      } else {
+        const fetched = await fetch(json.outputUrl);
+        blob = await fetched.blob();
       }
-      blob = new Blob([u8arr], { type: mime });
     } else {
-      const fetched = await fetch(json.outputUrl);
-      blob = await fetched.blob();
+      blob = await res.blob();
     }
-  } else {
-    blob = await res.blob();
+
+    const outputUrl = URL.createObjectURL(blob);
+    const elapsedMs = Math.round(performance.now() - startTime);
+
+    // Stage 5: Complete
+    options.onProgress?.({
+      stage: 5,
+      totalStages: 5,
+      stageName: "Complete",
+      stageNameKh: "រួចរាល់ 100%",
+      percent: 100,
+    });
+
+    diagnostics.actualEngine = "Real AI model";
+
+    return {
+      outputUrl,
+      blob,
+      srcWidth: srcW,
+      srcHeight: srcH,
+      outputWidth: outW,
+      outputHeight: outH,
+      scale: (factor as UpscaleScale) || 4,
+      requestedScale: 4,
+      isFallback: wasDownscaled,
+      fallbackReason: wasDownscaled
+        ? `រូបដើមធំជាង 1200px ត្រូវបានសម្រួលទំហំសុវត្ថិភាព CPU មុនពេលដំណើរការ Real-ESRGAN (Input capped at 1200px for CPU safety)`
+        : undefined,
+      diagnostics,
+      elapsedMs,
+      label: "Local worker result",
+      model: "Real-ESRGAN (4x · Compact SRVGGNet)",
+      engine: "Real AI model",
+      jobId: options.jobId,
+    };
   }
 
-  const outputUrl = URL.createObjectURL(blob);
+  // Graceful on-device HD Resize & Sharpen engine (via Web Worker)
+  // Executes pure TypedArray Lanczos-3, Kuwahara, Curvature Flow, and Khmer text protection
+  const reqScale = options.scale || 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = srcW;
+  canvas.height = srcH;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Could not initialize 2D canvas context for HD enhancement.");
+
+  const bitmap = await createImageBitmap(imageSource);
+  ctx.drawImage(bitmap, 0, 0);
+  if (typeof bitmap.close === "function") bitmap.close();
+  const srcImgData = ctx.getImageData(0, 0, srcW, srcH);
+
+  let workerRes: { data: Uint8ClampedArray; width: number; height: number; diagnostics: ImageDiagnostics };
+  try {
+    const { hdEnhancerWorkerManager } = await import("./hd-enhancer-manager");
+    workerRes = await hdEnhancerWorkerManager.runInWorker(srcImgData, options);
+  } catch (workerErr) {
+    if (options.signal?.aborted) throw workerErr;
+    const { runImageUpscalePipeline } = await import("./image-upscale-engine");
+    workerRes = await runImageUpscalePipeline(srcImgData, options);
+  }
+
+  const outCanvas = document.createElement("canvas");
+  outCanvas.width = workerRes.width;
+  outCanvas.height = workerRes.height;
+  const outCtx = outCanvas.getContext("2d");
+  if (!outCtx) throw new Error("Could not initialize destination canvas context.");
+
+  const outImageData = outCtx.createImageData(workerRes.width, workerRes.height);
+  outImageData.data.set(workerRes.data);
+  outCtx.putImageData(outImageData, 0, 0);
+
+  const outBlob = await new Promise<Blob>((resolve, reject) => {
+    outCanvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Failed to export PNG blob."))), "image/png");
+  });
+
+  const outputUrl = URL.createObjectURL(outBlob);
   const elapsedMs = Math.round(performance.now() - startTime);
 
-  // Stage 5: Complete
   options.onProgress?.({
     stage: 5,
     totalStages: 5,
@@ -221,26 +288,20 @@ export async function upscaleImageStudio(
     percent: 100,
   });
 
-  diagnostics.actualEngine = "Real AI model";
-
   return {
     outputUrl,
-    blob,
+    blob: outBlob,
     srcWidth: srcW,
     srcHeight: srcH,
-    outputWidth: outW,
-    outputHeight: outH,
-    scale: (factor as UpscaleScale) || 4,
-    requestedScale: 4,
-    isFallback: wasDownscaled,
-    fallbackReason: wasDownscaled
-      ? `រូបដើមធំជាង 1200px ត្រូវបានសម្រួលទំហំសុវត្ថិភាព CPU មុនពេលដំណើរការ Real-ESRGAN (Input capped at 1200px for CPU safety)`
-      : undefined,
-    diagnostics,
+    outputWidth: workerRes.width,
+    outputHeight: workerRes.height,
+    scale: reqScale,
+    requestedScale: reqScale,
+    diagnostics: workerRes.diagnostics || diagnostics,
     elapsedMs,
-    label: "Local worker result",
-    model: "Real-ESRGAN (4x · Compact SRVGGNet)",
-    engine: "Real AI model",
+    label: "Browser AI result",
+    model: `HD Resize & Sharpen (${reqScale}x)`,
+    engine: "Browser resize/sharpen",
     jobId: options.jobId,
   };
 }

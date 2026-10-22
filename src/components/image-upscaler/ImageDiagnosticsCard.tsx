@@ -77,7 +77,7 @@ export function ImageDiagnosticsCard({
             />
           </div>
           <span className="mt-1 block text-[10px] font-mono text-slate-500">
-            Laplacian: {diagnostics.laplacianVariance}
+            កម្រិត: {diagnostics.sharpnessScore}/100
           </span>
         </div>
 
@@ -112,7 +112,7 @@ export function ImageDiagnosticsCard({
             />
           </div>
           <span className="mt-1 block text-[10px] font-mono text-slate-500">
-            Immerkær: {diagnostics.noiseCategory}
+            កម្រិត: {diagnostics.noiseCategoryKh}
           </span>
         </div>
 
@@ -136,7 +136,7 @@ export function ImageDiagnosticsCard({
         </div>
       </div>
 
-      {/* Actual Engine Disclosure Badge (Requirement 13) */}
+      {/* Actual Engine Disclosure Badge */}
       <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-2.5 text-xs font-mono">
         <div className="flex items-center gap-2">
           <span className="text-slate-400 text-[11px]">Processing Engine:</span>
@@ -145,9 +145,9 @@ export function ImageDiagnosticsCard({
           </span>
         </div>
         <div className="flex items-center gap-3 text-[10px] text-slate-400">
-          <span>AI Super-Resolution Model: <strong className="text-slate-300">None (Lanczos/PDE Shaders)</strong></span>
+          <span>Processing Mode: <strong className="text-slate-300">HD Resize &amp; Sharpen</strong></span>
           <span>·</span>
-          <span>Remote Worker: <strong className="text-slate-300">Local Browser Worker</strong></span>
+          <span>Worker: <strong className="text-slate-300">Web Worker Active</strong></span>
         </div>
       </div>
 

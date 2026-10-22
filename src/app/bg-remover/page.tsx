@@ -47,12 +47,14 @@ import { BgStudioHelpModal } from "@/components/bg-remover/BgStudioHelpModal";
 import { BgAdvancedSettings } from "@/components/bg-remover/BgAdvancedSettings";
 import { StudioLocale, getSavedLocale, saveLocale, getTranslation } from "@/lib/i18n";
 import { resolveAutoQualityWorkingResolution } from "@/lib/khmer-text-analyzer";
+import { bgRemovalQueue, QueueStatus } from "@/lib/concurrency-queue";
 
 export default function BgRemoverPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [cachedResult, setCachedResult] = useState<BgRemovalOutput | null>(null);
   const [previousResult, setPreviousResult] = useState<BgRemovalOutput | null>(null);
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [initialCompositeUrl, setInitialCompositeUrl] = useState<string | null>(null);
   const [selectedPurpose, setSelectedPurpose] = useState<"white" | "pink" | "transparent" | "custom">("transparent");
   const [locale, setLocale] = useState<StudioLocale>(() => getSavedLocale());
@@ -598,9 +600,11 @@ export default function BgRemoverPage() {
 
     try {
       console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, mode=${mode}`);
-      let output: BgRemovalOutput;
+      const output = await bgRemovalQueue.enqueue(
+        async () => {
+          let segOutput: BgRemovalOutput;
 
-      if (activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster") {
+          if (activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster") {
         // DOCUMENT SAFE MODE: AI MATTE DISABLED
         // Zero worker calls, zero model inference, 100% byte-identical RGB preservation.
         const segResult = await segmentObjectSelection(imageFile, {
@@ -642,7 +646,7 @@ export default function BgRemoverPage() {
         const maskUrl = createAlphaMaskDataUrl(activeMask, width, height);
 
         const elapsedTotal = Math.round(performance.now() - startTime);
-        output = {
+        segOutput = {
           transparentBlob,
           transparentUrl: transUrl,
           alphaMaskUrl: maskUrl,
@@ -768,7 +772,7 @@ export default function BgRemoverPage() {
         const maskUrl = createAlphaMaskDataUrl(activeMask, width, height);
 
         const elapsedTotal = Math.round(performance.now() - startTime);
-        output = {
+        segOutput = {
           transparentBlob,
           transparentUrl: transUrl,
           alphaMaskUrl: maskUrl,
@@ -809,6 +813,26 @@ export default function BgRemoverPage() {
         });
       }
 
+          return segOutput;
+        },
+        {
+          signal: abortController.signal,
+          onQueueStatus: (status) => {
+            setQueueStatus(status);
+            if (status.position > 0) {
+              setProgressInfo({
+                key: "queue",
+                current: 0,
+                total: 100,
+                percent: 5,
+                stage: "Preparing image",
+                message: `Queued (Position #${status.position} of ${status.totalQueued}) · Max 4 active users`,
+              });
+            }
+          },
+        }
+      );
+
       console.log(`[bg-remover] Segmentation finished for ${imageFile.name}`);
 
       if (
@@ -818,6 +842,10 @@ export default function BgRemoverPage() {
       ) {
         console.log(`[bg-remover] Discarding result for ${imageFile.name} because superseded/stale`);
         return;
+      }
+
+      if (!output) {
+        throw new Error("No output generated from background removal.");
       }
 
       // Check for remaining isolated blobs in Auto Portrait mode
@@ -915,6 +943,7 @@ export default function BgRemoverPage() {
           : "ដំណើរការកាត់រូបភាពជួបបញ្ហា។ អ្នកអាចព្យាយាមម្តងទៀត ឬដំណើរការកម្រិត 1024px។"
       );
     } finally {
+      setQueueStatus(null);
       clearTimeout(slowTimer);
       clearTimeout(slow30Timer);
       if (assetLoadTimer) clearTimeout(assetLoadTimer);
@@ -1337,15 +1366,13 @@ export default function BgRemoverPage() {
                   data-testid-alias="remove-background-btn"
                   onClick={() => {
                     if (simplifiedQuality === "fast") {
-                      handleRunSegmentation("preview", 640);
+                      handleRunSegmentation("preview", 1024);
                     } else {
-                      if (!isWorkerConfigured || workerStatus === "unavailable" || workerStatus === "not_configured") {
-                        setError("High Quality engine unavailable. Choose Fast mode or retry.");
-                        setIsProcessing(false);
-                        isProcessingRef.current = false;
-                        return;
+                      if (selectedEngine === "worker" && isWorkerConfigured && workerStatus === "ready") {
+                        handleRunSegmentation("worker");
+                      } else {
+                        handleRunSegmentation("final", 1500);
                       }
-                      handleRunSegmentation("worker");
                     }
                   }}
                   disabled={!imageFile || isProcessing}
@@ -1405,6 +1432,25 @@ export default function BgRemoverPage() {
                   >
                     <Zap className="h-3.5 w-3.5" />
                     <span>Run with Fast Mode (&lt;10s)</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Queue Status Notification when job is waiting */}
+              {queueStatus && queueStatus.position > 0 && (
+                <div data-testid="queue-status-banner" className="flex items-center justify-between p-3 border border-amber-500/50 bg-amber-950/60 font-mono text-xs text-amber-200">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-amber-400 shrink-0" />
+                    <span>
+                      SYS_QUEUE: ជួររង់ចាំ (Queued: #{queueStatus.position} of {queueStatus.totalQueued}) · កំណត់អ្នកប្រើប្រាស់ ៤ នាក់ស្របគ្នា (Max 4 active users)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="px-2.5 py-1 border border-rose-500/50 bg-rose-950/60 text-rose-300 text-[10px] font-bold uppercase hover:bg-rose-900 transition-colors cursor-pointer"
+                  >
+                    Cancel Wait
                   </button>
                 </div>
               )}

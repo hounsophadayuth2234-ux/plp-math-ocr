@@ -523,11 +523,11 @@ export default function ImageUpscalerPage() {
                   MODULE 03
                 </span>
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                  Real AI Super-Resolution (Real-ESRGAN 4X)
+                  HD Resize &amp; Sharpen (ធ្វើរូបឱ្យច្បាស់)
                 </h1>
               </div>
               <p className="mt-0.5 text-xs text-slate-400">
-                Deep Convolutional Neural Network (SRVGGNetCompact) Super-Resolution · FastAPI AI Backend
+                High-Fidelity Resampling &amp; Adaptive Edge Sharpening · Web Worker Processing
               </p>
             </div>
           </div>
@@ -556,20 +556,20 @@ export default function ImageUpscalerPage() {
           </div>
         </div>
 
-        {/* Engine Notice: Real AI Super-Resolution */}
+        {/* Engine Notice: HD Resize & Sharpen */}
         <div className="flex items-start gap-3 rounded-xl border border-cyan-500/30 bg-cyan-950/30 p-3.5 font-mono text-xs text-cyan-200">
           <Sparkles className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="font-bold uppercase text-cyan-300">
-                Engine: Real-ESRGAN Compact ONNX Neural Super-Resolution (4X)
+                Engine: HD Resize &amp; Sharpen / Smart Enhance
               </span>
               <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
-                AI Neural Network
+                On-Device Web Worker
               </span>
             </div>
             <p className="text-[11px] text-cyan-100/80 leading-relaxed">
-              This system executes authentic 4x Real-ESRGAN deep neural network inference on the FastAPI backend. It reconstructs genuine high-frequency textures, sharp text strokes, and clean contours. Large images exceeding 1200px are capped proportionally to protect CPU memory.
+              Provides deterministic high-order Lanczos-3 resampling, Kuwahara noise smoothing, and Khmer text stroke protection. Large images are processed smoothly in a dedicated background worker to prevent UI lag.
             </p>
           </div>
         </div>
@@ -675,15 +675,15 @@ export default function ImageUpscalerPage() {
             {isLoading && (
               <RoboticScanner
                 active={true}
-                moduleName="REAL AI SUPER-RESOLUTION // [REAL-ESRGAN 4X]"
+                moduleName="HD RESIZE &amp; SHARPEN // SMART ENHANCE"
                 steps={[
                   "STAGE 1/5: SMART IMAGE DIAGNOSTICS & RESOLUTION CHECK...",
-                  "STAGE 2/5: DISPATCHING PAYLOAD TO FASTAPI AI BACKEND...",
-                  "STAGE 3/5: REAL-ESRGAN 4X NEURAL INFERENCE (SRVGGNET)...",
-                  "STAGE 4/5: HIGH-PRECISION TEXTURE RECONSTRUCTION...",
-                  "STAGE 5/5: PNG STREAMING & CLIENT BLOB RENDERING...",
+                  "STAGE 2/5: PRE-UPSCALE ARTIFACT SMOOTHING (KUWAHARA)...",
+                  "STAGE 3/5: HIGH-ORDER LANCZOS RESAMPLING (1X, 2X, 4X)...",
+                  "STAGE 4/5: COHERENCE FLOW & KHMER TEXT EDGE SHARPENING...",
+                  "STAGE 5/5: OUTPUT ASSEMBLY & INSTANT PREVIEW...",
                 ]}
-                subtext="Authentic Real-ESRGAN neural super-resolution running on FastAPI backend"
+                subtext="High-precision edge-directed sharpening and resolution scaling"
               />
             )}
 
@@ -712,8 +712,8 @@ export default function ImageUpscalerPage() {
                   beforeLabel="BEFORE (រូបដើម)"
                   afterLabel={
                     result.isFallback
-                      ? `AFTER (${result.scale}X Real-ESRGAN AI · Capped at 1200px)`
-                      : `AFTER (${result.scale}X Real-ESRGAN AI)`
+                      ? `AFTER (${result.scale}X HD Resize & Sharpen · Capped at 1200px)`
+                      : `AFTER (${result.scale}X HD Resize & Sharpen)`
                   }
                   srcWidth={result.srcWidth}
                   srcHeight={result.srcHeight}

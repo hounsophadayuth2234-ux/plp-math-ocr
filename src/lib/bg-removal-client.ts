@@ -131,6 +131,7 @@ export interface BgRemovalProgress {
     | "Segmenting"
     | "Refining mask"
     | "Ready";
+  message?: string;
   modelLoadingPercent?: number;
   processingPercent?: number;
 }
@@ -598,9 +599,12 @@ export async function removeBackgroundBrowser(
   }
 
   const mode = options?.mode || "preview";
-  const defaultMaxDim = mode === "preview" ? 1024 : 2048;
+  // Safe client-side resizing strictly bounded to 1024–1500px to protect browser memory & WASM execution
+  const MAX_SAFE_PROCESSING_DIM = 1500;
+  const MIN_PROCESSING_DIM = 1024;
+  const defaultMaxDim = mode === "preview" ? MIN_PROCESSING_DIM : 1280;
   const targetCap = options?.targetMaxDimension
-    ? Math.min(options.targetMaxDimension, 2048)
+    ? Math.min(Math.max(options.targetMaxDimension, MIN_PROCESSING_DIM), MAX_SAFE_PROCESSING_DIM)
     : defaultMaxDim;
   const modelName = "isnet_fp16" as const;
 
@@ -1224,12 +1228,12 @@ export async function removeBackgroundRemote(
     options instanceof AbortSignal ? { signal: options } : options || {};
 
   const { width: origW, height: origH } = await getImageDimensions(imageFile).catch(() => ({
-    width: 2048,
-    height: 2048,
+    width: 1500,
+    height: 1500,
   }));
   const { blob: safeBlob, width, height, wasScaled } = await downscaleImageIfExceeds(
     imageFile,
-    2048
+    1500
   );
 
   const tStart = Date.now();
@@ -1761,13 +1765,14 @@ export async function segmentObjectSelection(
       polygon: options.polygon,
     });
   } else {
-    const workingDimension = options?.targetMaxDimension ?? (
+    const rawWorkingDimension = options?.targetMaxDimension ?? (
       options?.quality === "fine_details"
-        ? 1536
+        ? 1500
         : options?.quality === "balanced"
-        ? 1024
-        : 768
+        ? 1200
+        : 1024
     );
+    const workingDimension = Math.min(1500, Math.max(768, rawWorkingDimension));
     initialOutput = await removeBackgroundBrowser(imageFile, {
       mode: options?.quality === "fine_details" ? "final" : "preview",
       targetMaxDimension: workingDimension,
