@@ -15,7 +15,7 @@ export const SESSION_COOKIE_NAME =
     : "dyt_gate_session";
 
 export interface SessionPayload {
-  iss: string;
+  iss?: string;
   iat: number;
   exp: number;
   jti: string;
@@ -229,7 +229,7 @@ export async function verifySessionToken(
       return { valid: false, error: "Session expired" };
     }
 
-    if (payload.iss !== "dyt-cyber-gate") {
+    if (payload.iss && payload.iss !== "dyt-cyber-gate") {
       return { valid: false, error: "Untrusted issuer" };
     }
 

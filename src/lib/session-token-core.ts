@@ -14,6 +14,7 @@ export interface SessionTokenPayload {
   iat: number;
   exp: number;
   jti: string;
+  iss?: string;
 }
 
 function getSessionSecret(): string {
@@ -73,6 +74,7 @@ export async function createSessionToken(params: {
 
   const now = Math.floor(Date.now() / 1000);
   const payload: SessionTokenPayload = {
+    iss: "dyt-cyber-gate",
     userId: params.id,
     username: params.username,
     role: params.role,
