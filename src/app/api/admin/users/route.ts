@@ -11,7 +11,7 @@ import {
   validateStatus,
 } from "@/lib/auth-validators";
 import {
-  validatePasswordStrength,
+  validateAdminManagedPassword,
   generateTemporaryPassword,
 } from "@/lib/password-rules";
 import { AuditLogger } from "@/lib/audit-logger";
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     plainPassword = generateTemporaryPassword();
     isTemporary = true;
   } else {
-    const strength = validatePasswordStrength(plainPassword);
+    const strength = validateAdminManagedPassword(plainPassword, usernameVal.value);
     if (!strength.valid) {
       return NextResponse.json(
         { error: strength.errors[0] || "Invalid password strength", details: strength.errors },

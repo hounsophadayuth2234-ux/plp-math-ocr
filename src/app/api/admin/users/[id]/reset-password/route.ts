@@ -39,9 +39,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const temporaryPassword = generateTemporaryPassword();
   const passwordHash = bcrypt.hashSync(temporaryPassword, 12);
 
+  const now = Date.now();
   await UserStore.updateUser(id, {
     passwordHash,
     mustChangePassword: true,
+    passwordChangedAt: now,
+    sessionRevokedAt: now,
+    activeSessionsCount: 0,
   });
 
   await AuditLogger.logEvent({
