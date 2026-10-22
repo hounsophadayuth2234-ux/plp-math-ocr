@@ -85,22 +85,22 @@ export function validateAdminManagedPassword(
 }
 
 /**
- * Generates a simple, practical random temporary password (8 alphanumeric characters).
+ * Generates a simple, practical random temporary password (10 alphanumeric characters by default).
  */
-export function generateTemporaryPassword(): string {
+export function generateTemporaryPassword(length: number = 10): string {
   const chars = "abcdefghjkmnpqrstuvwxyz23456789";
   let result = "";
-  const randomValues = new Uint32Array(8);
+  const randomValues = new Uint32Array(length);
 
   if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.getRandomValues === "function") {
     globalThis.crypto.getRandomValues(randomValues);
   } else {
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < length; i++) {
       randomValues[i] = Math.floor(Math.random() * 0xffffffff);
     }
   }
 
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < length; i++) {
     result += chars[randomValues[i] % chars.length];
   }
 
