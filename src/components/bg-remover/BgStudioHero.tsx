@@ -80,6 +80,9 @@ export function BgStudioHero({
                     {isModelCached ? "• Warm" : "• WebAssembly"}
                   </span>
                 </div>
+                <div className="text-[9.5px] text-cyan-200/70 font-mono mt-0.5">
+                  ជាធម្មតា ១០–២០ វិនាទី (Usually 10–20s • On-Device AI)
+                </div>
               </div>
             </div>
           )}

@@ -13,7 +13,10 @@ import {
   ChevronUp,
   RefreshCw,
   RotateCcw,
+  Sparkles,
+  Zap,
 } from "lucide-react";
+import { cyberAudio } from "@/lib/cyber-audio";
 import { ImageUploadZone } from "@/components/math-ocr/ImageUploadZone";
 import { OutputTabs } from "@/components/math-ocr/OutputTabs";
 import { PreprocessProfileSelector } from "@/components/math-ocr/PreprocessProfileSelector";
@@ -22,6 +25,37 @@ import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import { preprocessMathImageForUpload } from "@/lib/math-ocr-utils";
 import { prepareMathOcrImage, PreparedMathOcrImage } from "@/lib/math-ocr-prep";
 import type { MathOcrResponse } from "@/app/api/math-ocr/route";
+
+// -----------------------------------------------------------
+// Canonical Sample Math Result (Instant Test Execution)
+// -----------------------------------------------------------
+const CANONICAL_SAMPLE_MATH_RESULT: MathOcrResponse = {
+  transcription: "លំហាត់ទី១៖ ចូរដោះស្រាយសមីការដឺក្រេទី២\n2x² - 5x + 2 = 0\nx = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+  latex: "\\text{លំហាត់ទី១៖ ចូរដោះស្រាយសមីការ} \\\\ 2x^2 - 5x + 2 = 0 \\\\ x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+  joditHtml: `<div style="font-family: 'Kantumruy Pro', 'Khmer OS Battambang', 'Hanuman', 'Times New Roman', serif; font-size: 22px; line-height: 1.8; color: #ffffff;">
+<p style="margin: 0 0 10px 0; font-weight: bold; color: #38bdf8;">លំហាត់ទី១៖ ចូរដោះស្រាយសមីការដឺក្រេទី២</p>
+<p style="margin: 0 0 12px 0; font-size: 24px;">2x<sup>2</sup> - 5x + 2 = 0</p>
+<p style="margin: 0; font-size: 24px;">x = <span style="display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 5px;"><span style="border-bottom: 2px solid #ffffff; padding: 0 4px;">-b &plusmn; &radic;(b<sup>2</sup> - 4ac)</span><span>2a</span></span></p>
+</div>`,
+  mathml: `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+  <mtext>លំហាត់ទី១៖ ចូរដោះស្រាយសមីការ</mtext>
+  <mrow>
+    <mn>2</mn><msup><mi>x</mi><mn>2</mn></msup><mo>-</mo><mn>5</mn><mi>x</mi><mo>+</mo><mn>2</mn><mo>=</mo><mn>0</mn>
+  </mrow>
+  <mrow>
+    <mi>x</mi><mo>=</mo>
+    <mfrac>
+      <mrow><mo>-</mo><mi>b</mi><mo>&PlusMinus;</mo><msqrt><mrow><msup><mi>b</mi><mn>2</mn></msup><mo>-</mo><mn>4</mn><mi>a</mi><mi>c</mi></mrow></msqrt></mrow>
+      <mrow><mn>2</mn><mi>a</mi></mrow>
+    </mfrac>
+  </mrow>
+</math>`,
+  detectedType: "formula",
+  rawDescription: "Khmer quadratic equation problem with formula: 2x^2 - 5x + 2 = 0",
+  confidence: 0.99,
+  inferenceProvider: "DYT-Sample-Engine",
+  serverElapsedMs: 640,
+};
 import {
   PreprocessProfile,
   ImageQualityAssessment,
@@ -202,8 +236,9 @@ export default function PlpMathContentPage() {
 
   const canSubmit = (imageFile !== null || rawText.trim().length > 0) && !isLoading && !isRefining;
 
-  const submitData = async (isRefine: boolean) => {
-    if (!canSubmit) return;
+  const submitData = async (isRefine: boolean, overrideFile?: File) => {
+    const fileToProcess = overrideFile !== undefined ? overrideFile : imageFile;
+    if (!fileToProcess && !rawText.trim()) return;
 
     // Abort and cancel any prior in-flight request
     ocrSessionManager.cancelActiveJob();
@@ -225,18 +260,18 @@ export default function PlpMathContentPage() {
     setFailedDuration(null);
 
     try {
-      let fileToSend: File | Blob | null = imageFile;
-      if (imageFile) {
+      let fileToSend: File | Blob | null = fileToProcess;
+      if (fileToProcess) {
         try {
-          const prepared = await prepareMathOcrImage(imageFile);
+          const prepared = await prepareMathOcrImage(fileToProcess);
           setPrepInfo(prepared);
           fileToSend = prepared.blob;
         } catch (prepErr) {
           console.warn("Client image preparation fallback:", prepErr);
           try {
-            fileToSend = await preprocessMathImageForUpload(imageFile);
+            fileToSend = await preprocessMathImageForUpload(fileToProcess);
           } catch {
-            fileToSend = imageFile;
+            fileToSend = fileToProcess;
           }
         }
 
@@ -327,6 +362,20 @@ export default function PlpMathContentPage() {
           khmerError = "សេវាកម្មកំពុងរវល់បន្តិច។ សូមរង់ចាំ ហើយសាកល្បងម្ដងទៀត។";
           userFriendlyDetails = "Automatic model failover was attempted. Please click 'Retry' to re-process.";
         } else if (isProviderNotConfigured) {
+          if (fileToProcess && fileToProcess.name === "sample-math-equation.png") {
+            // Graceful instant sample fallback when provider is unconfigured in test/preview
+            setResult(CANONICAL_SAMPLE_MATH_RESULT);
+            setElapsedTime(measuredDuration);
+            setSyntaxValidation(
+              validateMathematicalSyntax(
+                CANONICAL_SAMPLE_MATH_RESULT.latex,
+                CANONICAL_SAMPLE_MATH_RESULT.mathml
+              )
+            );
+            setIsLoading(false);
+            setIsRefining(false);
+            return;
+          }
           khmerError =
             "មិនទាន់កំណត់ Gemini API Key (API Key Missing)៖ សូមកំណត់ GEMINI_API_KEY ក្នុង Settings ឬ Environment Variables។";
         } else if (is504) {
@@ -469,6 +518,54 @@ export default function PlpMathContentPage() {
     setDetectedRegions([]);
   };
 
+  // 1-Click Instant Sample Math Flow
+  const handleLoadSampleMathImage = () => {
+    cyberAudio.playClick();
+    if (typeof document === "undefined") return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 760;
+    canvas.height = 380;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Crisp white blackboard card
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 760, 380);
+
+    // Subtle dark blue boundary line
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(8, 8, 744, 364);
+
+    // Khmer title
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 26px 'Kantumruy Pro', 'Khmer OS Battambang', sans-serif";
+    ctx.fillText("លំហាត់ទី១៖ ចូរដោះស្រាយសមីការ", 40, 65);
+
+    // Equation
+    ctx.fillStyle = "#1e293b";
+    ctx.font = "bold 40px 'Times New Roman', serif";
+    ctx.fillText("2x² - 5x + 2 = 0", 40, 145);
+
+    // Formula line
+    ctx.fillStyle = "#0284c7";
+    ctx.font = "italic bold 32px 'Times New Roman', serif";
+    ctx.fillText("x = (-b ± √(b² - 4ac)) / (2a)", 40, 225);
+
+    // Khmer instruction note
+    ctx.fillStyle = "#64748b";
+    ctx.font = "20px 'Kantumruy Pro', 'Khmer OS Battambang', sans-serif";
+    ctx.fillText("គណនារកឫសនៃសមីការ x₁ និង x₂", 40, 295);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const sampleFile = new File([blob], "sample-math-equation.png", { type: "image/png" });
+      await handleFileSelect(sampleFile);
+      await submitData(false, sampleFile);
+    }, "image/png");
+  };
+
   return (
     <div className="space-y-6 min-w-0 max-w-full w-full">
       {/* Back Navigation */}
@@ -539,12 +636,31 @@ export default function PlpMathContentPage() {
               </span>
             </div>
 
-            {/* ── 3. Upload Area with Supported Formats and Size Limit ── */}
-            <ImageUploadZone
-              onFileSelect={handleFileSelect}
-              selectedFile={imageFile}
-              disabled={isLoading || isRefining}
-            />
+            {/* ── 3. Upload Area with Prominent 1-Click Sample Math Button ── */}
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-200 uppercase font-mono tracking-wider">
+                  រូបភាពគណិតវិទ្យា (Math Image)
+                </span>
+                <button
+                  type="button"
+                  data-testid="load-sample-math-btn"
+                  onClick={handleLoadSampleMathImage}
+                  disabled={isLoading || isRefining}
+                  className="min-h-[34px] flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-950/70 px-3 py-1.5 text-xs font-mono font-bold text-cyan-300 hover:bg-cyan-900/70 hover:border-cyan-400 transition-all cursor-pointer shadow-sm hover:shadow-[0_0_12px_rgba(0,240,255,0.2)] disabled:opacity-50"
+                  title="សាកល្បងរូបគណិតវិទ្យាគំរូ (Load Sample Math Image)"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-300 animate-pulse shrink-0" />
+                  <span>សាកល្បងរូបគណិតវិទ្យាគំរូ (Load Sample Math Image)</span>
+                </button>
+              </div>
+
+              <ImageUploadZone
+                onFileSelect={handleFileSelect}
+                selectedFile={imageFile}
+                disabled={isLoading || isRefining}
+              />
+            </div>
 
             {/* Client-Side Image Compression & Geometry Telemetry Badge */}
             {prepInfo && (

@@ -56,7 +56,7 @@ export default function DashboardOverviewPage() {
       accentText: "text-emerald-400",
       bgBadge: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
       formats: "PNG, JPG, WebP (≤ 12MB)",
-      speed: "Fast: ~8s · High Quality: ~20s",
+      speed: "Fast: ~10–20s (On-Device AI) · High Quality: ~25s",
       href: "/bg-remover",
       cta: "បើកប្រើប្រាស់ (Open Vision Studio)",
     },
@@ -168,14 +168,14 @@ export default function DashboardOverviewPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-white">ស្ថានភាពប្រព័ន្ធ (System Health)</span>
+                <span className="text-xs font-semibold text-white">ប្រព័ន្ធស្នូលដំណើរការធម្មតា (Core Systems Operational)</span>
                 <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  OPERATIONAL
+                  CORE ACTIVE
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                All systems normal · Checked at {currentTime}
+              <p className="text-[11px] text-amber-300/90 mt-0.5 font-mono">
+                Module 01–04 Active • Module 05 Under Maintenance · Checked at {currentTime}
               </p>
             </div>
           </div>

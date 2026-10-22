@@ -1177,7 +1177,7 @@ export default function BgRemoverPage() {
 
             {/* ── 1. UPLOAD IMAGE ── */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-bold text-slate-200 uppercase font-mono tracking-wider">
                   1. Upload Image
                 </span>
@@ -1186,11 +1186,11 @@ export default function BgRemoverPage() {
                   data-testid="sample-image-btn"
                   onClick={handleLoadSample}
                   disabled={isProcessing}
-                  className="min-h-[32px] flex items-center gap-1.5 rounded border border-cyan-500/40 bg-cyan-950/60 px-3 py-1 text-xs font-mono font-bold text-cyan-300 hover:bg-cyan-900/60 transition-colors cursor-pointer disabled:opacity-50"
+                  className="min-h-[34px] flex items-center gap-1.5 rounded border border-cyan-500/40 bg-cyan-950/60 px-2.5 py-1 text-xs font-mono font-bold text-cyan-300 hover:bg-cyan-900/60 transition-colors cursor-pointer disabled:opacity-50"
                   title="Load acceptance test portrait (Black suit & blue tie with isolated blue dot)"
                 >
-                  <Zap className="h-3.5 w-3.5" />
-                  <span>Sample Portrait (Suit & Tie)</span>
+                  <Zap className="h-3.5 w-3.5 shrink-0" />
+                  <span>រូបគំរូ (Sample Portrait)</span>
                 </button>
               </div>
               <BgUploadZone
@@ -1204,13 +1204,13 @@ export default function BgRemoverPage() {
 
             {/* ── 2. MODE: Auto Portrait vs Auto General ── */}
             <div className="space-y-2 pt-2 border-t border-slate-800/80 font-mono">
-              <div className="flex items-center justify-between text-xs uppercase text-slate-300 tracking-wider">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-xs uppercase text-slate-300 tracking-wider">
                 <span className="font-bold">2. Mode</span>
-                <span className="text-cyan-400 font-bold text-[11px]">
-                  {activeSelectionMode === "auto_portrait" ? "Auto Portrait (Recommended)" : "Auto General"}
+                <span className="text-cyan-400 font-bold text-[11px] truncate">
+                  {activeSelectionMode === "auto_portrait" ? "មនុស្ស (Portrait)" : "ទូទៅ (General)"}
                 </span>
               </div>
-              <div role="radiogroup" aria-label="Mode" className="grid grid-cols-2 gap-2">
+              <div role="radiogroup" aria-label="Mode" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
                   role="radio"
@@ -1227,10 +1227,10 @@ export default function BgRemoverPage() {
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-xs">
-                    <span className="h-2 w-2 bg-cyan-400" />
-                    <span>Auto Portrait</span>
+                    <span className="h-2 w-2 bg-cyan-400 shrink-0" />
+                    <span>មនុស្ស (Portrait)</span>
                   </div>
-                  <span className="text-[10px] text-cyan-200/70 mt-0.5">Person, suit, hair, ears</span>
+                  <span className="text-[10px] text-cyan-200/70 mt-0.5 truncate max-w-full">Person, suit, hair</span>
                 </button>
 
                 <button
@@ -1250,10 +1250,10 @@ export default function BgRemoverPage() {
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-bold text-xs">
-                    <span className="h-2 w-2 bg-emerald-400" />
-                    <span>Auto General</span>
+                    <span className="h-2 w-2 bg-emerald-400 shrink-0" />
+                    <span>ទូទៅ (General)</span>
                   </div>
-                  <span className="text-[10px] text-emerald-200/70 mt-0.5">Products, pets, scenes</span>
+                  <span className="text-[10px] text-emerald-200/70 mt-0.5 truncate max-w-full">Products, pets, scenes</span>
                 </button>
               </div>
             </div>
@@ -1263,10 +1263,10 @@ export default function BgRemoverPage() {
               <div className="flex items-center justify-between text-xs uppercase text-slate-300 tracking-wider">
                 <span className="font-bold">3. Quality</span>
                 <span className="text-cyan-400 font-bold text-[11px]">
-                  {simplifiedQuality === "fast" ? "Fast (<10s)" : "High Quality (<20s)"}
+                  {simplifiedQuality === "fast" ? "Fast (10–20s)" : "High Quality (<25s)"}
                 </span>
               </div>
-              <div role="radiogroup" aria-label="Quality" className="grid grid-cols-2 gap-2 text-xs">
+              <div role="radiogroup" aria-label="Quality" className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <button
                   type="button"
                   role="radio"
@@ -1277,14 +1277,16 @@ export default function BgRemoverPage() {
                     setSimplifiedQuality("fast");
                     setEdgeQuality("fast");
                   }}
-                  className={`min-h-[42px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
+                  className={`min-h-[44px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
                     simplifiedQuality === "fast"
                       ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-sm"
                       : "border-slate-850 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
                   }`}
                 >
-                  <Zap className="h-3.5 w-3.5 text-cyan-400" />
-                  <span className="font-semibold text-xs">Fast (Usually under 10s)</span>
+                  <Zap className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                  <span className="font-semibold text-xs leading-tight">
+                    ជាធម្មតា ១០–២០ វិនាទី (Usually 10–20s • On-Device AI)
+                  </span>
                 </button>
 
                 <button
@@ -1297,14 +1299,14 @@ export default function BgRemoverPage() {
                     setSimplifiedQuality("quality");
                     setEdgeQuality("fine_details");
                   }}
-                  className={`min-h-[42px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
+                  className={`min-h-[44px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
                     simplifiedQuality === "quality"
                       ? "border-emerald-400 bg-emerald-950/70 text-white font-bold ring-1 ring-emerald-400/40 shadow-sm"
                       : "border-slate-850 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
                   }`}
                 >
-                  <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                  <span className="font-semibold text-xs">High Quality (Usually under 25s)</span>
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <span className="font-semibold text-xs leading-tight">High Quality (Usually under 25s)</span>
                 </button>
               </div>
             </div>
@@ -1597,14 +1599,14 @@ export default function BgRemoverPage() {
 
           {/* 5. RESULT PANEL: Download Transparent PNG bar */}
           {cachedResult && originalUrl && !isProcessing && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border border-emerald-500/40 bg-slate-950/95 font-mono shadow-lg">
-              <div className="flex items-center gap-2.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">
-                    Transparent Cutout Ready ({cachedResult.width}×{cachedResult.height}px)
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 sm:p-4 border border-emerald-500/40 bg-slate-950/95 font-mono shadow-lg">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-white uppercase tracking-wider truncate">
+                    កាត់ផ្ទៃរួចរាល់ ({cachedResult.width}×{cachedResult.height}px)
                   </span>
-                  <span className="text-[10.5px] text-slate-400">
+                  <span className="text-[10.5px] text-slate-400 truncate">
                     Engine: {cachedResult.model} · {cachedResult.metrics?.totalMs ?? 0}ms
                   </span>
                 </div>
@@ -1613,9 +1615,9 @@ export default function BgRemoverPage() {
                 type="button"
                 data-testid="download-transparent-png-btn"
                 onClick={handleDownloadTransparentPng}
-                className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 rounded-none border border-emerald-400 bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-[0_0_20px_rgba(16,185,129,0.35)] hover:brightness-110 transition-all cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 rounded-none border border-emerald-400 bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-[0_0_20px_rgba(16,185,129,0.35)] hover:brightness-110 transition-all cursor-pointer shrink-0"
               >
-                <span>Download Transparent PNG</span>
+                <span>ទាញយក PNG (ថ្លា) • Download PNG</span>
               </button>
             </div>
           )}
@@ -1713,6 +1715,12 @@ export default function BgRemoverPage() {
         onToggleAudio={handleToggleAudio}
         edgeQuality={edgeQuality}
         onChangeEdgeQuality={(q) => setEdgeQuality(q)}
+        activeFont={studioFont}
+        onChangeFont={handleChangeFont}
+        activeStudioTheme={studioTheme}
+        onChangeStudioTheme={handleChangeStudioTheme}
+        activeLocale={locale}
+        onChangeLocale={handleChangeLocale}
       />
 
       <BgStudioHelpModal

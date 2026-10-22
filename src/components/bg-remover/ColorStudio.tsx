@@ -2884,10 +2884,10 @@ export function ColorStudio({
             type="button"
             data-testid="confirm-mask-export-btn"
             onClick={handleConfirmMaskAndExport}
-            className="min-h-[48px] w-full flex items-center justify-center gap-2 border border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-5 py-3 text-sm font-black text-white shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:brightness-110 active:scale-[0.98] transition-all tracking-wider uppercase font-mono"
+            className="min-h-[48px] w-full flex items-center justify-center gap-2 border border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-3 text-xs sm:text-sm font-black text-white shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:brightness-110 active:scale-[0.98] transition-all tracking-wider uppercase font-mono"
           >
-            <Sparkles className="h-4 w-4 text-emerald-200" />
-            <span>✨ បញ្ជាក់ម៉ាស់ និងកាត់សម្រួលគែម (CONFIRM MASK &amp; REFINE EDGES)</span>
+            <Sparkles className="h-4 w-4 text-emerald-200 shrink-0" />
+            <span className="truncate">✨ បញ្ជាក់ម៉ាស់ និងកាត់សម្រួលគែម (Confirm Mask)</span>
           </button>
         )}
       </div>
@@ -2999,17 +2999,34 @@ export function ColorStudio({
                 : "bg-gradient-to-r from-cyan-600 via-indigo-600 to-blue-600 shadow-cyan-900/40 hover:shadow-cyan-500/25 ring-1 ring-cyan-400/40"
             }`}
           >
-            <Download className="h-4 w-4" />
-            <span>
-              {activeChannel === "transparent"
-                ? "Download HD PNG — Transparent / ទាញយក PNG គុណភាពខ្ពស់ (ថ្លា)"
-                : activeChannel === "pink"
-                ? "Download HD PNG — Soft Portrait Pink (#FADADD) / ទាញយក PNG គុណភាពខ្ពស់ (ផ្កាឈូក)"
-                : activeChannel === "custom"
-                ? `Download HD PNG — Custom (${customColor.toUpperCase()})`
-                : activeChannel === "mask"
-                ? "Download Alpha Mask Debug"
-                : "Download HD PNG — Off-White / Light Gray (#F4F5F7) / ទាញយក PNG គុណភាពខ្ពស់ (ប្រផេះស្រាល)"}
+            <Download className="h-4 w-4 shrink-0" />
+            <span className="flex flex-col sm:flex-row items-center justify-center gap-1 text-center">
+              {activeChannel === "transparent" ? (
+                <>
+                  <span>ទាញយក PNG គុណភាពខ្ពស់ (ថ្លា)</span>
+                  <span className="text-[10px] text-white/80 font-normal sm:border-l sm:border-white/30 sm:pl-1.5">Download HD Transparent</span>
+                </>
+              ) : activeChannel === "pink" ? (
+                <>
+                  <span>ទាញយក PNG គុណភាពខ្ពស់ (ផ្កាឈូក)</span>
+                  <span className="text-[10px] text-white/80 font-normal sm:border-l sm:border-white/30 sm:pl-1.5">Download HD Soft Pink</span>
+                </>
+              ) : activeChannel === "custom" ? (
+                <>
+                  <span>ទាញយក PNG ({customColor.toUpperCase()})</span>
+                  <span className="text-[10px] text-white/80 font-normal sm:border-l sm:border-white/30 sm:pl-1.5">Download HD Custom</span>
+                </>
+              ) : activeChannel === "mask" ? (
+                <>
+                  <span>ទាញយក Alpha Mask</span>
+                  <span className="text-[10px] text-white/80 font-normal sm:border-l sm:border-white/30 sm:pl-1.5">Download Mask Debug</span>
+                </>
+              ) : (
+                <>
+                  <span>ទាញយក PNG គុណភាពខ្ពស់ (Off-White)</span>
+                  <span className="text-[10px] text-white/80 font-normal sm:border-l sm:border-white/30 sm:pl-1.5">Download HD Off-White</span>
+                </>
+              )}
             </span>
           </button>
           <button

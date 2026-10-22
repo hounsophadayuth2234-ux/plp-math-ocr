@@ -152,7 +152,7 @@ export function BgProcessingCard({
           <span>
             {processingMode === "final"
               ? "គុណភាពខ្ពស់ — ជាទូទៅក្រោម ២៥ វិនាទី (High Quality: Usually under 25s)"
-              : "ល្បឿនលឿន — ជាទូទៅក្រោម ១០ វិនាទី (Fast Mode: Usually under 10s)"}
+              : "ល្បឿនលឿន — ជាធម្មតា ១០–២០ វិនាទី (Fast Mode: Usually 10–20s • On-Device AI)"}
           </span>
         </div>
 

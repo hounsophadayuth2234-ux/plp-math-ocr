@@ -239,24 +239,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           </div>
 
-          {/* Section 4: Simple System Status */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs">
+          {/* Section 4: Truthful System Status */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-slate-400 font-sans">ស្ថានភាពប្រព័ន្ធ:</span>
-              <span className="flex items-center gap-1 text-emerald-400 font-medium font-mono text-[11px]">
+              <span className="text-slate-300 font-sans font-medium text-[11px]">
+                ប្រព័ន្ធស្នូលដំណើរការធម្មតា
+              </span>
+              <span className="flex items-center gap-1 text-emerald-400 font-medium font-mono text-[10px] bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                ដំណើរការល្អ
+                Core Active
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 font-mono">
+            <div className="text-[10px] text-amber-300/90 font-mono leading-tight">
+              Module 01–04 Active • Module 05 Under Maintenance
+            </div>
+            <p className="text-[10px] text-slate-400 pt-0.5 flex items-center gap-1 font-mono">
               <Clock className="h-3 w-3 text-slate-400" />
               <span>Checked: {checkedTime}</span>
             </p>
-          </div>
-
-          {/* Module 05 Notice */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-2.5 text-[11px] font-sans text-amber-300/80 leading-relaxed">
-            <span className="text-amber-400 font-semibold">ម៉ូឌុល ០៥:</span> កំពុងជួសជុល (Under Maintenance)
           </div>
         </nav>
 

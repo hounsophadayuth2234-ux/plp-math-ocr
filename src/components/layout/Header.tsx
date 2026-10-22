@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Settings, HelpCircle, Shield, User, LogOut } from "lucide-react";
 import { CORE_TOOLS } from "@/config/tools";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
+import { MotionSpeedControl } from "@/components/layout/MotionSpeedControl";
 
 interface HeaderProps {
   onOpenSidebar: () => void;
@@ -102,6 +103,11 @@ export function Header({ onOpenSidebar, onOpenSettings, onOpenHelp }: HeaderProp
 
       {/* ── Right: De-cluttered Top Bar (Brand, Language, Help, Settings, User/Logout) ── */}
       <div className="flex items-center gap-2 sm:gap-2.5">
+        {/* Motion Speed Control on Wide Desktop */}
+        <div className="hidden xl:flex items-center">
+          <MotionSpeedControl compact={true} />
+        </div>
+
         {/* 1. Language Selector */}
         <LanguageSwitcher />
 
