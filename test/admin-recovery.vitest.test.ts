@@ -3,12 +3,18 @@ import bcrypt from "bcryptjs";
 import { NextRequest } from "next/server";
 import { UserStore } from "@/lib/user-store";
 import { AuditLogger } from "@/lib/audit-logger";
-import { GET as recoveryGet, POST as recoveryPost } from "@/app/api/auth/admin-recovery/route";
+import {
+  GET as recoveryGet,
+  POST as recoveryPost,
+  stageOneTimePasswordReset,
+  __resetEphemeralRecovery,
+} from "@/app/api/auth/admin-recovery/route";
 
 describe("Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)", () => {
   beforeEach(async () => {
     UserStore.__resetTestStore();
     AuditLogger.__resetTestEvents();
+    __resetEphemeralRecovery();
     vi.unstubAllEnvs();
 
     // Seed target account dayuth
@@ -99,5 +105,45 @@ describe("Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)", () => {
     const resetEvent = events.find((e) => e.type === "PASSWORD_RESET" && e.targetUsername === "dayuth");
     expect(resetEvent).toBeDefined();
     expect(resetEvent?.details?.method).toBe("ADMIN_RECOVERY_KEY");
+  });
+
+  it("6. APP_GATE_ADMIN_RECOVERY_KEY is recognized as a valid recovery secret", async () => {
+    vi.stubEnv("APP_GATE_ADMIN_RECOVERY_KEY", "RecoverySecret2026!AppGate");
+    const res = await recoveryGet();
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.enabled).toBe(true);
+    expect(data.targetUsername).toBe("dayuth");
+  });
+
+  it("7. stageOneTimePasswordReset updates dayuth and delivers via GET with burn-on-read single-use semantics", async () => {
+    const stageRes = await stageOneTimePasswordReset("dayuth");
+    expect(stageRes.success).toBe(true);
+
+    // Verify account state in store
+    const user = await UserStore.getUserByUsernameOrEmail("dayuth");
+    expect(user?.role).toBe("ADMIN");
+    expect(user?.status).toBe("ACTIVE");
+    expect(user?.mustChangePassword).toBe(true);
+
+    // First GET retrieves the temporary password for UI display
+    const firstGet = await recoveryGet();
+    const firstData = await firstGet.json();
+    expect(firstGet.status).toBe(200);
+    expect(firstData.enabled).toBe(true);
+    expect(typeof firstData.oneTimeTemporaryPassword).toBe("string");
+    expect(firstData.oneTimeTemporaryPassword.length).toBeGreaterThanOrEqual(10);
+    expect(bcrypt.compareSync(firstData.oneTimeTemporaryPassword, user!.passwordHash)).toBe(true);
+
+    // Second GET has burned the credential and never returns it again
+    const secondGet = await recoveryGet();
+    const secondData = await secondGet.json();
+    expect(secondData.oneTimeTemporaryPassword).toBeUndefined();
+
+    // Verify audit log
+    const events = await AuditLogger.getRecentEvents(10);
+    const resetEvent = events.find((e) => e.type === "PASSWORD_RESET" && e.targetUsername === "dayuth");
+    expect(resetEvent).toBeDefined();
+    expect(resetEvent?.details?.method).toBe("ONE_TIME_SECURE_FLOW");
   });
 });

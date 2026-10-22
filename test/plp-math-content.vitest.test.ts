@@ -10,6 +10,8 @@ import {
   sanitizeJoditHtml,
   validateMathML,
 } from "../src/lib/math-ocr-utils";
+import { middleware } from "../src/middleware";
+import { createSessionToken, SESSION_COOKIE_NAME } from "../src/lib/auth-gate";
 
 describe("PLP Math Content - Clean URL, Redirects, and Safety Suite", () => {
   const originalEnv = { ...process.env };
@@ -152,5 +154,85 @@ describe("PLP Math Content - Clean URL, Redirects, and Safety Suite", () => {
     const data = await res.json();
     expect(data.code).toBe("PAYLOAD_TOO_LARGE");
     expect(data.error).toContain("4.5 MB");
+  });
+
+  // 11. Middleware safely 308-redirects /math-ocr to /plp-math-content
+  it("11. middleware safely 308-redirects /math-ocr to canonical /plp-math-content", async () => {
+    const req = new NextRequest("http://localhost:3000/math-ocr?mode=latex");
+    const res = await middleware(req);
+    expect(res.status).toBe(308);
+    const location = res.headers.get("location");
+    expect(location).toContain("/plp-math-content?mode=latex");
+  });
+
+  // 12. Middleware protects /plp-math-content from unauthenticated access and preserves return URL
+  it("12. middleware redirects unauthenticated access to /plp-math-content to login with from query", async () => {
+    const req = new NextRequest("http://localhost:3000/plp-math-content");
+    const res = await middleware(req);
+    expect(res.status).toBe(307);
+    const location = res.headers.get("location");
+    expect(location).toContain("/login?from=%2Fplp-math-content");
+  });
+
+  // 13. Middleware allows authenticated access to canonical /plp-math-content
+  it("13. middleware allows authenticated access to canonical /plp-math-content", async () => {
+    process.env.APP_GATE_SESSION_SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const token = await createSessionToken();
+    const req = new NextRequest("http://localhost:3000/plp-math-content", {
+      headers: {
+        cookie: `${SESSION_COOKIE_NAME}=${token}`,
+      },
+    });
+
+    const res = await middleware(req);
+    // NextResponse.next() returns a 200 pass-through response
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  // 14. Authenticated access to /login with from=/plp-math-content redirects directly to /plp-math-content
+  it("14. authenticated access to /login with from=/plp-math-content redirects to canonical destination", async () => {
+    process.env.APP_GATE_SESSION_SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const token = await createSessionToken();
+    const req = new NextRequest("http://localhost:3000/login?from=/plp-math-content", {
+      headers: {
+        cookie: `${SESSION_COOKIE_NAME}=${token}`,
+      },
+    });
+
+    const res = await middleware(req);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/plp-math-content");
+  });
+
+  // 15. Authenticated access to /login with legacy from=/math-ocr ends cleanly at canonical /plp-math-content
+  it("15. authenticated access to /login with legacy from=/math-ocr ends cleanly at /plp-math-content", async () => {
+    process.env.APP_GATE_SESSION_SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const token = await createSessionToken();
+    const req = new NextRequest("http://localhost:3000/login?from=/math-ocr", {
+      headers: {
+        cookie: `${SESSION_COOKIE_NAME}=${token}`,
+      },
+    });
+
+    const res = await middleware(req);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/plp-math-content");
+  });
+
+  // 16. Authenticated access to /login with from=/login prevents redirect loops by defaulting to /
+  it("16. authenticated access to /login with circular from=/login prevents redirect loops", async () => {
+    process.env.APP_GATE_SESSION_SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const token = await createSessionToken();
+    const req = new NextRequest("http://localhost:3000/login?from=/login", {
+      headers: {
+        cookie: `${SESSION_COOKIE_NAME}=${token}`,
+      },
+    });
+
+    const res = await middleware(req);
+    expect(res.status).toBe(307);
+    const location = new URL(res.headers.get("location") || "", "http://localhost:3000");
+    expect(location.pathname).toBe("/");
   });
 });

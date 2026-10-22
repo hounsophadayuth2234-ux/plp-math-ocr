@@ -16,6 +16,9 @@ export interface UserRecord {
   createdAt: number;
   updatedAt: number;
   lastLoginAt?: number;
+  passwordChangedAt?: number;
+  sessionRevokedAt?: number;
+  activeSessionsCount?: number;
 }
 
 export type SafeUser = Omit<UserRecord, "passwordHash">;
@@ -245,6 +248,9 @@ export class UserStore {
       mustChangePassword: params.mustChangePassword ?? false,
       createdAt: now,
       updatedAt: now,
+      passwordChangedAt: now,
+      sessionRevokedAt: undefined,
+      activeSessionsCount: 0,
     };
 
     const redis = getRedisConfig();
@@ -391,5 +397,16 @@ export class UserStore {
   static async countActiveAdmins(): Promise<number> {
     const users = await this.listUsers();
     return users.filter((u) => u.role === "ADMIN" && u.status === "ACTIVE").length;
+  }
+
+  /**
+   * Revokes all active sessions for a user immediately.
+   */
+  static async revokeSessions(id: string): Promise<UserRecord> {
+    const now = Date.now();
+    return this.updateUser(id, {
+      sessionRevokedAt: now,
+      activeSessionsCount: 0,
+    });
   }
 }

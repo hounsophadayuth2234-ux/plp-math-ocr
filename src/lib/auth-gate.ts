@@ -108,6 +108,21 @@ export function sanitizeInternalRedirect(from: string | null | undefined): strin
     !trimmed.includes("\r") &&
     !trimmed.includes("\n")
   ) {
+    // Avoid redirect loops back to the login gate or internal auth APIs
+    if (
+      trimmed === "/login" ||
+      trimmed.startsWith("/login?") ||
+      trimmed.startsWith("/login/") ||
+      trimmed.startsWith("/api/")
+    ) {
+      return "/";
+    }
+
+    // Canonicalize legacy Math OCR alias to canonical /plp-math-content
+    if (trimmed === "/math-ocr" || trimmed.startsWith("/math-ocr?")) {
+      return trimmed.replace(/^\/math-ocr/, "/plp-math-content");
+    }
+
     return trimmed;
   }
   return "/";

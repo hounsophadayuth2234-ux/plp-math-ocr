@@ -42,6 +42,9 @@ export default function AdminRecoveryPage() {
         setIsRecoveryEnabled(!!data.enabled);
         setIsConsumed(!!data.consumed);
         if (data.targetUsername) setTargetUsername(data.targetUsername);
+        if (data.oneTimeTemporaryPassword) {
+          setTemporaryPassword(data.oneTimeTemporaryPassword);
+        }
       } catch {
         setIsRecoveryEnabled(false);
       } finally {

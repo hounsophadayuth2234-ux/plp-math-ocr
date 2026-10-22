@@ -166,6 +166,16 @@ describe("Mechanical Cyber Security Gate & Authentication Engine", () => {
     expect(sanitizeInternalRedirect("/image-upscaler?filter=active")).toBe("/image-upscaler?filter=active");
     expect(sanitizeInternalRedirect("/")).toBe("/");
 
+    // Canonical alias resolution
+    expect(sanitizeInternalRedirect("/math-ocr")).toBe("/plp-math-content");
+    expect(sanitizeInternalRedirect("/math-ocr?tab=latex")).toBe("/plp-math-content?tab=latex");
+
+    // Loop prevention: never redirect back to login or internal auth APIs
+    expect(sanitizeInternalRedirect("/login")).toBe("/");
+    expect(sanitizeInternalRedirect("/login?from=/login")).toBe("/");
+    expect(sanitizeInternalRedirect("/login/subpath")).toBe("/");
+    expect(sanitizeInternalRedirect("/api/auth/login")).toBe("/");
+
     // Malicious open redirect attempts
     expect(sanitizeInternalRedirect("https://evil.com")).toBe("/");
     expect(sanitizeInternalRedirect("http://evil.com/phish")).toBe("/");

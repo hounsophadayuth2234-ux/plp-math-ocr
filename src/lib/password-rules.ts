@@ -89,6 +89,74 @@ export function validatePasswordStrength(password: string): PasswordValidationRe
 }
 
 /**
+ * Practical password policy for Admin-managed account creation, resets, and self-change:
+ * - Minimum 8 characters
+ * - Allows letters, numbers, spaces, and common symbols
+ * - Does not require excessive combinations of classes
+ * - Rejects only:
+ *   1. empty password
+ *   2. fewer than 8 characters
+ *   3. password equal to username
+ *   4. obvious/common passwords (password, 12345678, qwerty, admin, etc.)
+ *   5. confirm password mismatch
+ */
+export function validateAdminManagedPassword(
+  password: string,
+  username?: string,
+  confirmPassword?: string
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!password || typeof password !== "string") {
+    errors.push("ពាក្យសម្ងាត់មិនអាចទទេបានទេ (Password is required)");
+    return { valid: false, errors };
+  }
+
+  // 1. Minimum 8 characters
+  if (password.length < 8) {
+    errors.push("ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៨ តួអក្សរ (Password must be at least 8 characters)");
+  }
+
+  // 2. Reject if password matches username
+  if (username && password.toLowerCase().trim() === username.toLowerCase().trim()) {
+    errors.push("ពាក្យសម្ងាត់មិនអាចដូចឈ្មោះអ្នកប្រើបានទេ (Password cannot be equal to username)");
+  }
+
+  // 3. Reject obvious / common passwords
+  const normalized = password.toLowerCase().trim();
+  const obviousWeak = new Set([
+    "password",
+    "password123",
+    "12345678",
+    "123456789",
+    "1234567890",
+    "qwerty",
+    "qwertyuiop",
+    "admin",
+    "admin123",
+    "admin12345",
+    "welcome123",
+    "letmein123",
+    "changeme123",
+    "dytpassword",
+  ]);
+
+  if (obviousWeak.has(normalized)) {
+    errors.push("ពាក្យសម្ងាត់នេះងាយស្មានពេក (Password is too common or obvious)");
+  }
+
+  // 4. Confirm password match if provided
+  if (confirmPassword !== undefined && password !== confirmPassword) {
+    errors.push("ពាក្យសម្ងាត់ទាំងពីរមិនដូចគ្នា (Passwords do not match)");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
  * Generates a cryptographically strong random temporary password
  * Meets all strength requirements: 16 chars with mixed classes.
  */

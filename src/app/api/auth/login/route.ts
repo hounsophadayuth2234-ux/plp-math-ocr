@@ -112,10 +112,13 @@ export async function POST(req: NextRequest) {
   // Successful login
   await clearFailedAttempts(anonymizedIp);
 
-  // Update last login timestamp
-  await UserStore.updateUser(user.id, { lastLoginAt: Date.now() });
+  // Update last login timestamp and increment active session count
+  const updatedUser = await UserStore.updateUser(user.id, {
+    lastLoginAt: Date.now(),
+    activeSessionsCount: (user.activeSessionsCount || 0) + 1,
+  });
 
-  const safeUser = toSafeUser(user);
+  const safeUser = toSafeUser(updatedUser);
   const sessionToken = await createSessionToken(safeUser);
   const csrfToken = generateCsrfToken();
 

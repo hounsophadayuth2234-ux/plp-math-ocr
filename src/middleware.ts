@@ -64,6 +64,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // 3b. Safe canonical redirect for legacy route alias
+  if (pathname === "/math-ocr") {
+    const canonicalUrl = new URL("/plp-math-content", req.url);
+    canonicalUrl.search = req.nextUrl.search;
+    return NextResponse.redirect(canonicalUrl, 308);
+  }
+
   // 4. Protect all workspace pages and API routes
   if (!isAuthenticated) {
     // API routes return clean 401 JSON

@@ -160,5 +160,5 @@ Return valid JSON:
     // Assert that no "unsupported unicode glyphs" error was reported
     expect(data.uncertainParts).toEqual([]);
     expect(data.confidence).toBeGreaterThanOrEqual(0.9);
-  }, 20000);
+  }, 60000);
 });

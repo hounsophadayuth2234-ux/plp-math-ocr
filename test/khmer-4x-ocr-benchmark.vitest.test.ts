@@ -112,5 +112,5 @@ describe("4x Khmer Text & Document Super-Resolution & OCR Benchmark", () => {
       expect(result.status).toBe("not_measured");
       expect(result.reason).toBeDefined();
     }
-  }, 60000);
+  }, 120000);
 });

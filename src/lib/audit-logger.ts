@@ -5,13 +5,23 @@ export type AuditEventType =
   | "LOGIN_FAILURE"
   | "LOGOUT"
   | "ACCOUNT_CREATED"
+  | "USER_CREATED"
+  | "ADMIN_CREATED"
   | "ACCOUNT_EDITED"
+  | "USER_UPDATED"
   | "ROLE_CHANGED"
   | "PASSWORD_RESET"
+  | "USER_PASSWORD_RESET"
+  | "ADMIN_PASSWORD_RESET"
   | "PASSWORD_CHANGED"
+  | "ADMIN_SELF_PASSWORD_CHANGED"
   | "ACCOUNT_DISABLED"
+  | "USER_DISABLED"
   | "ACCOUNT_ENABLED"
+  | "USER_ENABLED"
   | "ACCOUNT_DELETED"
+  | "USER_DELETED"
+  | "SESSIONS_REVOKED"
   | "UNAUTHORIZED_ADMIN_ACCESS";
 
 export interface AuditEventRecord {
@@ -82,7 +92,12 @@ export class AuditLogger {
           lowerKey.includes("password") ||
           lowerKey.includes("token") ||
           lowerKey.includes("secret") ||
-          lowerKey.includes("hash")
+          lowerKey.includes("hash") ||
+          lowerKey.includes("cookie") ||
+          lowerKey.includes("csrf") ||
+          lowerKey.includes("recovery") ||
+          lowerKey.includes("bearer") ||
+          lowerKey.includes("salt")
         ) {
           sanitizedDetails[key] = "[REDACTED]";
         } else {

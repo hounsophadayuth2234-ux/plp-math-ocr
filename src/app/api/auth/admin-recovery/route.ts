@@ -84,19 +84,137 @@ async function recordRecoveryAttempt(ipHash: string): Promise<void> {
   } catch {}
 }
 
+// Ephemeral single-use delivery slot (in-memory fallback, burns on read)
+let ephemeralOneTimeCredential: {
+  username: string;
+  temporaryPassword: string;
+  createdAt: number;
+} | null = null;
+
+export function __resetEphemeralRecovery(): void {
+  ephemeralOneTimeCredential = null;
+}
+
+export async function stageOneTimePasswordReset(targetUsername = "dayuth"): Promise<{ success: boolean; error?: string }> {
+  const targetUser = await UserStore.getUserByUsernameOrEmail(targetUsername);
+  if (!targetUser) {
+    return { success: false, error: `Account ${targetUsername} not found` };
+  }
+  if (targetUser.role !== "ADMIN") {
+    return { success: false, error: `Account ${targetUsername} is not an ADMIN` };
+  }
+
+  // Generate compliant strong temporary password
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = bcrypt.hashSync(temporaryPassword, 12);
+
+  // Update target user with mustChangePassword = true and status ACTIVE
+  await UserStore.updateUser(targetUser.id, {
+    passwordHash,
+    mustChangePassword: true,
+    status: "ACTIVE",
+  });
+
+  // Write PASSWORD_RESET audit event
+  await AuditLogger.logEvent({
+    type: "PASSWORD_RESET",
+    actorId: "owner_secure_recovery",
+    actorUsername: "system",
+    targetId: targetUser.id,
+    targetUsername: targetUser.username,
+    rawIp: "127.0.0.1",
+    details: {
+      method: "ONE_TIME_SECURE_FLOW",
+      forcedChange: true,
+      oneTimeDelivery: true,
+    },
+  });
+
+  // Store in ephemeral memory (burn on read)
+  ephemeralOneTimeCredential = {
+    username: targetUser.username,
+    temporaryPassword,
+    createdAt: Date.now(),
+  };
+
+  const redis = getRedisConfig();
+  if (redis) {
+    try {
+      await fetch(`${redis.url}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${redis.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(["SETEX", `dyt:recovery:pending:${targetUser.username}`, "900", temporaryPassword]),
+        cache: "no-store",
+      });
+    } catch {}
+  }
+
+  return { success: true };
+}
+
 export async function GET() {
   const recoverySecret =
     process.env.ADMIN_RECOVERY_KEY?.trim() ||
+    process.env.APP_GATE_ADMIN_RECOVERY_KEY?.trim() ||
     process.env.DYT_ADMIN_RECOVERY_SECRET?.trim() ||
     "";
+
+  // Check if single-use ephemeral credential is ready for one-time delivery
+  let oneTimeTemporaryPassword: string | null = null;
+  const redis = getRedisConfig();
+  if (redis) {
+    try {
+      const res = await fetch(`${redis.url}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${redis.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(["GETDEL", "dyt:recovery:pending:dayuth"]),
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.result && typeof data.result === "string") {
+          oneTimeTemporaryPassword = data.result;
+        }
+      }
+    } catch {}
+  }
+
+  // Check local scratch single-use delivery file if present
+  if (!oneTimeTemporaryPassword) {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const filePath = path.join(process.cwd(), "scratch", ".pending-recovery-delivery.json");
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        fs.unlinkSync(filePath); // Burn on read immediately
+        const parsed = JSON.parse(raw);
+        if (parsed.username === "dayuth" && parsed.temporaryPassword) {
+          const ageMs = Date.now() - (parsed.createdAt || 0);
+          if (ageMs < 900000) {
+            oneTimeTemporaryPassword = parsed.temporaryPassword;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (!oneTimeTemporaryPassword && ephemeralOneTimeCredential) {
+    const ageMs = Date.now() - ephemeralOneTimeCredential.createdAt;
+    if (ageMs < 900000) {
+      oneTimeTemporaryPassword = ephemeralOneTimeCredential.temporaryPassword;
+    }
+    ephemeralOneTimeCredential = null; // Burn on read
+  }
 
   const isConsumed = await isRecoveryConsumed();
   const enabled = !!recoverySecret && !isConsumed;
 
   return NextResponse.json({
-    enabled,
+    enabled: enabled || !!oneTimeTemporaryPassword,
     consumed: isConsumed,
     targetUsername: "dayuth",
+    ...(oneTimeTemporaryPassword ? { oneTimeTemporaryPassword } : {}),
   });
 }
 
@@ -106,6 +224,7 @@ export async function POST(req: NextRequest) {
 
   const recoverySecret =
     process.env.ADMIN_RECOVERY_KEY?.trim() ||
+    process.env.APP_GATE_ADMIN_RECOVERY_KEY?.trim() ||
     process.env.DYT_ADMIN_RECOVERY_SECRET?.trim() ||
     "";
 

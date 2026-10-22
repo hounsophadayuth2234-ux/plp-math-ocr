@@ -51,6 +51,16 @@ export async function getSessionUser(req: NextRequest): Promise<SafeUser | null>
     return null;
   }
 
+  // Invariant: If sessions were explicitly revoked or password was reset/changed
+  // after this token was created, invalidate session immediately.
+  const tokenIatSec = verified.payload.iat;
+  if (user.sessionRevokedAt && tokenIatSec < Math.floor(user.sessionRevokedAt / 1000)) {
+    return null;
+  }
+  if (user.passwordChangedAt && tokenIatSec < Math.floor(user.passwordChangedAt / 1000)) {
+    return null;
+  }
+
   return toSafeUser(user);
 }
 
