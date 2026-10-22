@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
+export { getClientIp } from "./rate-limiter";
 
 // Session lifespan: 10 hours
 export const SESSION_MAX_AGE_SECONDS = 10 * 60 * 60; // 36,000s

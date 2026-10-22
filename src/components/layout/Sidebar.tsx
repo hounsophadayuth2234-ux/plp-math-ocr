@@ -34,6 +34,22 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    fetch("/api/auth/session")
+      .then((res) => res.json())
+      .then((data) => {
+        if (mounted && data.authenticated && data.user?.role === "ADMIN") {
+          setIsAdmin(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [pathname]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -120,12 +136,37 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       : "text-slate-400 group-hover:text-slate-200"
                   }`}
                 />
-                <span>ផ្ទាំងគ្រប់គ្រង</span>
+                <span>ផ្ទាំងគ្រប់គ្រងទូទៅ</span>
               </span>
               {pathname === "/" && (
                 <ChevronRight className="h-4 w-4 text-indigo-400" />
               )}
             </Link>
+
+            {/* Admin Panel Link for Administrators */}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                onClick={onClose}
+                className={`mt-1.5 group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                  pathname === "/admin"
+                    ? "bg-indigo-600/20 text-white ring-1 ring-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.25)]"
+                    : "text-indigo-300/80 hover:bg-indigo-950/40 hover:text-indigo-200"
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Cpu
+                    className={`h-4 w-4 ${
+                      pathname === "/admin" ? "text-indigo-400" : "text-indigo-400/80 group-hover:text-indigo-300"
+                    }`}
+                  />
+                  <span>គ្រប់គ្រងប្រព័ន្ធ (Admin)</span>
+                </span>
+                {pathname === "/admin" && (
+                  <ChevronRight className="h-4 w-4 text-indigo-400" />
+                )}
+              </Link>
+            )}
           </div>
 
           {/* Active Functional Modules */}

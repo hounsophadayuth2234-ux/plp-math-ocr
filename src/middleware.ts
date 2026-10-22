@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken, SESSION_COOKIE_NAME, sanitizeInternalRedirect } from "@/lib/auth-gate";
+import { verifySessionToken as verifyLegacySession, SESSION_COOKIE_NAME, sanitizeInternalRedirect } from "@/lib/auth-gate";
+import { verifySessionToken as verifyAccountSession } from "@/lib/session-token-core";
 
 export const config = {
   matcher: [
@@ -20,16 +21,33 @@ export async function middleware(req: NextRequest) {
   // 1. Unrestricted Public Endpoints
   const isPublicAuthRoute =
     pathname === "/login" ||
+    pathname === "/api/auth/login" ||
+    pathname === "/api/auth/logout" ||
+    pathname === "/api/auth/session" ||
     pathname === "/api/auth/gate" ||
     pathname === "/api/health" ||
     pathname.startsWith("/health");
 
-  const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value ||
+    req.cookies.get("__Secure-dyt_gate_session")?.value;
+
   let isAuthenticated = false;
+  let userRole: "ADMIN" | "USER" = "USER";
 
   if (sessionCookie) {
-    const check = await verifySessionToken(sessionCookie);
-    isAuthenticated = check.valid;
+    // Check structured account session using Edge Web Crypto
+    const structCheck = await verifyAccountSession(sessionCookie);
+    if (structCheck.valid && structCheck.payload) {
+      isAuthenticated = true;
+      userRole = structCheck.payload.role || "USER";
+    } else {
+      // Check legacy gate token
+      const legacyCheck = await verifyLegacySession(sessionCookie);
+      if (legacyCheck.valid) {
+        isAuthenticated = true;
+        userRole = "ADMIN"; // Legacy gate token holders are treated as administrative
+      }
+    }
   }
 
   // 2. Redirect authenticated users away from the login gate to dashboard (internal only)
@@ -72,5 +90,33 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // 5. Enforce ADMIN role on /admin and /api/admin/*
+  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+    if (userRole !== "ADMIN") {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          {
+            error: "Forbidden: Administrator role required (ត្រូវការសិទ្ធិជាអ្នកគ្រប់គ្រងប្រព័ន្ធ ADMIN).",
+            authenticated: true,
+            role: userRole,
+          },
+          {
+            status: 403,
+            headers: {
+              "Cache-Control": "no-store, private",
+              "X-Content-Type-Options": "nosniff",
+            },
+          }
+        );
+      }
+
+      // If user accesses /admin page without admin role, redirect to dashboard with error flag
+      const dashboardUrl = new URL("/", req.url);
+      dashboardUrl.searchParams.set("error", "unauthorized_admin");
+      return NextResponse.redirect(dashboardUrl);
+    }
+  }
+
   return NextResponse.next();
 }
+
