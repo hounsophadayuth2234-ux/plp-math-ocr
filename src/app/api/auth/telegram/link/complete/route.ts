@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-session";
-import { validateCsrfToken } from "@/lib/auth-csrf";
+import { validateCsrfToken, CSRF_COOKIE_NAME } from "@/lib/auth-csrf";
 import { UserStore, toSafeUser } from "@/lib/user-store";
 import { AuditLogger } from "@/lib/audit-logger";
 import {
@@ -19,18 +19,7 @@ export async function POST(req: NextRequest) {
     return auth.response;
   }
 
-  // 2. Validate CSRF token
-  const csrfResult = validateCsrfToken(req);
-  if (!csrfResult.valid) {
-    return NextResponse.json(
-      { error: csrfResult.error || "CSRF token missing or invalid" },
-      { status: 403, headers: { "Cache-Control": "no-store, private" } }
-    );
-  }
-
-  const csrfCookie = req.cookies.get("dyt_csrf_token")?.value || "";
-
-  // 3. Parse JSON body
+  // 2. Parse JSON body
   let body: any;
   try {
     body = await req.json();
@@ -40,6 +29,18 @@ export async function POST(req: NextRequest) {
       { status: 400, headers: { "Cache-Control": "no-store, private" } }
     );
   }
+
+  // 3. Validate CSRF token (header or body)
+  const csrfResult = validateCsrfToken(req, body?.csrfToken);
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { error: csrfResult.error || "CSRF token missing or invalid" },
+      { status: 403, headers: { "Cache-Control": "no-store, private" } }
+    );
+  }
+
+  const csrfCookie = req.cookies.get(CSRF_COOKIE_NAME)?.value?.trim() || "";
+
 
   const { challengeToken, telegramData } = body || {};
   if (!challengeToken || !telegramData) {

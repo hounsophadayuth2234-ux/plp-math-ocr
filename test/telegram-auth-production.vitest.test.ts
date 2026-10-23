@@ -13,6 +13,7 @@ import {
   __resetTelegramAuthTestStore,
 } from "@/lib/telegram-auth";
 import { AuditLogger } from "@/lib/audit-logger";
+import { GET as telegramConfigHandler } from "@/app/api/auth/telegram/config/route";
 import { POST as telegramLoginHandler } from "@/app/api/auth/telegram/login/route";
 import { POST as telegramLinkStartHandler } from "@/app/api/auth/telegram/link/start/route";
 import { POST as telegramLinkCompleteHandler } from "@/app/api/auth/telegram/link/complete/route";
@@ -482,5 +483,87 @@ describe("Telegram Login & Production Security Hardening Suite", () => {
       expect(cacheControl).toContain("no-store");
       expect(cacheControl).toContain("private");
     });
+
+    it("GET /api/auth/telegram/config returns botUsername and numeric botId", async () => {
+      const res = await telegramConfigHandler();
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.enabled).toBe(true);
+      expect(data.botUsername).toBe("DytPlpMathBot");
+      expect(data.botId).toBe("123456789");
+    });
+
+    it("POST /api/auth/telegram/link/start returns botId alongside botUsername and challengeToken", async () => {
+      const user = await UserStore.createUser({
+        username: "dayuth12_tester",
+        email: "dayuth12@test.com",
+        displayName: "Dayuth Tester",
+        passwordHash: "hash",
+        role: "ADMIN",
+      });
+
+      const sessionToken = await createSessionToken({
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        displayName: user.displayName,
+      });
+
+      const csrfToken = "valid-csrf-token-1234567890123456";
+
+      const req = new NextRequest("https://math.dytcore.com/api/auth/telegram/link/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: csrfToken,
+          Cookie: `${SESSION_COOKIE_NAME}=${sessionToken}; ${CSRF_COOKIE_NAME}=${csrfToken}`,
+        },
+        body: JSON.stringify({ csrfToken }),
+      });
+
+      const res = await telegramLinkStartHandler(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.botUsername).toBe("DytPlpMathBot");
+      expect(data.botId).toBe("123456789");
+      expect(data.challengeToken).toBeDefined();
+
+      // Complete link flow with valid signed payload
+      const tgPayload = createSignedTelegramPayload({ id: "987654321", username: "dayuth12_tg" }, TEST_BOT_TOKEN);
+
+      const completeReq = new NextRequest("https://math.dytcore.com/api/auth/telegram/link/complete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: csrfToken,
+          Cookie: `${SESSION_COOKIE_NAME}=${sessionToken}; ${CSRF_COOKIE_NAME}=${csrfToken}`,
+        },
+        body: JSON.stringify({
+          challengeToken: data.challengeToken,
+          telegramData: tgPayload,
+          csrfToken,
+        }),
+      });
+
+      const completeRes = await telegramLinkCompleteHandler(completeReq);
+      expect(completeRes.status).toBe(200);
+      const completeData = await completeRes.json();
+      expect(completeData.success).toBe(true);
+      expect(completeData.user.telegramLinked).toBe(true);
+      expect(completeData.user.telegramUsername).toBe("dayuth12_tg");
+
+      // Verify user store in persistent store
+      const freshUser = await UserStore.getUserById(user.id);
+      expect(freshUser?.telegramLinked).toBe(true);
+      expect(freshUser?.telegramUsername).toBe("dayuth12_tg");
+
+      // Verify audit event created
+      const events = await AuditLogger.getRecentEvents(10);
+      const linkEvent = events.find((e) => e.type === "TELEGRAM_LINKED");
+      expect(linkEvent).toBeDefined();
+      expect(linkEvent?.actorUsername).toBe("dayuth12_tester");
+    });
   });
 });
+

@@ -12,14 +12,20 @@ export async function POST(req: NextRequest) {
     return auth.response;
   }
 
-  // 2. Validate CSRF token
-  const csrfResult = validateCsrfToken(req);
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {}
+
+  // 2. Validate CSRF token (header or body)
+  const csrfResult = validateCsrfToken(req, body?.csrfToken);
   if (!csrfResult.valid) {
     return NextResponse.json(
       { error: csrfResult.error || "CSRF token missing or invalid" },
       { status: 403, headers: { "Cache-Control": "no-store, private" } }
     );
   }
+
 
   const rawUser = await UserStore.getUserById(auth.user.id);
   if (!rawUser) {

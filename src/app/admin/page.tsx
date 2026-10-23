@@ -21,6 +21,11 @@ import {
   EyeOff,
   Send,
 } from "lucide-react";
+import {
+  getOrRefreshCsrfToken,
+  fetchFreshCsrfToken,
+  CSRF_HEADER_NAME,
+} from "@/lib/csrf-client";
 
 interface SafeUser {
   id: string;
@@ -67,6 +72,11 @@ export default function AdminPage() {
   const [telegramStatusMessage, setTelegramStatusMessage] = useState<string | null>(null);
   const [telegramErrorMessage, setTelegramErrorMessage] = useState<string | null>(null);
   const [telegramChallengeToken, setTelegramChallengeToken] = useState<string | null>(null);
+  const [telegramConfig, setTelegramConfig] = useState<{
+    enabled: boolean;
+    botUsername: string;
+    botId: string;
+  } | null>(null);
   const challengeTokenRef = useRef<string | null>(null);
 
   // MFA Management State
@@ -160,8 +170,15 @@ export default function AdminPage() {
   // Fetch Session & CSRF
   const initSession = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/session");
-      const data = await res.json();
+      const res = await fetch(`/api/auth/session?_t=${Date.now()}`, {
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+      const data = await res.json().catch(() => ({}));
       if (data.csrfToken) {
         setCsrfToken(data.csrfToken);
       }
@@ -176,8 +193,11 @@ export default function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/users");
-      const data = await res.json();
+      const res = await fetch("/api/admin/users", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || "Failed to load users");
       }
@@ -193,8 +213,11 @@ export default function AdminPage() {
   // Fetch Audit Log
   const fetchAuditLog = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/audit-log");
-      const data = await res.json();
+      const res = await fetch("/api/admin/audit-log", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setAuditEvents(data.events || []);
       }
@@ -204,8 +227,11 @@ export default function AdminPage() {
   // Fetch MFA Status
   const fetchMfaStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/mfa");
-      const data = await res.json();
+      const res = await fetch("/api/admin/mfa", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setMfaEnabled(Boolean(data.mfaEnabled));
       }
@@ -218,7 +244,29 @@ export default function AdminPage() {
     fetchUsers();
     fetchAuditLog();
     fetchMfaStatus();
+
+    // Fetch Telegram Configuration
+    fetch("/api/auth/telegram/config", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((cfg) => {
+        if (cfg && typeof cfg.enabled === "boolean") {
+          setTelegramConfig(cfg);
+        }
+      })
+      .catch(() => {});
+
+    // Preload Telegram Widget script if not already present
+    if (typeof document !== "undefined") {
+      const existing = document.querySelector('script[src*="telegram-widget.js"]');
+      if (!existing) {
+        const script = document.createElement("script");
+        script.src = "https://telegram.org/js/telegram-widget.js?22";
+        script.async = true;
+        document.head.appendChild(script);
+      }
+    }
   }, [initSession, fetchUsers, fetchAuditLog, fetchMfaStatus]);
+
 
   const handleInitiateMfa = async () => {
     setMfaLoading(true);
@@ -300,35 +348,68 @@ export default function AdminPage() {
     async (challengeToken: string, tgUser: any) => {
       setTelegramLoading(true);
       setTelegramErrorMessage(null);
+      setTelegramStatusMessage(null);
       try {
+        let activeCsrf = await getOrRefreshCsrfToken(csrfToken);
+        if (!activeCsrf) {
+          activeCsrf = await fetchFreshCsrfToken();
+        }
+        if (!activeCsrf) {
+          throw new Error("CSRF failure: សុពលភាព CSRF បាត់បង់ (CSRF token missing). សូម refresh ហើយព្យាយាមម្តងទៀត។");
+        }
+
         const res = await fetch("/api/auth/telegram/link/complete", {
           method: "POST",
+          credentials: "include",
+          cache: "no-store",
           headers: {
             "Content-Type": "application/json",
-            "x-csrf-token": csrfToken,
+            "Cache-Control": "no-cache",
+            [CSRF_HEADER_NAME]: activeCsrf,
           },
           body: JSON.stringify({
             challengeToken,
             telegramData: tgUser,
+            csrfToken: activeCsrf,
           }),
         });
-        const data = await res.json();
+
+        const data = await res.json().catch(() => ({}));
+
         if (!res.ok) {
-          throw new Error(data.error || "Failed to complete Telegram link");
+          if (res.status === 401) {
+            const errStr = (data.error || "").toLowerCase();
+            if (errStr.includes("expired") || errStr.includes("ផុតកំណត់")) {
+              throw new Error("Expired Telegram response: ការឆ្លើយតប Telegram បានផុតកំណត់។ សូមព្យាយាមម្តងទៀត។");
+            }
+            if (errStr.includes("signature") || errStr.includes("ហត្ថលេខា")) {
+              throw new Error("Invalid Telegram signature: ហត្ថលេខាផ្ទៀងផ្ទាត់ Telegram មិនត្រឹមត្រូវ។");
+            }
+            throw new Error("Session expired: សម័យកាលចូលប្រើប្រាស់បានផុតកំណត់។ សូមចូលម្តងទៀត។");
+          }
+          if (res.status === 403) {
+            throw new Error("CSRF failure: សុពលភាព CSRF មិនត្រឹមត្រូវ។ សូម refresh ហើយព្យាយាមម្តងទៀត។");
+          }
+          if (res.status === 409 || (data.error && data.error.includes("already linked"))) {
+            throw new Error("Telegram identity already linked: គណនី Telegram នេះត្រូវបានភ្ជាប់ជាមួយគណនីផ្សេងរួចហើយ។");
+          }
+          throw new Error(data.error || "Complete endpoint failure: មិនអាចបញ្ចប់ការភ្ជាប់ Telegram បានទេ។");
         }
+
         setTelegramStatusMessage("បានភ្ជាប់ Telegram ដោយជោគជ័យ (Telegram linked successfully)!");
         if (data.user) {
           setSessionUser(data.user);
         }
-        fetchUsers();
-        fetchAuditLog();
+        await initSession();
+        await fetchUsers();
+        await fetchAuditLog();
       } catch (err: any) {
-        setTelegramErrorMessage(err.message || "Error completing Telegram link");
+        setTelegramErrorMessage(err.message || "Complete endpoint failure: បញ្ហាក្នុងការភ្ជាប់ Telegram");
       } finally {
         setTelegramLoading(false);
       }
     },
-    [csrfToken, fetchUsers, fetchAuditLog]
+    [csrfToken, initSession, fetchUsers, fetchAuditLog]
   );
 
   useEffect(() => {
@@ -351,49 +432,159 @@ export default function AdminPage() {
     setTelegramLoading(true);
     setTelegramErrorMessage(null);
     setTelegramStatusMessage(null);
+
+    // 1. Immediately & synchronously open the popup window on user click to prevent browser popup block
+    const width = 550;
+    const height = 470;
+    const left = Math.max(0, (window.screen.width - width) / 2) + ((window.screen as any).availLeft | 0);
+    const top = Math.max(0, (window.screen.height - height) / 2) + ((window.screen as any).availTop | 0);
+
+    const targetBotId = telegramConfig?.botId || "8770636147";
+    const popupName = `telegram_oauth_bot${targetBotId}`;
+    let popup: Window | null = null;
     try {
+      popup = window.open(
+        "about:blank",
+        popupName,
+        `width=${width},height=${height},left=${left},top=${top},status=0,location=0,menubar=0,toolbar=0`
+      );
+    } catch {}
+
+    if (!popup || popup.closed || typeof popup.closed === "undefined") {
+      setTelegramErrorMessage(
+        "ផ្ទាំង Popup ត្រូវបានរារាំងដោយ Browser (Popup blocked). សូមអនុញ្ញាត Popups សម្រាប់ math.dytcore.com រួចព្យាយាមម្តងទៀត។"
+      );
+      setTelegramLoading(false);
+      return;
+    }
+
+    try {
+      popup.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Telegram Authorization</title>
+            <style>
+              body { background: #0b1120; color: #38bdf8; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+              .spinner { width: 36px; height: 36px; border: 3px solid rgba(56,189,248,0.2); border-top-color: #38bdf8; border-radius: 50%; animation: spin 1s linear infinite; }
+              @keyframes spin { to { transform: rotate(360deg); } }
+              p { margin-top: 16px; font-size: 13px; font-weight: 500; color: #94a3b8; }
+            </style>
+          </head>
+          <body>
+            <div class="spinner"></div>
+            <p>កំពុងរៀបចំការតភ្ជាប់ Telegram (Connecting to Telegram)...</p>
+          </body>
+        </html>
+      `);
+    } catch {}
+
+    try {
+      let activeCsrf = await getOrRefreshCsrfToken(csrfToken);
+      if (!activeCsrf) {
+        activeCsrf = await fetchFreshCsrfToken();
+      }
+      if (!activeCsrf) {
+        popup?.close();
+        setTelegramErrorMessage("CSRF failure: សុពលភាព CSRF បាត់បង់ (CSRF token missing). សូម refresh ហើយព្យាយាមម្តងទៀត។");
+        setTelegramLoading(false);
+        return;
+      }
+
       const res = await fetch("/api/auth/telegram/link/start", {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "Cache-Control": "no-cache",
+          [CSRF_HEADER_NAME]: activeCsrf,
         },
+        body: JSON.stringify({ csrfToken: activeCsrf }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to start Telegram linking");
-      }
 
-      challengeTokenRef.current = data.challengeToken;
-      setTelegramChallengeToken(data.challengeToken);
+      const data = await res.json().catch(() => ({}));
 
-      const win = typeof window !== "undefined" ? (window as any) : null;
-      if (win && win.Telegram && win.Telegram.Login && win.Telegram.Login.auth) {
-        win.Telegram.Login.auth(
-          { bot_id: data.botUsername, request_access: true },
-          async (tgUser: any) => {
-            if (tgUser) {
-              await handleCompleteTelegramLink(data.challengeToken, tgUser);
-            }
-          }
-        );
-      } else {
-        const container = document.getElementById("telegram-admin-link-widget");
-        if (container) {
-          container.innerHTML = "";
-          const script = document.createElement("script");
-          script.src = "https://telegram.org/js/telegram-widget.js?22";
-          script.setAttribute("data-telegram-login", data.botUsername);
-          script.setAttribute("data-size", "large");
-          script.setAttribute("data-request-access", "write");
-          script.setAttribute("data-onauth", "onTelegramLinkAuth(user)");
-          script.async = true;
-          container.appendChild(script);
+      if (!res.ok || !data.success) {
+        popup?.close();
+        if (res.status === 401) {
+          throw new Error("Session expired: សម័យកាលចូលប្រើប្រាស់បានផុតកំណត់។ សូមចូលម្តងទៀត។");
         }
+        if (res.status === 403) {
+          throw new Error("CSRF failure: សុពលភាព CSRF បាត់បង់។ សូម refresh ហើយព្យាយាមម្តងទៀត។");
+        }
+        throw new Error(data.error || "Challenge start failed: មិនអាចចាប់ផ្តើម Telegram Challenge បានទេ។");
       }
+
+      const challengeToken = data.challengeToken;
+      challengeTokenRef.current = challengeToken;
+      setTelegramChallengeToken(challengeToken);
+
+      const botId = data.botId || targetBotId;
+      const origin = window.location.origin; // https://math.dytcore.com
+      const popupUrl = `https://oauth.telegram.org/auth?bot_id=${encodeURIComponent(botId)}&origin=${encodeURIComponent(origin)}&request_access=write&embed=0`;
+
+      // Navigate the synchronously pre-opened popup to Telegram OAuth
+      popup.location.href = popupUrl;
+      popup.focus();
+
+      let isFinished = false;
+      let checkTimer: NodeJS.Timeout | null = null;
+
+      const triggerComplete = async (tgUser: any) => {
+        if (isFinished) return;
+        isFinished = true;
+        if (checkTimer) clearInterval(checkTimer);
+        window.removeEventListener("message", onMessage);
+        try {
+          if (!popup?.closed) popup?.close();
+        } catch {}
+        await handleCompleteTelegramLink(challengeToken, tgUser);
+      };
+
+      // 1. Listen for postMessage from Telegram OAuth popup
+      const onMessage = (event: MessageEvent) => {
+        if (!event.origin.includes("telegram.org")) return;
+        try {
+          const msg = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+          if (msg?.event === "auth_result" && msg?.result) {
+            triggerComplete(msg.result);
+          } else if (msg?.hash && msg?.id) {
+            triggerComplete(msg);
+          }
+        } catch {}
+      };
+      window.addEventListener("message", onMessage);
+
+      // 2. Monitor popup closure; if user closed without authorizing, check getAuthData or report missing callback
+      checkTimer = setInterval(() => {
+        if (!popup || popup.closed) {
+          if (checkTimer) clearInterval(checkTimer);
+          window.removeEventListener("message", onMessage);
+          if (!isFinished) {
+            setTimeout(() => {
+              if (isFinished) return;
+              const win = window as any;
+              if (win.Telegram?.Login?.getAuthData) {
+                win.Telegram.Login.getAuthData({ bot_id: botId }, (originDomain: string, authUser: any) => {
+                  if (authUser && authUser.hash) {
+                    triggerComplete(authUser);
+                    return;
+                  }
+                  setTelegramErrorMessage("Callback missing: មិនទទួលបានការអនុញ្ញាតពី Telegram ទេ។ ការភ្ជាប់ត្រូវបានបោះបង់។");
+                  setTelegramLoading(false);
+                });
+              } else {
+                setTelegramErrorMessage("Callback missing: មិនទទួលបានការអនុញ្ញាតពី Telegram ទេ។ ការភ្ជាប់ត្រូវបានបោះបង់។");
+                setTelegramLoading(false);
+              }
+            }, 300);
+          }
+        }
+      }, 500);
     } catch (err: any) {
-      setTelegramErrorMessage(err.message || "Failed to initiate Telegram link");
-    } finally {
+      popup?.close();
+      setTelegramErrorMessage(err.message || "Challenge start failed");
       setTelegramLoading(false);
     }
   };
@@ -403,14 +594,22 @@ export default function AdminPage() {
     setTelegramErrorMessage(null);
     setTelegramStatusMessage(null);
     try {
+      let activeCsrf = await getOrRefreshCsrfToken(csrfToken);
+      if (!activeCsrf) {
+        activeCsrf = await fetchFreshCsrfToken();
+      }
       const res = await fetch("/api/auth/telegram/unlink", {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "Cache-Control": "no-cache",
+          [CSRF_HEADER_NAME]: activeCsrf || "",
         },
+        body: JSON.stringify({ csrfToken: activeCsrf || "" }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || "Failed to unlink Telegram");
       }
@@ -418,14 +617,16 @@ export default function AdminPage() {
       if (data.user) {
         setSessionUser(data.user);
       }
-      fetchUsers();
-      fetchAuditLog();
+      await initSession();
+      await fetchUsers();
+      await fetchAuditLog();
     } catch (err: any) {
       setTelegramErrorMessage(err.message || "Error unlinking Telegram");
     } finally {
       setTelegramLoading(false);
     }
   };
+
 
   // Summary Metrics
   const totalUsers = users.length;
