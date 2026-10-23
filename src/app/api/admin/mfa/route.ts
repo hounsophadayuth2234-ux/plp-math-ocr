@@ -66,8 +66,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "setup") {
-    // Generate TOTP secret and SVG QR Code
-    const setup = await generateTotpSetup(currentAdmin.username);
+    // Generate fresh TOTP secret, scannable QR SVG & downloadable PNG, discarding any prior pending secret
+    const setup = await generateTotpSetup(currentAdmin.username, "DYT Ecosystem");
     await UserStore.updateUser(currentAdmin.id, {
       mfaPendingSecretEncrypted: setup.encryptedSecret,
     });
@@ -83,8 +83,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       qrSvg: setup.qrSvg,
+      qrPngDataUrl: setup.qrPngDataUrl,
       manualKey: setup.plainSecret,
-      issuer: "DYT Ecosystem",
+      issuer: setup.issuer,
+      account: setup.account,
+    });
+  }
+
+  if (action === "cancel") {
+    // Safely discard the pending setup secret
+    await UserStore.updateUser(currentAdmin.id, {
+      mfaPendingSecretEncrypted: undefined,
+    });
+
+    await AuditLogger.logEvent({
+      type: "SECURITY_ALERT",
+      actorId: currentAdmin.id,
+      actorUsername: currentAdmin.username,
+      rawIp,
+      details: { action: "Cancelled MFA TOTP setup" },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "ការរៀបចំ MFA ត្រូវបានបោះបង់ (MFA setup cancelled)",
     });
   }
 
@@ -105,7 +127,8 @@ export async function POST(req: NextRequest) {
 
     const isValid = await verifyTotpCode(
       currentAdmin.mfaPendingSecretEncrypted,
-      code.trim()
+      code.trim(),
+      1
     );
 
     if (!isValid) {
@@ -175,3 +198,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
+

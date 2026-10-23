@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff,
   Send,
+  Download,
 } from "lucide-react";
 import {
   getOrRefreshCsrfToken,
@@ -83,7 +84,11 @@ export default function AdminPage() {
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaLoading, setMfaLoading] = useState(false);
   const [mfaQrSvg, setMfaQrSvg] = useState<string | null>(null);
+  const [mfaQrPngDataUrl, setMfaQrPngDataUrl] = useState<string | null>(null);
   const [mfaManualKey, setMfaManualKey] = useState<string | null>(null);
+  const [mfaIssuer, setMfaIssuer] = useState<string>("DYT Ecosystem");
+  const [mfaAccount, setMfaAccount] = useState<string>("");
+  const [mfaManualKeyCopied, setMfaManualKeyCopied] = useState(false);
   const [mfaVerificationCode, setMfaVerificationCode] = useState("");
   const [mfaRecoveryCodes, setMfaRecoveryCodes] = useState<string[]>([]);
   const [mfaStatusMessage, setMfaStatusMessage] = useState<string | null>(null);
@@ -271,19 +276,30 @@ export default function AdminPage() {
   const handleInitiateMfa = async () => {
     setMfaLoading(true);
     setMfaErrorMessage(null);
+    setMfaStatusMessage(null);
     try {
+      let activeCsrf = await getOrRefreshCsrfToken(csrfToken);
+      if (!activeCsrf) activeCsrf = await fetchFreshCsrfToken();
       const res = await fetch("/api/admin/mfa", {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "Cache-Control": "no-cache",
+          [CSRF_HEADER_NAME]: activeCsrf || "",
         },
-        body: JSON.stringify({ action: "setup" }),
+        body: JSON.stringify({ action: "setup", csrfToken: activeCsrf }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to start MFA setup");
       setMfaQrSvg(data.qrSvg);
+      setMfaQrPngDataUrl(data.qrPngDataUrl || null);
       setMfaManualKey(data.manualKey);
+      setMfaIssuer(data.issuer || "DYT Ecosystem");
+      setMfaAccount(data.account || sessionUser?.username || "Admin");
+      setMfaVerificationCode("");
+      setMfaManualKeyCopied(false);
     } catch (err: any) {
       setMfaErrorMessage(err.message || "Failed to initiate MFA");
     } finally {
@@ -291,26 +307,82 @@ export default function AdminPage() {
     }
   };
 
+  const handleCancelMfa = async () => {
+    setMfaLoading(true);
+    try {
+      let activeCsrf = await getOrRefreshCsrfToken(csrfToken);
+      if (!activeCsrf) activeCsrf = await fetchFreshCsrfToken();
+      await fetch("/api/admin/mfa", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+          [CSRF_HEADER_NAME]: activeCsrf || "",
+        },
+        body: JSON.stringify({ action: "cancel", csrfToken: activeCsrf }),
+      });
+    } catch {}
+    setMfaQrSvg(null);
+    setMfaQrPngDataUrl(null);
+    setMfaManualKey(null);
+    setMfaVerificationCode("");
+    setMfaLoading(false);
+  };
+
+  const handleCopyManualKey = async () => {
+    if (!mfaManualKey) return;
+    try {
+      await navigator.clipboard.writeText(mfaManualKey);
+      setMfaManualKeyCopied(true);
+      setTimeout(() => setMfaManualKeyCopied(false), 2500);
+    } catch {}
+  };
+
+  const handleDownloadQrSvg = () => {
+    if (!mfaQrSvg) return;
+    try {
+      const blob = new Blob([mfaQrSvg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "dyt-admin-mfa-qr.svg";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch {}
+  };
+
   const handleVerifyMfa = async (e: React.FormEvent) => {
     e.preventDefault();
     setMfaLoading(true);
     setMfaErrorMessage(null);
     try {
+      let activeCsrf = await getOrRefreshCsrfToken(csrfToken);
+      if (!activeCsrf) activeCsrf = await fetchFreshCsrfToken();
       const res = await fetch("/api/admin/mfa", {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "Cache-Control": "no-cache",
+          [CSRF_HEADER_NAME]: activeCsrf || "",
         },
-        body: JSON.stringify({ action: "verify", code: mfaVerificationCode }),
+        body: JSON.stringify({ action: "verify", code: mfaVerificationCode, csrfToken: activeCsrf }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "MFA code verification failed");
       setMfaEnabled(true);
       setMfaQrSvg(null);
+      setMfaQrPngDataUrl(null);
       setMfaManualKey(null);
       setMfaRecoveryCodes(data.recoveryCodes || []);
-      setMfaStatusMessage("បានបើកដំណើរការ MFA ដោយជោគជ័យ!");
+      setMfaStatusMessage("បានបើកដំណើរការ MFA ដោយជោគជ័យ! (MFA activated successfully)");
+      await fetchMfaStatus();
+      await fetchAuditLog();
     } catch (err: any) {
       setMfaErrorMessage(err.message || "Failed to verify MFA code");
     } finally {
@@ -323,19 +395,26 @@ export default function AdminPage() {
     setMfaLoading(true);
     setMfaErrorMessage(null);
     try {
+      let activeCsrf = await getOrRefreshCsrfToken(csrfToken);
+      if (!activeCsrf) activeCsrf = await fetchFreshCsrfToken();
       const res = await fetch("/api/admin/mfa", {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "Cache-Control": "no-cache",
+          [CSRF_HEADER_NAME]: activeCsrf || "",
         },
-        body: JSON.stringify({ action: "disable" }),
+        body: JSON.stringify({ action: "disable", csrfToken: activeCsrf }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to disable MFA");
       setMfaEnabled(false);
       setMfaRecoveryCodes([]);
-      setMfaStatusMessage("បានបិទដំណើរការ MFA រួចរាល់");
+      setMfaStatusMessage("បានបិទដំណើរការ MFA រួចរាល់ (MFA disabled)");
+      await fetchMfaStatus();
+      await fetchAuditLog();
     } catch (err: any) {
       setMfaErrorMessage(err.message || "Failed to disable MFA");
     } finally {
@@ -1334,48 +1413,128 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Active Setup Flow: QR Code SVG & Verification Code Input */}
+            {/* Active Setup Flow: Standards-compliant 256x256 QR Code & Manual Key */}
             {!mfaEnabled && mfaQrSvg && (
-              <div className="space-y-5 rounded-xl border border-cyan-500/40 bg-slate-950/80 p-5">
-                <div className="text-xs font-semibold text-cyan-300">
-                  ជំហានទី ១ ៖ ស្កេន QR Code ឬបញ្ចូល Manual Key ក្នុងកម្មវិធី Authenticator
+              <div className="space-y-6 rounded-2xl border border-cyan-500/40 bg-slate-950/90 p-6 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="text-sm font-bold text-cyan-300 flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-cyan-400" />
+                    <span>ជំហានទី ១ ៖ ស្កេន QR Code ឬបញ្ចូល Manual Key ក្នុង Authenticator App</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">RFC 6238 TOTP (SHA-1)</span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-6">
-                  {/* QR SVG Container */}
-                  <div
-                    className="p-3 bg-white rounded-xl shadow-lg shrink-0 flex items-center justify-center w-[200px] h-[200px]"
-                    dangerouslySetInnerHTML={{ __html: mfaQrSvg }}
-                  />
+                <div className="flex flex-col lg:flex-row items-center lg:items-start gap-8">
+                  {/* Clean 256x256+ QR Container */}
+                  <div className="flex flex-col items-center gap-3 shrink-0">
+                    <div
+                      className="p-4 bg-white rounded-2xl shadow-xl flex items-center justify-center min-w-[280px] min-h-[280px] w-[280px] h-[280px]"
+                      data-testid="mfa-qr-container"
+                    >
+                      <div
+                        className="w-[256px] h-[256px] flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                        dangerouslySetInnerHTML={{ __html: mfaQrSvg }}
+                      />
+                    </div>
 
-                  <div className="space-y-3 text-xs text-slate-300">
-                    <p>
-                      បើកកម្មវិធី <strong>Google Authenticator</strong> រួចចុចសញ្ញា <strong>(+)</strong> ស្កេនរូប QR ខាងលើ។
-                    </p>
-                    {mfaManualKey && (
-                      <div>
-                        <span className="text-slate-400">Manual Setup Key:</span>
-                        <div className="mt-1 font-mono text-sm font-bold text-cyan-300 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg select-all">
-                          {mfaManualKey}
+                    {/* Download Buttons */}
+                    <div className="flex items-center gap-2 text-xs">
+                      {mfaQrPngDataUrl && (
+                        <a
+                          href={mfaQrPngDataUrl}
+                          download="dyt-admin-mfa-qr.png"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:text-white hover:bg-slate-700 transition-all font-sans"
+                        >
+                          <Download className="h-3.5 w-3.5 text-cyan-400" />
+                          <span>Download PNG</span>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleDownloadQrSvg}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:text-white hover:bg-slate-700 transition-all font-sans cursor-pointer"
+                      >
+                        <Download className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Download SVG</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Manual Setup Key and App Guidance */}
+                  <div className="space-y-4 text-xs text-slate-300 flex-1 w-full">
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
+                      <div className="font-semibold text-slate-200 text-xs flex items-center gap-2">
+                        <KeyRound className="h-4 w-4 text-cyan-400" />
+                        <span>ការបញ្ចូលដោយដៃ (Manual Setup Details)</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800/80">
+                          <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Issuer (អ្នកចេញកូដ)</span>
+                          <span className="font-semibold text-white mt-0.5 block">{mfaIssuer}</span>
+                        </div>
+                        <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800/80">
+                          <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Account (គណនី)</span>
+                          <span className="font-semibold text-white mt-0.5 block">{mfaAccount || sessionUser?.username || "Admin"}</span>
                         </div>
                       </div>
-                    )}
+
+                      {mfaManualKey && (
+                        <div>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                            <span>Secret Key (Base32):</span>
+                            {mfaManualKeyCopied ? (
+                              <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                                <Check className="h-3.5 w-3.5" /> បានចម្លង (Copied!)
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 font-mono text-sm font-bold text-cyan-300 bg-slate-950 border border-cyan-500/30 px-3.5 py-2.5 rounded-lg select-all tracking-wider break-all">
+                              {mfaManualKey}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleCopyManualKey}
+                              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 hover:text-white transition-all font-sans font-bold cursor-pointer shrink-0"
+                            >
+                              {mfaManualKeyCopied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                              <span>{mfaManualKeyCopied ? "Copied" : "Copy"}</span>
+                            </button>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            គាំទ្រតែតួអក្សរ Base32 ស្តង់ដារ A–Z និង ២–៧ (Standard Base32 RFC 4648).
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 text-slate-400 text-xs">
+                      <p>
+                        • <strong>Google Authenticator:</strong> បើក App &rarr; ចុច <strong>(+)</strong> &rarr; Scan QR Code ឬ Enter setup key.
+                      </p>
+                      <p>
+                        • <strong>Microsoft Authenticator:</strong> បើក App &rarr; Add account &rarr; Other (Google, etc.) &rarr; ស្កេនរូប QR Code ខាងលើ។
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 {/* Verification Form */}
-                <form onSubmit={handleVerifyMfa} className="space-y-3 border-t border-slate-800 pt-4">
+                <form onSubmit={handleVerifyMfa} className="space-y-3 border-t border-slate-800 pt-5">
                   <div className="text-xs font-semibold text-cyan-300">
-                    ជំហានទី ២ ៖ បញ្ចូលលេខកូដ ៦ ខ្ទង់ដែលបង្ហាញក្នុង App ដើម្បីបញ្ជាក់
+                    ជំហានទី ២ ៖ បញ្ចូលលេខកូដ ៦ ខ្ទង់ដែលបង្ហាញក្នុង App ដើម្បីបញ្ជាក់ (Step 2: Enter 6-digit code)
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <input
                       type="text"
                       maxLength={6}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={mfaVerificationCode}
-                      onChange={(e) => setMfaVerificationCode(e.target.value)}
-                      placeholder="123456"
-                      className="w-40 rounded-xl border border-cyan-500/50 bg-slate-900 px-4 py-2 text-center text-lg font-mono font-bold text-white tracking-widest focus:border-cyan-400 focus:outline-none"
+                      onChange={(e) => setMfaVerificationCode(e.target.value.replace(/\D/g, ""))}
+                      placeholder="000000"
+                      className="w-44 rounded-xl border border-cyan-500/50 bg-slate-900 px-4 py-2.5 text-center text-xl font-mono font-bold text-white tracking-[0.25em] focus:border-cyan-400 focus:outline-none"
                     />
                     <button
                       type="submit"
@@ -1386,12 +1545,16 @@ export default function AdminPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setMfaQrSvg(null)}
-                      className="text-xs text-slate-400 hover:text-rose-300 underline"
+                      onClick={handleCancelMfa}
+                      disabled={mfaLoading}
+                      className="rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-rose-300 hover:bg-slate-700 transition-all cursor-pointer"
                     >
                       បោះបង់ (Cancel)
                     </button>
                   </div>
+                  <p className="text-[11px] text-slate-500">
+                    ចំណាំ៖ ប្រសិនបើអ្នកចុចបោះបង់ (Cancel) លេខកូដសម្ងាត់ Setup បច្ចុប្បន្ននឹងត្រូវបានលុបចោលទាំងស្រុង។
+                  </p>
                 </form>
               </div>
             )}

@@ -127,37 +127,54 @@ export function verifyTotpCode(
  * - otpauth:// URI
  * - Standalone SVG QR Code
  */
-export async function generateTotpSetup(username: string): Promise<{
+import QRCode from "qrcode";
+
+export async function generateTotpSetup(
+  username: string,
+  issuer: string = "DYT Ecosystem"
+): Promise<{
   plainSecret: string;
   encryptedSecret: string;
   otpauthUrl: string;
   qrSvg: string;
+  qrPngDataUrl: string;
+  issuer: string;
+  account: string;
 }> {
   const plainSecret = generateBase32Secret(20);
   const encryptedSecret = encryptMfaSecret(plainSecret);
-  const otpauthUrl = buildOtpauthUri(username, plainSecret, "DYT Ecosystem");
-  const qrSvg = generateQrCodeSvg(otpauthUrl, 200);
+  const otpauthUrl = buildOtpauthUri(username, plainSecret, issuer);
+  const qrSvg = await generateQrCodeSvg(otpauthUrl, 280, "M");
+  const qrPngDataUrl = await generateQrCodeDataUrl(otpauthUrl, 280, "M");
 
   return {
     plainSecret,
     encryptedSecret,
     otpauthUrl,
     qrSvg,
+    qrPngDataUrl,
+    issuer,
+    account: username,
   };
 }
 
-
 /**
- * Generates otpauth:// URI compatible with Google Authenticator, Microsoft Authenticator, 1Password, etc.
+ * Generates standard RFC 6238 otpauth:// URI compatible with Google Authenticator,
+ * Microsoft Authenticator, 1Password, Authy, etc.
+ * Format: otpauth://totp/{issuer}:{account}?secret={BASE32}&issuer={issuer}&algorithm=SHA1&digits=6&period=30
  */
 export function buildOtpauthUri(
-  username: string,
+  account: string,
   secret: string,
-  issuer: string = "DYT PLP Math"
+  issuer: string = "DYT Ecosystem"
 ): string {
-  const label = encodeURIComponent(`${issuer}:${username}`);
-  const encIssuer = encodeURIComponent(issuer);
-  return `otpauth://totp/${label}?secret=${secret}&issuer=${encIssuer}&algorithm=SHA1&digits=6&period=30`;
+  const cleanIssuer = issuer.trim();
+  const cleanAccount = account.trim();
+  const cleanSecret = secret.trim().replace(/\s+/g, "").toUpperCase();
+  const encIssuer = encodeURIComponent(cleanIssuer);
+  const encAccount = encodeURIComponent(cleanAccount);
+  const encSecret = encodeURIComponent(cleanSecret);
+  return `otpauth://totp/${encIssuer}:${encAccount}?secret=${encSecret}&issuer=${encIssuer}&algorithm=SHA1&digits=6&period=30`;
 }
 
 /**
@@ -176,7 +193,6 @@ export function generateRecoveryCodes(count: number = 8): string[] {
   return plainCodes;
 }
 
-
 export function hashRecoveryCode(code: string): string {
   const clean = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   return crypto.createHash("sha256").update(clean).digest("hex");
@@ -185,7 +201,6 @@ export function hashRecoveryCode(code: string): string {
 export function hashRecoveryCodes(codes: string[]): string[] {
   return codes.map(hashRecoveryCode);
 }
-
 
 /**
  * Verifies and burns a single-use recovery code.
@@ -227,130 +242,44 @@ export function decryptMfaSecret(encryptedSecret?: string | null): string | null
 }
 
 /**
- * Pure SVG QR-Code Matrix Generator (Zero External Dependencies)
- * Generates an SVG string representing a scannable 2D QR barcode for otpauth:// URIs.
+ * Production-grade QR Code SVG Generator using standard `qrcode` library.
+ * - Error correction level: M (or H)
+ * - Quiet-zone margin: at least 4 modules
+ * - Clean white background (#ffffff), crisp black modules (#000000), zero decorative overlays.
  */
-export function generateQrCodeSvg(text: string, size: number = 220): string {
-  // Use compact algorithmic Reed-Solomon QR generator for standard URI sizes
-  const modules = generateQrMatrix(text);
-  const n = modules.length;
-  const cellSize = size / (n + 8);
-
-  let rects = "";
-  for (let r = 0; r < n; r++) {
-    for (let c = 0; c < n; c++) {
-      if (modules[r][c]) {
-        const x = (c + 4) * cellSize;
-        const y = (r + 4) * cellSize;
-        rects += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(cellSize + 0.2).toFixed(2)}" height="${(cellSize + 0.2).toFixed(2)}" fill="#0f172a" />`;
-      }
-    }
-  }
-
-  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QR Code">
-    <rect width="${size}" height="${size}" fill="#ffffff" rx="12" />
-    ${rects}
-  </svg>`;
+export async function generateQrCodeSvg(
+  text: string,
+  size: number = 280,
+  errorCorrectionLevel: "M" | "H" = "M"
+): Promise<string> {
+  return await QRCode.toString(text, {
+    type: "svg",
+    errorCorrectionLevel,
+    margin: 4,
+    width: size,
+    color: {
+      dark: "#000000",
+      light: "#ffffff",
+    },
+  });
 }
 
-// ---------------------------------------------------------------------------
-// Compact QR Matrix Generator (Version 3/4 Byte Mode)
-// ---------------------------------------------------------------------------
-function generateQrMatrix(data: string): boolean[][] {
-  // Determine suitable size based on string length (Version 4: 33x33)
-  const size = 33;
-  const matrix: (boolean | null)[][] = Array.from({ length: size }, () =>
-    Array(size).fill(null)
-  );
-
-  // 1. Finder patterns at 3 corners
-  drawFinderPattern(matrix, 0, 0);
-  drawFinderPattern(matrix, size - 7, 0);
-  drawFinderPattern(matrix, 0, size - 7);
-
-  // 2. Alignment pattern for Version 4 at (24, 24)
-  drawAlignmentPattern(matrix, 24, 24);
-
-  // 3. Timing patterns
-  for (let i = 8; i < size - 8; i++) {
-    const val = i % 2 === 0;
-    if (matrix[6][i] === null) matrix[6][i] = val;
-    if (matrix[i][6] === null) matrix[i][6] = val;
-  }
-
-  // Dark module
-  matrix[size - 8][8] = true;
-
-  // 4. Encode data bits into remaining null cells
-  const dataBytes = Buffer.from(data, "utf8");
-  const bits: number[] = [];
-
-  // Mode: Byte (0100)
-  bits.push(0, 1, 0, 0);
-  // Character count (8 bits for Version 1-9)
-  for (let i = 7; i >= 0; i--) bits.push((dataBytes.length >>> i) & 1);
-  // Data bytes
-  for (const b of dataBytes) {
-    for (let i = 7; i >= 0; i--) bits.push((b >>> i) & 1);
-  }
-  // Terminator
-  for (let i = 0; i < 4; i++) bits.push(0);
-
-  // Fill in zigzag pattern
-  let bitIdx = 0;
-  let upward = true;
-
-  for (let col = size - 1; col > 0; col -= 2) {
-    if (col === 6) col--; // Skip vertical timing line
-
-    const rows = upward
-      ? Array.from({ length: size }, (_, i) => size - 1 - i)
-      : Array.from({ length: size }, (_, i) => i);
-
-    for (const row of rows) {
-      for (const c of [col, col - 1]) {
-        if (matrix[row][c] === null) {
-          const bit = bitIdx < bits.length ? bits[bitIdx++] : (row + c) % 2 === 0 ? 1 : 0;
-          // Apply standard Mask 0 ((row + col) % 2 === 0)
-          const mask = (row + c) % 2 === 0;
-          matrix[row][c] = (bit ^ (mask ? 1 : 0)) === 1;
-        }
-      }
-    }
-    upward = !upward;
-  }
-
-  return matrix.map((row) => row.map((cell) => cell ?? false));
+/**
+ * Production-grade QR Code Data URL Generator for PNG export/download.
+ */
+export async function generateQrCodeDataUrl(
+  text: string,
+  size: number = 280,
+  errorCorrectionLevel: "M" | "H" = "M"
+): Promise<string> {
+  return await QRCode.toDataURL(text, {
+    errorCorrectionLevel,
+    margin: 4,
+    width: size,
+    color: {
+      dark: "#000000",
+      light: "#ffffff",
+    },
+  });
 }
 
-function drawFinderPattern(m: (boolean | null)[][], r0: number, c0: number) {
-  for (let r = 0; r < 7; r++) {
-    for (let c = 0; c < 7; c++) {
-      const isBorder = r === 0 || r === 6 || c === 0 || c === 6;
-      const isCenter = r >= 2 && r <= 4 && c >= 2 && c <= 4;
-      m[r0 + r][c0 + c] = isBorder || isCenter;
-    }
-  }
-  // Separator
-  for (let r = -1; r <= 7; r++) {
-    for (let c = -1; c <= 7; c++) {
-      const nr = r0 + r;
-      const nc = c0 + c;
-      if (nr >= 0 && nr < m.length && nc >= 0 && nc < m.length) {
-        if (r === -1 || r === 7 || c === -1 || c === 7) {
-          m[nr][nc] = false;
-        }
-      }
-    }
-  }
-}
-
-function drawAlignmentPattern(m: (boolean | null)[][], r0: number, c0: number) {
-  for (let r = -2; r <= 2; r++) {
-    for (let c = -2; c <= 2; c++) {
-      const isBorder = Math.abs(r) === 2 || Math.abs(c) === 2;
-      const isCenter = r === 0 && c === 0;
-      m[r0 + r][c0 + c] = isBorder || isCenter;
-    }
-  }
-}
