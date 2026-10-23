@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Shield,
   Users,
@@ -19,6 +19,7 @@ import {
   Activity,
   Eye,
   EyeOff,
+  Send,
 } from "lucide-react";
 
 interface SafeUser {
@@ -33,6 +34,9 @@ interface SafeUser {
   updatedAt: number;
   lastLoginAt?: number;
   visiblePassword?: string | null;
+  telegramLinked?: boolean;
+  telegramUsername?: string;
+  telegramLinkedAt?: number;
 }
 
 interface AuditEvent {
@@ -54,8 +58,26 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [csrfToken, setCsrfToken] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"users" | "audit">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "mfa" | "telegram">("users");
   const [currentTimestamp, setCurrentTimestamp] = useState<number>(0);
+  const [sessionUser, setSessionUser] = useState<SafeUser | null>(null);
+
+  // Telegram Linking State
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramStatusMessage, setTelegramStatusMessage] = useState<string | null>(null);
+  const [telegramErrorMessage, setTelegramErrorMessage] = useState<string | null>(null);
+  const [telegramChallengeToken, setTelegramChallengeToken] = useState<string | null>(null);
+  const challengeTokenRef = useRef<string | null>(null);
+
+  // MFA Management State
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaQrSvg, setMfaQrSvg] = useState<string | null>(null);
+  const [mfaManualKey, setMfaManualKey] = useState<string | null>(null);
+  const [mfaVerificationCode, setMfaVerificationCode] = useState("");
+  const [mfaRecoveryCodes, setMfaRecoveryCodes] = useState<string[]>([]);
+  const [mfaStatusMessage, setMfaStatusMessage] = useState<string | null>(null);
+  const [mfaErrorMessage, setMfaErrorMessage] = useState<string | null>(null);
 
   // Dialog & Modal States
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -143,6 +165,9 @@ export default function AdminPage() {
       if (data.csrfToken) {
         setCsrfToken(data.csrfToken);
       }
+      if (data.user) {
+        setSessionUser(data.user);
+      }
     } catch {}
   }, []);
 
@@ -176,12 +201,231 @@ export default function AdminPage() {
     } catch {}
   }, []);
 
+  // Fetch MFA Status
+  const fetchMfaStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/mfa");
+      const data = await res.json();
+      if (res.ok) {
+        setMfaEnabled(Boolean(data.mfaEnabled));
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     setCurrentTimestamp(Date.now());
     initSession();
     fetchUsers();
     fetchAuditLog();
-  }, [initSession, fetchUsers, fetchAuditLog]);
+    fetchMfaStatus();
+  }, [initSession, fetchUsers, fetchAuditLog, fetchMfaStatus]);
+
+  const handleInitiateMfa = async () => {
+    setMfaLoading(true);
+    setMfaErrorMessage(null);
+    try {
+      const res = await fetch("/api/admin/mfa", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        body: JSON.stringify({ action: "setup" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to start MFA setup");
+      setMfaQrSvg(data.qrSvg);
+      setMfaManualKey(data.manualKey);
+    } catch (err: any) {
+      setMfaErrorMessage(err.message || "Failed to initiate MFA");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleVerifyMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMfaLoading(true);
+    setMfaErrorMessage(null);
+    try {
+      const res = await fetch("/api/admin/mfa", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        body: JSON.stringify({ action: "verify", code: mfaVerificationCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "MFA code verification failed");
+      setMfaEnabled(true);
+      setMfaQrSvg(null);
+      setMfaManualKey(null);
+      setMfaRecoveryCodes(data.recoveryCodes || []);
+      setMfaStatusMessage("បានបើកដំណើរការ MFA ដោយជោគជ័យ!");
+    } catch (err: any) {
+      setMfaErrorMessage(err.message || "Failed to verify MFA code");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleDisableMfa = async () => {
+    if (!confirm("តើអ្នកពិតជាចង់បិទដំណើរការ 2FA MFA មែនទេ?")) return;
+    setMfaLoading(true);
+    setMfaErrorMessage(null);
+    try {
+      const res = await fetch("/api/admin/mfa", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        body: JSON.stringify({ action: "disable" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to disable MFA");
+      setMfaEnabled(false);
+      setMfaRecoveryCodes([]);
+      setMfaStatusMessage("បានបិទដំណើរការ MFA រួចរាល់");
+    } catch (err: any) {
+      setMfaErrorMessage(err.message || "Failed to disable MFA");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  // Telegram Linking Handlers
+  const handleCompleteTelegramLink = useCallback(
+    async (challengeToken: string, tgUser: any) => {
+      setTelegramLoading(true);
+      setTelegramErrorMessage(null);
+      try {
+        const res = await fetch("/api/auth/telegram/link/complete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
+          body: JSON.stringify({
+            challengeToken,
+            telegramData: tgUser,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to complete Telegram link");
+        }
+        setTelegramStatusMessage("បានភ្ជាប់ Telegram ដោយជោគជ័យ (Telegram linked successfully)!");
+        if (data.user) {
+          setSessionUser(data.user);
+        }
+        fetchUsers();
+        fetchAuditLog();
+      } catch (err: any) {
+        setTelegramErrorMessage(err.message || "Error completing Telegram link");
+      } finally {
+        setTelegramLoading(false);
+      }
+    },
+    [csrfToken, fetchUsers, fetchAuditLog]
+  );
+
+  useEffect(() => {
+    const win = typeof window !== "undefined" ? (window as any) : null;
+    if (win) {
+      win.onTelegramLinkAuth = (tgUser: any) => {
+        if (challengeTokenRef.current && tgUser) {
+          handleCompleteTelegramLink(challengeTokenRef.current, tgUser);
+        }
+      };
+    }
+    return () => {
+      if (win) {
+        delete win.onTelegramLinkAuth;
+      }
+    };
+  }, [handleCompleteTelegramLink]);
+
+  const handleStartTelegramLink = async () => {
+    setTelegramLoading(true);
+    setTelegramErrorMessage(null);
+    setTelegramStatusMessage(null);
+    try {
+      const res = await fetch("/api/auth/telegram/link/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to start Telegram linking");
+      }
+
+      challengeTokenRef.current = data.challengeToken;
+      setTelegramChallengeToken(data.challengeToken);
+
+      const win = typeof window !== "undefined" ? (window as any) : null;
+      if (win && win.Telegram && win.Telegram.Login && win.Telegram.Login.auth) {
+        win.Telegram.Login.auth(
+          { bot_id: data.botUsername, request_access: true },
+          async (tgUser: any) => {
+            if (tgUser) {
+              await handleCompleteTelegramLink(data.challengeToken, tgUser);
+            }
+          }
+        );
+      } else {
+        const container = document.getElementById("telegram-admin-link-widget");
+        if (container) {
+          container.innerHTML = "";
+          const script = document.createElement("script");
+          script.src = "https://telegram.org/js/telegram-widget.js?22";
+          script.setAttribute("data-telegram-login", data.botUsername);
+          script.setAttribute("data-size", "large");
+          script.setAttribute("data-request-access", "write");
+          script.setAttribute("data-onauth", "onTelegramLinkAuth(user)");
+          script.async = true;
+          container.appendChild(script);
+        }
+      }
+    } catch (err: any) {
+      setTelegramErrorMessage(err.message || "Failed to initiate Telegram link");
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
+
+  const handleUnlinkTelegram = async () => {
+    setTelegramLoading(true);
+    setTelegramErrorMessage(null);
+    setTelegramStatusMessage(null);
+    try {
+      const res = await fetch("/api/auth/telegram/unlink", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to unlink Telegram");
+      }
+      setTelegramStatusMessage("បានផ្តាច់ Telegram ដោយជោគជ័យ (Telegram unlinked successfully)!");
+      if (data.user) {
+        setSessionUser(data.user);
+      }
+      fetchUsers();
+      fetchAuditLog();
+    } catch (err: any) {
+      setTelegramErrorMessage(err.message || "Error unlinking Telegram");
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
 
   // Summary Metrics
   const totalUsers = users.length;
@@ -544,6 +788,32 @@ export default function AdminPage() {
           <History className="h-3.5 w-3.5" />
           <span>Security Audit Log ({auditEvents.length})</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("mfa")}
+          className={`flex items-center gap-2 rounded-lg px-3 py-1.5 font-bold uppercase transition-all ${
+            activeTab === "mfa"
+              ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Shield className="h-3.5 w-3.5 text-cyan-400" />
+          <span>Admin MFA (2FA) {mfaEnabled ? "✓ Active" : "Off"}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("telegram")}
+          className={`flex items-center gap-2 rounded-lg px-3 py-1.5 font-bold uppercase transition-all ${
+            activeTab === "telegram"
+              ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Send className="h-3.5 w-3.5 text-sky-400" />
+          <span>Telegram Link {sessionUser?.telegramLinked ? "✓ បានភ្ជាប់" : "មិនទាន់ភ្ជាប់"}</span>
+        </button>
       </div>
 
       {/* 4. Tab 1: User Accounts Table */}
@@ -803,6 +1073,277 @@ export default function AdminPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Tab 3: Admin Two-Factor Authentication (MFA) */}
+      {activeTab === "mfa" && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/60 p-6 shadow-xl space-y-5">
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-cyan-400" />
+                  <span>ការផ្ទៀងផ្ទាត់ពីរកត្តា (Two-Factor Authentication / TOTP)</span>
+                </h3>
+                <p className="mt-1 text-xs text-slate-300">
+                  ការពារគណនី ADMIN ដោយប្រើលេខកូដសម្ងាត់ ៦ ខ្ទង់ពី Google Authenticator, Microsoft Authenticator ឬ 1Password។
+                </p>
+              </div>
+
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-mono font-bold border ${
+                  mfaEnabled
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : "bg-slate-800 text-slate-400 border-slate-700"
+                }`}
+              >
+                {mfaEnabled ? "✓ បើកដំណើរការ (ENABLED)" : "○ បិទ (DISABLED)"}
+              </span>
+            </div>
+
+            {mfaStatusMessage && (
+              <div className="rounded-xl border border-emerald-500/50 bg-emerald-950/50 p-3 text-xs text-emerald-200">
+                {mfaStatusMessage}
+              </div>
+            )}
+
+            {mfaErrorMessage && (
+              <div className="rounded-xl border border-rose-500/50 bg-rose-950/50 p-3 text-xs text-rose-200">
+                {mfaErrorMessage}
+              </div>
+            )}
+
+            {/* If MFA not enabled and not in setup flow */}
+            {!mfaEnabled && !mfaQrSvg && (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-400">
+                  នៅពេលបើកដំណើរការ រាល់ពេល Login ចូលគណនី Admin ប្រព័ន្ធនឹងទាមទារ Password បូកជាមួយលេខកូដ Authenticator App។
+                </p>
+                <button
+                  type="button"
+                  onClick={handleInitiateMfa}
+                  disabled={mfaLoading}
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Shield className="h-4 w-4" />
+                  <span>{mfaLoading ? "កំពុងរៀបចំ..." : "បើកដំណើរការ MFA (Enable Two-Factor)"}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Active Setup Flow: QR Code SVG & Verification Code Input */}
+            {!mfaEnabled && mfaQrSvg && (
+              <div className="space-y-5 rounded-xl border border-cyan-500/40 bg-slate-950/80 p-5">
+                <div className="text-xs font-semibold text-cyan-300">
+                  ជំហានទី ១ ៖ ស្កេន QR Code ឬបញ្ចូល Manual Key ក្នុងកម្មវិធី Authenticator
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-6">
+                  {/* QR SVG Container */}
+                  <div
+                    className="p-3 bg-white rounded-xl shadow-lg shrink-0 flex items-center justify-center w-[200px] h-[200px]"
+                    dangerouslySetInnerHTML={{ __html: mfaQrSvg }}
+                  />
+
+                  <div className="space-y-3 text-xs text-slate-300">
+                    <p>
+                      បើកកម្មវិធី <strong>Google Authenticator</strong> រួចចុចសញ្ញា <strong>(+)</strong> ស្កេនរូប QR ខាងលើ។
+                    </p>
+                    {mfaManualKey && (
+                      <div>
+                        <span className="text-slate-400">Manual Setup Key:</span>
+                        <div className="mt-1 font-mono text-sm font-bold text-cyan-300 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg select-all">
+                          {mfaManualKey}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Verification Form */}
+                <form onSubmit={handleVerifyMfa} className="space-y-3 border-t border-slate-800 pt-4">
+                  <div className="text-xs font-semibold text-cyan-300">
+                    ជំហានទី ២ ៖ បញ្ចូលលេខកូដ ៦ ខ្ទង់ដែលបង្ហាញក្នុង App ដើម្បីបញ្ជាក់
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={mfaVerificationCode}
+                      onChange={(e) => setMfaVerificationCode(e.target.value)}
+                      placeholder="123456"
+                      className="w-40 rounded-xl border border-cyan-500/50 bg-slate-900 px-4 py-2 text-center text-lg font-mono font-bold text-white tracking-widest focus:border-cyan-400 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={mfaLoading || mfaVerificationCode.trim().length !== 6}
+                      className="rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-5 py-2.5 text-xs font-bold text-slate-950 hover:brightness-110 disabled:opacity-50 transition-all cursor-pointer"
+                    >
+                      {mfaLoading ? "កំពុងផ្ទៀងផ្ទាត់..." : "បញ្ជាក់ & បើកដំណើរការ (Verify & Activate)"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMfaQrSvg(null)}
+                      className="text-xs text-slate-400 hover:text-rose-300 underline"
+                    >
+                      បោះបង់ (Cancel)
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Display Recovery Codes After Setup */}
+            {mfaRecoveryCodes.length > 0 && (
+              <div className="space-y-3 rounded-xl border border-amber-500/50 bg-amber-950/30 p-5">
+                <div className="flex items-center gap-2 text-amber-300 text-xs font-bold">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>កូដសង្គ្រោះគណនី (Backup Recovery Codes) — សូមកត់ទុកនៅកន្លែងមានសុវត្ថិភាព!</span>
+                </div>
+                <p className="text-xs text-amber-200/90 leading-relaxed">
+                  កូដនីមួយៗអាចប្រើប្រាស់បានតែម្តងគត់ សម្រាប់ចូលប្រព័ន្ធក្នុងករណីលោកអ្នកបាត់ទូរស័ព្ទ ឬបាត់បង់ Authenticator App។
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs">
+                  {mfaRecoveryCodes.map((code, idx) => (
+                    <div key={idx} className="bg-slate-950 border border-amber-500/40 p-2 rounded text-center text-amber-300 select-all font-bold">
+                      {code}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* If MFA is currently active */}
+            {mfaEnabled && (
+              <div className="space-y-4 pt-2">
+                <p className="text-xs text-slate-300">
+                  គណនីអ្នកគ្រប់គ្រងរបស់អ្នកត្រូវបានការពារដោយ <strong>Two-Factor Authentication (TOTP)</strong> រួចរាល់ហើយ។
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDisableMfa}
+                  disabled={mfaLoading}
+                  className="rounded-xl border border-rose-500/50 bg-rose-950/40 px-4 py-2 text-xs font-bold text-rose-300 hover:bg-rose-900/60 transition-all cursor-pointer"
+                >
+                  {mfaLoading ? "កំពុងដំណើរការ..." : "បិទដំណើរការ MFA (Disable 2FA)"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 5b. Tab 4: Telegram Identity Linking */}
+      {activeTab === "telegram" && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-sky-500/30 bg-slate-900/60 p-6 shadow-xl space-y-5">
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Send className="h-5 w-5 text-sky-400" />
+                  <span>ភ្ជាប់ Telegram ជាមួយគណនី (Telegram Identity Linking)</span>
+                </h3>
+                <p className="mt-1 text-xs text-slate-300">
+                  ភ្ជាប់គណនី Telegram របស់អ្នកសម្រាប់ការចូលប្រើប្រាស់ប្រកបដោយសុវត្ថិភាពខ្ពស់ និងរហ័ស។ ប្រើបានតែគណនីដែលមានស្រាប់ក្នុងប្រព័ន្ធប៉ុណ្ណោះ។
+                </p>
+              </div>
+
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-mono font-bold border ${
+                  sessionUser?.telegramLinked
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : "bg-slate-800 text-slate-400 border-slate-700"
+                }`}
+              >
+                {sessionUser?.telegramLinked ? "Telegram: បានភ្ជាប់" : "Telegram: មិនទាន់បានភ្ជាប់"}
+              </span>
+            </div>
+
+            {telegramStatusMessage && (
+              <div className="rounded-xl border border-emerald-500/50 bg-emerald-950/50 p-3 text-xs text-emerald-200">
+                {telegramStatusMessage}
+              </div>
+            )}
+
+            {telegramErrorMessage && (
+              <div className="rounded-xl border border-rose-500/50 bg-rose-950/50 p-3 text-xs text-rose-200">
+                {telegramErrorMessage}
+              </div>
+            )}
+
+            {/* If Telegram is already linked */}
+            {sessionUser?.telegramLinked ? (
+              <div className="space-y-4 pt-2">
+                <div className="rounded-xl border border-sky-500/20 bg-slate-950/60 p-4 space-y-2 text-xs">
+                  <div className="text-slate-400">គណនី Telegram ដែលបានភ្ជាប់៖</div>
+                  <div className="text-sm font-bold text-sky-300 font-mono">
+                    {sessionUser.telegramUsername ? `@${sessionUser.telegramUsername}` : "Telegram Verified Account"}
+                  </div>
+                  {sessionUser.telegramLinkedAt && (
+                    <div className="text-[11px] text-slate-500">
+                      ភ្ជាប់នៅថ្ងៃទី {new Date(sessionUser.telegramLinkedAt).toLocaleString("km-KH")}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleUnlinkTelegram}
+                    disabled={telegramLoading}
+                    className="rounded-xl border border-rose-500/50 bg-rose-950/40 px-5 py-2.5 text-xs font-bold text-rose-300 hover:bg-rose-900/60 transition-all cursor-pointer font-khmer"
+                  >
+                    {telegramLoading ? "កំពុងដំណើរការ..." : "ផ្តាច់ Telegram"}
+                  </button>
+                  <p className="mt-2 text-[11px] text-slate-400 font-khmer">
+                    ចំណាំ៖ អ្នកនៅតែអាចចូលប្រើប្រាស់ដោយប្រើពាក្យសម្ងាត់របស់អ្នកដដែលបន្ទាប់ពីផ្តាច់ Telegram។
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* If Telegram is not linked */
+              <div className="space-y-4 pt-2">
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-2 text-xs leading-relaxed text-slate-300">
+                  <p>
+                    ប្រព័ន្ធសុវត្ថិភាពទាមទារការផ្ទៀងផ្ទាត់បញ្ហាប្រឈមតែម្តងគត់ (One-time Challenge) រវាងគណនីបច្ចុប្បន្ន និងអត្តសញ្ញាណ Telegram របស់អ្នក។
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-slate-400">
+                    <li>មិនបង្កើតគណនីថ្មីដោយស្វ័យប្រវត្តិទេ</li>
+                    <li>អត្តសញ្ញាណ Telegram មួយ អាចភ្ជាប់បានតែគណនីមួយគត់</li>
+                    <li>ព័ត៌មានអត្តសញ្ញាណ Telegram ត្រូវបានរក្សាទុកដោយការអ៊ិនគ្រីបកម្រិតខ្ពស់</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleStartTelegramLink}
+                    disabled={telegramLoading}
+                    className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer font-khmer"
+                  >
+                    <Send className="h-4 w-4" />
+                    <span>{telegramLoading ? "កំពុងរៀបចំ..." : "ភ្ជាប់ Telegram"}</span>
+                  </button>
+
+                  <div id="telegram-admin-link-widget" className="pt-2 empty:hidden" />
+
+                  {telegramChallengeToken && (
+                    <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                      <span>ប្រសិនបើផ្ទាំង Popup ត្រូវបានរារាំងដោយ Browser សូមចុច retry ឬអនុញ្ញាត Popup៖</span>
+                      <button
+                        type="button"
+                        onClick={handleStartTelegramLink}
+                        className="text-cyan-400 hover:underline font-mono"
+                      >
+                        [ព្យាយាមម្តងទៀត]
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

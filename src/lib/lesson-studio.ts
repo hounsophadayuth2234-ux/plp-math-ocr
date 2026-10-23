@@ -1,8 +1,5 @@
-/**
- * Module 05: AI Lesson & Visual Studio Library
- * Core utilities for SVG diagram generation & sanitization,
- * Primary school quiz & worksheet generation, and Khmer HTML box styling.
- */
+import { normalizeKhmerEducationalText } from "./khmer-text-normalizer";
+
 
 export type LessonStudioMode = "visual_svg" | "quiz_generator" | "html_styler";
 export type GradeLevel =
@@ -372,6 +369,91 @@ export function renderQuizHtml(quiz: QuizResult): string {
 </div>`;
 }
 
+/**
+ * Deterministically normalize quiz questions for Cambodian primary school standards:
+ * 1. For multiple choice, rewrite option labels strictly to ក. ខ. គ. ឃ.
+ * 2. Ensure exactly four options (replaces/augments or trims gracefully).
+ * 3. Correct corrupt Khmer prefixes (such as ឆ. or English A, B, C, D).
+ * 4. Synchronize answer keys so answer matches the normalized label.
+ * 5. Apply safe Khmer educational text normalization.
+ */
+export function normalizeQuizQuestions(questions: QuizQuestion[]): QuizQuestion[] {
+  if (!Array.isArray(questions)) return [];
+
+  const KHMER_OPTION_PREFIXES = ["ក. ", "ខ. ", "គ. ", "ឃ. "];
+  const KHMER_OPTION_KEYS = ["ក", "ខ", "គ", "ឃ"];
+
+  return questions.map((q, qIndex) => {
+    const rawQuestion = normalizeKhmerEducationalText(q.question || "");
+    const rawExplanation = normalizeKhmerEducationalText(q.explanation || "");
+    const answer = (q.answer || "").trim();
+
+    if (q.type !== "multiple_choice" || !q.options || q.options.length === 0) {
+      return {
+        ...q,
+        id: q.id || qIndex + 1,
+        question: rawQuestion,
+        answer: normalizeKhmerEducationalText(answer),
+        explanation: rawExplanation,
+      };
+    }
+
+    // 1. Strip any existing prefix (e.g. A., B., C., D., ក., ខ., គ., ឃ., ឆ., 1., 2.)
+    const cleanOptionTexts: string[] = q.options.map((opt) => {
+      let cleaned = opt.trim();
+      // Remove prefixes like "A.", "B.", "ក.", "ឆ.", "1.", "(ក)", "[A]"
+      cleaned = cleaned.replace(/^(\([ក-អa-zA-Z0-9]+\)|\[[ក-អa-zA-Z0-9]+\]|[ក-អa-zA-Z0-9]+[.:\)\-]\s*)/, "").trim();
+      return normalizeKhmerEducationalText(cleaned);
+    });
+
+    // 2. Ensure exactly 4 options
+    while (cleanOptionTexts.length < 4) {
+      const fallbackIdx = cleanOptionTexts.length + 1;
+      cleanOptionTexts.push(`ចម្លើយបន្ថែម ${toKhmerNum(fallbackIdx)}`);
+    }
+    const finalOptionTexts = cleanOptionTexts.slice(0, 4);
+
+    // 3. Map original answer to index 0..3
+    let answerIndex = -1;
+    const cleanAns = answer.replace(/[.:\s\(\)]/g, "").toUpperCase();
+
+    if (cleanAns === "A" || cleanAns === "ក" || cleanAns === "1") answerIndex = 0;
+    else if (cleanAns === "B" || cleanAns === "ខ" || cleanAns === "2") answerIndex = 1;
+    else if (cleanAns === "C" || cleanAns === "គ" || cleanAns === "3") answerIndex = 2;
+    else if (cleanAns === "D" || cleanAns === "ឃ" || cleanAns === "4" || cleanAns === "ឆ") answerIndex = 3;
+    else {
+      // Try finding match in option texts
+      const matchIdx = finalOptionTexts.findIndex((t) => t.includes(cleanAns) || cleanAns.includes(t));
+      if (matchIdx !== -1) {
+        answerIndex = matchIdx;
+      } else {
+        answerIndex = 0; // deterministic safe fallback
+      }
+    }
+
+    // 4. Build normalized 4 options strictly with ក. ខ. គ. ឃ.
+    const normalizedOptions = finalOptionTexts.map((text, idx) => {
+      return `${KHMER_OPTION_PREFIXES[idx]}${text}`;
+    });
+
+    const normalizedAnswer = `${KHMER_OPTION_KEYS[answerIndex]}. ${finalOptionTexts[answerIndex]}`;
+
+    return {
+      id: q.id || qIndex + 1,
+      type: "multiple_choice",
+      question: rawQuestion,
+      options: normalizedOptions,
+      answer: normalizedAnswer,
+      explanation: rawExplanation,
+    };
+  });
+}
+
+function toKhmerNum(n: number): string {
+  const map: Record<string, string> = { "0": "០", "1": "១", "2": "២", "3": "៣", "4": "៤", "5": "៥", "6": "៦", "7": "៧", "8": "៨", "9": "៩" };
+  return String(n).replace(/[0-9]/g, (d) => map[d] || d);
+}
+
 function escapeHtml(str: string): string {
   if (!str) return "";
   return str
@@ -381,3 +463,4 @@ function escapeHtml(str: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+

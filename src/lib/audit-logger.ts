@@ -22,7 +22,15 @@ export type AuditEventType =
   | "ACCOUNT_DELETED"
   | "USER_DELETED"
   | "SESSIONS_REVOKED"
-  | "UNAUTHORIZED_ADMIN_ACCESS";
+  | "UNAUTHORIZED_ADMIN_ACCESS"
+  | "SECURITY_ALERT"
+  | "MFA_ENABLED"
+  | "MFA_DISABLED"
+  | "MFA_VERIFIED"
+  | "TELEGRAM_LINKED"
+  | "TELEGRAM_UNLINKED"
+  | "TELEGRAM_LOGIN_SUCCESS"
+  | "TELEGRAM_LOGIN_REJECTED";
 
 export interface AuditEventRecord {
   id: string;
@@ -97,7 +105,12 @@ export class AuditLogger {
           lowerKey.includes("csrf") ||
           lowerKey.includes("recovery") ||
           lowerKey.includes("bearer") ||
-          lowerKey.includes("salt")
+          lowerKey.includes("salt") ||
+          lowerKey.includes("telegramid") ||
+          lowerKey.includes("telegram_id") ||
+          lowerKey.includes("payload") ||
+          lowerKey.includes("bot") ||
+          lowerKey.includes("signature")
         ) {
           sanitizedDetails[key] = "[REDACTED]";
         } else {

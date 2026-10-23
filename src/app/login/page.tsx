@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Sparkles,
   Layers,
+  Send,
 } from "lucide-react";
 import { sanitizeInternalRedirect } from "@/lib/auth-gate";
 
@@ -199,6 +200,92 @@ function LoginContent() {
     }
   }, [isLocked, mustChangePassword]);
 
+  const [isMfaRequired, setIsMfaRequired] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
+  const totpInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Telegram Login State
+  const [telegramConfig, setTelegramConfig] = useState<{
+    enabled: boolean;
+    botUsername: string;
+  } | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const telegramContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/telegram/config")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data.enabled === "boolean") {
+          setTelegramConfig(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleTelegramAuthResponse = async (user: any) => {
+    if (!user) return;
+    setTelegramLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/telegram/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(user),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(
+          data.error ||
+            "Telegram នេះមិនទាន់បានភ្ជាប់ជាមួយគណនីក្នុងប្រព័ន្ធទេ។ សូមចូលដោយ Username/Password ឬទាក់ទង Admin។"
+        );
+        return;
+      }
+      window.location.href = fromPath;
+    } catch {
+      setError("មានបញ្ហាក្នុងការផ្ទៀងផ្ទាត់ជាមួយ Telegram។ សូមព្យាយាមម្តងទៀត។");
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
+
+  const handleTelegramLoginClick = () => {
+    if (!telegramConfig?.botUsername) return;
+    setError(null);
+
+    const win = window as any;
+    win.onTelegramAuth = (user: any) => {
+      handleTelegramAuthResponse(user);
+    };
+
+    if (win.Telegram && win.Telegram.Login && win.Telegram.Login.auth) {
+      win.Telegram.Login.auth(
+        { bot_id: telegramConfig.botUsername, request_access: true },
+        (data: any) => {
+          if (data) {
+            handleTelegramAuthResponse(data);
+          }
+        }
+      );
+      return;
+    }
+
+    // Embed Telegram script dynamically if not yet loaded
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute("data-telegram-login", telegramConfig.botUsername);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-userpic", "false");
+    script.setAttribute("data-request-access", "write");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.async = true;
+
+    if (telegramContainerRef.current) {
+      telegramContainerRef.current.innerHTML = "";
+      telegramContainerRef.current.appendChild(script);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || isLocked) return;
@@ -234,10 +321,20 @@ function LoginContent() {
         body: JSON.stringify({
           usernameOrEmail: identifier,
           password: password.trim(),
+          totpCode: totpCode.trim() || undefined,
         }),
       });
 
       const data = await res.json().catch(() => ({}));
+
+      if (data.mfaRequired) {
+        setIsMfaRequired(true);
+        setError(null);
+        setTimeout(() => {
+          totpInputRef.current?.focus();
+        }, 50);
+        return;
+      }
 
       if (res.status === 429) {
         const retrySec = data.retryAfter || 1800;
@@ -248,10 +345,11 @@ function LoginContent() {
       }
 
       if (!res.ok || !data.success) {
-        setError("ឈ្មោះ ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវ");
-        setPassword("");
+        setError(data.error || "ឈ្មោះ ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវ");
+        if (!isMfaRequired) setPassword("");
         setTimeout(() => {
-          passwordInputRef.current?.focus();
+          if (isMfaRequired) totpInputRef.current?.focus();
+          else passwordInputRef.current?.focus();
         }, 50);
         return;
       }
@@ -484,6 +582,36 @@ function LoginContent() {
                         </span>
                       </div>
                     </div>
+
+                    {/* TOTP 2FA Input (Shown when MFA is enabled on user account) */}
+                    {isMfaRequired && (
+                      <div className="space-y-1.5 animate-fadeIn">
+                        <label
+                          htmlFor="login-totp"
+                          className="flex items-center gap-1.5 text-xs sm:text-[13px] font-semibold text-cyan-300 font-khmer"
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
+                          <span>លេខកូដ 2FA / Authenticator Code (៦ ខ្ទង់)</span>
+                        </label>
+                        <input
+                          ref={totpInputRef}
+                          id="login-totp"
+                          data-testid="login-totp-input"
+                          type="text"
+                          maxLength={8}
+                          value={totpCode}
+                          onChange={(e) => setTotpCode(e.target.value)}
+                          disabled={loading || isLocked}
+                          placeholder="ឧ. 123456 ឬ កូដសង្គ្រោះ"
+                          autoComplete="one-time-code"
+                          required
+                          className="w-full rounded-xl border border-cyan-500/50 bg-slate-950/90 px-4 py-3 text-sm text-center text-cyan-200 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 font-mono tracking-widest text-lg font-bold"
+                        />
+                        <p className="text-[11px] text-slate-400 font-khmer">
+                          សូមបើកកម្មវិធី Google Authenticator ឬបញ្ចូលកូដសង្គ្រោះ Recovery Code។
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -642,6 +770,56 @@ function LoginContent() {
                     )}
                   </button>
                 </form>
+              )}
+
+              {/* Telegram Login Option (Only when TELEGRAM_LOGIN_ENABLED is true) */}
+              {telegramConfig?.enabled && !mustChangePassword && (
+                <div className="mt-5 space-y-3">
+                  <div className="relative flex items-center justify-center">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-800/80" />
+                    </div>
+                    <div className="relative bg-slate-900/90 px-3 text-[11px] uppercase tracking-wider text-slate-500 font-mono">
+                      ឬ (OR)
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      data-testid="telegram-login-btn"
+                      onClick={handleTelegramLoginClick}
+                      disabled={loading || telegramLoading || isLocked}
+                      className="group relative flex w-full items-center justify-center gap-2.5 rounded-xl border border-sky-500/30 bg-sky-950/30 hover:bg-sky-900/40 active:scale-[0.99] px-4 py-3 text-sm font-semibold text-sky-200 shadow-[0_0_15px_rgba(56,189,248,0.12)] hover:border-sky-400/50 disabled:cursor-not-allowed disabled:opacity-50 transition-all font-khmer cursor-pointer"
+                    >
+                      {telegramLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin text-sky-300" aria-hidden="true" />
+                          <span>កំពុងផ្ទៀងផ្ទាត់ Telegram...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg
+                            className="h-4 w-4 fill-sky-400 shrink-0"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                          >
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+                          </svg>
+                          <span>ចូលតាម Telegram</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Official Telegram Widget Mount Node */}
+                    <div ref={telegramContainerRef} className="flex justify-center empty:hidden" />
+
+                    {/* Explanatory Khmer Text */}
+                    <p className="text-[11px] text-slate-400 text-center font-khmer leading-relaxed select-none">
+                      ប្រើបានតែគណនីដែលបានភ្ជាប់ Telegram ជាមុនប៉ុណ្ណោះ។ វាមិនបង្កើតគណនីថ្មីទេ។
+                    </p>
+                  </div>
+                </div>
               )}
 
               {/* Exact Khmer Helper Text below the Form */}

@@ -498,8 +498,44 @@ export function evaluateBasicArithmetic(
     .replace(/\s+/g, "")
     .replace(/=/g, "");
 
-  // Match simple binary operation: a op b
-  const match = norm.match(/^(-?\d+(?:\.\d+)?)([+\-*/])(-?\d+(?:\.\d+)?)$/);
+  // If expression contains fraction notation like 1/2 + 1/4 or \frac, pass directly to fraction engine
+  if (norm.includes("/") && norm.match(/\d+\/\d+[+\-*]/)) {
+    return { success: false };
+  }
+
+
+
+  // 1. Support chained addition (e.g. 5 + 12 + 13)
+  if (/^\d+(?:\.\d+)?(?:\+\d+(?:\.\d+)?)+$/.test(norm)) {
+    const parts = norm.split("+").map(Number);
+    const sum = parts.reduce((acc, curr) => acc + curr, 0);
+    return {
+      success: true,
+      result: Math.round(sum * 1000) / 1000,
+      operation: "+",
+      operands: parts,
+      detailedKhmerExplanation: `គណនាផលបូក៖ ${parts.map(toKhmerNumeral).join(" + ")} = ${toKhmerNumeral(sum)}`,
+    };
+  }
+
+  // 2. Match simple binary operation: a op b (or embedded like "មានស្ករគ្រាប់ ៣ ថែម ២" -> "3+2")
+  let match = norm.match(/^(-?\d+(?:\.\d+)?)([+\-*/])(-?\d+(?:\.\d+)?)$/);
+  if (!match) {
+    // Try extracting first binary arithmetic operator from string containing numbers
+    const embedded = norm.match(/(\d+(?:\.\d+)?)([+\-*/])(\d+(?:\.\d+)?)/);
+    if (embedded) {
+      match = embedded;
+    }
+  }
+
+  if (!match) {
+    // Try Khmer word problem extraction (e.g. "មាន ... ៣ ... ថែម ... ២" -> 3 + 2)
+    const twoNums = norm.match(/(\d+(?:\.\d+)?)[^\d]+?(\d+(?:\.\d+)?)/);
+    if (twoNums && (expression.includes("ថែម") || expression.includes("បូក") || expression.includes("សរុប"))) {
+      match = [twoNums[0], twoNums[1], "+", twoNums[2]] as any;
+    }
+  }
+
   if (!match) return { success: false };
 
   const a = parseFloat(match[1]);
@@ -706,6 +742,84 @@ export function evaluateLinearEquation(
 }
 
 // -----------------------------------------------------------
+// Deterministic Percentage & Geometry Evaluators
+// -----------------------------------------------------------
+export function evaluatePercentageOrGeometry(problemStatement: string): {
+  success: boolean;
+  result?: number;
+  unit?: string;
+  explanationKhmer?: string;
+} {
+  const norm = fromKhmerNumeral(problemStatement).toLowerCase();
+
+  // 1. Percentage of a number: e.g. "20% នៃ 150" or "20% of 150"
+  const pctMatch = norm.match(/(\d+(?:\.\d+)?)\s*%\s*(?:នៃ|of|\*)\s*(\d+(?:\.\d+)?)/);
+  if (pctMatch) {
+    const rate = parseFloat(pctMatch[1]);
+    const total = parseFloat(pctMatch[2]);
+    if (!isNaN(rate) && !isNaN(total)) {
+      const res = (rate / 100) * total;
+      return {
+        success: true,
+        result: Math.round(res * 1000) / 1000,
+        explanationKhmer: `គណនាភាគរយ៖ ${toKhmerNumeral(rate)}% នៃ ${toKhmerNumeral(total)} = (${toKhmerNumeral(rate)} × ${toKhmerNumeral(total)}) ÷ ១០០ = ${toKhmerNumeral(res)}`,
+      };
+    }
+  }
+
+  // 2. Rectangle Perimeter (បរិមាត្រចតុកោណកែង): P = (length + width) * 2
+  // e.g. "បណ្ដោយ 8m ទទឹង 5m" or "ប្រវែង 8 និង 5"
+  const rectPerimMatch = norm.match(/(?:បរិមាត្រ|perimeter)[\s\S]*?(?:បណ្ដោយ|ប្រវែង|length)?\s*(\d+(?:\.\d+)?)\s*(?:ម|cm|m)?[\s\S]*?(?:ទទឹង|width)\s*(\d+(?:\.\d+)?)/);
+  if (rectPerimMatch) {
+    const l = parseFloat(rectPerimMatch[1]);
+    const w = parseFloat(rectPerimMatch[2]);
+    if (!isNaN(l) && !isNaN(w)) {
+      const p = 2 * (l + w);
+      return {
+        success: true,
+        result: p,
+        explanationKhmer: `គណនាបរិមាត្រចតុកោណកែង៖ P = (បណ្ដោយ + ទទឹង) × ២ = (${toKhmerNumeral(l)} + ${toKhmerNumeral(w)}) × ២ = ${toKhmerNumeral(p)}`,
+      };
+    }
+  }
+
+  // 3. Rectangle Area (ផ្ទៃក្រឡាចតុកោណកែង): A = length * width
+  const rectAreaMatch = norm.match(/(?:ផ្ទៃក្រឡា|area)[\s\S]*?(?:បណ្ដោយ|ប្រវែង|length)?\s*(\d+(?:\.\d+)?)\s*(?:ម|cm|m)?[\s\S]*?(?:ទទឹង|width)\s*(\d+(?:\.\d+)?)/);
+  if (rectAreaMatch) {
+    const l = parseFloat(rectAreaMatch[1]);
+    const w = parseFloat(rectAreaMatch[2]);
+    if (!isNaN(l) && !isNaN(w)) {
+      const a = l * w;
+      return {
+        success: true,
+        result: a,
+        explanationKhmer: `គណនាផ្ទៃក្រឡាចតុកោណកែង៖ S = បណ្ដោយ × ទទឹង = ${toKhmerNumeral(l)} × ${toKhmerNumeral(w)} = ${toKhmerNumeral(a)}`,
+      };
+    }
+  }
+
+  // 4. Triangle Area (ផ្ទៃក្រឡាត្រីកោណ): A = (base * height) / 2
+  const triAreaMatch = norm.match(/(?:ត្រីកោណ|triangle)[\s\S]*?(?:បាត|base)\s*(\d+(?:\.\d+)?)\s*(?:ម|cm|m)?[\s\S]*?(?:កម្ពស់|height)\s*(\d+(?:\.\d+)?)/);
+  if (triAreaMatch) {
+    const b = parseFloat(triAreaMatch[1]);
+    const h = parseFloat(triAreaMatch[2]);
+    if (!isNaN(b) && !isNaN(h)) {
+      const a = (b * h) / 2;
+      return {
+        success: true,
+        result: a,
+        explanationKhmer: `គណនាផ្ទៃក្រឡាត្រីកោណ៖ S = (បាត × កម្ពស់) ÷ ២ = (${toKhmerNumeral(b)} × ${toKhmerNumeral(h)}) ÷ ២ = ${toKhmerNumeral(a)}`,
+      };
+    }
+  }
+
+  return { success: false };
+}
+
+export const DISCREPANCY_ERROR_KHMER =
+  "ប្រព័ន្ធរកឃើញភាពមិនស៊ីគ្នារវាងចម្លើយ និងការគណនា។ សូមពិនិត្យ ឬបង្កើតម្តងទៀត។";
+
+// -----------------------------------------------------------
 // Master Deterministic Verification Pipeline
 // -----------------------------------------------------------
 export function verifyMathResultDeterministically(
@@ -719,9 +833,6 @@ export function verifyMathResultDeterministically(
   }
 ): DeterministicVerificationResult {
   const reviewPoints: string[] = [];
-  if (options?.existingStudentAnswer) {
-    // Verified against student's existing answer
-  }
 
   // 1. Try basic arithmetic evaluation
   const arith = evaluateBasicArithmetic(problemStatement, {
@@ -744,6 +855,7 @@ export function verifyMathResultDeterministically(
       : `គណនាដោយក្បួនសុក្រឹត = ${computedKhmer}`;
 
     if (!matches && !isNaN(propNum)) {
+      reviewPoints.push(DISCREPANCY_ERROR_KHMER);
       reviewPoints.push(
         `ចម្លើយដែលស្នើឡើង (${proposedAnswer}) មិនត្រូវគ្នានឹងការគណនាសុក្រឹត (${computedKhmer}) ទេ។`
       );
@@ -780,6 +892,10 @@ export function verifyMathResultDeterministically(
     const propNorm = fromKhmerNumeral(proposedAnswer).replace(/\s+/g, "");
     const matches = propNorm.includes(computedFracStr) || propNorm.includes(computedFracKhmer);
 
+    if (!matches) {
+      reviewPoints.push(DISCREPANCY_ERROR_KHMER);
+    }
+
     const structuredCalculation = detectAndBuildStructuredCalculation(
       problemStatement,
       computedFracKhmer
@@ -804,6 +920,10 @@ export function verifyMathResultDeterministically(
     const exactStr = `x = ${linear.solvedX}`;
     const exactKhmer = `x = ${toKhmerNumeral(linear.solvedX)}`;
 
+    if (!linear.isValid) {
+      reviewPoints.push(DISCREPANCY_ERROR_KHMER);
+    }
+
     return {
       computedAnswer: exactStr,
       computedAnswerKhmer: exactKhmer,
@@ -816,16 +936,44 @@ export function verifyMathResultDeterministically(
     };
   }
 
-  // 4. Fallback for word problems / complex geometry:
-  // Cannot be fully determined via regular expression parser -> marked as unverifiable without guessing
+  // 4. Try Percentage or Geometry
+  const geomPct = evaluatePercentageOrGeometry(problemStatement);
+  if (geomPct.success && geomPct.result !== undefined) {
+    const computedNum = geomPct.result;
+    const computedStr = String(computedNum);
+    const computedKhmer = toKhmerNumeral(computedStr);
+
+    const propNorm = fromKhmerNumeral(proposedAnswer).replace(/[^0-9.-]/g, "");
+    const propNum = parseFloat(propNorm);
+    const matches = !isNaN(propNum) && Math.abs(computedNum - propNum) < 1e-4;
+
+    if (!matches) {
+      reviewPoints.push(DISCREPANCY_ERROR_KHMER);
+    }
+
+    return {
+      computedAnswer: computedStr,
+      computedAnswerKhmer: computedKhmer,
+      isVerified: matches,
+      status: matches ? "verified" : "discrepancy",
+      statusKhmer: matches ? "ផ្ទៀងផ្ទាត់ត្រឹមត្រូវ ✓" : "មានភាពខុសគ្នា ✗",
+      verificationMethod: "Deterministic Geometry/Percentage Engine",
+      verificationMethodKhmer: geomPct.explanationKhmer || `គណនាសុក្រឹត = ${computedKhmer}`,
+      reviewPoints,
+    };
+  }
+
+  // 5. Fallback for unparseable complex word problems:
+  // Must NOT claim verified correctness without evidence; mark as "Requires review"
   return {
     computedAnswer: proposedAnswer,
     computedAnswerKhmer: toKhmerNumeral(proposedAnswer),
-    isVerified: true,
-    status: "verified",
-    statusKhmer: "ផ្ទៀងផ្ទាត់ត្រឹមត្រូវ ✓",
-    verificationMethod: "Heuristic and Semantic Check",
-    verificationMethodKhmer: "ផ្ទៀងផ្ទាត់តាមរយៈលក្ខខណ្ឌប្រធានលំហាត់",
-    reviewPoints,
+    isVerified: false,
+    status: "unverifiable",
+    statusKhmer: "មិនអាចបញ្ជាក់បាន",
+    verificationMethod: "Requires Review (ទាមទារការពិនិត្យឡើងវិញ)",
+    verificationMethodKhmer: "ទាមទារការពិនិត្យឡើងវិញដោយគ្រូបង្រៀន",
+    reviewPoints: ["ទាមទារការពិនិត្យឡើងវិញ (Requires review)"],
   };
 }
+

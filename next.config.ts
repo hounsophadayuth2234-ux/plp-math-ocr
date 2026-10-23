@@ -34,17 +34,22 @@ const nextConfig: NextConfig = {
             value: "strict-origin-when-cross-origin",
           },
           {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+          },
+          {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:",
+              "script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' blob: https://telegram.org https://oauth.telegram.org",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https:",
               "media-src 'self' data: blob:",
               "connect-src 'self' https: wss: blob: data:",
               "worker-src 'self' blob:",
-              "child-src 'self' blob:",
+              "child-src 'self' blob: https://oauth.telegram.org",
+              "frame-src 'self' blob: https://oauth.telegram.org",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -60,6 +65,19 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/api/auth/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate, private",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+        ],
+      },
+      {
+        source: "/api/admin/:path*",
         headers: [
           {
             key: "Cache-Control",

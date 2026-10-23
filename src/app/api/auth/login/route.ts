@@ -109,6 +109,67 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // MFA Verification check for accounts with MFA enabled
+  if (user.mfaEnabled) {
+    const { totpCode, recoveryCode } = body || {};
+    if (!totpCode && !recoveryCode) {
+      return NextResponse.json({
+        mfaRequired: true,
+        message: "សូមបញ្ចូលលេខកូដសម្ងាត់ 2FA / Authenticator (MFA code required)",
+      });
+    }
+
+    const { verifyTotpCode, verifyAndConsumeRecoveryCode } = await import("@/lib/mfa");
+
+    let mfaPassed = false;
+    let usedRecovery = false;
+
+    if (totpCode && user.mfaSecretEncrypted) {
+      mfaPassed = await verifyTotpCode(user.mfaSecretEncrypted, String(totpCode).trim());
+    }
+
+    if (!mfaPassed && recoveryCode && user.mfaRecoveryCodesHashed) {
+      const recResult = await verifyAndConsumeRecoveryCode(
+        user.mfaRecoveryCodesHashed,
+        String(recoveryCode).trim()
+      );
+      if (recResult.valid) {
+        mfaPassed = true;
+        usedRecovery = true;
+        await UserStore.updateUser(user.id, {
+          mfaRecoveryCodesHashed: recResult.remainingHashedCodes,
+        });
+      }
+    }
+
+    if (!mfaPassed) {
+      await recordFailedAttempt(anonymizedIp);
+      await AuditLogger.logEvent({
+        type: "LOGIN_FAILURE",
+        actorId: user.id,
+        actorUsername: user.username,
+        rawIp,
+        userAgent,
+        details: { reason: "Invalid MFA TOTP or Recovery code" },
+      });
+      return NextResponse.json(
+        { error: "លេខកូដផ្ទៀងផ្ទាត់ 2FA មិនត្រឹមត្រូវ (Invalid 2FA Authenticator code)" },
+        { status: 401 }
+      );
+    }
+
+    if (usedRecovery) {
+      await AuditLogger.logEvent({
+        type: "SECURITY_ALERT",
+        actorId: user.id,
+        actorUsername: user.username,
+        rawIp,
+        userAgent,
+        details: { action: "Used single-use recovery code for MFA login" },
+      });
+    }
+  }
+
   // Successful login
   await clearFailedAttempts(anonymizedIp);
 

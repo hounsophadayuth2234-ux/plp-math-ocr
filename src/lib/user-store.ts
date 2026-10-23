@@ -20,14 +20,47 @@ export interface UserRecord {
   passwordChangedAt?: number;
   sessionRevokedAt?: number;
   activeSessionsCount?: number;
+  mfaEnabled?: boolean;
+  mfaSecretEncrypted?: string;
+  mfaPendingSecretEncrypted?: string;
+  mfaRecoveryCodesHashed?: string[];
+  telegramLinked?: boolean;
+  telegramIdEncrypted?: string;
+  telegramIdLookupHash?: string;
+  telegramUsername?: string;
+  telegramLinkedAt?: number;
+  telegramLastLoginAt?: number;
 }
 
-export type SafeUser = Omit<UserRecord, "passwordHash" | "managedPasswordEncrypted"> & {
+export type SafeUser = Omit<
+  UserRecord,
+  | "passwordHash"
+  | "managedPasswordEncrypted"
+  | "mfaSecretEncrypted"
+  | "mfaPendingSecretEncrypted"
+  | "mfaRecoveryCodesHashed"
+  | "telegramIdEncrypted"
+  | "telegramIdLookupHash"
+> & {
   visiblePassword?: string | null;
+  mfaEnabled?: boolean;
+  telegramLinked?: boolean;
+  telegramUsername?: string;
+  telegramLinkedAt?: number;
+  telegramLastLoginAt?: number;
 };
 
 export function toSafeUser(user: UserRecord): SafeUser {
-  const { passwordHash: _hash, managedPasswordEncrypted: _enc, ...safe } = user;
+  const {
+    passwordHash: _hash,
+    managedPasswordEncrypted: _enc,
+    mfaSecretEncrypted: _mfaSec,
+    mfaPendingSecretEncrypted: _mfaPend,
+    mfaRecoveryCodesHashed: _mfaRec,
+    telegramIdEncrypted: _telIdEnc,
+    telegramIdLookupHash: _telLookupHash,
+    ...safe
+  } = user;
   return safe;
 }
 
@@ -114,6 +147,7 @@ async function redisPipeline(commands: any[][]): Promise<any[] | null> {
 const localMemoryUsers = new Map<string, UserRecord>();
 const localUsernameIndex = new Map<string, string>(); // username -> id
 const localEmailIndex = new Map<string, string>(); // email -> id
+const localTelegramIndex = new Map<string, string>(); // telegramIdLookupHash -> id
 
 function getLocalStoreFilePath(): string {
   const dir = path.join(process.cwd(), "scratch");
@@ -134,10 +168,14 @@ function loadLocalFileStore(): void {
       localMemoryUsers.clear();
       localUsernameIndex.clear();
       localEmailIndex.clear();
+      localTelegramIndex.clear();
       for (const u of list) {
         localMemoryUsers.set(u.id, u);
         localUsernameIndex.set(u.username.toLowerCase(), u.id);
         localEmailIndex.set(u.email.toLowerCase(), u.id);
+        if (u.telegramIdLookupHash) {
+          localTelegramIndex.set(u.telegramIdLookupHash, u.id);
+        }
       }
     }
   } catch {}
@@ -166,6 +204,7 @@ export class UserStore {
     localMemoryUsers.clear();
     localUsernameIndex.clear();
     localEmailIndex.clear();
+    localTelegramIndex.clear();
   }
 
   /**
@@ -209,6 +248,29 @@ export class UserStore {
     }
 
     const localId = localUsernameIndex.get(clean) || localEmailIndex.get(clean);
+    if (localId) {
+      return localMemoryUsers.get(localId) || null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Retrieves a user by their deterministic Telegram lookup hash.
+   */
+  static async getUserByTelegramLookupHash(hash: string): Promise<UserRecord | null> {
+    if (!hash) return null;
+    const clean = hash.trim();
+
+    const redis = getRedisConfig();
+    if (redis) {
+      const userId = await redisCommand<string>(["GET", `dyt:user:lookup:telegram:${clean}`]);
+      if (userId) {
+        return this.getUserById(userId);
+      }
+    }
+
+    const localId = localTelegramIndex.get(clean);
     if (localId) {
       return localMemoryUsers.get(localId) || null;
     }
@@ -304,6 +366,9 @@ export class UserStore {
     // If username changed, update lookup index
     const usernameChanged = updates.username && updates.username.toLowerCase() !== existing.username;
     const emailChanged = updates.email && updates.email.toLowerCase() !== existing.email;
+    const telegramChanged =
+      updates.telegramIdLookupHash !== undefined &&
+      updates.telegramIdLookupHash !== existing.telegramIdLookupHash;
 
     const redis = getRedisConfig();
     if (redis) {
@@ -321,6 +386,15 @@ export class UserStore {
         commands.push(["SET", `dyt:user:lookup:email:${updated.email.toLowerCase()}`, id]);
       }
 
+      if (telegramChanged) {
+        if (existing.telegramIdLookupHash) {
+          commands.push(["DEL", `dyt:user:lookup:telegram:${existing.telegramIdLookupHash}`]);
+        }
+        if (updated.telegramIdLookupHash) {
+          commands.push(["SET", `dyt:user:lookup:telegram:${updated.telegramIdLookupHash}`, id]);
+        }
+      }
+
       await redisPipeline(commands);
     }
 
@@ -331,6 +405,14 @@ export class UserStore {
     if (emailChanged) {
       localEmailIndex.delete(existing.email);
       localEmailIndex.set(updated.email.toLowerCase(), id);
+    }
+    if (telegramChanged) {
+      if (existing.telegramIdLookupHash) {
+        localTelegramIndex.delete(existing.telegramIdLookupHash);
+      }
+      if (updated.telegramIdLookupHash) {
+        localTelegramIndex.set(updated.telegramIdLookupHash, id);
+      }
     }
 
     localMemoryUsers.set(id, updated);
@@ -357,16 +439,23 @@ export class UserStore {
 
     const redis = getRedisConfig();
     if (redis) {
-      await redisPipeline([
+      const commands: any[][] = [
         ["DEL", `dyt:user:${id}`],
         ["DEL", `dyt:user:lookup:username:${existing.username}`],
         ["DEL", `dyt:user:lookup:email:${existing.email}`],
         ["SREM", "dyt:users:all", id],
-      ]);
+      ];
+      if (existing.telegramIdLookupHash) {
+        commands.push(["DEL", `dyt:user:lookup:telegram:${existing.telegramIdLookupHash}`]);
+      }
+      await redisPipeline(commands);
     }
 
     localUsernameIndex.delete(existing.username);
     localEmailIndex.delete(existing.email);
+    if (existing.telegramIdLookupHash) {
+      localTelegramIndex.delete(existing.telegramIdLookupHash);
+    }
     localMemoryUsers.delete(id);
     saveLocalFileStore();
 

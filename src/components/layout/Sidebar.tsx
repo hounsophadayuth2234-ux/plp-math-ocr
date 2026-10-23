@@ -246,15 +246,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-slate-300 font-sans font-medium text-[11px]">
-                ប្រព័ន្ធស្នូលដំណើរការធម្មតា
+                ប្រព័ន្ធទាំងអស់ដំណើរការធម្មតា
               </span>
               <span className="flex items-center gap-1 text-emerald-400 font-medium font-mono text-[10px] bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Core Active
+                All 5 Modules Operational
               </span>
             </div>
-            <div className="text-[10px] text-amber-300/90 font-mono leading-tight">
-              Module 01–04 Active • Module 05 Under Maintenance
+            <div className="text-[10px] text-emerald-300/90 font-mono leading-tight">
+              Module 01–05 Active
             </div>
             <p className="text-[10px] text-slate-400 pt-0.5 flex items-center gap-1 font-mono">
               <Clock className="h-3 w-3 text-slate-400" />

@@ -12,7 +12,10 @@ import {
   renderHtmlBox,
   createDefaultCountingSvg,
   createDefaultFractionSvg,
+  normalizeQuizQuestions,
 } from "@/lib/lesson-studio";
+import { normalizeKhmerEducationalText } from "@/lib/khmer-text-normalizer";
+
 
 export const maxDuration = 60; // 60 seconds budget
 
@@ -246,17 +249,22 @@ Output JSON format:
     }
 
     if (mode === "quiz_generator") {
-      const titleKhmer = parsed.titleKhmer || "សន្លឹកកិច្ចការគណិតវិទ្យា (Math Worksheet)";
-      const gradeTitleKhmer = parsed.gradeTitleKhmer || GRADE_LABELS_KHMER[gradeLevel] || "កម្រិតបឋមសិក្សា";
-      const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
-      const textContent = parsed.textContent || promptText;
+      const titleKhmer = normalizeKhmerEducationalText(
+        parsed.titleKhmer || "សន្លឹកកិច្ចការគណិតវិទ្យា (Math Worksheet)"
+      );
+      const gradeTitleKhmer = normalizeKhmerEducationalText(
+        parsed.gradeTitleKhmer || GRADE_LABELS_KHMER[gradeLevel] || "កម្រិតបឋមសិក្សា"
+      );
+      const rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+      const normalizedQuestions = normalizeQuizQuestions(rawQuestions);
+      const textContent = normalizeKhmerEducationalText(parsed.textContent || promptText);
 
       const quizData = {
         titleKhmer,
         gradeLevel,
         gradeTitleKhmer,
         textContent,
-        questions,
+        questions: normalizedQuestions,
         htmlContent: "",
       };
       quizData.htmlContent = renderQuizHtml(quizData);

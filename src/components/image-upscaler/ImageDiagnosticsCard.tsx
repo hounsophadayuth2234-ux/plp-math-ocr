@@ -31,19 +31,29 @@ export function ImageDiagnosticsCard({
   const isRecommendedApplied = selectedPreset === diagnostics.recommendedPreset;
 
   return (
-    <div className="rounded-2xl border border-cyan-500/25 bg-slate-950/80 p-5 shadow-[0_0_20px_rgba(0,240,255,0.08)] backdrop-blur-md">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-cyan-500/20 pb-3">
+    <details
+      data-testid="image-diagnostics-accordion"
+      className="group rounded-2xl border border-cyan-500/25 bg-slate-950/80 p-4 sm:p-5 shadow-[0_0_20px_rgba(0,240,255,0.08)] backdrop-blur-md font-mono"
+    >
+      {/* Header / Summary (Collapsed by default) */}
+      <summary className="cursor-pointer text-xs font-bold text-slate-300 hover:text-cyan-300 select-none flex items-center justify-between min-h-[44px]">
         <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-cyan-400 animate-pulse" />
+          <Activity className="h-4 w-4 text-cyan-400" />
           <h3 className="font-mono text-sm font-bold text-white uppercase tracking-wider">
-            Smart Image Diagnostics (វិភាគគុណភាពស្វ័យប្រវត្តិ)
+            ព័ត៌មានបច្ចេកទេស (Technical Diagnostics)
           </h3>
         </div>
-        <span className="rounded bg-cyan-500/10 px-2 py-0.5 text-[10px] font-mono font-bold text-cyan-400 border border-cyan-500/30">
-          STAGE 1 / 5 PASSED
-        </span>
-      </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-cyan-500/10 px-2 py-0.5 text-[10px] font-mono font-bold text-cyan-400 border border-cyan-500/30">
+            បង្ហាញព័ត៌មានលម្អិត
+          </span>
+          <span className="text-cyan-400 group-open:rotate-180 transition-transform text-xs">
+            ▼
+          </span>
+        </div>
+      </summary>
+
+      <div className="pt-4 border-t border-cyan-500/20 mt-3 space-y-4">
 
       {/* Grid of Metrics */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -192,6 +202,8 @@ export function ImageDiagnosticsCard({
           </button>
         )}
       </div>
-    </div>
+      </div>
+    </details>
   );
 }
+
