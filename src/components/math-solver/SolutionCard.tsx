@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   CheckCircle2,
   Copy,
   Check,
   ChevronDown,
   ChevronUp,
-  ShieldCheck,
   Eye,
   BookOpen,
   Code2,
   Download,
+  Image as ImageIcon,
   X,
   AlertTriangle,
 } from "lucide-react";
@@ -21,6 +21,8 @@ import {
   copyCanonicalSolutionPlainTextToClipboard,
   renderCanonicalSolutionHtml,
   copyTextFallback,
+  isWordProblem,
+  downloadSolutionAsPng,
 } from "@/lib/math-solution-html";
 import { ColumnCalculationView } from "./ColumnCalculationView";
 import { detectAndBuildStructuredCalculation } from "@/lib/column-calculation";
@@ -34,6 +36,67 @@ interface SolutionCardProps {
   solverMode?: SolverMode;
 }
 
+function renderStepCards(rawExplanation: string) {
+  const blocks = rawExplanation
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+
+  if (blocks.length <= 1) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 text-sm sm:text-base text-slate-800 whitespace-pre-wrap leading-relaxed shadow-sm">
+        {rawExplanation}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, idx) => {
+        const isCheck = block.includes("ពិនិត្យ") || block.includes("ផ្ទៀងផ្ទាត់");
+        const titleMatch = block.match(/^(?:([០-៩\d]+\.|\s*ជំហានទី\s*[០-៩\d]+)[—:៖-]?\s*)([^\n]+)/);
+        const badgeText = isCheck
+          ? "ពិនិត្យចម្លើយ ✓"
+          : titleMatch
+          ? titleMatch[1].replace(/[.:]/g, "").trim()
+          : `ជំហានទី ${idx + 1}`;
+        const content = titleMatch ? block.slice(titleMatch[0].length).trim() : block;
+
+        return (
+          <div
+            key={idx}
+            className={`step-card rounded-xl border p-4 sm:p-5 text-sm sm:text-base leading-relaxed shadow-sm transition-all ${
+              isCheck
+                ? "border-emerald-300 bg-emerald-50/60 text-slate-900"
+                : "border-slate-200 bg-white text-slate-800"
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span
+                className={`rounded-md px-2.5 py-0.5 text-xs font-bold ${
+                  isCheck
+                    ? "bg-emerald-200 text-emerald-900"
+                    : "bg-indigo-100 text-indigo-900"
+                }`}
+              >
+                {badgeText}
+              </span>
+              {titleMatch && (
+                <span className="font-bold text-sm text-slate-900">
+                  {titleMatch[2].trim()}
+                </span>
+              )}
+            </div>
+            <div className="whitespace-pre-wrap text-slate-700 leading-relaxed">
+              {content || block}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function SolutionCard({
   problem,
   index,
@@ -42,8 +105,10 @@ export function SolutionCard({
   solverModeTitle,
   solverMode,
 }: SolutionCardProps) {
+  const cardRef = useRef<HTMLElement | null>(null);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
+  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [showHtmlModal, setShowHtmlModal] = useState(false);
   const [copiedModalHtml, setCopiedModalHtml] = useState(false);
@@ -75,17 +140,45 @@ export function SolutionCard({
       problem.verticalLines
     );
 
+  // Calculate clean MoEYS textbook grade badge (never generic 'ស្វ័យប្រវត្តិ')
+  const effectiveGradeBadge =
+    gradeTitle && gradeTitle !== "ស្វ័យប្រវត្តិ"
+      ? gradeTitle
+      : problem.inferredGradeKhmer && problem.inferredGradeKhmer !== "ស្វ័យប្រវត្តិ"
+      ? problem.inferredGradeKhmer
+      : "ថ្នាក់បឋមសិក្សា";
+
+  // Check if student answer is genuinely present
+  const hasStudentAnswer = Boolean(
+    problem.extractedAnswer &&
+      problem.extractedAnswer.trim() !== "" &&
+      problem.extractedAnswer.trim() !== "គ្មាន" &&
+      !problem.extractedAnswer.includes("មិនទាន់មានចម្លើយរបស់សិស្ស")
+  );
+
   // Pre-generate raw HTML source for copy / modal
   const htmlSource = renderCanonicalSolutionHtml(problem, {
-    gradeTitle,
+    gradeTitle: effectiveGradeBadge,
     solverModeTitle,
     solverMode: effectiveMode,
   });
 
+  // Download high-resolution PNG image (2x scale)
+  const handleDownloadPng = async () => {
+    if (!cardRef.current || isDownloadingImage) return;
+    setIsDownloadingImage(true);
+    try {
+      const fileName = `plp-math-solution-${problem.id || `problem-${index + 1}`}.png`;
+      await downloadSolutionAsPng(cardRef.current, fileName);
+    } finally {
+      setIsDownloadingImage(false);
+    }
+  };
+
   // Copy plain text ("ចម្លងអត្ថបទ")
   const handleCopyText = async () => {
     const success = await copyCanonicalSolutionPlainTextToClipboard(problem, {
-      gradeTitle,
+      gradeTitle: effectiveGradeBadge,
       solverModeTitle,
       solverMode: effectiveMode,
     });
@@ -99,7 +192,7 @@ export function SolutionCard({
   const handleCopyHtml = async () => {
     try {
       const success = await copyCanonicalSolutionToClipboard(problem, {
-        gradeTitle,
+        gradeTitle: effectiveGradeBadge,
         solverModeTitle,
         solverMode: effectiveMode,
       });
@@ -141,6 +234,7 @@ export function SolutionCard({
     <div className="space-y-4">
       {/* Primary Educational PLP Worksheet Card */}
       <article
+        ref={cardRef}
         className="solution plp-solution-sheet rounded-2xl border border-amber-200/90 bg-[#FFFEFC] text-slate-800 shadow-md p-6 sm:p-8 max-w-3xl mx-auto space-y-6 font-sans transition-all"
         role="region"
         aria-label="សន្លឹកដំណោះស្រាយគណិតវិទ្យា PLP"
@@ -156,11 +250,9 @@ export function SolutionCard({
             </h3>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {(gradeTitle || problem.inferredGradeKhmer) && (
-              <span className="badge-grade rounded-full bg-indigo-50 border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-800">
-                {gradeTitle || problem.inferredGradeKhmer}
-              </span>
-            )}
+            <span className="badge-grade rounded-full bg-indigo-50 border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-800">
+              {effectiveGradeBadge}
+            </span>
             <span className="badge-mode rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-medium text-amber-900">
               {isMode1 ? "ដោះស្រាយលំហាត់ (ចម្លើយ)" : isMode2 ? "បង្កើតដំណោះស្រាយ (វិធីដោះស្រាយ)" : "ដោះស្រាយ + ផ្ទៀងផ្ទាត់ (ពេញលេញ)"}
             </span>
@@ -178,8 +270,8 @@ export function SolutionCard({
           </div>
         </section>
 
-        {/* 2. Educational Framework: Given, To Find, Formulas (Mode 2 & 3 only) */}
-        {!isMode1 && (problem.given || problem.toFind || problem.formulas) && (
+        {/* 2. Educational Framework: Given, To Find, Formulas (Mode 2 & 3 only FOR WORD PROBLEMS) */}
+        {!isMode1 && isWordProblem(problem.extractedProblem) && (problem.given || problem.toFind || problem.formulas) && (
           <section className="framework-box rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-2 text-xs sm:text-sm text-slate-700">
             {problem.given && (
               <div>
@@ -202,8 +294,8 @@ export function SolutionCard({
           </section>
         )}
 
-        {/* 3. Student Answer Review (Mode 3 ONLY) */}
-        {isMode3 && problem.extractedAnswer && (
+        {/* 3. Student Answer Review (Mode 3 ONLY - Shown ONLY when valid answer exists) */}
+        {isMode3 && hasStudentAnswer && (
           <section className="student-review rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2 text-xs sm:text-sm">
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-700">ចម្លើយរបស់សិស្សក្នុងរូបភាព៖</span>
@@ -238,8 +330,8 @@ export function SolutionCard({
               វិធីដោះស្រាយលម្អិត
             </h4>
             {(problem.solutionKhmer || problem.solution) && (
-              <div className="solution-steps rounded-xl border border-slate-200 bg-white p-4 sm:p-5 text-sm sm:text-base text-slate-800 whitespace-pre-wrap leading-relaxed shadow-sm">
-                {problem.solutionKhmer || problem.solution}
+              <div className="solution-steps">
+                {renderStepCards(problem.solutionKhmer || problem.solution || "")}
               </div>
             )}
 
@@ -254,14 +346,16 @@ export function SolutionCard({
                     <ColumnCalculationView calculation={structuredCalc} theme="worksheet" />
                   </div>
                 )}
-                {/* Fallback pre for regression testing & raw monospace copy */}
+                {/* Fallback pre for regression testing & raw monospace copy with display:none */}
                 <pre
                   data-testid="vertical-calculation-pre"
-                  className="vertical-calc font-mono text-sm sm:text-base text-slate-800 leading-relaxed whitespace-pre font-semibold"
+                  className="vertical-calc font-mono text-sm sm:text-base text-slate-800 leading-relaxed whitespace-pre font-semibold sr-only"
                   style={{
+                    display: "none",
                     fontFamily: '"Noto Sans Khmer", "Kantumruy Pro", ui-monospace, SFMono-Regular, Menlo, monospace',
                     whiteSpace: "pre",
                   }}
+                  aria-hidden="true"
                 >
                   {problem.verticalLines && problem.verticalLines.length > 0
                     ? problem.verticalLines.join("\n")
@@ -297,41 +391,7 @@ export function SolutionCard({
           </section>
         )}
 
-        {/* 6. Educational Verification Summary (Mode 3 ONLY) */}
-        {isMode3 && (problem.verification || problem.deterministicResult) && (
-          <section className="verification-box rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-1.5 text-xs sm:text-sm text-slate-700">
-            <div className="flex items-center gap-2 font-bold text-slate-800">
-              <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-              <span>ការពិនិត្យផ្ទៀងផ្ទាត់ (Verification)</span>
-            </div>
-            {problem.deterministicResult && (
-              <div className="text-xs text-slate-600">
-                ស្ថានភាព៖{" "}
-                <strong
-                  className={
-                    problem.deterministicResult.isVerified !== false
-                      ? "text-emerald-700"
-                      : "text-rose-700"
-                  }
-                >
-                  {problem.deterministicResult.statusKhmer || (problem.deterministicResult.isVerified ? "ផ្ទៀងផ្ទាត់ត្រឹមត្រូវ ✓" : "មានភាពខុសគ្នា ✗")}
-                </strong>
-                {problem.deterministicResult.verificationMethodKhmer && (
-                  <span className="block mt-0.5 text-slate-500">
-                    វិធីផ្ទៀងផ្ទាត់៖ {problem.deterministicResult.verificationMethodKhmer}
-                  </span>
-                )}
-              </div>
-            )}
-            {problem.verification && !problem.deterministicResult && (
-              <div className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
-                {problem.verification}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* 7. Collapsed Advanced Technical Settings / Verifier Details */}
+        {/* 6. Collapsed Advanced Technical Settings / Verifier Details */}
         {((problem.ambiguousParts && problem.ambiguousParts.length > 0) ||
           problem.deterministicResult) && (
           <div className="pt-2">
@@ -385,7 +445,7 @@ export function SolutionCard({
         </footer>
       </article>
 
-      {/* Action Buttons: ចម្លងអត្ថបទ, ចម្លងកូដ HTML, ទាញយកឯកសារ HTML, មើល HTML Source */}
+      {/* Action Buttons: ទាញយកជារូបភាព (PNG), ចម្លងអត្ថបទ, ចម្លងកូដ HTML, ទាញយកឯកសារ HTML, មើល HTML Source */}
       <div className="max-w-3xl mx-auto flex flex-wrap items-center justify-between gap-2 px-2 py-1">
         <div className="text-xs text-slate-400 font-medium">
           {copiedHtml && (
@@ -397,6 +457,20 @@ export function SolutionCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* 0. Download High-Res PNG Image */}
+          <button
+            type="button"
+            onClick={handleDownloadPng}
+            disabled={isDownloadingImage}
+            title="Download Image PNG"
+            aria-label="Download Image PNG"
+            data-testid="download-image-png-button"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/50 bg-emerald-600/20 px-3.5 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-600/40 hover:text-white transition-colors shadow-sm"
+          >
+            <ImageIcon className="h-3.5 w-3.5 text-emerald-400" />
+            <span>{isDownloadingImage ? "កំពុងទាញយក..." : "ទាញយកជារូបភាព (PNG)"}</span>
+          </button>
+
           {/* 1. Copy Clean Text */}
           <button
             type="button"

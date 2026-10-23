@@ -30,6 +30,7 @@ import {
   X,
   Printer,
   PlusCircle,
+  Image as ImageIcon,
 } from "lucide-react";
 import { SolverImageUpload } from "@/components/math-solver/SolverImageUpload";
 import { SolutionCard } from "@/components/math-solver/SolutionCard";
@@ -49,6 +50,7 @@ import {
   renderCanonicalSolutionHtml,
   renderCanonicalSolutionPlainText,
   copyTextFallback,
+  downloadSolutionAsPng,
 } from "@/lib/math-solution-html";
 
 const GRADE_OPTIONS: { id: GradeLevel; label: string; sublabel: string }[] = [
@@ -106,6 +108,7 @@ export default function MathSolverPage() {
   const [result, setResult] = useState<MathSolverResponse | null>(null);
   const [copiedText, setCopiedText] = useState<boolean>(false);
   const [copiedHtml, setCopiedHtml] = useState<boolean>(false);
+  const [isDownloadingTopImage, setIsDownloadingTopImage] = useState<boolean>(false);
   const [showTopHtmlModal, setShowTopHtmlModal] = useState<boolean>(false);
   const [copiedTopModalHtml, setCopiedTopModalHtml] = useState<boolean>(false);
 
@@ -452,6 +455,20 @@ export default function MathSolverPage() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, [result, gradeLevel]);
+
+  // Download high-resolution PNG image (2x scale) from top action bar
+  const handleDownloadTopPng = useCallback(async () => {
+    if (isDownloadingTopImage) return;
+    const el = document.querySelector(".plp-solution-sheet") as HTMLElement;
+    if (!el) return;
+    setIsDownloadingTopImage(true);
+    try {
+      const fileName = `plp-math-solution-${gradeLevel !== "auto" ? gradeLevel : "worksheet"}.png`;
+      await downloadSolutionAsPng(el, fileName);
+    } finally {
+      setIsDownloadingTopImage(false);
+    }
+  }, [isDownloadingTopImage, gradeLevel]);
 
   const problemResult = result?.problems?.[selectedProblemIndex] || result?.problems?.[0];
 
@@ -1054,7 +1071,18 @@ export default function MathSolverPage() {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 hover:text-white hover:border-violet-500/50 transition-colors min-h-[36px]"
               >
                 <Download className="h-3.5 w-3.5 text-slate-400" />
-                <span>Download (ទាញយក)</span>
+                <span>Download HTML (ទាញយក)</span>
+              </button>
+
+              {/* 3.5. Download as High-Res PNG Image */}
+              <button
+                type="button"
+                onClick={handleDownloadTopPng}
+                disabled={isDownloadingTopImage}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/50 bg-emerald-950/40 px-3.5 py-1.5 text-xs font-semibold text-emerald-300 hover:text-white hover:bg-emerald-900/60 transition-colors min-h-[36px]"
+              >
+                <ImageIcon className="h-3.5 w-3.5 text-emerald-400" />
+                <span>{isDownloadingTopImage ? "កំពុងទាញយក..." : "Download PNG (ទាញយកជារូបភាព)"}</span>
               </button>
 
               {/* 4. Print */}
@@ -1117,7 +1145,10 @@ export default function MathSolverPage() {
                   <textarea
                     readOnly
                     value={renderCanonicalSolutionHtml(problemResult, {
-                      gradeTitle: GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា",
+                      gradeTitle:
+                        gradeLevel !== "auto"
+                          ? (GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា")
+                          : (problemResult.inferredGradeKhmer || inferredGradeDisplay || "ថ្នាក់បឋមសិក្សា"),
                       solverModeTitle: result.solverMode.toUpperCase(),
                       solverMode: result.solverMode,
                     })}
@@ -1131,7 +1162,10 @@ export default function MathSolverPage() {
                     type="button"
                     onClick={() => {
                       const src = renderCanonicalSolutionHtml(problemResult, {
-                        gradeTitle: GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា",
+                        gradeTitle:
+                          gradeLevel !== "auto"
+                            ? (GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា")
+                            : (problemResult.inferredGradeKhmer || inferredGradeDisplay || "ថ្នាក់បឋមសិក្សា"),
                         solverModeTitle: result.solverMode.toUpperCase(),
                         solverMode: result.solverMode,
                       });
@@ -1174,7 +1208,9 @@ export default function MathSolverPage() {
                 index={idx}
                 totalProblems={result.problems.length}
                 gradeTitle={
-                  GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា"
+                  gradeLevel !== "auto"
+                    ? (GRADE_OPTIONS.find((g) => g.id === gradeLevel)?.label || "ថ្នាក់បឋមសិក្សា")
+                    : (prob.inferredGradeKhmer || inferredGradeDisplay || "ថ្នាក់បឋមសិក្សា")
                 }
                 solverModeTitle={result.solverMode.toUpperCase()}
                 solverMode={result.solverMode}

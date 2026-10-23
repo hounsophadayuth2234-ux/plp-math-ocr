@@ -272,7 +272,7 @@ export function buildPedagogicalArithmeticExplanation(
   const verticalLines = [line0, line1, line2, line3];
   const alignedWorking = verticalLines.join("\n");
 
-  const placeNames = ["ខ្ទង់ឯកតា", "ខ្ទង់ដប់", "ខ្ទង់រយ", "ខ្ទង់ពាន់", "ខ្ទង់ម៉ឺន"];
+  const placeNames = ["ខ្ទង់រាយ", "ខ្ទង់ដប់", "ខ្ទង់រយ", "ខ្ទង់ពាន់", "ខ្ទង់ម៉ឺន"];
   const stepPrefixes = ["ជំហានទី១", "ជំហានទី២", "ជំហានទី៣", "ជំហានទី៤", "ជំហានទី៥"];
 
   let hasRegrouping = false;
@@ -386,7 +386,7 @@ export function buildPedagogicalArithmeticExplanation(
             if (borrowIdx === i + 1) {
               borrowNote = `ដោយសារ ${toKhmerNumeral(colA)} តូចជាង ${toKhmerNumeral(colB)} (មិនអាចដកបាន) ត្រូវខ្ចី ១ ពី${placeNames[i + 1]} (ស្មើនឹង ១០) មកបូកបន្ថែមបាន ${toKhmerNumeral(borrowedVal)}។\nបន្ទាប់មកយក ${toKhmerNumeral(borrowedVal)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)} (សរសេរ ${toKhmerNumeral(diff)})`;
             } else {
-              borrowNote = `- ខ្ចី ១ ពី${placeNames[borrowIdx]} (លេខ ${toKhmerNumeral(fromDigit)} ក្លាយជា ${toKhmerNumeral(fromDigit - 1)})\n- បំប្លែង ${toKhmerNumeral(fromDigit)} រយ ទៅជា ${toKhmerNumeral(fromDigit - 1)} រយ និង ១០ ដប់\n- ខ្ចី ១ ដប់ ពីខ្ទង់ដប់ (ខ្ទង់ដប់នៅសល់ ៩) មកខ្ទង់ឯកតា (បាន ១០ បូក ${toKhmerNumeral(colA)} = ${toKhmerNumeral(borrowedVal)})\n- យក ${toKhmerNumeral(borrowedVal)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)} (សរសេរ ${toKhmerNumeral(diff)})`;
+              borrowNote = `- ខ្ចី ១ ពី${placeNames[borrowIdx]} (លេខ ${toKhmerNumeral(fromDigit)} ក្លាយជា ${toKhmerNumeral(fromDigit - 1)})\n- បំប្លែង ${toKhmerNumeral(fromDigit)} រយ ទៅជា ${toKhmerNumeral(fromDigit - 1)} រយ និង ១០ ដប់\n- ខ្ចី ១ ដប់ ពីខ្ទង់ដប់ (ខ្ទង់ដប់នៅសល់ ៩) មកខ្ទង់រាយ (បាន ១០ បូក ${toKhmerNumeral(colA)} = ${toKhmerNumeral(borrowedVal)})\n- យក ${toKhmerNumeral(borrowedVal)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)} (សរសេរ ${toKhmerNumeral(diff)})`;
             }
             steps.push(`${sPrefix} — ${pName}៖\n${borrowNote}`);
           } else {

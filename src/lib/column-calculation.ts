@@ -109,6 +109,29 @@ export interface FractionStep {
   operator?: string;
 }
 
+export interface DivisionStep {
+  qDigit: number;
+  prod: number;
+  prodKhmer: string;
+  diff: number;
+  diffKhmer: string;
+  broughtVal: number;
+  broughtKhmer: string;
+  isLast: boolean;
+}
+
+export interface DivisionData {
+  dividend: number;
+  divisor: number;
+  quotient: number;
+  remainder: number;
+  dividendKhmer: string;
+  divisorKhmer: string;
+  quotientKhmer: string;
+  remainderKhmer: string;
+  steps: DivisionStep[];
+}
+
 export interface StructuredCalculation {
   type: "arithmetic" | "division" | "fraction" | "decimal";
   columns: string[]; // Names/roles of each column e.g. ["thousands", "hundreds", "tens", "ones"]
@@ -119,13 +142,14 @@ export interface StructuredCalculation {
     steps: FractionStep[];
     result: { numerator: string; denominator: string };
   };
+  divisionData?: DivisionData;
 }
 
 /**
  * Standard Cambodian place names for integer columns
  */
-const INTEGER_PLACE_NAMES = [
-  "ones", // ខ្ទង់ឯកតា
+export const INTEGER_PLACE_NAMES = [
+  "ones", // ខ្ទង់រាយ
   "tens", // ខ្ទង់ដប់
   "hundreds", // ខ្ទង់រយ
   "thousands", // ខ្ទង់ពាន់
@@ -134,12 +158,30 @@ const INTEGER_PLACE_NAMES = [
   "millions", // ខ្ទង់លាន
 ];
 
-const DECIMAL_PLACE_NAMES = [
+export const KHMER_INTEGER_PLACE_LABELS: Record<string, string> = {
+  ones: "រាយ",
+  tens: "ដប់",
+  hundreds: "រយ",
+  thousands: "ពាន់",
+  ten_thousands: "ម៉ឺន",
+  hundred_thousands: "សែន",
+  millions: "លាន",
+};
+
+export const DECIMAL_PLACE_NAMES = [
   "tenths", // ខ្ទង់ភាគដប់
   "hundredths", // ខ្ទង់ភាគរយ
   "thousandths", // ខ្ទង់ភាគពាន់
   "ten_thousandths", // ខ្ទង់ភាគម៉ឺន
 ];
+
+export const KHMER_DECIMAL_PLACE_LABELS: Record<string, string> = {
+  decimal_point: "·",
+  tenths: "ភាគដប់",
+  hundredths: "ភាគរយ",
+  thousandths: "ភាគពាន់",
+  ten_thousandths: "ភាគម៉ឺន",
+};
 
 /**
  * Normalizes operator symbols to standard Khmer/math presentation
@@ -476,6 +518,7 @@ export function buildStructuredLongDivision(
 
   // Step-by-step division process
   let currentVal = 0;
+  const divisionSteps: DivisionStep[] = [];
 
   for (let i = 0; i < dividendStr.length; i++) {
     currentVal = currentVal * 10 + parseInt(dividendStr[i], 10);
@@ -521,7 +564,19 @@ export function buildStructuredLongDivision(
         remDigits[remStartCol + j] = broughtKhmer[j];
       }
 
-      if (i < dividendStr.length - 1) {
+      const isLast = i === dividendStr.length - 1;
+      divisionSteps.push({
+        qDigit,
+        prod,
+        prodKhmer: toKhmerNumeral(prod),
+        diff,
+        diffKhmer: toKhmerNumeral(diff),
+        broughtVal,
+        broughtKhmer: toKhmerNumeral(broughtVal),
+        isLast,
+      });
+
+      if (!isLast) {
         rows.push({
           role: "step",
           digits: remDigits,
@@ -545,6 +600,17 @@ export function buildStructuredLongDivision(
     captionKhmer: `ប្រមាណវិធីចែកវែង៖ ${toKhmerNumeral(dividend)} ÷ ${toKhmerNumeral(divisor)} = ${toKhmerNumeral(quotient)}${
       remainder > 0 ? ` សំណល់ ${toKhmerNumeral(remainder)}` : ""
     }`,
+    divisionData: {
+      dividend,
+      divisor,
+      quotient,
+      remainder,
+      dividendKhmer: toKhmerNumeral(dividend),
+      divisorKhmer: toKhmerNumeral(divisor),
+      quotientKhmer: toKhmerNumeral(quotient),
+      remainderKhmer: toKhmerNumeral(remainder),
+      steps: divisionSteps,
+    },
   };
 }
 
@@ -717,8 +783,8 @@ export function detectAndBuildStructuredCalculation(
 
 /**
  * SECTION 4: Exported HTML Table Generator
- * Produces semantic HTML table matching exactly the visible UI grid.
- * If options.inlineStyles is true, embeds inline CSS attributes for rich text editors (Jodit, Word, Docs).
+ * Produces semantic HTML table matching exactly the visible UI grid according to Cambodian MoEYS standards.
+ * Every single digit and operator sits in its own fixed-width <td> cell (36px x 34px, tabular-nums).
  */
 export function renderColumnCalculationHtml(
   calc: StructuredCalculation,
@@ -728,40 +794,198 @@ export function renderColumnCalculationHtml(
     return renderFractionCalculationHtml(calc);
   }
 
+  if (calc.type === "division") {
+    return renderDivisionCalculationHtml(calc, options);
+  }
+
   const inline = !!options?.inlineStyles;
   const numCols = calc.columns.length;
   const parts: string[] = [];
 
-  const tableStyle = inline ? ' style="border-collapse:collapse; font-family:monospace; font-size:18px; text-align:right;"' : "";
+  const tableStyle = inline
+    ? ' style="border-collapse: collapse; font-variant-numeric: tabular-nums; font-family: monospace, \'Noto Sans Khmer\', \'Kantumruy Pro\', Arial, sans-serif; font-size: 18px; text-align: right;"'
+    : '';
+
   parts.push(`<table class="column-calculation" role="math" aria-label="ការគណនាជួរឈរ"${tableStyle}>\n`);
   parts.push('  <tbody>\n');
 
+  // 1. Subtle top header row showing place values in Khmer (ពាន់ | រយ | ដប់ | រាយ)
+  const hasPlaceHeaders = calc.columns.some((col) => KHMER_INTEGER_PLACE_LABELS[col] || KHMER_DECIMAL_PLACE_LABELS[col]);
+  if (hasPlaceHeaders) {
+    parts.push('    <tr class="place-header-row" style="color: #64748b; font-size: 11px; font-weight: 600;">\n');
+    parts.push('      <th class="operator-cell" style="width: 36px; height: 24px; text-align: center; padding: 0; font-weight: normal;"></th>\n');
+    for (let i = 0; i < numCols; i++) {
+      const colKey = calc.columns[i];
+      const label = KHMER_INTEGER_PLACE_LABELS[colKey] || (colKey === "decimal_point" ? "·" : KHMER_DECIMAL_PLACE_LABELS[colKey] || "");
+      const borderStyle = label ? "border-bottom: 1px dashed #cbd5e1;" : "";
+      parts.push(`      <th class="place-header-cell" style="width: 36px; height: 24px; text-align: center; vertical-align: middle; padding: 0; ${borderStyle}">${label}</th>\n`);
+    }
+    parts.push('    </tr>\n');
+  }
+
+  // 2. Data Rows
   for (const row of calc.rows) {
     if (row.role === "separator") {
-      const sepStyle = inline
-        ? ' style="border-bottom:2px solid #000; height:6px; padding:0;"'
-        : ' style="border-bottom:2px solid #000; height:6px;"';
+      const sepStyle = ' style="border-bottom: 2px solid #000; height: 6px; padding: 0;"';
       parts.push(`    <tr class="separator-row"><td colspan="${numCols + 1}"${sepStyle}></td></tr>\n`);
+      continue;
+    }
+
+    const isBorrowOrCarry = row.role === "borrow" || row.role === "carry";
+    const isResult = row.role === "result";
+    const cellList = (row.cells && row.cells.length > 0) ? row.cells : (row.digits || []);
+
+    // Dedicated Carry/Borrow row highlighted in warm amber (#d97706)
+    if (isBorrowOrCarry) {
+      parts.push('    <tr class="math-row carry-borrow-row" style="color: #d97706; font-size: 13px; font-weight: 700;">\n');
+      parts.push('      <td class="operator-cell" style="width: 36px; height: 28px; text-align: center; padding: 0;"></td>\n');
+      for (let i = 0; i < numCols; i++) {
+        const val = cellList[i] !== undefined && cellList[i] !== null ? cellList[i] : "";
+        parts.push(`      <td class="digit-cell carry-borrow-cell" style="width: 36px; height: 28px; text-align: center; vertical-align: middle; font-size: 13px; font-weight: 700; color: #d97706; padding: 0;">${val}</td>\n`);
+      }
+      parts.push('    </tr>\n');
       continue;
     }
 
     const rowClass = `math-row ${row.role}`;
     parts.push(`    <tr class="${rowClass}">\n`);
-    const opStyle = inline ? ' style="width:24px; text-align:center;"' : "";
+    const opStyle = inline
+      ? ' style="width: 36px; height: 34px; text-align: center; vertical-align: middle; font-weight: 700; font-size: 18px; color: #0f172a;"'
+      : '';
     parts.push(`      <td class="operator-cell"${opStyle}>${row.operator || ""}</td>\n`);
 
-    const cellList = (row.cells && row.cells.length > 0) ? row.cells : (row.digits || []);
     for (let i = 0; i < numCols; i++) {
       const val = cellList[i] !== undefined && cellList[i] !== null ? cellList[i] : "";
       const isPoint = val === ".";
       const cellClass = isPoint ? "digit-cell point-cell" : "digit-cell";
-      const digitStyle = inline ? ' style="width:32px; text-align:center;"' : "";
+      const fontWeight = isResult ? "font-weight: 800; color: #0f172a;" : "color: #0f172a;";
+      const digitStyle = inline
+        ? ` style="width: 36px; height: 34px; text-align: center; vertical-align: middle; font-size: 18px; font-variant-numeric: tabular-nums; ${fontWeight}"`
+        : '';
       parts.push(`      <td class="${cellClass}"${digitStyle}>${val}</td>\n`);
     }
 
     parts.push('    </tr>\n');
   }
 
+  parts.push('  </tbody>\n');
+  parts.push('</table>\n');
+
+  return parts.join("");
+}
+
+/**
+ * Render Cambodian MoEYS Primary Textbook vertical division (L-bracket / T-grid layout)
+ * Left: Dividend (តំណាងចែក) with aligned subtraction rows and final Remainder (សំណល់)
+ * Right: Divisor (តួចែក) in top-right box over Quotient (ផលចែក) separated by vertical line (border-left: 2px solid #0f172a)
+ */
+function renderDivisionCalculationHtml(
+  calc: StructuredCalculation,
+  options?: { inlineStyles?: boolean }
+): string {
+  const inline = !!options?.inlineStyles;
+  const div = calc.divisionData;
+
+  const tableStyle = inline
+    ? ' style="border-collapse: collapse; font-variant-numeric: tabular-nums; font-family: monospace, \'Noto Sans Khmer\', \'Kantumruy Pro\', Arial, sans-serif; font-size: 18px; margin: 12px 0;"'
+    : ' style="border-collapse: collapse; font-variant-numeric: tabular-nums;"';
+
+  if (!div) {
+    const numCols = calc.columns.length;
+    const parts: string[] = [];
+    parts.push(`<table class="column-calculation" data-layout="division-table" role="math" aria-label="ការចែកជួរឈរ"${tableStyle}>\n`);
+    parts.push('  <tbody>\n');
+    for (const row of calc.rows) {
+      if (row.role === "separator") {
+        parts.push(`    <tr class="separator-row"><td colspan="${numCols + 1}" style="border-bottom: 2px solid #000; height: 6px; padding: 0;"></td></tr>\n`);
+        continue;
+      }
+      parts.push(`    <tr class="math-row ${row.role}">\n`);
+      parts.push(`      <td class="operator-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle; font-weight: 700;">${row.operator || ""}</td>\n`);
+      const cellList = (row.cells && row.cells.length > 0) ? row.cells : (row.digits || []);
+      for (let i = 0; i < numCols; i++) {
+        const val = cellList[i] !== undefined && cellList[i] !== null ? cellList[i] : "";
+        parts.push(`      <td class="digit-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle;">${val}</td>\n`);
+      }
+      parts.push('    </tr>\n');
+    }
+    parts.push('  </tbody>\n');
+    parts.push('</table>\n');
+    return parts.join("");
+  }
+
+  const parts: string[] = [];
+  parts.push(`<table class="column-calculation" data-layout="division-textbook-grid" role="math" aria-label="ប្រមាណវិធីចែកជួរឈរ"${tableStyle}>\n`);
+  parts.push('  <tbody>\n');
+  parts.push('    <tr>\n');
+
+  // Left side: Dividend & subtraction steps
+  const divDigits = div.dividendKhmer.split("");
+  const leftCols = Math.max(divDigits.length, 3);
+
+  parts.push('      <td style="vertical-align: top; padding-right: 18px; border-right: 2px solid #0f172a;">\n');
+  parts.push('        <table style="border-collapse: collapse; font-variant-numeric: tabular-nums; font-family: monospace, \'Noto Sans Khmer\', \'Kantumruy Pro\', Arial, sans-serif; font-size: 18px; text-align: right;">\n');
+  parts.push('          <tbody>\n');
+
+  // Dividend row
+  parts.push('            <tr class="math-row dividend">\n');
+  parts.push('              <td class="operator-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle;"></td>\n');
+  for (let i = 0; i < leftCols; i++) {
+    const d = divDigits[i] || "";
+    parts.push(`              <td class="digit-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle; font-weight: 700; color: #0f172a;">${d}</td>\n`);
+  }
+  parts.push('            </tr>\n');
+
+  // Subtraction rows
+  for (const step of div.steps) {
+    const subDigits = step.prodKhmer.split("");
+    parts.push('            <tr class="math-row step">\n');
+    parts.push('              <td class="operator-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle; font-weight: 700; color: #0f172a;">−</td>\n');
+    const padCount = Math.max(0, leftCols - subDigits.length);
+    for (let p = 0; p < padCount; p++) {
+      parts.push('              <td class="digit-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle;"></td>\n');
+    }
+    for (const d of subDigits) {
+      parts.push(`              <td class="digit-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle; color: #0f172a;">${d}</td>\n`);
+    }
+    parts.push('            </tr>\n');
+
+    parts.push(`            <tr class="separator-row"><td colspan="${leftCols + 1}" style="border-bottom: 2px solid #000; height: 4px; padding: 0;"></td></tr>\n`);
+
+    const remDigits = step.broughtKhmer.split("");
+    const remPad = Math.max(0, leftCols - remDigits.length);
+    const isLast = step.isLast;
+    parts.push(`            <tr class="math-row ${isLast ? "remainder" : "step"}">\n`);
+    parts.push('              <td class="operator-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle;"></td>\n');
+    for (let p = 0; p < remPad; p++) {
+      parts.push('              <td class="digit-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle;"></td>\n');
+    }
+    for (const d of remDigits) {
+      parts.push(`              <td class="digit-cell" style="width: 36px; height: 34px; text-align: center; vertical-align: middle; ${isLast ? "font-weight: 800; color: #059669;" : "color: #0f172a;"}">${d}</td>\n`);
+    }
+    parts.push('            </tr>\n');
+  }
+
+  parts.push('          </tbody>\n');
+  parts.push('        </table>\n');
+  parts.push('      </td>\n');
+
+  // Right side: Divisor on top, Quotient underneath
+  parts.push('      <td style="vertical-align: top; padding-left: 18px; min-width: 140px;">\n');
+  parts.push('        <div style="border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 8px;">\n');
+  parts.push('          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 2px;">តួចែក (Divisor)</div>\n');
+  parts.push(`          <div class="digit-cell" style="font-size: 22px; font-weight: 800; color: #0f172a; font-family: monospace, 'Noto Sans Khmer', sans-serif;">${div.divisorKhmer}</div>\n`);
+  parts.push('        </div>\n');
+  parts.push('        <div>\n');
+  parts.push('          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 2px;">ផលចែក (Quotient)</div>\n');
+  parts.push(`          <div style="font-size: 22px; font-weight: 800; color: #4338ca; font-family: monospace, 'Noto Sans Khmer', sans-serif;">${div.quotientKhmer}</div>\n`);
+  parts.push('        </div>\n');
+  if (div.remainder > 0) {
+    parts.push(`        <div style="margin-top: 8px; font-size: 12px; font-weight: 700; color: #d97706;">សំណល់ = ${div.remainderKhmer}</div>\n`);
+  }
+  parts.push('      </td>\n');
+
+  parts.push('    </tr>\n');
   parts.push('  </tbody>\n');
   parts.push('</table>\n');
 

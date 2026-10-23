@@ -116,58 +116,37 @@ export interface MathSolverError {
 function getGradeGuidance(grade: GradeLevel): string {
   switch (grade) {
     case "grade_1":
-      return `Target Audience: ថ្នាក់ទី ១ (Grade 1 Cambodian Students)
-- Use extremely simple, welcoming Khmer suitable for 6-7 year olds.
-- Rely on visual object counting (fruits, toys, dots, animals, fingers).
-- Explain addition (+) as putting objects together and subtraction (-) as taking objects away or crossing them out.
-- Do not use complex algebraic symbols or advanced terminology.
-- Numbers typically within 1 to 20 or 100.`;
-
     case "grade_2":
-      return `Target Audience: ថ្នាក់ទី ២ (Grade 2 Cambodian Students)
-- Use simple, concrete Khmer.
-- Support addition and subtraction with and without regrouping (ខ្ទង់ដប់, ខ្ទង់រយ).
-- Explain multiplication as repeated addition and rows × columns arrays.
-- Explain division as equal sharing into groups.
-- Address word problems involving everyday objects and basic riel/currency.`;
+      return `Target Audience: ថ្នាក់ទី ១ និង ទី ២ (Grades 1–2 MoEYS Cambodian Primary Students)
+- ប្រើឃ្លាខ្លីៗ ងាយយល់បំផុតសម្រាប់កុមារតូច។
+- ផ្តោតលើ «ខ្ទង់រាយ» និង «ខ្ទង់ដប់» (ឬដល់ខ្ទង់រយ)។
+- ការរាប់បន្ថែម ការបូកមានត្រាទុក ១ និងការដកមានខ្ចី ១ ដប់។
+- ប្រើវត្ថុរាប់ជាក់ស្តែង (ផ្លែឈើ, ផ្កាយ, ចំណុច, ម្រាមដៃ, ប្រដាប់ក្មេងលេង)។
+- ហាមប្រើពាក្យបច្ចេកទេសពិបាក ឬពិជគណិតស្មុគស្មាញ។`;
 
     case "grade_3":
-      return `Target Audience: ថ្នាក់ទី ៣ (Grade 3 Cambodian Students)
-- Explain vertical and horizontal column calculations with carrying (ត្រាទុក) and borrowing (ខ្ចី).
-- Focus on place values (រាយ, ដប់, រយ, ពាន់, ម៉ឺន).
-- Multiplication tables up to 10×10 and 2-3 digit multiplication.
-- Division with remainders and introduction to basic fractions (ភាគបែង, ភាគយក).
-- Basic measurements, perimeter of rectangles/squares.`;
-
     case "grade_4":
-      return `Target Audience: ថ្នាក់ទី ៤ (Grade 4 Cambodian Students)
-- Fractions: comparison, equal parts, addition/subtraction with same/different denominators.
-- Decimals: place value, alignment of decimal points.
-- Standard long division with check (ចែកដាច់ និង មានសំណល់).
-- Geometric properties: angles, perimeter, and area (ផ្ទៃក្រឡា) of rectangles, triangles.
-- Units and unit conversion (m, cm, mm, kg, g, l, ml).`;
+      return `Target Audience: ថ្នាក់ទី ៣ និង ទី ៤ (Grades 3–4 MoEYS Cambodian Primary Students)
+- ពន្យល់ច្បាស់ៗតាមខ្ទង់ («ខ្ទង់រាយ», «ខ្ទង់ដប់», «ខ្ទង់រយ», «ខ្ទង់ពាន់», «ខ្ទង់ម៉ឺន»)។
+- ការគុណតាមជួរឈរ (ផលគុណទី១, ផលគុណទី២) ដោយរំកិលតាមខ្ទង់។
+- ការចែកជួរឈរ (តំណាងចែក, តួចែក, ផលចែក, សំណល់) តាមទម្រង់សៀវភៅគោលខ្មែរ (L-bracket / T-grid)។
+- ប្រភាគសាមញ្ញ (ភាគយក, ភាគបែង), ចំនួនទសភាគដំបូង, រង្វាស់រង្វាល់ និងបរិមាត្រ។`;
 
     case "grade_5":
-      return `Target Audience: ថ្នាក់ទី ៥ (Grade 5 Cambodian Students)
-- Multi-step word problems involving fractions, mixed numbers, and decimals.
-- Percentages (%) and basic ratios/proportions.
-- Area and volume calculations with formulas explained conceptually.
-- Explain WHY each formula is applied before calculating.`;
-
     case "grade_6":
-      return `Target Audience: ថ្នាក់ទី ៦ (Grade 6 Cambodian Students / Primary School Graduation)
-- Single-variable linear equations and maintaining balance on both sides.
-- Complex fractions, percentages, speed-distance-time problems, ratios.
-- Comprehensive geometry (area, perimeter, surface area, volume, angle calculation).
-- Explain mathematical rationale and rigorous verification steps.`;
+      return `Target Audience: ថ្នាក់ទី ៥ និង ទី ៦ (Grades 5–6 MoEYS Cambodian Primary Students)
+- គាំទ្រចំនួនទសភាគ (ដាក់ចំណុចទសភាគ ',' ឬ '.' ឱ្យត្រង់ជួរឈរគ្នា រវាងផ្នែកគត់ និងផ្នែកទសភាគ)។
+- ប្រភាគ, ភាគរយ (%), អនុបាត, និងចំណោទពហុជំហានតាមទម្រង់សៀវភៅគោល (មាន «ប្រមាណវិធី» និង «របៀបឆ្លើយ» ដាច់ដោយឡែកយ៉ាងស្អាត)។
+- ផ្ទៃក្រឡា និងមាឌធរណីមាត្រ ដោយពន្យល់រូបមន្តច្បាស់លាស់។
+- សមីការលីនេអ៊ែរសាមញ្ញ និងការរក្សាសមភាពអង្គសងខាង។`;
 
     case "auto":
     default:
-      return `Target Audience: ស្វ័យប្រវត្តិ (Auto-detect Grade 1-6)
-- Carefully analyze the problem complexity, visual representations, and notation.
+      return `Target Audience: ស្វ័យប្រវត្តិ (Auto-detect Grade 1-6 according to MoEYS standards)
+- Carefully analyze problem complexity, visual representations, numbers, and operations.
 - Determine the most appropriate Cambodian primary grade level: "ថ្នាក់ទី ១", "ថ្នាក់ទី ២", "ថ្នាក់ទី ៣", "ថ្នាក់ទី ៤", "ថ្នាក់ទី ៥", or "ថ្នាក់ទី ៦".
 - Set "inferredGrade" (e.g. "grade_2") and "inferredGradeKhmer" (e.g. "ថ្នាក់ទី ២").
-- Adjust the explanation tone, vocabulary, and methods strictly to match that inferred grade.`;
+- Adjust the explanation tone, vocabulary, and methods strictly to match that MoEYS grade level.`;
   }
 }
 
@@ -414,8 +393,13 @@ When the problem is vertical arithmetic involving addition (+), subtraction (−
 - Never put a whole number such as "431" into one cell.
 - Never return application UI, debug information, API metadata, model details, request IDs, or diagnostics.
 
+CAMBODIAN MoEYS PRIMARY TEXTBOOK TERMINOLOGY & FORMAT (MANDATORY):
+- Terminology Rule: ALWAYS use primary textbook terms: «ខ្ទង់រាយ» (NEVER use «ខ្ទង់ឯកតា»), «ខ្ទង់ដប់», «ខ្ទង់រយ», «ខ្ទង់ពាន់», «ត្រាទុក», «ខ្ចី».
+- Zero foreign script typos: NEVER use Thai characters (e.g. NEVER write ผลដក or ผลบวก; ALWAYS write purely Khmer: ផលដក, ផលបូក, ផលគុណ, ផលចែក).
+- Division Form: Cambodian textbook vertical division uses an L-bracket / T-grid layout (Left: Dividend/តំណាងចែក with subtraction steps and Remainder/សំណល់; Right: Divisor/តួចែក in top-right box over Quotient/ផលចែក separated by a vertical border).
+
 EXPLICIT ALIGNMENT RULES:
-- For ៤៣១ + ៦៥: The ៦ goes under ៣ (tens column). The ៥ goes under ១ (ones column). The ៤ stays under hundreds. The result ៤, ៩, ៦ stays under hundreds, tens, and ones respectively.
+- For ៤៣១ + ៦៥: The ៦ goes under ៣ (tens column). The ៥ goes under ១ (ones column/ខ្ទង់រាយ). The ៤ stays under hundreds. The result ៤, ៩, ៦ stays under hundreds, tens, and ones respectively.
 - For ៧៩៥ − ៥៤: The ៥ goes under ៩, ៤ goes under ៥. Result ៧, ៤, ១ under hundreds, tens, and ones respectively.
 - For ៧០២ − ២៧៨: Handles borrowing rows (ones borrows from tens, tens from hundreds).
 - For ២៤ × ៣: Partial products rows aligned by place value.
@@ -440,8 +424,8 @@ If returning vertical calculations, include "verticalCalculations": [
 
 HTML TABLE STYLES (IF RETURNING HTML REPRESENTATION):
 - Vertical arithmetic must be represented as a strict HTML table.
-- Use one <td> per logical place-value cell with fixed width (e.g., style="width:32px; text-align:center;").
-- Use one <td> for the operator column (e.g., style="width:24px; text-align:center;").
+- Use one <td> per logical place-value cell with fixed width (e.g., style="width:36px; height:34px; text-align:center; vertical-align:middle;").
+- Use one <td> for the operator column (e.g., style="width:36px; height:34px; text-align:center; vertical-align:middle;").
 - Table style must include: style="border-collapse:collapse; font-family:monospace; font-size:18px; text-align:right;"
 - Separator line must use: <tr class="separator-row"><td colspan="N" style="border-bottom:2px solid #000; height:6px;"></td></tr>
 - Do NOT use <pre> as the primary alignment mechanism.
@@ -700,13 +684,13 @@ Return a valid JSON object matching the standard schema.`;
       }
 
       const inferredGradeGlobal =
-        (parsed.inferredGrade as string) ||
-        (parsed.inferred_grade as string) ||
-        (gradeLevel === "auto" ? "grade_3" : gradeLevel);
+        gradeLevel !== "auto"
+          ? gradeLevel
+          : (parsed.inferredGrade as string) ||
+            (parsed.inferred_grade as string) ||
+            "grade_3";
       const inferredGradeKhmerGlobal =
-        (parsed.inferredGradeKhmer as string) ||
-        (parsed.inferred_grade_khmer as string) ||
-        (inferredGradeGlobal === "grade_1"
+        inferredGradeGlobal === "grade_1"
           ? "ថ្នាក់ទី ១"
           : inferredGradeGlobal === "grade_2"
           ? "ថ្នាក់ទី ២"
@@ -718,7 +702,7 @@ Return a valid JSON object matching the standard schema.`;
           ? "ថ្នាក់ទី ៥"
           : inferredGradeGlobal === "grade_6"
           ? "ថ្នាក់ទី ៦"
-          : "ថ្នាក់ទី ៣");
+          : "ថ្នាក់ទី ៣";
 
       const problems: MathSolverProblem[] = rawProblems.map((p, i) => {
         const id = (p.id as string) || `q${i + 1}`;

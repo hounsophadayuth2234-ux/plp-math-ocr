@@ -782,7 +782,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
     // 7 Required sections check
     expect(expl).toContain("ប្រមាណវិធី");
     expect(expl).toContain("រៀបជាជួរឈរ");
-    expect(expl).toContain("ជំហានទី១ — ខ្ទង់ឯកតា");
+    expect(expl).toContain("ជំហានទី១ — ខ្ទង់រាយ");
     expect(expl).toContain("ជំហានទី២ — ខ្ទង់ដប់");
     expect(expl).toContain("ជំហានទី៣ — ខ្ទង់រយ");
     expect(expl).toContain("ចម្លើយចុងក្រោយ");
@@ -946,7 +946,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
 
     // Explanation is expanded to full Grade 3 pedagogical sections
     expect(prob.solutionKhmer).toContain("ប្រមាណវិធី");
-    expect(prob.solutionKhmer).toContain("ជំហានទី១ — ខ្ទង់ឯកតា");
+    expect(prob.solutionKhmer).toContain("ជំហានទី១ — ខ្ទង់រាយ");
     expect(prob.solutionKhmer).toContain("ដោយមិនបាច់ខ្ចីទេ");
   });
 
