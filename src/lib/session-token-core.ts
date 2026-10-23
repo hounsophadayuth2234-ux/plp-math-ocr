@@ -15,6 +15,7 @@ export interface SessionTokenPayload {
   exp: number;
   jti: string;
   iss?: string;
+  mustChangePassword?: boolean;
 }
 
 function getSessionSecret(): string {
@@ -68,6 +69,7 @@ export async function createSessionToken(params: {
   username: string;
   role: "ADMIN" | "USER";
   displayName: string;
+  mustChangePassword?: boolean;
 }): Promise<string> {
   const secret = getSessionSecret();
   const key = await getHmacKey(secret);
@@ -82,6 +84,7 @@ export async function createSessionToken(params: {
     iat: now,
     exp: now + SESSION_MAX_AGE_SECONDS,
     jti: Math.random().toString(36).substring(2) + Date.now().toString(36),
+    mustChangePassword: params.mustChangePassword === true,
   };
 
   const enc = new TextEncoder();

@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { requireAuth } from "@/lib/auth-session";
-import { validateCsrfToken } from "@/lib/auth-csrf";
-import { UserStore } from "@/lib/user-store";
+import { requireAuth, createSessionToken, setSessionCookie } from "@/lib/auth-session";
+import { validateCsrfToken, generateCsrfToken, setCsrfCookie } from "@/lib/auth-csrf";
+import { UserStore, toSafeUser } from "@/lib/user-store";
 import { validatePasswordStrength } from "@/lib/password-rules";
 import { AuditLogger } from "@/lib/audit-logger";
 import { getClientIp } from "@/lib/auth-gate";
-import { encryptManagedPassword } from "@/lib/managed-credential-vault";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -78,11 +77,16 @@ export async function POST(req: NextRequest) {
   const newHash = bcrypt.hashSync(newPassword, 12);
   const now = Date.now();
 
-  await UserStore.updateUser(fullUser.id, {
+  const updatedUser = await UserStore.updateUser(fullUser.id, {
     passwordHash: newHash,
     mustChangePassword: false,
     passwordChangedAt: now,
+    sessionRevokedAt: undefined,
   });
+
+  const safeUser = toSafeUser(updatedUser);
+  const newSessionToken = await createSessionToken(safeUser);
+  const newCsrfToken = generateCsrfToken();
 
   await AuditLogger.logEvent({
     type: "PASSWORD_CHANGED",
@@ -92,8 +96,15 @@ export async function POST(req: NextRequest) {
     rawIp,
   });
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     success: true,
+    user: safeUser,
+    csrfToken: newCsrfToken,
     message: "បានផ្លាស់ប្តូរពាក្យសម្ងាត់ដោយជោគជ័យ (Password changed successfully)",
   });
+
+  setSessionCookie(response, newSessionToken);
+  setCsrfCookie(response, newCsrfToken);
+
+  return response;
 }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
-export const CSRF_COOKIE_NAME = "dyt_csrf_token";
-export const CSRF_HEADER_NAME = "x-csrf-token";
+import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from "./csrf-constants";
+
+export { CSRF_COOKIE_NAME, CSRF_HEADER_NAME };
 
 /**
  * Generates a random 32-byte hex CSRF token.

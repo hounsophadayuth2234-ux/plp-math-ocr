@@ -19,6 +19,11 @@ import {
   Send,
 } from "lucide-react";
 import { sanitizeInternalRedirect } from "@/lib/auth-gate";
+import {
+  getOrRefreshCsrfToken,
+  fetchFreshCsrfToken,
+  CSRF_HEADER_NAME,
+} from "@/lib/csrf-client";
 
 /**
  * Animated Abstract Human Silhouette Component
@@ -160,10 +165,46 @@ function LoginContent() {
 
   // Force Password Change state (for first-login temporary passwords)
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changeError, setChangeError] = useState<string | null>(null);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
+
+  // Check active session on mount to detect pending mandatory password change
+  useEffect(() => {
+    let isMounted = true;
+    const probeSession = async () => {
+      try {
+        const res = await fetch(`/api/auth/session?_t=${Date.now()}`, {
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+        if (res.ok && isMounted) {
+          const data = await res.json().catch(() => ({}));
+          if (data?.authenticated && data?.user?.mustChangePassword) {
+            setMustChangePassword(true);
+            if (data.csrfToken) {
+              setCsrfToken(data.csrfToken);
+            }
+          }
+        }
+      } catch {}
+    };
+
+    if (searchParams.get("mustChange") === "1") {
+      setMustChangePassword(true);
+    }
+    probeSession();
+    return () => {
+      isMounted = false;
+    };
+  }, [searchParams]);
 
   const identifierInputRef = useRef<HTMLInputElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
@@ -354,6 +395,10 @@ function LoginContent() {
         return;
       }
 
+      if (data.csrfToken) {
+        setCsrfToken(data.csrfToken);
+      }
+
       // Check if user must change temporary password on first login
       if (data.user?.mustChangePassword) {
         setMustChangePassword(true);
@@ -377,8 +422,14 @@ function LoginContent() {
     e.preventDefault();
     if (changingPassword) return;
 
+    const activeCurrentPassword = password.trim() || currentPasswordInput.trim();
+    if (!activeCurrentPassword) {
+      setChangeError("សូមបញ្ចូលពាក្យសម្ងាត់បច្ចុប្បន្ន (Current password is required)");
+      return;
+    }
+
     if (!newPassword.trim()) {
-      setChangeError("សូមបញ្ចូលពាក្យសម្ងាត់");
+      setChangeError("សូមបញ្ចូលពាក្យសម្ងាត់ថ្មី (New password is required)");
       return;
     }
 
@@ -396,24 +447,67 @@ function LoginContent() {
     setChangeError(null);
 
     try {
-      const res = await fetch("/api/auth/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentPassword: password.trim(),
-          newPassword: newPassword.trim(),
-          confirmPassword: confirmPassword.trim(),
-        }),
-      });
+      // Resolve active CSRF token (in-memory -> readable cookie -> fresh fetch)
+      let activeCsrf = await getOrRefreshCsrfToken(csrfToken);
 
-      const data = await res.json().catch(() => ({}));
+      if (!activeCsrf) {
+        // Safe retry to obtain fresh token before giving up
+        activeCsrf = await fetchFreshCsrfToken();
+      }
+
+      if (!activeCsrf) {
+        setChangeError("CSRF token missing. Please refresh and try again");
+        setChangingPassword(false);
+        return;
+      }
+
+      const executeChangePassword = async (token: string) => {
+        return await fetch("/api/auth/change-password", {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            [CSRF_HEADER_NAME]: token,
+          },
+          body: JSON.stringify({
+            currentPassword: activeCurrentPassword,
+            newPassword: newPassword.trim(),
+            confirmPassword: confirmPassword.trim(),
+            csrfToken: token,
+          }),
+        });
+      };
+
+      let res = await executeChangePassword(activeCsrf);
+      let data = await res.json().catch(() => ({}));
+
+      // Safe client-side refresh/retry mechanism if CSRF token expired or mismatched
+      if (
+        res.status === 403 &&
+        typeof data?.error === "string" &&
+        data.error.toLowerCase().includes("csrf")
+      ) {
+        const freshToken = await fetchFreshCsrfToken();
+        if (freshToken) {
+          setCsrfToken(freshToken);
+          res = await executeChangePassword(freshToken);
+          data = await res.json().catch(() => ({}));
+        }
+      }
 
       if (!res.ok || !data.success) {
         setChangeError(data.error || "មិនអាចផ្លាស់ប្តូរពាក្យសម្ងាត់បានទេ");
         return;
       }
 
-      // Success: Proceed to requested destination
+      // Success: Clear sensitive form state and navigate to destination
+      setMustChangePassword(false);
+      setPassword("");
+      setCurrentPasswordInput("");
+      setNewPassword("");
+      setConfirmPassword("");
       router.push(fromPath);
       router.refresh();
     } catch {
@@ -636,15 +730,31 @@ function LoginContent() {
                     </div>
                   )}
 
+                  {!password.trim() && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-200 font-khmer">
+                        Current / Temporary Password · ពាក្យសម្ងាត់បច្ចុប្បន្ន
+                      </label>
+                      <input
+                        type="password"
+                        value={currentPasswordInput}
+                        onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                        placeholder="បញ្ចូលពាក្យសម្ងាត់បច្ចុប្បន្ន"
+                        required
+                        className="w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 font-mono"
+                      />
+                    </div>
+                  )}
+
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-200 font-khmer">
-                      Password · ពាក្យសម្ងាត់
+                      New Password · ពាក្យសម្ងាត់ថ្មី
                     </label>
                     <input
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="ពាក្យសម្ងាត់ (យ៉ាងហោចណាស់ ៤ តួអក្សរ)"
+                      placeholder="ពាក្យសម្ងាត់ថ្មី (យ៉ាងហោចណាស់ ៤ តួអក្សរ)"
                       required
                       className="w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 font-mono"
                     />
@@ -652,13 +762,13 @@ function LoginContent() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-200 font-khmer">
-                      Confirm Password · បញ្ជាក់ពាក្យសម្ងាត់
+                      Confirm New Password · បញ្ជាក់ពាក្យសម្ងាត់ថ្មី
                     </label>
                     <input
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="បញ្ជាក់ពាក្យសម្ងាត់"
+                      placeholder="បញ្ជាក់ពាក្យសម្ងាត់ថ្មី"
                       required
                       className="w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 font-mono"
                     />
@@ -666,8 +776,13 @@ function LoginContent() {
 
                   <button
                     type="submit"
-                    disabled={changingPassword || !newPassword || !confirmPassword}
-                    className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 py-3.5 text-sm font-bold text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:brightness-110 disabled:opacity-50 transition-all font-khmer"
+                    disabled={
+                      changingPassword ||
+                      !newPassword ||
+                      !confirmPassword ||
+                      (!password.trim() && !currentPasswordInput.trim())
+                    }
+                    className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 py-3.5 text-sm font-bold text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:brightness-110 disabled:opacity-50 transition-all font-khmer cursor-pointer"
                   >
                     {changingPassword ? "កំពុងរក្សាទុក..." : "Save (រក្សាទុក)"}
                   </button>

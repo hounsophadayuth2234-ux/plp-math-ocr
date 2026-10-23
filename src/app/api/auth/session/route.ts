@@ -13,15 +13,27 @@ export async function GET(req: NextRequest) {
   }
 
   // Ensure CSRF token is provided
-  let csrfToken = req.cookies.get(CSRF_COOKIE_NAME)?.value;
-  const res = NextResponse.json({
-    authenticated: true,
-    user,
-    csrfToken: csrfToken || undefined,
-  });
-
+  let csrfToken = req.cookies.get(CSRF_COOKIE_NAME)?.value?.trim();
+  let newCsrfGenerated = false;
   if (!csrfToken) {
     csrfToken = generateCsrfToken();
+    newCsrfGenerated = true;
+  }
+
+  const res = NextResponse.json(
+    {
+      authenticated: true,
+      user,
+      csrfToken,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store, private",
+      },
+    }
+  );
+
+  if (newCsrfGenerated) {
     setCsrfCookie(res, csrfToken);
   }
 

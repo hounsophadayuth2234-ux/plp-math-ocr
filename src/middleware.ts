@@ -79,6 +79,7 @@ export async function middleware(req: NextRequest) {
     pathname === "/login" ||
     pathname === "/admin/recovery" ||
     pathname === "/api/auth/admin-recovery" ||
+    pathname === "/api/auth/csrf" ||
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
     pathname === "/api/auth/session" ||
@@ -93,6 +94,7 @@ export async function middleware(req: NextRequest) {
 
   let isAuthenticated = false;
   let userRole: "ADMIN" | "USER" = "USER";
+  let mustChangePassword = false;
 
   if (sessionCookie) {
     // Check structured account session using Edge Web Crypto
@@ -100,6 +102,7 @@ export async function middleware(req: NextRequest) {
     if (structCheck.valid && structCheck.payload) {
       isAuthenticated = true;
       userRole = structCheck.payload.role || "USER";
+      mustChangePassword = structCheck.payload.mustChangePassword === true;
     } else {
       // Check legacy gate token
       const legacyCheck = await verifyLegacySession(sessionCookie);
@@ -111,10 +114,41 @@ export async function middleware(req: NextRequest) {
   }
 
   // 2. Redirect authenticated users away from the login gate to dashboard (internal only)
+  // If user must change temporary password, allow them to remain on /login to complete the change!
   if (pathname === "/login" && isAuthenticated) {
-    const returnUrl = sanitizeInternalRedirect(req.nextUrl.searchParams.get("from"));
-    const redirectUrl = new URL(returnUrl, req.url);
-    return NextResponse.redirect(redirectUrl);
+    if (!mustChangePassword) {
+      const returnUrl = sanitizeInternalRedirect(req.nextUrl.searchParams.get("from"));
+      const redirectUrl = new URL(returnUrl, req.url);
+      return NextResponse.redirect(redirectUrl);
+    }
+    return NextResponse.next();
+  }
+
+  // 2b. Restrict users with mustChangePassword from entering protected workspace until updated
+  if (isAuthenticated && mustChangePassword) {
+    if (
+      pathname === "/login" ||
+      pathname === "/api/auth/change-password" ||
+      pathname === "/api/auth/csrf" ||
+      pathname === "/api/auth/logout" ||
+      pathname === "/api/auth/session"
+    ) {
+      return applyCorsHeaders(NextResponse.next());
+    }
+    if (pathname.startsWith("/api/")) {
+      return applyCorsHeaders(
+        NextResponse.json(
+          {
+            error: "Password change required before accessing system resources (ត្រូវផ្លាស់ប្តូរពាក្យសម្ងាត់ជាមុនសិន).",
+            mustChangePassword: true,
+          },
+          { status: 403 }
+        )
+      );
+    }
+    const changeUrl = new URL("/login", req.url);
+    changeUrl.searchParams.set("mustChange", "1");
+    return NextResponse.redirect(changeUrl);
   }
 
   // 3. Allow public auth route
