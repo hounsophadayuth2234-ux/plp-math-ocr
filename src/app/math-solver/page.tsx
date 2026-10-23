@@ -1218,39 +1218,7 @@ export default function MathSolverPage() {
             ))}
           </div>
 
-          {/* Advanced Technical Diagnostics Accordion */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowAdvancedSettings((prev) => !prev)}
-              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <Settings className="h-3.5 w-3.5 text-slate-500" />
-                <span>ការកំណត់កម្រិតខ្ពស់ &amp; ពត៌មានបច្ចេកទេស (Advanced Settings &amp; Diagnostics)</span>
-              </span>
-              {showAdvancedSettings ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </button>
-            {showAdvancedSettings && (
-              <div className="border-t border-slate-800 p-4 space-y-2 text-xs font-mono text-slate-400 bg-slate-950/90">
-                <div>ម៉ាស៊ីនដំណើរការ (Provider): {result.inferenceProvider}</div>
-                <div>ទម្រង់ដំណោះស្រាយ (Mode): {result.solverMode}</div>
-                <div>កម្រិតថ្នាក់ដែលបានជ្រើស (Selected Grade): {result.gradeLevel}</div>
-                {result.inferredGrade && (
-                  <div>កម្រិតថ្នាក់ដែលបានប៉ាន់ស្មាន (Inferred Grade): {result.inferredGrade} ({result.inferredGradeKhmer})</div>
-                )}
-                <div>រយៈពេលវិភាគ (Reasoning Time): {result.timings.reasoningMs} ms</div>
-                <div>រយៈពេលសរុប (Total Time): {result.timings.totalMs} ms</div>
-                {result.imageQualityNote && (
-                  <div>ចំណាំគុណភាពរូបភាព៖ {result.imageQualityNote}</div>
-                )}
-              </div>
-            )}
-          </div>
+
         </div>
       )}
     </div>

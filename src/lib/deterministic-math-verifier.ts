@@ -447,21 +447,15 @@ export function buildPedagogicalArithmeticExplanation(
       ? "ថ្នាក់ទី ៦ (ការវិភាគពិជគណិត និងសមីការ)"
       : "ថ្នាក់ទី ៣ (ខ្ទង់ & ការខ្ចី/ត្រាទុក)";
 
-  const sec1 = `១. ប្រមាណវិធី (${gradeLabel})៖\n${aKhmer} ${opSymbol} ${bKhmer}`;
-  const sec2 = `២. រៀបជាជួរឈរ៖\n${alignedWorking}`;
-  const stepSections = steps.map((s, idx) => `${toKhmerNumeral(idx + 3)}. ${s}`);
+  const sections: string[] = [...steps];
 
-  const sections: string[] = [sec1, sec2, ...stepSections];
-
-  // STRICT THREE-MODE CONTRACT:
   // In Mode 2 ("generate"), STRICTLY DO NOT output final answer section!
   if (solverMode !== "generate") {
-    const secAns = `${toKhmerNumeral(steps.length + 3)}. ចម្លើយចុងក្រោយ៖\n${aKhmer} ${opSymbol} ${bKhmer} = ${resKhmer}`;
     const secCheck =
       normOp === "-"
-        ? `${toKhmerNumeral(steps.length + 4)}. ពិនិត្យចម្លើយឡើងវិញ៖\n${resKhmer} + ${bKhmer} = ${aKhmer} ✓ (ត្រឹមត្រូវ)`
-        : `${toKhmerNumeral(steps.length + 4)}. ពិនិត្យចម្លើយឡើងវិញ៖\n${resKhmer} − ${bKhmer} = ${aKhmer} ✓ (ត្រឹមត្រូវ)`;
-    sections.push(secAns, secCheck);
+        ? `ពិនិត្យចម្លើយឡើងវិញ៖\n${resKhmer} + ${bKhmer} = ${aKhmer} ✓ (ត្រឹមត្រូវ)`
+        : `ពិនិត្យចម្លើយឡើងវិញ៖\n${resKhmer} − ${bKhmer} = ${aKhmer} ✓ (ត្រឹមត្រូវ)`;
+    sections.push(secCheck);
   }
 
   const detailedKhmerExplanation = sections.join("\n\n");

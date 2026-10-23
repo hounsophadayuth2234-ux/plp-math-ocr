@@ -15,6 +15,11 @@ import {
   fromKhmerNumeral,
 } from "./deterministic-math-verifier";
 
+export {
+  toKhmerNumeral,
+  fromKhmerNumeral,
+};
+
 export type MathOperation =
   | "addition"
   | "subtraction"
@@ -197,17 +202,17 @@ export function normalizeOperator(op: string): string {
 }
 
 /**
- * Pad array of digits with leading characters ('០' by default for place-value columns)
+ * Pad array of digits with leading characters (empty string by default for place-value columns)
  */
-function padLeading(digits: string[], targetLen: number, padChar = "០"): string[] {
+function padLeading(digits: string[], targetLen: number, padChar = ""): string[] {
   const padCount = Math.max(0, targetLen - digits.length);
   return [...Array(padCount).fill(padChar), ...digits];
 }
 
 /**
- * Pad array of digits with trailing characters ('០' by default for decimal place-value columns)
+ * Pad array of digits with trailing characters (empty string by default for decimal place-value columns)
  */
-function padTrailing(digits: string[], targetLen: number, padChar = "០"): string[] {
+function padTrailing(digits: string[], targetLen: number, padChar = ""): string[] {
   const padCount = Math.max(0, targetLen - digits.length);
   return [...digits, ...Array(padCount).fill(padChar)];
 }
@@ -247,11 +252,80 @@ export function buildStructuredIntegerArithmetic(
 
   const rows: StructuredCalculationRow[] = [];
 
+  // Carry row for Addition (+) whenever any column sum >= 10
+  if (opSymbol === "+") {
+    const aRev = String(Math.abs(Math.round(aNum))).split("").map(Number).reverse();
+    const bRev = String(Math.abs(Math.round(bNum))).split("").map(Number).reverse();
+    const carryArr = Array(maxDigits).fill("");
+    let carry = 0;
+    let hasCarry = false;
+
+    for (let i = 0; i < maxDigits; i++) {
+      const dA = aRev[i] ?? 0;
+      const dB = bRev[i] ?? 0;
+      const sum = dA + dB + carry;
+      if (sum >= 10) {
+        carry = Math.floor(sum / 10);
+        hasCarry = true;
+        if (i + 1 < maxDigits) {
+          carryArr[i + 1] = toKhmerNumeral(carry);
+        }
+      } else {
+        carry = 0;
+      }
+    }
+
+    if (hasCarry) {
+      const carryCells = [...carryArr].reverse();
+      rows.push({
+        role: "carry",
+        operator: "",
+        digits: carryCells,
+        cells: carryCells,
+        label: "ត្រាទុក (Carrying)",
+      });
+    }
+  }
+
+  // Carry row for Multiplication (×) whenever any column product >= 10
+  if (opSymbol === "×" && Math.abs(bNum) < 10) {
+    const aRev = String(Math.abs(Math.round(aNum))).split("").map(Number).reverse();
+    const mult = Math.abs(Math.round(bNum));
+    const carryArr = Array(maxDigits).fill("");
+    let carry = 0;
+    let hasCarry = false;
+
+    for (let i = 0; i < aRev.length; i++) {
+      const prod = aRev[i] * mult + carry;
+      if (prod >= 10) {
+        carry = Math.floor(prod / 10);
+        hasCarry = true;
+        if (i + 1 < maxDigits) {
+          carryArr[i + 1] = toKhmerNumeral(carry);
+        }
+      } else {
+        carry = 0;
+      }
+    }
+
+    if (hasCarry) {
+      const carryCells = [...carryArr].reverse();
+      rows.push({
+        role: "carry",
+        operator: "",
+        digits: carryCells,
+        cells: carryCells,
+        label: "ត្រាទុក (Carrying)",
+      });
+    }
+  }
+
   // Borrowing row for subtraction with borrowing
   if (opSymbol === "−") {
     const aRev = String(Math.abs(Math.round(aNum))).split("").map(Number).reverse();
     const bRev = String(Math.abs(Math.round(bNum))).split("").map(Number).reverse();
     const currentA = [...aRev];
+    const borrowDisplay = Array(maxDigits).fill("");
     let hasBorrow = false;
 
     for (let i = 0; i < maxDigits; i++) {
@@ -265,26 +339,25 @@ export function buildStructuredIntegerArithmetic(
         }
         if (borrowIdx < currentA.length) {
           currentA[borrowIdx]--;
+          borrowDisplay[borrowIdx] = `(${toKhmerNumeral(currentA[borrowIdx])})`;
           for (let k = borrowIdx - 1; k > i; k--) {
             currentA[k] = 9;
+            borrowDisplay[k] = `(${toKhmerNumeral(9)})`;
           }
           currentA[i] += 10;
+          borrowDisplay[i] = toKhmerNumeral(currentA[i]);
         }
       }
     }
 
     if (hasBorrow) {
-      const resultRev = currentA.map((v) => (v !== undefined ? toKhmerNumeral(v) : ""));
-      while (resultRev.length < maxDigits) {
-        resultRev.push("");
-      }
-      const borrowCells = resultRev.reverse();
+      const borrowCells = [...borrowDisplay].reverse();
       rows.push({
         role: "borrow",
         operator: "",
         digits: borrowCells,
         cells: borrowCells,
-        label: "ខ្ចី (Borrowing)",
+        label: "ចំនួនខ្ចី (Borrowing)",
       });
     }
   }

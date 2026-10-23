@@ -269,10 +269,20 @@ export function formatSolutionStepsHtml(rawExplanation: string): string {
   const blocks = rawExplanation
     .split(/\n\s*\n/)
     .map((b) => b.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((b) => {
+      if (b.includes("រៀបជាជួរឈរ") || b.includes("ប្រមាណវិធី") || b.includes("ចម្លើយចុងក្រោយ")) {
+        return false;
+      }
+      return true;
+    });
 
-  if (blocks.length <= 1) {
-    return `    <div class="solution-steps">${escapeHtml(rawExplanation)}</div>\n`;
+  if (blocks.length === 0) {
+    return "";
+  }
+
+  if (blocks.length === 1 && !blocks[0].includes("ជំហាន") && !blocks[0].includes("ពិនិត្យ")) {
+    return `    <div class="solution-steps">${escapeHtml(toKhmerNumeral(blocks[0]))}</div>\n`;
   }
 
   const cards = blocks.map((block, idx) => {
@@ -290,7 +300,7 @@ export function formatSolutionStepsHtml(rawExplanation: string): string {
     const badgeBg = isCheck ? "#10b981" : "#eef2ff";
     const badgeTextCol = isCheck ? "#ffffff" : "#4338ca";
 
-    return `      <div class="step-card" style="background: ${cardBg}; border: 1px solid ${borderCol}; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px;">\n        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">\n          <span style="background: ${badgeBg}; color: ${badgeTextCol}; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 6px;">${escapeHtml(badgeText)}</span>\n          ${titleMatch ? `<span style="font-weight: 700; font-size: 13px; color: #1e293b;">${escapeHtml(titleMatch[2].trim())}</span>\n` : ""}\n        </div>\n        <div style="font-size: 14px; color: #334155; line-height: 1.7; white-space: pre-wrap;">${escapeHtml(content || block)}</div>\n      </div>`;
+    return `      <div class="step-card" style="background: ${cardBg}; border: 1px solid ${borderCol}; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px;">\n        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">\n          <span style="background: ${badgeBg}; color: ${badgeTextCol}; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 6px;">${escapeHtml(toKhmerNumeral(badgeText))}</span>\n          ${titleMatch ? `<span style="font-weight: 700; font-size: 13px; color: #1e293b;">${escapeHtml(toKhmerNumeral(titleMatch[2].trim()))}</span>\n` : ""}\n        </div>\n        <div style="font-size: 14px; color: #334155; line-height: 1.7; white-space: pre-wrap;">${escapeHtml(toKhmerNumeral(content || block))}</div>\n      </div>`;
   });
 
   return `    <div class="step-cards-container" style="margin-bottom: 20px;">\n${cards.join("\n")}\n    </div>\n`;
@@ -563,16 +573,6 @@ body {
   parts.push('<article class="solution">\n');
   parts.push('  <main class="plp-solution-sheet">\n');
 
-  // Document Title / Header
-  parts.push('  <header class="solution-header plp-header">\n');
-  parts.push('    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4338ca; margin-bottom: 4px;">PLP Math Content</div>\n');
-  parts.push(`    <h1 style="margin: 0 0 6px 0; color: #1e1b4b; font-size: 20px; font-weight: 800;">${escapeHtml(docTitle)}</h1>\n`);
-  parts.push('    <div class="badges">\n');
-  parts.push(`      <span class="badge-grade">${escapeHtml(gradeLabel)}</span>\n`);
-  parts.push(`      <span class="badge-mode">${escapeHtml(modeLabel)}</span>\n`);
-  parts.push("    </div>\n");
-  parts.push("  </header>\n\n");
-
   // Visual Interpretation (Mode 2 or Mode 3 only)
   if (!isMode1 && problem.visualInterpretation) {
     const vi = problem.visualInterpretation;
@@ -580,7 +580,7 @@ body {
     parts.push('    <h2 class="section-title">🔍 ការបកស្រាយរូបភាព (Visual Interpretation)</h2>\n');
     parts.push('    <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155;">\n');
     parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600; width: 35%;">វត្ថុដែលបានស្គាល់៖</td><td style="padding: 4px 8px;">${escapeHtml(vi.recognizedObjects)}</td></tr>\n`);
-    parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600;">ចំនួនវត្ថុ៖</td><td style="padding: 4px 8px; font-family: monospace; font-weight: 600;">${escapeHtml(vi.objectCount)}</td></tr>\n`);
+    parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600;">ចំនួនវត្ថុ៖</td><td style="padding: 4px 8px; font-family: monospace; font-weight: 600;">${escapeHtml(toKhmerNumeral(vi.objectCount))}</td></tr>\n`);
     if (vi.arrangement) {
       parts.push(`      <tr><td style="padding: 4px 8px; font-weight: 600;">របៀបរៀបចំ៖</td><td style="padding: 4px 8px;">${escapeHtml(vi.arrangement)}</td></tr>\n`);
     }
@@ -593,23 +593,23 @@ body {
     parts.push("  </section>\n\n");
   }
 
-  // 1. Problem Statement (Mandatory in all modes)
+  // 1. Problem Statement (Mandatory in all modes) - Sheet starts directly with problem statement
   parts.push('  <section class="problem-statement-section">\n');
   parts.push('    <h2 class="section-title">ប្រធានលំហាត់</h2>\n');
-  parts.push(`    <div class="problem-box">${escapeHtml(problemStatement)}</div>\n`);
+  parts.push(`    <div class="problem-box">${escapeHtml(toKhmerNumeral(problemStatement))}</div>\n`);
   parts.push("  </section>\n\n");
 
   // 2. Educational Framework (Given, To Find, Formulas) - Mode 2 & Mode 3 ONLY for Word Problems
   if (!isMode1 && isWordProblem(problemStatement) && (p.given || p.toFind || p.formulas)) {
     parts.push('  <section class="framework-box">\n');
     if (p.given) {
-      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលគេឱ្យ (Given)៖</strong> <span>${escapeHtml(p.given)}</span></div>\n`);
+      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលគេឱ្យ (Given)៖</strong> <span>${escapeHtml(toKhmerNumeral(p.given))}</span></div>\n`);
     }
     if (p.toFind) {
-      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលត្រូវរក (To Find)៖</strong> <span>${escapeHtml(p.toFind)}</span></div>\n`);
+      parts.push(`    <div style="margin-bottom: 8px;"><strong>អ្វីដែលត្រូវរក (To Find)៖</strong> <span>${escapeHtml(toKhmerNumeral(p.toFind))}</span></div>\n`);
     }
     if (p.formulas) {
-      parts.push(`    <div><strong>រូបមន្តដែលត្រូវប្រើ (Formulas)៖</strong> <span style="font-family: monospace; color: #4338ca; font-weight: 600;">${escapeHtml(p.formulas)}</span></div>\n`);
+      parts.push(`    <div><strong>រូបមន្តដែលត្រូវប្រើ (Formulas)៖</strong> <span style="font-family: monospace; color: #4338ca; font-weight: 600;">${escapeHtml(toKhmerNumeral(p.formulas))}</span></div>\n`);
     }
     parts.push("  </section>\n\n");
   }
@@ -622,16 +622,16 @@ body {
     parts.push(`      <strong>ចម្លើយរបស់សិស្សក្នុងរូបភាព៖</strong>\n`);
     parts.push(`      <span style="background: ${isCorrect ? "#10b981" : "#ef4444"}; color: #ffffff; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">${escapeHtml(p.answerStatusKhmer || (isCorrect ? "ត្រឹមត្រូវ ✓" : "មិនទាន់ត្រឹមត្រូវ ✗"))}</span>\n`);
     parts.push("    </div>\n");
-    parts.push(`    <div style="font-family: monospace; font-size: 14px; margin-bottom: 8px;">${escapeHtml(p.extractedAnswer)}</div>\n`);
+    parts.push(`    <div style="font-family: monospace; font-size: 14px; margin-bottom: 8px;">${escapeHtml(toKhmerNumeral(p.extractedAnswer))}</div>\n`);
     if (p.answerStatus === "incorrect") {
       if (p.incorrectStep) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 6px;"><strong>ជំហានដែលខុស៖</strong> ${escapeHtml(p.incorrectStep)}</div>\n`);
+        parts.push(`    <div style="font-size: 12px; margin-top: 6px;"><strong>ជំហានដែលខុស៖</strong> ${escapeHtml(toKhmerNumeral(p.incorrectStep))}</div>\n`);
       }
       if (p.errorExplanationKhmer) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ការពន្យល់កំហុស៖</strong> ${escapeHtml(p.errorExplanationKhmer)}</div>\n`);
+        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ការពន្យល់កំហុស៖</strong> ${escapeHtml(toKhmerNumeral(p.errorExplanationKhmer))}</div>\n`);
       }
       if (p.correctedStep) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ជំហានត្រឹមត្រូវ៖</strong> ${escapeHtml(p.correctedStep)}</div>\n`);
+        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ជំហានត្រឹមត្រូវ៖</strong> ${escapeHtml(toKhmerNumeral(p.correctedStep))}</div>\n`);
       }
     }
     parts.push("  </section>\n\n");
@@ -642,9 +642,6 @@ body {
   if (!isMode1 && (solKhmer || p.verticalLines || p.alignedWorking || p.verticalCalculations)) {
     parts.push('  <section class="solution-body-section">\n');
     parts.push('    <h2 class="section-title">វិធីដោះស្រាយ</h2>\n');
-    if (solKhmer) {
-      parts.push(formatSolutionStepsHtml(solKhmer));
-    }
 
     const structuredCalc =
       p.structuredCalculation ||
@@ -659,17 +656,25 @@ body {
         ? p.verticalLines.join("\n")
         : p.alignedWorking;
 
+    // Place vertical calculation at the TOP of the solution section
     if (structuredCalc) {
-      parts.push('    <div style="color: #64748b; font-size: 11px; margin-top: 10px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
+      parts.push('    <div style="color: #64748b; font-size: 11px; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
       parts.push(renderColumnCalculationHtml(structuredCalc, { inlineStyles: true }));
       // Hidden pre for DOM compatibility and headless testing assertions with zero visible duplication
       if (vertText) {
         parts.push(`    <pre class="vertical-calc" style="display:none;" aria-hidden="true">${escapeHtml(vertText)}</pre>\n`);
       }
     } else if (vertText) {
-      parts.push('    <div style="color: #64748b; font-size: 11px; margin-top: 10px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
+      parts.push('    <div style="color: #64748b; font-size: 11px; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
       parts.push(`    <pre class="vertical-calc">${escapeHtml(vertText)}</pre>\n`);
     }
+
+    // Followed by detailed step-by-step explanation cards
+    if (solKhmer) {
+      parts.push('    <div style="color: #475569; font-size: 12px; margin-top: 14px; margin-bottom: 8px; font-weight: 700; text-transform: uppercase;">ការពន្យល់លម្អិត</div>\n');
+      parts.push(formatSolutionStepsHtml(solKhmer));
+    }
+
     parts.push("  </section>\n\n");
   }
 
@@ -683,27 +688,13 @@ body {
     parts.push('    <div class="final-answer-box">\n');
     parts.push("      <div>\n");
     parts.push('        <span class="final-answer-title">ចម្លើយចុងក្រោយ</span>\n');
-    parts.push(`        <span class="final-answer-value">${escapeHtml(finalAnswer)}</span>\n`);
+    parts.push(`        <span class="final-answer-value">${escapeHtml(toKhmerNumeral(finalAnswer))}</span>\n`);
     parts.push("      </div>\n");
     parts.push('      <span class="badge-status">សម្រេច ✓</span>\n');
     parts.push("    </div>\n");
     parts.push("  </section>\n\n");
   }
 
-  // 6. Verification Status (Clean badge if deterministic verification performed)
-  if (p.deterministicResult) {
-    const isVer = p.deterministicResult.isVerified !== false;
-    const statusText = p.deterministicResult.statusKhmer || (isVer ? "ផ្ទៀងផ្ទាត់ត្រឹមត្រូវ ✓" : "មានភាពខុសគ្នា ✗");
-    parts.push(`  <div class="verification-status-badge" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: ${isVer ? '#059669' : '#dc2626'}; background: ${isVer ? '#ecfdf5' : '#fef2f2'}; border: 1px solid ${isVer ? '#a7f3d0' : '#fecaca'}; padding: 4px 10px; border-radius: 6px; margin-bottom: 16px;">\n`);
-    parts.push(`    <span>${escapeHtml(statusText)}</span>\n`);
-    parts.push("  </div>\n\n");
-  }
-
-  // 7. Footer
-  parts.push('  <footer class="footer plp-footer" style="border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748b;">\n');
-  parts.push('    <div style="font-weight: 600; color: #312e81;">PLP Math Content · DYT ECOSYSTEM</div>\n');
-  parts.push('    <div style="color: #94a3b8; font-style: italic;">សម្រាប់ការសិក្សា</div>\n');
-  parts.push("  </footer>\n");
   parts.push('  </main>\n');
   parts.push('</article>\n');
   parts.push("</body>\n");

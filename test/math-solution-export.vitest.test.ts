@@ -125,32 +125,32 @@ describe("Phase 9: Khmer Math Solver Comprehensive 25-Point Test Suite", () => {
     expect(escaped).toContain("&lt;script&gt;");
   });
 
-  // 6. ៤៣១ + ៦៥ aligns by hundreds, tens, and ones.
+  // 6. ៤៣១ + ៦៥ aligns by hundreds, tens, and ones without leading zero padding.
   it("Requirement 6: ៤៣១ + ៦៥ aligns by hundreds, tens, and ones", () => {
     const calc = buildStructuredIntegerArithmetic(431, "+", 65, 496);
     expect(calc.columns).toEqual(["hundreds", "tens", "ones"]);
 
     // Operand 1: ៤ ៣ ១
     expect(calc.rows[0].digits).toEqual(["៤", "៣", "១"]);
-    // Operand 2: ០ ៦ ៥
+    // Operand 2: [ ] ៦ ៥
     expect(calc.rows[1].operator).toBe("+");
-    expect(calc.rows[1].digits).toEqual(["០", "៦", "៥"]);
+    expect(calc.rows[1].digits).toEqual(["", "៦", "៥"]);
     // Result: ៤ ៩ ៦
     expect(calc.rows[3].role).toBe("result");
     expect(calc.rows[3].digits).toEqual(["៤", "៩", "៦"]);
 
     const text = renderColumnCalculationText(calc);
     expect(text).toContain("៤ ៣ ១");
-    expect(text).toContain("០ ៦ ៥");
+    expect(text).toContain("៦ ៥");
     expect(text).toContain("៤ ៩ ៦");
   });
 
-  // 7. ៧៩៥ − ៥៤ aligns correctly.
+  // 7. ៧៩៥ − ៥៤ aligns correctly without leading zero padding.
   it("Requirement 7: ៧៩៥ − ៥៤ aligns correctly", () => {
     const calc = buildStructuredIntegerArithmetic(795, "−", 54, 741);
     expect(calc.columns).toEqual(["hundreds", "tens", "ones"]);
     expect(calc.rows[0].digits).toEqual(["៧", "៩", "៥"]);
-    expect(calc.rows[1].digits).toEqual(["០", "៥", "៤"]);
+    expect(calc.rows[1].digits).toEqual(["", "៥", "៤"]);
     expect(calc.rows[3].digits).toEqual(["៧", "៤", "១"]);
   });
 

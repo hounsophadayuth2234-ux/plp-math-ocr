@@ -5,15 +5,12 @@ import {
   CheckCircle2,
   Copy,
   Check,
-  ChevronDown,
-  ChevronUp,
   Eye,
   BookOpen,
   Code2,
   Download,
   Image as ImageIcon,
   X,
-  AlertTriangle,
 } from "lucide-react";
 import type { MathSolverProblem, SolverMode } from "@/app/api/math-solver/route";
 import {
@@ -25,7 +22,7 @@ import {
   downloadSolutionAsPng,
 } from "@/lib/math-solution-html";
 import { ColumnCalculationView } from "./ColumnCalculationView";
-import { detectAndBuildStructuredCalculation } from "@/lib/column-calculation";
+import { detectAndBuildStructuredCalculation, toKhmerNumeral } from "@/lib/column-calculation";
 
 interface SolutionCardProps {
   problem: MathSolverProblem;
@@ -40,12 +37,23 @@ function renderStepCards(rawExplanation: string) {
   const blocks = rawExplanation
     .split(/\n\s*\n/)
     .map((b) => b.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    // Filter out plain-text vertical stacks, redundant problem restatements, and redundant final answer cards
+    .filter((b) => {
+      if (b.includes("រៀបជាជួរឈរ") || b.includes("ប្រមាណវិធី") || b.includes("ចម្លើយចុងក្រោយ")) {
+        return false;
+      }
+      return true;
+    });
 
-  if (blocks.length <= 1) {
+  if (blocks.length === 0) {
+    return null;
+  }
+
+  if (blocks.length === 1 && !blocks[0].includes("ជំហាន") && !blocks[0].includes("ពិនិត្យ")) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 text-sm sm:text-base text-slate-800 whitespace-pre-wrap leading-relaxed shadow-sm">
-        {rawExplanation}
+        {toKhmerNumeral(blocks[0])}
       </div>
     );
   }
@@ -59,7 +67,7 @@ function renderStepCards(rawExplanation: string) {
           ? "ពិនិត្យចម្លើយ ✓"
           : titleMatch
           ? titleMatch[1].replace(/[.:]/g, "").trim()
-          : `ជំហានទី ${idx + 1}`;
+          : `ជំហានទី ${toKhmerNumeral(idx + 1)}`;
         const content = titleMatch ? block.slice(titleMatch[0].length).trim() : block;
 
         return (
@@ -79,16 +87,16 @@ function renderStepCards(rawExplanation: string) {
                     : "bg-indigo-100 text-indigo-900"
                 }`}
               >
-                {badgeText}
+                {toKhmerNumeral(badgeText)}
               </span>
               {titleMatch && (
                 <span className="font-bold text-sm text-slate-900">
-                  {titleMatch[2].trim()}
+                  {toKhmerNumeral(titleMatch[2].trim())}
                 </span>
               )}
             </div>
             <div className="whitespace-pre-wrap text-slate-700 leading-relaxed">
-              {content || block}
+              {toKhmerNumeral(content || block)}
             </div>
           </div>
         );
@@ -100,7 +108,7 @@ function renderStepCards(rawExplanation: string) {
 export function SolutionCard({
   problem,
   index,
-  totalProblems,
+  totalProblems: _totalProblems,
   gradeTitle,
   solverModeTitle,
   solverMode,
@@ -109,7 +117,6 @@ export function SolutionCard({
   const [copiedText, setCopiedText] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
   const [isDownloadingImage, setIsDownloadingImage] = useState(false);
-  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [showHtmlModal, setShowHtmlModal] = useState(false);
   const [copiedModalHtml, setCopiedModalHtml] = useState(false);
 
@@ -232,41 +239,21 @@ export function SolutionCard({
 
   return (
     <div className="space-y-4">
-      {/* Primary Educational PLP Worksheet Card */}
+      {/* Primary Educational PLP Worksheet Card - Clean Sheet starting directly with Problem Statement */}
       <article
         ref={cardRef}
         className="solution plp-solution-sheet rounded-2xl border border-amber-200/90 bg-[#FFFEFC] text-slate-800 shadow-md p-6 sm:p-8 max-w-3xl mx-auto space-y-6 font-sans transition-all"
         role="region"
-        aria-label="សន្លឹកដំណោះស្រាយគណិតវិទ្យា PLP"
+        aria-label="សន្លឹកដំណោះស្រាយគណិតវិទ្យា"
       >
-        {/* Subtle PLP Header */}
-        <header className="solution-header plp-header border-b-2 border-indigo-100/80 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="plp-brand text-xs font-bold uppercase tracking-wider text-indigo-700">
-              PLP Math Content
-            </div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mt-0.5 tracking-tight">
-              {totalProblems > 1 ? `សន្លឹកដំណោះស្រាយគណិតវិទ្យា (លំហាត់ទី ${index + 1})` : "សន្លឹកដំណោះស្រាយគណិតវិទ្យា"}
-            </h3>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="badge-grade rounded-full bg-indigo-50 border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-800">
-              {effectiveGradeBadge}
-            </span>
-            <span className="badge-mode rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-medium text-amber-900">
-              {isMode1 ? "ដោះស្រាយលំហាត់ (ចម្លើយ)" : isMode2 ? "បង្កើតដំណោះស្រាយ (វិធីដោះស្រាយ)" : "ដោះស្រាយ + ផ្ទៀងផ្ទាត់ (ពេញលេញ)"}
-            </span>
-          </div>
-        </header>
-
-        {/* 1. Problem Statement (Mandatory in all modes) */}
+        {/* 1. Problem Statement (Mandatory in all modes) - Sheet starts directly with problem statement */}
         <section className="problem-statement-section space-y-2">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600">
             <BookOpen className="h-4 w-4 text-indigo-600 shrink-0" />
             <span>ប្រធានលំហាត់</span>
           </div>
           <div className="problem-box rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-base font-semibold text-slate-900 font-mono leading-relaxed whitespace-pre-wrap">
-            {problem.extractedProblem}
+            {toKhmerNumeral(problem.extractedProblem)}
           </div>
         </section>
 
@@ -276,19 +263,19 @@ export function SolutionCard({
             {problem.given && (
               <div>
                 <strong className="text-indigo-900 font-semibold">អ្វីដែលគេឱ្យ (Given)៖</strong>{" "}
-                <span className="text-slate-800">{problem.given}</span>
+                <span className="text-slate-800">{toKhmerNumeral(problem.given)}</span>
               </div>
             )}
             {problem.toFind && (
               <div>
                 <strong className="text-indigo-900 font-semibold">អ្វីដែលត្រូវរក (To Find)៖</strong>{" "}
-                <span className="text-slate-800">{problem.toFind}</span>
+                <span className="text-slate-800">{toKhmerNumeral(problem.toFind)}</span>
               </div>
             )}
             {problem.formulas && (
               <div>
                 <strong className="text-indigo-900 font-semibold">រូបមន្តដែលត្រូវប្រើ (Formulas)៖</strong>{" "}
-                <span className="font-mono font-bold text-indigo-900">{problem.formulas}</span>
+                <span className="font-mono font-bold text-indigo-900">{toKhmerNumeral(problem.formulas)}</span>
               </div>
             )}
           </section>
@@ -310,13 +297,13 @@ export function SolutionCard({
               </span>
             </div>
             <div className="font-mono font-bold text-slate-800 text-sm">
-              {problem.extractedAnswer}
+              {toKhmerNumeral(problem.extractedAnswer || "")}
             </div>
             {problem.answerStatus === "incorrect" && (
               <div className="mt-2 pt-2 border-t border-slate-200 space-y-1 text-xs text-rose-900">
-                {problem.incorrectStep && <div><strong>ជំហានដែលខុស៖</strong> {problem.incorrectStep}</div>}
-                {problem.errorExplanationKhmer && <div><strong>ការពន្យល់កំហុស៖</strong> {problem.errorExplanationKhmer}</div>}
-                {problem.correctedStep && <div><strong>ជំហានត្រឹមត្រូវ៖</strong> {problem.correctedStep}</div>}
+                {problem.incorrectStep && <div><strong>ជំហានដែលខុស៖</strong> {toKhmerNumeral(problem.incorrectStep)}</div>}
+                {problem.errorExplanationKhmer && <div><strong>ការពន្យល់កំហុស៖</strong> {toKhmerNumeral(problem.errorExplanationKhmer)}</div>}
+                {problem.correctedStep && <div><strong>ជំហានត្រឹមត្រូវ៖</strong> {toKhmerNumeral(problem.correctedStep)}</div>}
               </div>
             )}
           </section>
@@ -327,15 +314,10 @@ export function SolutionCard({
         {!isMode1 && (problem.solutionKhmer || problem.solution || problem.verticalLines || problem.alignedWorking) && (
           <section className="solution-body-section space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-              វិធីដោះស្រាយលម្អិត
+              វិធីដោះស្រាយ
             </h4>
-            {(problem.solutionKhmer || problem.solution) && (
-              <div className="solution-steps">
-                {renderStepCards(problem.solutionKhmer || problem.solution || "")}
-              </div>
-            )}
 
-            {/* Place-value aligned column calculation & fallback */}
+            {/* Place-value aligned column calculation at TOP of solution section */}
             {(structuredCalc || Boolean(problem.verticalLines && problem.verticalLines.length > 0) || Boolean(problem.alignedWorking)) && (
               <div className="rounded-xl border border-amber-200/90 bg-[#FEFEFA] p-4 sm:p-5 overflow-x-auto space-y-3 shadow-sm">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
@@ -363,6 +345,18 @@ export function SolutionCard({
                 </pre>
               </div>
             )}
+
+            {/* Step-by-Step Explanation Cards with header 'ការពន្យល់លម្អិត' */}
+            {(problem.solutionKhmer || problem.solution) && (
+              <div className="space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
+                  ការពន្យល់លម្អិត
+                </span>
+                <div className="solution-steps">
+                  {renderStepCards(problem.solutionKhmer || problem.solution || "")}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -381,7 +375,7 @@ export function SolutionCard({
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
                 <span className="text-xl sm:text-2xl font-bold text-emerald-950 font-mono">
-                  {problem.finalAnswer}
+                  {toKhmerNumeral(problem.finalAnswer)}
                 </span>
               </div>
               <span className="badge-status rounded-full bg-emerald-100 border border-emerald-300 px-3 py-1 text-xs font-bold text-emerald-800">
@@ -390,59 +384,6 @@ export function SolutionCard({
             </div>
           </section>
         )}
-
-        {/* 6. Collapsed Advanced Technical Settings / Verifier Details */}
-        {((problem.ambiguousParts && problem.ambiguousParts.length > 0) ||
-          problem.deterministicResult) && (
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => setShowTechnicalDetails((p) => !p)}
-              className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-700 font-medium transition-colors"
-            >
-              <span>ការកំណត់កម្រិតខ្ពស់ &amp; ពត៌មានបច្ចេកទេស (Advanced Settings)</span>
-              {showTechnicalDetails ? (
-                <ChevronUp className="h-3 w-3" />
-              ) : (
-                <ChevronDown className="h-3 w-3" />
-              )}
-            </button>
-            {showTechnicalDetails && (
-              <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 text-xs font-mono text-slate-600">
-                {problem.deterministicResult && (
-                  <div>
-                    <div>ការផ្ទៀងផ្ទាត់ដោយប្រព័ន្ធ (Deterministic Verified): {String(problem.deterministicResult.isVerified)}</div>
-                    <div>វិធីសាស្ត្រ: {problem.deterministicResult.verificationMethod}</div>
-                    {problem.deterministicResult.computedAnswer && (
-                      <div>ចម្លើយដែលគណនា: {problem.deterministicResult.computedAnswer}</div>
-                    )}
-                  </div>
-                )}
-                {problem.ambiguousParts && problem.ambiguousParts.length > 0 && (
-                  <div className="space-y-1 text-amber-800">
-                    <span className="font-bold flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      ចំណុចមិនច្បាស់លាស់៖
-                    </span>
-                    {problem.ambiguousParts.map((p, i) => (
-                      <div key={i}>• {p}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Subtle PLP Footer */}
-        <footer className="footer plp-footer border-t border-amber-200/80 pt-4 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 gap-2">
-          <div className="font-semibold text-indigo-900">
-            PLP Math Content · DYT ECOSYSTEM
-          </div>
-          <div className="italic text-slate-400">
-            សម្រាប់ការសិក្សា
-          </div>
-        </footer>
       </article>
 
       {/* Action Buttons: ទាញយកជារូបភាព (PNG), ចម្លងអត្ថបទ, ចម្លងកូដ HTML, ទាញយកឯកសារ HTML, មើល HTML Source */}
