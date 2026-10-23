@@ -1,8 +1,12 @@
 "use client";
 
 import React, { useRef, useState, useCallback, useEffect } from "react";
-import { X, ImageIcon, AlertCircle, Scan, Radio } from "lucide-react";
+import { X, ImageIcon, AlertCircle, Scan, Radio, Sparkles } from "lucide-react";
 import { cyberAudio } from "@/lib/cyber-audio";
+import {
+  optimizeLargeImageIfNeeded,
+  AUTO_OPTIMIZE_MESSAGE_KHMER,
+} from "@/lib/image-auto-optimizer";
 
 interface BgUploadZoneProps {
   onFileSelect: (file: File | null) => void;
@@ -22,6 +26,7 @@ const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
  * - Text: "DROP IMAGE INTO SCANNER"
  * - Secondary: "or choose a file from your device"
  * - Formats: "PNG · JPG · WEBP · MAX 12MB"
+ * - Auto-optimizes large images (5MB–20MB) to safe 2048px working resolution
  */
 export function BgUploadZone({
   onFileSelect,
@@ -35,11 +40,13 @@ export function BgUploadZone({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [optimizationNotice, setOptimizationNotice] = useState<string | null>(null);
   const [imageMeta, setImageMeta] = useState<{ width: number; height: number } | null>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
       setErrorMessage(null);
+      setOptimizationNotice(null);
 
       // 1. Format validation
       if (!ACCEPTED_TYPES.includes(file.type.toLowerCase())) {
@@ -47,9 +54,9 @@ export function BgUploadZone({
         return;
       }
 
-      // 2. Size validation (12 MB max)
-      if (file.size > 12 * 1024 * 1024) {
-        setErrorMessage("ទំហំឯកសារធំជាង ១២ MB សូមជ្រើសរើសរូបភាពតូចជាងនេះ (Payload exceeds 12 MB limit)");
+      // 2. Size validation (allow up to 25 MB for client-side auto-optimization)
+      if (file.size > 25 * 1024 * 1024) {
+        setErrorMessage("ទំហំឯកសារធំជាង ២៥ MB សូមជ្រើសរើសរូបភាពតូចជាងនេះ (Payload exceeds 25 MB limit)");
         return;
       }
 
@@ -59,18 +66,35 @@ export function BgUploadZone({
         return;
       }
 
-      // 4. Decodability & Dimension verification
+      // 4. Auto-optimization for large/heavy files (5MB–20MB or > 2048px dimension)
+      let targetFile = file;
+      if (file.size > 4.5 * 1024 * 1024) {
+        try {
+          const optResult = await optimizeLargeImageIfNeeded(file, {
+            maxDimension: 2048,
+            sizeThresholdBytes: 4.5 * 1024 * 1024,
+          });
+          if (optResult.wasOptimized) {
+            targetFile = optResult.file;
+            setOptimizationNotice(AUTO_OPTIMIZE_MESSAGE_KHMER);
+          }
+        } catch (e) {
+          console.warn("Client auto-optimization warning:", e);
+        }
+      }
+
+      // 5. Decodability & Dimension verification
       try {
         let w = 0;
         let h = 0;
         if (typeof createImageBitmap === "function") {
-          const bitmap = await createImageBitmap(file);
+          const bitmap = await createImageBitmap(targetFile);
           w = bitmap.width;
           h = bitmap.height;
           bitmap.close();
         } else {
           await new Promise<void>((resolve, reject) => {
-            const testUrl = URL.createObjectURL(file);
+            const testUrl = URL.createObjectURL(targetFile);
             const img = new Image();
             img.onload = () => {
               w = img.naturalWidth;
@@ -90,6 +114,22 @@ export function BgUploadZone({
           throw new Error("Invalid image dimensions");
         }
 
+        // Additional dimension check: if dimension > 2048px even if file size < 4.5MB
+        if ((w > 2048 || h > 2048) && targetFile === file) {
+          try {
+            const optResult = await optimizeLargeImageIfNeeded(file, {
+              maxDimension: 2048,
+              sizeThresholdBytes: 0,
+            });
+            if (optResult.wasOptimized) {
+              targetFile = optResult.file;
+              w = optResult.newWidth;
+              h = optResult.newHeight;
+              setOptimizationNotice(AUTO_OPTIMIZE_MESSAGE_KHMER);
+            }
+          } catch {}
+        }
+
         setImageMeta({ width: w, height: h });
       } catch {
         setErrorMessage("ឯកសាររូបភាពខូច ឬមិនអាចអានបាន សូមជ្រើសរើសរូបភាពផ្សេង (Corrupted or undecodable image file)");
@@ -102,19 +142,20 @@ export function BgUploadZone({
           URL.revokeObjectURL(previewUrlRef.current);
         } catch {}
       }
-      const newUrl = URL.createObjectURL(file);
+      const newUrl = URL.createObjectURL(targetFile);
       previewUrlRef.current = newUrl;
       setPreviewUrl(newUrl);
 
       // Play robotic hydraulic hiss on successful file ingest
       cyberAudio.playHydraulicHiss();
-      onFileSelect(file);
+      onFileSelect(targetFile);
     },
     [onFileSelect]
   );
 
   const handleClear = () => {
     setErrorMessage(null);
+    setOptimizationNotice(null);
     setImageMeta(null);
     cyberAudio.playClick();
     if (previewUrlRef.current) {
@@ -323,6 +364,17 @@ export function BgUploadZone({
             {/* Hidden compatibility hook for test scanners */}
             <span className="sr-only">DROP IMAGE INTO SCANNER</span>
           </div>
+        </div>
+      )}
+
+      {optimizationNotice && (
+        <div
+          role="status"
+          data-testid="large-image-optimized-badge"
+          className="flex items-center gap-2 border border-emerald-500/50 bg-emerald-950/70 p-2.5 text-xs font-sans text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.15)] rounded-lg"
+        >
+          <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
+          <span>{optimizationNotice}</span>
         </div>
       )}
 

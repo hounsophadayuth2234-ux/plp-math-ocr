@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useRef, useState, useCallback } from "react";
-import { Upload, Camera, X, Image as ImageIcon, FileWarning } from "lucide-react";
+import { Upload, Camera, X, Image as ImageIcon, FileWarning, Sparkles } from "lucide-react";
+import {
+  optimizeLargeImageIfNeeded,
+  AUTO_OPTIMIZE_MESSAGE_KHMER,
+} from "@/lib/image-auto-optimizer";
 
 interface SolverImageUploadProps {
   onFileSelect: (file: File | null) => void;
@@ -10,7 +14,7 @@ interface SolverImageUploadProps {
 }
 
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
-const MAX_SIZE_MB = 4.5;
+const MAX_SIZE_MB = 20;
 
 export function SolverImageUpload({
   onFileSelect,
@@ -21,10 +25,12 @@ export function SolverImageUpload({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [optimizationNotice, setOptimizationNotice] = useState<string | null>(null);
 
   const validateAndSelect = useCallback(
-    (file: File) => {
+    async (file: File) => {
       setValidationError(null);
+      setOptimizationNotice(null);
 
       if (!ACCEPTED_TYPES.includes(file.type)) {
         setValidationError(
@@ -40,10 +46,26 @@ export function SolverImageUpload({
         return;
       }
 
+      let targetFile = file;
+      if (file.size > 4.0 * 1024 * 1024) {
+        try {
+          const optRes = await optimizeLargeImageIfNeeded(file, {
+            maxDimension: 2048,
+            sizeThresholdBytes: 4.0 * 1024 * 1024,
+          });
+          if (optRes.wasOptimized) {
+            targetFile = optRes.file;
+            setOptimizationNotice(AUTO_OPTIMIZE_MESSAGE_KHMER);
+          }
+        } catch (e) {
+          console.warn("Client auto-optimization warning in solver upload:", e);
+        }
+      }
+
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      const url = URL.createObjectURL(file);
+      const url = URL.createObjectURL(targetFile);
       setPreviewUrl(url);
-      onFileSelect(file);
+      onFileSelect(targetFile);
     },
     [onFileSelect, previewUrl]
   );
@@ -92,6 +114,7 @@ export function SolverImageUpload({
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     setValidationError(null);
+    setOptimizationNotice(null);
     onFileSelect(null);
   }, [previewUrl, onFileSelect]);
 
@@ -199,6 +222,18 @@ export function SolverImageUpload({
           <Camera className="h-4 w-4" />
           <span>ថតរូបពីកាមេរ៉ា (Take Photo)</span>
         </button>
+      )}
+
+      {/* Large Image Auto-Optimization Badge */}
+      {optimizationNotice && (
+        <div
+          role="status"
+          data-testid="solver-large-image-optimized-badge"
+          className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/60 p-2.5 text-xs text-emerald-200 font-sans shadow-md"
+        >
+          <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
+          <span>{optimizationNotice}</span>
+        </div>
       )}
 
       {/* Validation error */}

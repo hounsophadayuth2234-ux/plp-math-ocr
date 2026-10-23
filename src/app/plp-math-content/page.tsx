@@ -22,6 +22,7 @@ import { OutputTabs } from "@/components/math-ocr/OutputTabs";
 import { PreprocessProfileSelector } from "@/components/math-ocr/PreprocessProfileSelector";
 import { OcrDiagnosticsDeck } from "@/components/math-ocr/OcrDiagnosticsDeck";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
+import { MathStageProgressIndicator } from "@/components/ui/MathStageProgressIndicator";
 import { preprocessMathImageForUpload } from "@/lib/math-ocr-utils";
 import { prepareMathOcrImage, PreparedMathOcrImage } from "@/lib/math-ocr-prep";
 import type { MathOcrResponse } from "@/app/api/math-ocr/route";
@@ -858,20 +859,28 @@ export default function PlpMathContentPage() {
             </div>
           )}
 
-          {/* High-Tech Telemetry Scanner */}
+          {/* High-Tech Telemetry Scanner & Calm Stage Progress Indicator */}
           {isLoading && (
-            <RoboticScanner
-              active={true}
-              moduleName="PLP MATH CONTENT // RECOGNITION CORE"
-              providerLabel="SERVERLESS GEMINI VISION"
-              steps={[
-                "LOCAL IMAGE DECODE & GRAPHEME PREPROCESSING...",
-                "DETECTING KHMER TEXT & FORMULA REGIONS...",
-                "TRANSCRIBING BILINGUAL KHMER-MATH TOKENS...",
-                "VALIDATING KATEX, JODIT CSS & MATHML OUTPUT...",
-              ]}
-              subtext="Bilingual Khmer educational text and mathematical structure transcription"
-            />
+            <div className="space-y-4">
+              <MathStageProgressIndicator
+                active={true}
+                moduleName="MODULE 01 // MATHEMATICAL OCR MATRIX"
+                elapsedSeconds={activeElapsed}
+                subtext="កំពុងអាន រៀបចំ និងបម្លែងរូបមន្តគណិតវិទ្យាភាសាខ្មែរតាមរយៈ Gemini Vision AI"
+              />
+              <RoboticScanner
+                active={true}
+                moduleName="PLP MATH CONTENT // RECOGNITION CORE"
+                providerLabel="SERVERLESS GEMINI VISION"
+                steps={[
+                  "LOCAL IMAGE DECODE & GRAPHEME PREPROCESSING...",
+                  "DETECTING KHMER TEXT & FORMULA REGIONS...",
+                  "TRANSCRIBING BILINGUAL KHMER-MATH TOKENS...",
+                  "VALIDATING KATEX, JODIT CSS & MATHML OUTPUT...",
+                ]}
+                subtext="Bilingual Khmer educational text and mathematical structure transcription"
+              />
+            </div>
           )}
 
           {/* ── 7. Results Card with Tabs for LaTeX, Jodit HTML, MathML, and Preview ── */}

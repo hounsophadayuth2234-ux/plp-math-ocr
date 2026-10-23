@@ -28,6 +28,7 @@ export interface BgAdvancedSettingsProps {
   selectedEngine: "browser" | "worker";
   onSelectEngine: (engine: "browser" | "worker") => void;
   isWorkerConfigured: boolean;
+  workerStatus?: "not_configured" | "checking" | "ready" | "unavailable" | "configured";
   edgeQuality: "fast" | "balanced" | "fine_details";
   onChangeEdgeQuality: (q: "fast" | "balanced" | "fine_details") => void;
   // Group B: Edge Refinement
@@ -68,6 +69,7 @@ export function BgAdvancedSettings({
   selectedEngine,
   onSelectEngine,
   isWorkerConfigured,
+  workerStatus,
   edgeQuality,
   onChangeEdgeQuality,
   dehaloRadius,
@@ -234,9 +236,13 @@ export function BgAdvancedSettings({
             </div>
 
             {/* AI Engine Selection */}
-            <div className="space-y-1.5">
-              <div className="text-[10.5px] text-slate-300 font-bold">Execution Engine</div>
-              <div className={`grid ${isWorkerConfigured ? "grid-cols-2" : "grid-cols-1"} gap-2`}>
+            <div className="space-y-2">
+              <div className="text-[11px] text-slate-200 font-bold uppercase tracking-wider font-mono flex items-center justify-between">
+                <span>ម៉ាស៊ីនដំណើរការ (Execution Engine)</span>
+                <span className="text-[10px] text-slate-400 font-normal">2 ជម្រើសច្បាស់លាស់</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {/* Option A: Browser AI • 100% On-Device */}
                 <button
                   type="button"
                   data-testid="engine-select-browser"
@@ -247,56 +253,89 @@ export function BgAdvancedSettings({
                     onSelectEngine("browser");
                   }}
                   disabled={isProcessing}
-                  className={`min-h-[42px] flex items-center justify-between p-2.5 rounded-none border text-left transition-all ${
+                  className={`min-h-[58px] flex flex-col justify-between p-3 rounded-xl border text-left transition-all ${
                     selectedEngine === "browser"
-                      ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40"
+                      ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_15px_rgba(0,240,255,0.15)]"
                       : "border-slate-800 bg-slate-900/40 text-slate-300 hover:border-slate-700"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-2.5 w-2.5 rounded-none border ${
-                        selectedEngine === "browser"
-                          ? "bg-cyan-400 border-cyan-300"
-                          : "bg-transparent border-slate-500"
-                      }`}
-                    />
-                    <span className="text-[11px] font-bold text-white">Browser AI</span>
-                  </div>
-                  <span className="text-[9px] text-emerald-400 font-bold">100% Local</span>
-                </button>
-
-                {/* Hide Remote Worker completely when not configured */}
-                {isWorkerConfigured && (
-                  <button
-                    type="button"
-                    data-testid="engine-select-worker"
-                    role="radio"
-                    aria-checked={selectedEngine === "worker"}
-                    onClick={() => {
-                      cyberAudio.playClick();
-                      onSelectEngine("worker");
-                    }}
-                    disabled={isProcessing}
-                    className={`min-h-[42px] flex items-center justify-between p-2.5 rounded-none border text-left transition-all ${
-                      selectedEngine === "worker"
-                        ? "border-purple-400 bg-purple-950/70 text-white font-bold ring-1 ring-purple-400/40"
-                        : "border-slate-800 bg-slate-900/40 text-slate-300 hover:border-slate-700"
-                    }`}
-                  >
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span
-                        className={`h-2.5 w-2.5 rounded-none border ${
-                          selectedEngine === "worker"
-                            ? "bg-purple-400 border-purple-300"
+                        className={`h-3 w-3 rounded-full border ${
+                          selectedEngine === "browser"
+                            ? "bg-cyan-400 border-cyan-300"
                             : "bg-transparent border-slate-500"
                         }`}
                       />
-                      <span className="text-[11px] font-bold text-slate-200">Remote Worker</span>
+                      <span className="text-xs font-bold text-white">
+                        ដំណើរការលើឧបករណ៍ផ្ទាល់ (Browser AI • 100% On-Device)
+                      </span>
                     </div>
-                    <span className="text-[9px] text-slate-400">Server</span>
-                  </button>
-                )}
+                    <span className="text-[9.5px] bg-emerald-950 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded font-mono font-bold shrink-0">
+                      100% Local
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-[10.5px] text-slate-300 font-sans leading-relaxed">
+                    រូបភាពត្រូវបានកាត់នៅក្នុង Browser របស់អ្នកផ្ទាល់ មិនផ្ញើទៅ Server ទេ (Processed locally in your browser)
+                  </p>
+                </button>
+
+                {/* Option B: Cloud Server AI */}
+                {(() => {
+                  const isWorkerOnline = isWorkerConfigured && workerStatus === "ready";
+                  return (
+                    <button
+                      type="button"
+                      data-testid="engine-select-worker"
+                      role="radio"
+                      aria-checked={selectedEngine === "worker"}
+                      aria-disabled={!isWorkerOnline ? "true" : "false"}
+                      disabled={!isWorkerOnline || isProcessing}
+                      onClick={() => {
+                        if (!isWorkerOnline) return;
+                        cyberAudio.playClick();
+                        onSelectEngine("worker");
+                      }}
+                      className={`min-h-[58px] flex flex-col justify-between p-3 rounded-xl border text-left transition-all ${
+                        !isWorkerOnline
+                          ? "border-slate-800/80 bg-slate-900/30 text-slate-500 opacity-60 cursor-not-allowed"
+                          : selectedEngine === "worker"
+                          ? "border-purple-400 bg-purple-950/70 text-white font-bold ring-1 ring-purple-400/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                          : "border-slate-800 bg-slate-900/40 text-slate-300 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`h-3 w-3 rounded-full border ${
+                              selectedEngine === "worker"
+                                ? "bg-purple-400 border-purple-300"
+                                : "bg-transparent border-slate-500"
+                            }`}
+                          />
+                          <span className="text-xs font-bold text-slate-200">
+                            ម៉ាស៊ីនមេកម្រិតខ្ពស់ (Cloud Server AI)
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[9.5px] px-2 py-0.5 rounded font-mono font-bold shrink-0 border ${
+                            isWorkerOnline
+                              ? "bg-purple-950 border-purple-500/40 text-purple-300"
+                              : "bg-slate-900 border-slate-700 text-slate-400"
+                          }`}
+                        >
+                          {isWorkerOnline ? "Cloud AI" : "ក្រៅបណ្តាញ / Offline"}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-[10.5px] text-slate-300 font-sans leading-relaxed">
+                        {isWorkerOnline
+                          ? "ផ្ញើរូបភាពទៅកាត់នៅលើ Server សម្រាប់រូបស្មុគស្មាញ (Processed on remote server)"
+                          : "ផ្ញើរូបភាពទៅកាត់នៅលើ Server សម្រាប់រូបស្មុគស្មាញ (Processed on remote server) — ម៉ាស៊ីនមេក្រៅបណ្តាញ"}
+                      </p>
+                    </button>
+                  );
+                })()}
               </div>
             </div>
 

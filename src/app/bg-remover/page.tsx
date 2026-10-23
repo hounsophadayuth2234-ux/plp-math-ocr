@@ -1484,6 +1484,7 @@ export default function BgRemoverPage() {
                 selectedEngine={selectedEngine}
                 onSelectEngine={handleSwitchEngine}
                 isWorkerConfigured={isWorkerConfigured}
+                workerStatus={workerStatus}
                 edgeQuality={edgeQuality === "quality" ? "fine_details" : edgeQuality}
                 onChangeEdgeQuality={(q) => setEdgeQuality(q)}
                 dehaloRadius={dehaloRadius}

@@ -227,6 +227,7 @@ export function MechanicalCyberBackground({
   return (
     <div
       aria-hidden="true"
+      role="presentation"
       data-testid="cyber-bg-canvas"
       className="pointer-events-none absolute inset-0 overflow-hidden z-0 select-none"
     >
@@ -264,7 +265,7 @@ export function MechanicalCyberBackground({
               <circle
                 cx="120"
                 cy="120"
-                r="3"
+                r="4"
                 fill="none"
                 stroke="#00f0ff"
                 strokeWidth="0.5"
@@ -284,9 +285,11 @@ export function MechanicalCyberBackground({
       {/* ── Layer 2: Perspective Engineering Floor Grid ── */}
       <div className="perspective-floor-grid opacity-50 hidden sm:block" />
 
-      {/* ── Layer 2.5: Horizontal Mathematical Formula Streams (10 Desktop, 5 Mobile) ── */}
+      {/* ── Layer 2.5: Horizontal Mathematical Streams Reduced to Subtle CSS Grid (Zero DOM Text Nodes for SEO/A11y) ── */}
       <div
         data-testid="math-formula-streams"
+        aria-hidden="true"
+        role="presentation"
         className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
       >
         {FORMULA_STREAMS.map((row, idx) => {
@@ -306,33 +309,36 @@ export function MechanicalCyberBackground({
               key={row.id}
               data-testid="formula-stream-row"
               data-direction={row.direction}
+              aria-hidden="true"
+              role="presentation"
               className={`absolute left-0 w-full overflow-hidden whitespace-nowrap pointer-events-none select-none ${row.opacity} ${responsiveVisibility}`}
               style={{ top: row.top }}
             >
               <div
                 data-speed={row.speed}
+                aria-hidden="true"
+                role="presentation"
                 className={`formula-stream flex shrink-0 items-center gap-10 ${directionClass}`}
                 style={{
                   animationDelay: row.delay,
                 }}
               >
-                {/* Primary formula set */}
-                {row.items.map((item, itemIdx) => (
+                {/* Pure CSS subtle decorative nodes with aria-hidden, zero math symbols or text nodes exposed to DOM */}
+                {row.items.map((_, itemIdx) => (
                   <span
                     key={`p-${itemIdx}`}
-                    className={`font-mono text-xs sm:text-sm font-semibold tracking-wider ${item.color}`}
-                  >
-                    {item.text}
-                  </span>
+                    aria-hidden="true"
+                    role="presentation"
+                    className="inline-block h-1 w-10 sm:w-14 rounded-full bg-cyan-400/20 shadow-[0_0_6px_rgba(0,240,255,0.2)]"
+                  />
                 ))}
-                {/* Repeated formula set for seamless continuous marquee */}
-                {row.items.map((item, itemIdx) => (
+                {row.items.map((_, itemIdx) => (
                   <span
                     key={`r-${itemIdx}`}
-                    className={`font-mono text-xs sm:text-sm font-semibold tracking-wider ${item.color}`}
-                  >
-                    {item.text}
-                  </span>
+                    aria-hidden="true"
+                    role="presentation"
+                    className="inline-block h-1 w-10 sm:w-14 rounded-full bg-cyan-400/20 shadow-[0_0_6px_rgba(0,240,255,0.2)]"
+                  />
                 ))}
               </div>
             </div>

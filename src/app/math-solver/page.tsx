@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { SolverImageUpload } from "@/components/math-solver/SolverImageUpload";
 import { SolutionCard } from "@/components/math-solver/SolutionCard";
+import { MathStageProgressIndicator } from "@/components/ui/MathStageProgressIndicator";
 import type {
   MathSolverResponse,
   MathSolverProblem,
@@ -923,6 +924,16 @@ export default function MathSolverPage() {
           </div>
         </div>
       </div>
+
+      {/* Stage-Based Progress Indicator with Live Elapsed Counter & Expectation Badge */}
+      {isBusy && (
+        <MathStageProgressIndicator
+          active={true}
+          moduleName="MODULE 04 // KHMER MATH SOLVER & WORKSHEET GENERATOR"
+          subtext="កំពុងដោះស្រាយលំហាត់ និងបង្កើតជំហានតាមកម្មវិធីសិក្សាបឋមសិក្សា (ថ្នាក់ទី ១–៦) តាមរយៈ Gemini API"
+          onCancel={handleCancel}
+        />
+      )}
 
       {/* Fresh Empty State when no result is present */}
       {!problemResult && !isBusy && !error && (

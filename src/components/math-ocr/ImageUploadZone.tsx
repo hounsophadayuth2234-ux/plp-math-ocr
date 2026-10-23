@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useRef, useState, useCallback, useEffect } from "react";
-import { Upload, X, ImageIcon, AlertCircle } from "lucide-react";
+import { Upload, X, ImageIcon, AlertCircle, Sparkles } from "lucide-react";
+import {
+  optimizeLargeImageIfNeeded,
+  AUTO_OPTIMIZE_MESSAGE_KHMER,
+} from "@/lib/image-auto-optimizer";
 
 interface ImageUploadZoneProps {
   onFileSelect: (file: File | null) => void;
@@ -13,7 +17,7 @@ const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 /**
  * Accessible drag-and-drop + click-to-upload zone for math problem images.
- * Accepts PNG, JPG, WEBP up to 10MB.
+ * Accepts PNG, JPG, WEBP up to 25MB with client-side auto-optimization.
  * Validates decodability, MIME type, empty files, and manages Object URLs cleanly.
  */
 export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageUploadZoneProps) {
@@ -21,6 +25,7 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
   const [isDragging, setIsDragging] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [sizeError, setSizeError] = useState<string | null>(null);
+  const [optimizationNotice, setOptimizationNotice] = useState<string | null>(null);
 
   // Clean up preview object URL on unmount or file replacement
   useEffect(() => {
@@ -36,6 +41,7 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
   const handleFile = useCallback(
     async (file: File) => {
       setSizeError(null);
+      setOptimizationNotice(null);
 
       // 1. MIME type validation
       const lowerType = file.type ? file.type.toLowerCase() : "";
@@ -50,16 +56,33 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
         return;
       }
 
-      // 3. Size check: allow up to 20 MB for client-side auto-compression
-      if (file.size > 20 * 1024 * 1024) {
-        setSizeError("ទំហំឯកសារធំជាង 20 MB សូមជ្រើសរើសរូបភាពតូចជាងនេះ (File exceeds 20 MB limit)");
+      // 3. Size check: allow up to 25 MB for client-side auto-compression
+      if (file.size > 25 * 1024 * 1024) {
+        setSizeError("ទំហំឯកសារធំជាង 25 MB សូមជ្រើសរើសរូបភាពតូចជាងនេះ (File exceeds 25 MB limit)");
         return;
       }
 
-      // 4. Decodability check
+      // 4. Auto-optimization for large/heavy files (> 4.0 MB or > 2048px dimension)
+      let targetFile = file;
+      if (file.size > 4.0 * 1024 * 1024) {
+        try {
+          const optRes = await optimizeLargeImageIfNeeded(file, {
+            maxDimension: 2048,
+            sizeThresholdBytes: 4.0 * 1024 * 1024,
+          });
+          if (optRes.wasOptimized) {
+            targetFile = optRes.file;
+            setOptimizationNotice(AUTO_OPTIMIZE_MESSAGE_KHMER);
+          }
+        } catch (e) {
+          console.warn("Client auto-optimization warning in math OCR:", e);
+        }
+      }
+
+      // 5. Decodability check
       try {
         if (typeof window !== "undefined" && "createImageBitmap" in window) {
-          const bitmap = await createImageBitmap(file);
+          const bitmap = await createImageBitmap(targetFile);
           bitmap.close();
         }
       } catch (decodeErr) {
@@ -74,9 +97,9 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
         } catch {}
       }
 
-      const url = URL.createObjectURL(file);
+      const url = URL.createObjectURL(targetFile);
       setPreviewUrl(url);
-      onFileSelect(file);
+      onFileSelect(targetFile);
     },
     [onFileSelect, previewUrl]
   );
@@ -93,6 +116,7 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
 
   const handleClear = () => {
     setSizeError(null);
+    setOptimizationNotice(null);
     if (previewUrl) {
       try {
         URL.revokeObjectURL(previewUrl);
@@ -196,6 +220,17 @@ export function ImageUploadZone({ onFileSelect, selectedFile, disabled }: ImageU
               Supports handwritten equations, printed formulas, and geometric diagrams (PNG, JPG, WEBP · max 4.5 MB)
             </p>
           </div>
+        </div>
+      )}
+
+      {optimizationNotice && (
+        <div
+          role="status"
+          data-testid="ocr-large-image-optimized-badge"
+          className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/60 p-2.5 text-xs text-emerald-200 font-sans shadow-md"
+        >
+          <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
+          <span>{optimizationNotice}</span>
         </div>
       )}
 

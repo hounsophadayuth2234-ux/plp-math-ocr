@@ -44,13 +44,16 @@ export function BgStudioHero({
           {isCloudActive ? (
             <div
               data-testid="active-engine-badge"
-              className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/40 px-3 py-1.5 text-emerald-300"
-              title="Processing running via remote cloud worker"
+              className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/40 px-3 py-1.5 text-purple-300"
+              title="ផ្ញើរូបភាពទៅកាត់នៅលើ Server សម្រាប់រូបស្មុគស្មាញ (Processed on remote server)"
             >
-              <Cloud className="h-4 w-4 text-emerald-400" />
+              <Cloud className="h-4 w-4 text-purple-400" />
               <div className="leading-tight">
-                <div className="text-[10px] text-emerald-400/80 font-mono">ACTIVE ENGINE</div>
-                <div className="font-bold">Cloud Worker (HF Space API)</div>
+                <div className="text-[10px] text-purple-400/80 font-mono">ACTIVE ENGINE</div>
+                <div className="font-bold">ម៉ាស៊ីនមេកម្រិតខ្ពស់ (Cloud Server AI)</div>
+                <div className="text-[9.5px] text-purple-300/80 font-mono mt-0.5">
+                  ផ្ញើរូបភាពទៅកាត់នៅលើ Server (Processed on remote server)
+                </div>
               </div>
             </div>
           ) : isCloudOffline ? (
@@ -62,26 +65,29 @@ export function BgStudioHero({
               <CloudOff className="h-4 w-4 text-amber-400" />
               <div className="leading-tight">
                 <div className="text-[10px] text-amber-400/80 font-mono">ACTIVE ENGINE</div>
-                <div className="font-bold">Remote Worker Offline — Using Browser AI</div>
+                <div className="font-bold">ម៉ាស៊ីនមេកម្រិតខ្ពស់ (Cloud Server AI) — ក្រៅបណ្តាញ</div>
+                <div className="text-[9.5px] text-amber-200/80 font-mono mt-0.5">
+                  Fallback: ដំណើរការលើ Browser AI ជំនួសវិញ (Processed locally)
+                </div>
               </div>
             </div>
           ) : (
             <div
               data-testid="active-engine-badge"
               className="flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-950/40 px-3 py-1.5 text-cyan-300"
-              title="Processing locally on your device via WebAssembly/WebGPU"
+              title="រូបភាពត្រូវបានកាត់នៅក្នុង Browser របស់អ្នកផ្ទាល់ មិនផ្ញើទៅ Server ទេ (Processed locally in your browser)"
             >
               <Cpu className="h-4 w-4 text-cyan-400" />
               <div className="leading-tight">
                 <div className="text-[10px] text-cyan-400/80 font-mono">ACTIVE ENGINE</div>
                 <div className="font-bold flex items-center gap-1.5">
-                  <span>On-Device (Browser AI)</span>
+                  <span>ដំណើរការលើឧបករណ៍ផ្ទាល់ (Browser AI • 100% On-Device)</span>
                   <span className="text-[10px] text-slate-400 font-normal">
-                    {isModelCached ? "• Warm" : "• WebAssembly"}
+                    {isModelCached ? "• Warm" : "• Local"}
                   </span>
                 </div>
                 <div className="text-[9.5px] text-cyan-200/70 font-mono mt-0.5">
-                  ជាធម្មតា ១០–២០ វិនាទី (Usually 10–20s • On-Device AI)
+                  រូបភាពត្រូវបានកាត់នៅក្នុង Browser ផ្ទាល់ (Processed locally in your browser)
                 </div>
               </div>
             </div>
