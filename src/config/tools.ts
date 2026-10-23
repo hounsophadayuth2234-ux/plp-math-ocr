@@ -16,7 +16,7 @@ export interface ToolModule {
   engine: string;
   accentColor: string;
   highlights: string[];
-  iconName: "Calculator" | "Eraser" | "Sparkles" | "ImagePlus" | "Code2" | "Brain";
+  iconName: "Calculator" | "Eraser" | "Sparkles" | "ImagePlus" | "Code2" | "Brain" | "Palette";
   disabled?: boolean;
 }
 
@@ -100,23 +100,23 @@ export const CORE_TOOLS: ToolModule[] = [
     disabled: false,
   },
   {
-    id: "web-cloner",
+    id: "lesson-studio",
     number: 5,
-    title: "ចម្លងកូដគេហទំព័រ (Web Cloner)",
-    shortTitle: "ចម្លងកូដគេហទំព័រ",
-    href: "/web-cloner",
+    title: "Module 05: ផលិតមេរៀន & រូបភាពគណិត (AI Lesson & Visual Studio)",
+    shortTitle: "ផលិតមេរៀន & រូបភាពគណិត",
+    href: "/lesson-studio",
     description:
-      "ស្រង់ទាញយក HTML DOM និង CSS Styles ពីគេហទំព័រគោលដៅ ពិនិត្យមើល Visual Preview និងចម្លងកូដបានភ្លាមៗ។",
-    badge: "Temporarily Inactive",
-    engine: "Server-Side DOM Extractor & CSS Sanitizer",
-    accentColor: "from-cyan-500 via-blue-500 to-indigo-600",
+      "គូសរូបភាពរាប់ចំនួន/ប្រភាគ SVG, បង្កើតវិញ្ញាសាពហុជ្រើសរើស និងរចនាប្រអប់មេរៀន HTML សម្រាប់ថ្នាក់ទី១–៦",
+    badge: "AI Visual Studio",
+    engine: "Gemini 2.5 / Flash Core",
+    accentColor: "from-rose-500 via-pink-500 to-red-600",
     highlights: [
-      "Target URL & optional CSS selector extraction",
-      "Sanitized HTML + scoped CSS bundle",
-      "Sandboxed live preview & one-click code copy",
+      "គូសរូបភាពរាប់ចំនួន/ប្រភាគ SVG (Child-friendly vector)",
+      "បង្កើតសន្លឹកកិច្ចការ និងវិញ្ញាសាពហុជ្រើសរើស (MoEYS Grade 1–6)",
+      "កែអក្ខរាវិរុទ្ធ & រចនាប្រអប់មេរៀន HTML (One-click Jodit Box)",
     ],
-    iconName: "Code2",
-    disabled: true,
+    iconName: "Palette",
+    disabled: false,
   },
 ];
 

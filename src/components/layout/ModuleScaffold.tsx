@@ -7,6 +7,7 @@ import {
   ImagePlus,
   Code2,
   Brain,
+  Palette,
   CheckCircle2,
   ArrowLeft,
   Terminal,
@@ -20,6 +21,7 @@ const ICON_MAP: Record<ToolModule["iconName"], React.ComponentType<{ className?:
   ImagePlus,
   Code2,
   Brain,
+  Palette,
 };
 
 interface ModuleScaffoldProps {

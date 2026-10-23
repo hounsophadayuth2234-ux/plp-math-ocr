@@ -18,6 +18,7 @@ import {
   AlertCircle,
   FileCode2,
   Wrench,
+  Palette,
 } from "lucide-react";
 
 export default function DashboardOverviewPage() {
@@ -92,9 +93,36 @@ export default function DashboardOverviewPage() {
       href: "/math-solver",
       cta: "បើកប្រើប្រាស់ (Open Math Solver)",
     },
+    {
+      id: "mod-05",
+      number: "05",
+      title: "AI Lesson & Visual Studio",
+      titleKhmer: "Module 05: ផលិតមេរៀន & រូបភាពគណិត (AI Lesson & Visual Studio)",
+      description: "គូសរូបភាពរាប់ចំនួន/ប្រភាគ SVG, បង្កើតវិញ្ញាសាពហុជ្រើសរើស និងរចនាប្រអប់មេរៀន HTML សម្រាប់ថ្នាក់ទី១–៦",
+      icon: Palette,
+      color: "from-rose-500 to-pink-600",
+      accentBorder: "border-rose-500/30 hover:border-rose-400",
+      accentText: "text-rose-400",
+      bgBadge: "bg-rose-500/10 text-rose-300 border-rose-500/30",
+      formats: "SVG Vector, Worksheet, HTML Box",
+      speed: "Fast: ~2–5s (Gemini 2.5/Flash)",
+      href: "/lesson-studio",
+      cta: "បើកប្រើប្រាស់ (Open Lesson Studio)",
+    },
   ];
 
   const recentActivities = [
+    {
+      id: "act-0",
+      tool: "Module 05: AI Lesson & Visual Studio",
+      detail: "Fraction 3/4 circle diagram & MoEYS Grade 4 worksheet",
+      status: "Completed",
+      duration: "2.1s",
+      time: "1m ago",
+      icon: Palette,
+      color: "text-rose-400",
+      href: "/lesson-studio",
+    },
     {
       id: "act-1",
       tool: "Module 04: Khmer Math Solver",
@@ -168,27 +196,27 @@ export default function DashboardOverviewPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-white">ប្រព័ន្ធស្នូលដំណើរការធម្មតា (Core Systems Operational)</span>
+                <span className="text-xs font-semibold text-white">ប្រព័ន្ធទាំងអស់ដំណើរការធម្មតា (All 5 Modules Operational)</span>
                 <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   CORE ACTIVE
                 </span>
               </div>
-              <p className="text-[11px] text-amber-300/90 mt-0.5 font-mono">
-                Module 01–04 Active • Module 05 Under Maintenance · Checked at {currentTime}
+              <p className="text-[11px] text-emerald-300/90 mt-0.5 font-mono">
+                Module 01–05 Active · Checked at {currentTime}
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── 2. Primary 4 Module Cards Grid ── */}
+      {/* ── 2. Primary 5 Module Cards Grid ── */}
       <div>
         <div className="mb-3.5 flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider font-sans">
             ម៉ូឌុលការងារចម្បង (Primary Workspace Modules)
           </h2>
-          <span className="text-xs text-slate-400 font-mono">4 Modules Active</span>
+          <span className="text-xs text-slate-400 font-mono">5 Modules Active</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -258,39 +286,7 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* ── 3. Module 05: Disabled Maintenance Card ── */}
-      <div className="rounded-2xl border border-amber-500/30 bg-amber-950/15 p-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-950 border border-amber-500/40 text-amber-400">
-              <Wrench className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-amber-400">MODULE 05</span>
-                <span className="font-semibold text-white text-sm">
-                  Web Page Cloner &amp; Asset Extractor
-                </span>
-                <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30">
-                  Under Maintenance (កំពុងជួសជុល)
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-slate-300">
-                ម៉ូឌុល ០៥ កំពុងស្ថិតក្នុងដំណាក់កាលធ្វើឱ្យប្រសើរឡើងផ្នែកសុវត្ថិភាពនិងភាពឆបគ្នា។ សូមប្រើប្រាស់ម៉ូឌុល ០១ ដល់ ០៤ សម្រាប់ផលិតភាពការងារ។
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled
-            className="cursor-not-allowed rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs text-slate-500 font-medium shrink-0 self-start sm:self-center"
-          >
-            មិនទាន់បើកដំណើរការ (Disabled)
-          </button>
-        </div>
-      </div>
-
-      {/* ── 4. Recent Activity Section ── */}
+      {/* ── 3. Recent Activity Section ── */}
       <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2 text-slate-200">

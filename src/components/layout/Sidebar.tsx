@@ -19,6 +19,7 @@ import {
   Clock,
   Activity,
   History,
+  Palette,
 } from "lucide-react";
 import { CORE_TOOLS, TEAM_MEMBERS, ToolModule } from "@/config/tools";
 
@@ -29,6 +30,7 @@ const ICON_MAP: Record<ToolModule["iconName"], React.ComponentType<{ className?:
   ImagePlus,
   Code2,
   Brain,
+  Palette,
 };
 
 interface SidebarProps {
@@ -77,6 +79,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     { name: "Canvas Cutout", href: "/bg-remover", icon: Eraser, color: "text-emerald-400" },
     { name: "4x HD Upscale", href: "/image-upscaler", icon: Sparkles, color: "text-amber-400" },
     { name: "Khmer Math Solver", href: "/math-solver", icon: Brain, color: "text-violet-400" },
+    { name: "Lesson & Visual Studio", href: "/lesson-studio", icon: Palette, color: "text-rose-400" },
   ];
 
   return (
@@ -153,11 +156,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </Link>
           </div>
 
-          {/* Section 2: Workspace Modules 01–04 */}
+          {/* Section 2: Workspace Modules 01–05 */}
           <div>
             <div className="mb-2 px-3 flex items-center justify-between">
               <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-sans">
-                ម៉ូឌុលការងារ (Modules 01–04)
+                ម៉ូឌុលការងារ (Modules 01–05)
               </p>
             </div>
             <div className="space-y-1.5">
