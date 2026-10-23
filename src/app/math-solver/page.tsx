@@ -18,14 +18,9 @@ import {
   CheckCircle2,
   FileText,
   Sparkles,
-  HelpCircle,
   BookOpen,
   GraduationCap,
-  ShieldCheck,
   Code2,
-  ChevronDown,
-  ChevronUp,
-  Settings,
   Eye,
   X,
   Printer,
@@ -48,7 +43,6 @@ import {
   copyCanonicalSolutionToClipboard,
   copyCanonicalSolutionPlainTextToClipboard,
   renderCanonicalSolutionHtml,
-  renderCanonicalSolutionPlainText,
   copyTextFallback,
   downloadSolutionAsPng,
 } from "@/lib/math-solution-html";
@@ -90,8 +84,7 @@ export default function MathSolverPage() {
     "high" | "medium" | "low" | null
   >(null);
 
-  // Advanced settings accordion
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
+
 
   // Execution State
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
@@ -564,7 +557,7 @@ export default function MathSolverPage() {
           <label className="text-xs font-bold font-mono tracking-wider text-slate-400 uppercase flex items-center gap-2">
             <span>មុខងារដំណើរការ // Select Function Mode</span>
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {/* Mode 1 */}
             <button
               type="button"
@@ -607,29 +600,6 @@ export default function MathSolverPage() {
                 <p className="text-xs font-bold">២. បង្កើតដំណោះស្រាយ (Generate Full Solution)</p>
                 <p className="text-[10.5px] text-slate-400 mt-0.5 leading-relaxed">
                   បង្កើតការពន្យល់ជំហានម្តងៗពេញលេញសម្រាប់បង្រៀន ឬរៀបចំកិច្ចការផ្ទះ។
-                </p>
-              </div>
-            </button>
-
-            {/* Mode 3 */}
-            <button
-              type="button"
-              onClick={() => handleModeChange("verify")}
-              className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all ${
-                solverMode === "verify"
-                  ? "border-violet-500 bg-violet-950/60 text-white shadow-[0_0_15px_rgba(139,92,246,0.25)] ring-1 ring-violet-500/40"
-                  : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700"
-              }`}
-            >
-              <ShieldCheck
-                className={`h-4 w-4 mt-0.5 shrink-0 ${
-                  solverMode === "verify" ? "text-violet-400" : "text-slate-500"
-                }`}
-              />
-              <div>
-                <p className="text-xs font-bold">៣. ដោះស្រាយ + ផ្ទៀងផ្ទាត់ (Solve &amp; Verify)</p>
-                <p className="text-[10.5px] text-slate-400 mt-0.5 leading-relaxed">
-                  ផ្ទៀងផ្ទាត់ចម្លើយ ឬស្នាដៃរបស់សិស្ស រួមទាំងចង្អុលបង្ហាញកំហុស។
                 </p>
               </div>
             </button>
@@ -853,33 +823,6 @@ export default function MathSolverPage() {
                 className="w-full rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-100 placeholder-slate-500 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 focus:outline-none transition-colors"
               />
             </div>
-
-            {/* Answer-Verification Controls (Mode 3) */}
-            {solverMode === "verify" && (
-              <div className="space-y-1.5 border-t border-slate-800/80 pt-3">
-                <label
-                  htmlFor="student-answer"
-                  className="text-xs font-semibold text-amber-300 flex items-center justify-between"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <ShieldCheck className="h-3.5 w-3.5 text-amber-400" />
-                    <span>ចម្លើយ/ស្នាដៃសិស្សដែលត្រូវផ្ទៀងផ្ទាត់ (Student Answer/Work)</span>
-                  </span>
-                  <span className="text-[10px] text-amber-400/80 font-mono">
-                    Mode 3 Only
-                  </span>
-                </label>
-                <input
-                  id="student-answer"
-                  type="text"
-                  value={existingAnswerText}
-                  onChange={(e) => setExistingAnswerText(e.target.value)}
-                  placeholder="ស្រង់ចេញពីរូបភាពដោយស្វ័យប្រវត្តិ ឬវាយបញ្ចូល ឧ. x = 6..."
-                  disabled={isBusy}
-                  className="w-full rounded-xl border border-amber-600/40 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 focus:outline-none transition-colors"
-                />
-              </div>
-            )}
           </div>
 
           {/* Action Button Bar */}
@@ -898,20 +841,10 @@ export default function MathSolverPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <span>កំពុងដំណើរការ...</span>
                   </>
-                ) : solverMode === "generate" ? (
-                  <>
-                    <BookOpen className="h-4 w-4" />
-                    <span>បង្កើតដំណោះស្រាយ (Generate)</span>
-                  </>
-                ) : solverMode === "verify" ? (
-                  <>
-                    <ShieldCheck className="h-4 w-4" />
-                    <span>ផ្ទៀងផ្ទាត់ចម្លើយ (Verify)</span>
-                  </>
                 ) : (
                   <>
                     <Calculator className="h-4 w-4" />
-                    <span>ដោះស្រាយ (Solve)</span>
+                    <span>ដោះស្រាយលំហាត់ (Solve)</span>
                   </>
                 )}
               </button>

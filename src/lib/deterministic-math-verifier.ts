@@ -312,28 +312,8 @@ export function buildPedagogicalArithmeticExplanation(
         `ជំហានទី២ — រាប់បន្តពីចំនួន ${aKhmer}៖\nបន្ថែម ${bKhmer} ទៀត ទទួលបានផលបូកសរុបស្មើនឹង ${resKhmer} វត្ថុ។`
       );
     }
-  } else if (isGrade6) {
-    // Grade 6: Algebraic reasoning, equation balance, mathematical rigor
-    if (normOp === "-") {
-      steps.push(
-        `ជំហានទី១ — ការវិភាគទម្រង់សមីការពិជគណិត (Algebraic Structure)៖\nកំណត់សមីការរកតម្លៃមិនស្គាល់៖ x = ${aKhmer} − ${bKhmer} ដែល ${aKhmer} ជាតួដក និង ${bKhmer} ជាតួរងការដក។`
-      );
-      steps.push(
-        `ជំហានទី២ — គណនាតាមលក្ខណៈបំណែងចែកតាមថ្នាក់ខ្ទង់៖\nអនុវត្តប្រមាណវិធីដកពហុខ្ទង់ ដោយរក្សាតម្លៃលេខតាមខ្ទង់នីមួយៗ និងអនុវត្តវិធានខ្ចីតាមក្បួនគណិតវិទ្យា។`
-      );
-      steps.push(
-        `ជំហានទី៣ — រក្សាសមភាព និងផ្ទៀងផ្ទាត់លក្ខខណ្ឌអង្គសងខាង៖\nតាមរយៈលក្ខណៈសមភាព ផលដក x បូកនឹង ${bKhmer} ត្រូវតែស្មើ ${aKhmer} វិញយ៉ាងពិតប្រាកដ។`
-      );
-    } else if (normOp === "+") {
-      steps.push(
-        `ជំហានទី១ — ការវិភាគសមភាពពិជគណិត (Commutative Property & Sum)៖\nប្រមាណវិធីបូកមានលក្ខណៈត្រឡប់៖ S = ${aKhmer} + ${bKhmer} = ${bKhmer} + ${aKhmer}។`
-      );
-      steps.push(
-        `ជំហានទី២ — បូកតាមថ្នាក់ខ្ទង់ទសភាគ និងត្រាទុក៖\nបូកតាមលំដាប់ថ្នាក់ខ្ទង់ពីស្តាំទៅឆ្វេង ដោយត្រាទុកចំនួនដប់ទៅខ្ទង់បន្ទាប់។`
-      );
-    }
   } else {
-    // Grade 3 (and standard elementary): Column place value, carrying, borrowing
+    // Grades 3–6 (and standard elementary): Column place value, carrying, borrowing
     if (normOp === "-") {
       const aDigits = String(Math.abs(Math.round(a))).split("").map(Number).reverse();
       const bDigits = String(Math.abs(Math.round(b))).split("").map(Number).reverse();
@@ -444,7 +424,7 @@ export function buildPedagogicalArithmeticExplanation(
       : gradeLevel === "grade_2"
       ? "ថ្នាក់ទី ២ (ការបូកដក និងប្រមាណវិធីស្មើគ្នា)"
       : gradeLevel === "grade_6"
-      ? "ថ្នាក់ទី ៦ (ការវិភាគពិជគណិត និងសមីការ)"
+      ? "ថ្នាក់ទី ៦ (ប្រមាណវិធីពហុខ្ទង់ និងទសភាគ)"
       : "ថ្នាក់ទី ៣ (ខ្ទង់ & ការខ្ចី/ត្រាទុក)";
 
   const sections: string[] = [...steps];

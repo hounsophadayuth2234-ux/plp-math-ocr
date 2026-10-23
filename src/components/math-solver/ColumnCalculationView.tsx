@@ -3,6 +3,7 @@
 import React from "react";
 import {
   type StructuredCalculation,
+  type ProgressiveColumnStep,
   KHMER_INTEGER_PLACE_LABELS,
   KHMER_DECIMAL_PLACE_LABELS,
 } from "@/lib/column-calculation";
@@ -370,3 +371,174 @@ export function ColumnCalculationView({
     </div>
   );
 }
+
+export interface ProgressiveCalculationViewProps {
+  steps: ProgressiveColumnStep[];
+  operationTitle?: string;
+  conclusionText?: string;
+  finalEquation?: string;
+  className?: string;
+}
+
+export function ProgressiveCalculationView({
+  steps,
+  operationTitle,
+  conclusionText,
+  finalEquation,
+  className = "",
+}: ProgressiveCalculationViewProps) {
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    <div className={`progressive-column-steps space-y-5 ${className}`} data-testid="progressive-column-steps">
+      {operationTitle && (
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-red-500">ការដោះស្រាយ</h3>
+          <p className="text-sm font-bold text-blue-900">{operationTitle}</p>
+        </div>
+      )}
+
+      {steps.map((step, idx) => {
+        const numCols = step.columns.length;
+
+        return (
+          <div
+            key={idx}
+            className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-3"
+          >
+            <div className="text-xs font-bold text-slate-500 tracking-wide">
+              {step.stepTitleKhmer}
+            </div>
+            <div className="text-sm sm:text-base font-semibold text-slate-900 leading-relaxed">
+              {step.explanationKhmer}
+            </div>
+
+            <div className="overflow-x-auto pt-2">
+              <table
+                className="column-step-table font-mono select-all"
+                style={{
+                  borderCollapse: "collapse",
+                  fontVariantNumeric: "tabular-nums",
+                  fontFamily: '"Noto Sans Khmer", "Kantumruy Pro", ui-monospace, SFMono-Regular, monospace',
+                }}
+              >
+                <tbody>
+                  {/* Top carry/borrow row */}
+                  {step.carryDigits && step.carryDigits.some((d) => d !== "") && (
+                    <tr className="carry-row h-6 text-xs">
+                      <td style={{ width: "38px" }} />
+                      {step.carryDigits.map((cDigit, cIdx) => (
+                        <td
+                          key={cIdx}
+                          style={{
+                            width: "38px",
+                            textAlign: "center",
+                            color: "#15803d",
+                            fontWeight: 700,
+                            fontSize: "13px",
+                          }}
+                        >
+                          {cDigit || ""}
+                        </td>
+                      ))}
+                    </tr>
+                  )}
+
+                  {/* Operand rows */}
+                  {step.operandRows.map((row, rIdx) => (
+                    <tr key={rIdx} className="operand-row h-9">
+                      <td
+                        className="operator-cell"
+                        style={{
+                          width: "38px",
+                          textAlign: "center",
+                          color: "#2563eb",
+                          fontWeight: 700,
+                          fontSize: "19px",
+                        }}
+                      >
+                        {row.operator || ""}
+                      </td>
+                      {row.digits.map((digit, cIdx) => {
+                        const isActive = cIdx === step.activeColIdx;
+                        return (
+                          <td
+                            key={cIdx}
+                            className="digit-cell"
+                            style={{
+                              width: "38px",
+                              textAlign: "center",
+                              color: isActive ? "#15803d" : "#2563eb",
+                              fontWeight: isActive ? 800 : 700,
+                              fontSize: "20px",
+                            }}
+                          >
+                            {digit}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+
+                  {/* Divider */}
+                  <tr className="divider-row">
+                    <td
+                      colSpan={numCols + 1}
+                      style={{
+                        borderBottom: "2px solid #94a3b8",
+                        height: "4px",
+                        padding: 0,
+                      }}
+                    />
+                  </tr>
+
+                  {/* Answer boxes row */}
+                  <tr className="answer-box-row h-12">
+                    <td style={{ width: "38px" }} />
+                    {step.answerBoxes.map((box, cIdx) => {
+                      const isActive = box.status === "active";
+                      const isCompleted = box.status === "completed";
+
+                      return (
+                        <td
+                          key={cIdx}
+                          style={{
+                            width: "38px",
+                            height: "38px",
+                            border: "1px solid #cbd5e1",
+                            textAlign: "center",
+                            verticalAlign: "middle",
+                            color: isActive ? "#15803d" : isCompleted ? "#2563eb" : "transparent",
+                            fontWeight: isActive ? 800 : 700,
+                            fontSize: "20px",
+                            backgroundColor: isActive ? "#f0fdf4" : "#ffffff",
+                          }}
+                        >
+                          {box.digit}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+
+      {(conclusionText || finalEquation) && (
+        <div className="rounded-xl border-l-4 border-blue-600 bg-slate-50 p-4 space-y-1">
+          {conclusionText && (
+            <div className="text-sm font-bold text-slate-800">{conclusionText}</div>
+          )}
+          {finalEquation && (
+            <div className="text-base font-extrabold text-slate-900 font-mono">
+              {finalEquation}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+

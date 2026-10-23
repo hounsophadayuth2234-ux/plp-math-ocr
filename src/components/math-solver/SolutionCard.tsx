@@ -21,8 +21,16 @@ import {
   isWordProblem,
   downloadSolutionAsPng,
 } from "@/lib/math-solution-html";
-import { ColumnCalculationView } from "./ColumnCalculationView";
-import { detectAndBuildStructuredCalculation, toKhmerNumeral } from "@/lib/column-calculation";
+import { ColumnCalculationView, ProgressiveCalculationView } from "./ColumnCalculationView";
+import {
+  detectAndBuildStructuredCalculation,
+  toKhmerNumeral,
+  fromKhmerNumeral,
+  buildProgressiveColumnSteps,
+  buildHorizontalBreakdown,
+  type ProgressiveColumnStep,
+  type HorizontalBreakdown,
+} from "@/lib/column-calculation";
 
 interface SolutionCardProps {
   problem: MathSolverProblem;
@@ -136,7 +144,6 @@ export function SolutionCard({
 
   const isMode1 = effectiveMode === "solve";
   const isMode2 = effectiveMode === "generate";
-  const isMode3 = effectiveMode === "verify";
 
   // Build or retrieve structured calculation for place-value alignment
   const structuredCalc =
@@ -155,13 +162,56 @@ export function SolutionCard({
       ? problem.inferredGradeKhmer
       : "ថ្នាក់បឋមសិក្សា";
 
-  // Check if student answer is genuinely present
-  const hasStudentAnswer = Boolean(
-    problem.extractedAnswer &&
-      problem.extractedAnswer.trim() !== "" &&
-      problem.extractedAnswer.trim() !== "គ្មាន" &&
-      !problem.extractedAnswer.includes("មិនទាន់មានចម្លើយរបស់សិស្ស")
-  );
+  // View mode toggle: "vertical" vs "horizontal"
+  const [viewFormat, setViewFormat] = useState<"vertical" | "horizontal">("vertical");
+
+  // Parse arithmetic for Progressive Steps and Horizontal Breakdown
+  const normProb = fromKhmerNumeral(problem.extractedProblem || "")
+    .replace(/×/g, "*")
+    .replace(/[÷:]/g, "/")
+    .replace(/−/g, "-")
+    .replace(/\s+/g, "")
+    .replace(/=/g, "");
+  const arithMatch = normProb.match(/^(-?\d+(?:\.\d+)?)([+\-*/])(-?\d+(?:\.\d+)?)$/);
+
+  let progressiveSteps: ProgressiveColumnStep[] | null = null;
+  let horizontalBreakdown: HorizontalBreakdown | null = null;
+  let opTitle = "ធ្វើប្រមាណវិធីលេខម្តងមួយជួរៗតាមខ្ទង់ ៖";
+  let concText = "";
+  let finalEq = "";
+
+  if (arithMatch) {
+    const a = parseFloat(arithMatch[1]);
+    const op = arithMatch[2];
+    const b = parseFloat(arithMatch[3]);
+    const res = problem.finalAnswer
+      ? parseFloat(fromKhmerNumeral(problem.finalAnswer).replace(/[^0-9.-]/g, ""))
+      : undefined;
+
+    if (op === "+") {
+      opTitle = "ធ្វើប្រមាណវិធីបូកលេខម្តងមួយជួរៗតាមខ្ទង់ ៖";
+      concText = `ដូច្នេះ យើងបានផលបូកគឺ ៖ ${toKhmerNumeral(problem.finalAnswer || String(a + b))}`;
+      finalEq = `${toKhmerNumeral(a)} + ${toKhmerNumeral(b)} = ${toKhmerNumeral(problem.finalAnswer || String(a + b))} ។`;
+    } else if (op === "-") {
+      opTitle = "ធ្វើប្រមាណវិធីដកលេខម្តងមួយជួរៗតាមខ្ទង់ ៖";
+      concText = `ដូច្នេះ យើងបានផលដកគឺ ៖ ${toKhmerNumeral(problem.finalAnswer || String(a - b))}`;
+      finalEq = `${toKhmerNumeral(a)} − ${toKhmerNumeral(b)} = ${toKhmerNumeral(problem.finalAnswer || String(a - b))} ។`;
+    } else if (op === "*") {
+      opTitle = "ធ្វើប្រមាណវិធីគុណលេខម្តងមួយជួរៗតាមខ្ទង់ ៖";
+      concText = `ដូច្នេះ យើងបានផលគុណគឺ ៖ ${toKhmerNumeral(problem.finalAnswer || String(a * b))}`;
+      finalEq = `${toKhmerNumeral(a)} × ${toKhmerNumeral(b)} = ${toKhmerNumeral(problem.finalAnswer || String(a * b))} ។`;
+    } else if (op === "/") {
+      opTitle = "ធ្វើប្រមាណវិធីចែកលេខតាមក្បួនជួរឈរ ៖";
+      concText = `ដូច្នេះ យើងបានផលចែកគឺ ៖ ${toKhmerNumeral(problem.finalAnswer || String(Math.floor(a / b)))}`;
+    }
+
+    if (Number.isInteger(a) && Number.isInteger(b) && (op === "+" || op === "-" || (op === "*" && b < 10))) {
+      progressiveSteps = buildProgressiveColumnSteps(a, op, b, res);
+    }
+    horizontalBreakdown = buildHorizontalBreakdown(problem.extractedProblem || "", a, op, b, res);
+  } else {
+    horizontalBreakdown = buildHorizontalBreakdown(problem.extractedProblem || "");
+  }
 
   // Pre-generate raw HTML source for copy / modal
   const htmlSource = renderCanonicalSolutionHtml(problem, {
@@ -281,82 +331,130 @@ export function SolutionCard({
           </section>
         )}
 
-        {/* 3. Student Answer Review (Mode 3 ONLY - Shown ONLY when valid answer exists) */}
-        {isMode3 && hasStudentAnswer && (
-          <section className="student-review rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2 text-xs sm:text-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-700">ចម្លើយរបស់សិស្សក្នុងរូបភាព៖</span>
-              <span
-                className={`rounded-full px-3 py-0.5 text-xs font-bold ${
-                  problem.answerStatus === "correct"
-                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                    : "bg-rose-100 text-rose-800 border border-rose-300"
-                }`}
-              >
-                {problem.answerStatusKhmer || (problem.answerStatus === "correct" ? "ត្រឹមត្រូវ ✓" : "មិនទាន់ត្រឹមត្រូវ ✗")}
-              </span>
-            </div>
-            <div className="font-mono font-bold text-slate-800 text-sm">
-              {toKhmerNumeral(problem.extractedAnswer || "")}
-            </div>
-            {problem.answerStatus === "incorrect" && (
-              <div className="mt-2 pt-2 border-t border-slate-200 space-y-1 text-xs text-rose-900">
-                {problem.incorrectStep && <div><strong>ជំហានដែលខុស៖</strong> {toKhmerNumeral(problem.incorrectStep)}</div>}
-                {problem.errorExplanationKhmer && <div><strong>ការពន្យល់កំហុស៖</strong> {toKhmerNumeral(problem.errorExplanationKhmer)}</div>}
-                {problem.correctedStep && <div><strong>ជំហានត្រឹមត្រូវ៖</strong> {toKhmerNumeral(problem.correctedStep)}</div>}
-              </div>
-            )}
-          </section>
-        )}
-
         {/* 4. Step-by-Step Solution & Aligned Column Working */}
         {/* STRICT CONTRACT: Mode 2 and Mode 3 ONLY. In Mode 1, this must NOT be rendered. */}
-        {!isMode1 && (problem.solutionKhmer || problem.solution || problem.verticalLines || problem.alignedWorking) && (
+        {!isMode1 && (problem.solutionKhmer || problem.solution || problem.verticalLines || problem.alignedWorking || progressiveSteps || horizontalBreakdown) && (
           <section className="solution-body-section space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-              វិធីដោះស្រាយ
-            </h4>
-
-            {/* Place-value aligned column calculation at TOP of solution section */}
-            {(structuredCalc || Boolean(problem.verticalLines && problem.verticalLines.length > 0) || Boolean(problem.alignedWorking)) && (
-              <div className="rounded-xl border border-amber-200/90 bg-[#FEFEFA] p-4 sm:p-5 overflow-x-auto space-y-3 shadow-sm">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
-                  ការគណនាតាមជួរឈរ (Vertical Calculation)៖
-                </span>
-                {structuredCalc && (
-                  <div className="py-2" data-testid="structured-column-calculation">
-                    <ColumnCalculationView calculation={structuredCalc} theme="worksheet" />
+            {/* View Format Switcher */}
+            {(horizontalBreakdown || (progressiveSteps && progressiveSteps.length > 0)) && (
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">ទម្រង់បង្ហាញ៖</span>
+                  <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setViewFormat("vertical")}
+                      className={`px-3 py-1 rounded-md transition-all ${
+                        viewFormat === "vertical"
+                          ? "bg-white text-blue-700 shadow-sm font-bold"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      ទម្រង់ជួរឈរ (Vertical Step-by-Step)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewFormat("horizontal")}
+                      className={`px-3 py-1 rounded-md transition-all ${
+                        viewFormat === "horizontal"
+                          ? "bg-white text-blue-700 shadow-sm font-bold"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      ទម្រង់ជួរដេក (Horizontal Breakdown)
+                    </button>
                   </div>
-                )}
-                {/* Fallback pre for regression testing & raw monospace copy with display:none */}
-                <pre
-                  data-testid="vertical-calculation-pre"
-                  className="vertical-calc font-mono text-sm sm:text-base text-slate-800 leading-relaxed whitespace-pre font-semibold sr-only"
-                  style={{
-                    display: "none",
-                    fontFamily: '"Noto Sans Khmer", "Kantumruy Pro", ui-monospace, SFMono-Regular, Menlo, monospace',
-                    whiteSpace: "pre",
-                  }}
-                  aria-hidden="true"
-                >
-                  {problem.verticalLines && problem.verticalLines.length > 0
-                    ? problem.verticalLines.join("\n")
-                    : problem.alignedWorking}
-                </pre>
-              </div>
-            )}
-
-            {/* Step-by-Step Explanation Cards with header 'ការពន្យល់លម្អិត' */}
-            {(problem.solutionKhmer || problem.solution) && (
-              <div className="space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
-                  ការពន្យល់លម្អិត
-                </span>
-                <div className="solution-steps">
-                  {renderStepCards(problem.solutionKhmer || problem.solution || "")}
                 </div>
               </div>
             )}
+
+            {/* Horizontal Breakdown View */}
+            {viewFormat === "horizontal" && horizontalBreakdown ? (
+              <div
+                className="horizontal-breakdown-card rounded-xl p-5 border-l-4 border-l-orange-500 shadow-sm space-y-3"
+                style={{ background: "#fff8f6" }}
+                data-testid="horizontal-breakdown-card"
+              >
+                <div className="text-base font-bold text-red-500">{horizontalBreakdown.titleKhmer}</div>
+                <div className="text-sm font-bold text-slate-900">{horizontalBreakdown.subTitleKhmer}</div>
+                <div className="text-lg font-bold text-slate-900 font-mono">{horizontalBreakdown.expressionKhmer}</div>
+                <div className="space-y-1.5 pt-1">
+                  {horizontalBreakdown.bullets.map((bullet, bIdx) => (
+                    <div key={bIdx} className="text-sm text-slate-700 leading-relaxed">
+                      {bullet}
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-2 border-t border-orange-200/80 text-base font-extrabold text-[#991b1b]">
+                  {horizontalBreakdown.conclusionKhmer}
+                </div>
+              </div>
+            ) : viewFormat === "vertical" && progressiveSteps && progressiveSteps.length > 0 ? (
+              /* Progressive Step-by-Step Vertical View */
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                    វិធីដោះស្រាយ
+                  </h4>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    ការគណនាតាមជួរឈរ (Vertical Calculation)៖
+                  </span>
+                </div>
+                <div className="py-2" data-testid="structured-column-calculation">
+                  <ProgressiveCalculationView
+                    steps={progressiveSteps}
+                    operationTitle={opTitle}
+                    conclusionText={concText}
+                    finalEquation={finalEq}
+                  />
+                </div>
+              </div>
+            ) : (
+              /* Fallback standard vertical & step cards view */
+              <>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  វិធីដោះស្រាយ
+                </h4>
+                {(structuredCalc || Boolean(problem.verticalLines && problem.verticalLines.length > 0) || Boolean(problem.alignedWorking)) && (
+                  <div className="rounded-xl border border-amber-200/90 bg-[#FEFEFA] p-4 sm:p-5 overflow-x-auto space-y-3 shadow-sm">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
+                      ការគណនាតាមជួរឈរ (Vertical Calculation)៖
+                    </span>
+                    {structuredCalc && (
+                      <div className="py-2" data-testid="structured-column-calculation">
+                        <ColumnCalculationView calculation={structuredCalc} theme="worksheet" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {(problem.solutionKhmer || problem.solution) && (
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
+                      ការពន្យល់លម្អិត
+                    </span>
+                    <div className="solution-steps">
+                      {renderStepCards(problem.solutionKhmer || problem.solution || "")}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Hidden fallback pre for regression testing */}
+            <pre
+              data-testid="vertical-calculation-pre"
+              className="vertical-calc font-mono text-sm sm:text-base text-slate-800 leading-relaxed whitespace-pre font-semibold sr-only"
+              style={{
+                display: "none",
+                fontFamily: '"Noto Sans Khmer", "Kantumruy Pro", ui-monospace, SFMono-Regular, Menlo, monospace',
+                whiteSpace: "pre",
+              }}
+              aria-hidden="true"
+            >
+              {problem.verticalLines && problem.verticalLines.length > 0
+                ? problem.verticalLines.join("\n")
+                : problem.alignedWorking}
+            </pre>
           </section>
         )}
 

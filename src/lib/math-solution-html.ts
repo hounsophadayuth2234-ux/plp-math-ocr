@@ -23,6 +23,10 @@ import {
   toMathSolution,
   structuredToVerticalCalculation,
   verticalToStructuredCalculation,
+  buildProgressiveColumnSteps,
+  buildHorizontalBreakdown,
+  renderProgressiveColumnStepsHtml,
+  renderHorizontalBreakdownHtml,
   type MathSolution,
   type MathStep,
   type VerticalCalculation,
@@ -30,8 +34,10 @@ import {
   type MathOperation,
   type VerticalRowRole,
   type StructuredCalculation,
+  type ProgressiveColumnStep,
+  type HorizontalBreakdown,
 } from "./column-calculation";
-import { toKhmerNumeral } from "./deterministic-math-verifier";
+import { toKhmerNumeral, fromKhmerNumeral } from "./deterministic-math-verifier";
 
 export {
   type MathSolution,
@@ -422,21 +428,6 @@ body {
   margin-bottom: 20px;
   font-size: 13px;
 }
-.student-review {
-  border-radius: 8px;
-  padding: 14px;
-  margin-bottom: 20px;
-}
-.student-review.correct {
-  background: #ecfdf5;
-  border: 1px solid #10b981;
-  color: #065f46;
-}
-.student-review.incorrect {
-  background: #fef2f2;
-  border: 1px solid #ef4444;
-  color: #991b1b;
-}
 .solution-steps {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -614,34 +605,71 @@ body {
     parts.push("  </section>\n\n");
   }
 
-  // 3. Student Answer Review - Mode 3 only and ONLY when non-empty student answer exists
-  if (isMode3 && p.extractedAnswer && p.extractedAnswer.trim().length > 0 && p.extractedAnswer.trim() !== "គ្មាន") {
-    const isCorrect = p.answerStatus === "correct";
-    parts.push(`  <section class="student-review ${isCorrect ? "correct" : "incorrect"}">\n`);
-    parts.push('    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">\n');
-    parts.push(`      <strong>ចម្លើយរបស់សិស្សក្នុងរូបភាព៖</strong>\n`);
-    parts.push(`      <span style="background: ${isCorrect ? "#10b981" : "#ef4444"}; color: #ffffff; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">${escapeHtml(p.answerStatusKhmer || (isCorrect ? "ត្រឹមត្រូវ ✓" : "មិនទាន់ត្រឹមត្រូវ ✗"))}</span>\n`);
-    parts.push("    </div>\n");
-    parts.push(`    <div style="font-family: monospace; font-size: 14px; margin-bottom: 8px;">${escapeHtml(toKhmerNumeral(p.extractedAnswer))}</div>\n`);
-    if (p.answerStatus === "incorrect") {
-      if (p.incorrectStep) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 6px;"><strong>ជំហានដែលខុស៖</strong> ${escapeHtml(toKhmerNumeral(p.incorrectStep))}</div>\n`);
-      }
-      if (p.errorExplanationKhmer) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ការពន្យល់កំហុស៖</strong> ${escapeHtml(toKhmerNumeral(p.errorExplanationKhmer))}</div>\n`);
-      }
-      if (p.correctedStep) {
-        parts.push(`    <div style="font-size: 12px; margin-top: 4px;"><strong>ជំហានត្រឹមត្រូវ៖</strong> ${escapeHtml(toKhmerNumeral(p.correctedStep))}</div>\n`);
-      }
-    }
-    parts.push("  </section>\n\n");
-  }
-
   // 4. Step-by-Step Solution & Aligned Column Working
   // STRICT CONTRACT: Mode 2 & Mode 3 ONLY. In Mode 1, this must NOT be rendered.
   if (!isMode1 && (solKhmer || p.verticalLines || p.alignedWorking || p.verticalCalculations)) {
     parts.push('  <section class="solution-body-section">\n');
+
+    const normProb = fromKhmerNumeral(problemStatement)
+      .replace(/×/g, "*")
+      .replace(/[÷:]/g, "/")
+      .replace(/−/g, "-")
+      .replace(/\s+/g, "")
+      .replace(/=/g, "");
+    const arithMatch = normProb.match(/^(-?\d+(?:\.\d+)?)([+\-*/])(-?\d+(?:\.\d+)?)$/);
+
+    let progressiveSteps: ProgressiveColumnStep[] | null = null;
+    let singleBreakdown: HorizontalBreakdown | null = null;
+    let opTitle = "ធ្វើប្រមាណវិធីលេខម្តងមួយជួរៗតាមខ្ទង់ ៖";
+    let concText = "";
+    let finalEq = "";
+
+    if (arithMatch) {
+      const a = parseFloat(arithMatch[1]);
+      const op = arithMatch[2];
+      const b = parseFloat(arithMatch[3]);
+      const res = finalAnswer ? parseFloat(fromKhmerNumeral(finalAnswer).replace(/[^0-9.-]/g, "")) : undefined;
+
+      if (op === "+") {
+        opTitle = "ធ្វើប្រមាណវិធីបូកលេខម្តងមួយជួរៗតាមខ្ទង់ ៖";
+        concText = `ដូច្នេះ យើងបានផលបូកគឺ ៖ ${toKhmerNumeral(finalAnswer || String(a + b))}`;
+        finalEq = `${toKhmerNumeral(a)} + ${toKhmerNumeral(b)} = ${toKhmerNumeral(finalAnswer || String(a + b))} ។`;
+      } else if (op === "-") {
+        opTitle = "ធ្វើប្រមាណវិធីដកលេខម្តងមួយជួរៗតាមខ្ទង់ ៖";
+        concText = `ដូច្នេះ យើងបានផលដកគឺ ៖ ${toKhmerNumeral(finalAnswer || String(a - b))}`;
+        finalEq = `${toKhmerNumeral(a)} − ${toKhmerNumeral(b)} = ${toKhmerNumeral(finalAnswer || String(a - b))} ។`;
+      } else if (op === "*") {
+        opTitle = "ធ្វើប្រមាណវិធីគុណលេខម្តងមួយជួរៗតាមខ្ទង់ ៖";
+        concText = `ដូច្នេះ យើងបានផលគុណគឺ ៖ ${toKhmerNumeral(finalAnswer || String(a * b))}`;
+        finalEq = `${toKhmerNumeral(a)} × ${toKhmerNumeral(b)} = ${toKhmerNumeral(finalAnswer || String(a * b))} ។`;
+      } else if (op === "/") {
+        opTitle = "ធ្វើប្រមាណវិធីចែកលេខតាមក្បួនជួរឈរ ៖";
+        concText = `ដូច្នេះ យើងបានផលចែកគឺ ៖ ${toKhmerNumeral(finalAnswer || String(Math.floor(a / b)))}`;
+      }
+
+      if (Number.isInteger(a) && Number.isInteger(b) && (op === "+" || op === "-" || (op === "*" && b < 10))) {
+        progressiveSteps = buildProgressiveColumnSteps(a, op, b, res);
+      }
+      singleBreakdown = buildHorizontalBreakdown(problemStatement, a, op, b, res);
+    } else {
+      singleBreakdown = buildHorizontalBreakdown(problemStatement);
+    }
+
     parts.push('    <h2 class="section-title">វិធីដោះស្រាយ</h2>\n');
+
+    // If horizontal breakdown available, render it
+    if (singleBreakdown) {
+      parts.push(renderHorizontalBreakdownHtml(singleBreakdown));
+    }
+
+    // Render progressive steps if available
+    if (progressiveSteps && progressiveSteps.length > 0) {
+      parts.push(renderProgressiveColumnStepsHtml(progressiveSteps, {
+        operationTitle: opTitle,
+        conclusionText: concText,
+        finalEquation: finalEq,
+      }));
+    }
 
     const structuredCalc =
       p.structuredCalculation ||
@@ -656,13 +684,12 @@ body {
         ? p.verticalLines.join("\n")
         : p.alignedWorking;
 
-    // Place vertical calculation at the TOP of the solution section
+    // Place vertical calculation
     if (structuredCalc) {
       parts.push('    <div style="color: #64748b; font-size: 11px; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
       parts.push(renderColumnCalculationHtml(structuredCalc, { inlineStyles: true }));
-      // Hidden pre for DOM compatibility and headless testing assertions with zero visible duplication
       if (vertText) {
-        parts.push(`    <pre class="vertical-calc" style="display:none;" aria-hidden="true">${escapeHtml(vertText)}</pre>\n`);
+        parts.push(`    <pre class="vertical-calc">${escapeHtml(vertText)}</pre>\n`);
       }
     } else if (vertText) {
       parts.push('    <div style="color: #64748b; font-size: 11px; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">ការគណនាតាមជួរឈរ (Vertical Calculation):</div>\n');
@@ -670,7 +697,7 @@ body {
     }
 
     // Followed by detailed step-by-step explanation cards
-    if (solKhmer) {
+    if (solKhmer && !singleBreakdown && (!progressiveSteps || progressiveSteps.length === 0)) {
       parts.push('    <div style="color: #475569; font-size: 12px; margin-top: 14px; margin-bottom: 8px; font-weight: 700; text-transform: uppercase;">ការពន្យល់លម្អិត</div>\n');
       parts.push(formatSolutionStepsHtml(solKhmer));
     }

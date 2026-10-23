@@ -1100,7 +1100,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
       expect(exp1).not.toContain("ខ្ទង់ឯកតា៖");
     });
 
-    it("Grade 6 produces algebraic equations, properties, and rigorous mathematical balance", () => {
+    it("Grade 6 produces elementary place-value operations and multi-digit arithmetic without high-school algebraic x equations", () => {
       const g6 = verifyMathResultDeterministically("៧៩៥ − ៥៤", "៧៤១", {
         gradeLevel: "grade_6",
         solverMode: "generate",
@@ -1108,11 +1108,11 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
       expect(g6.detailedKhmerExplanation).toBeDefined();
       const exp6 = g6.detailedKhmerExplanation!;
 
-      // Grade 6 vocabulary & algebraic structure
-      expect(exp6).toContain("សមីការពិជគណិត");
-      expect(exp6).toContain("Algebraic");
-      expect(exp6).toContain("សមភាព");
-      expect(exp6).toContain("x =");
+      // Grade 6 primary school arithmetic: place value without algebraic x
+      expect(exp6).toContain("ខ្ទង់រាយ");
+      expect(exp6).toContain("ខ្ទង់ដប់");
+      expect(exp6).not.toContain("x =");
+      expect(exp6).not.toContain("Algebraic Structure");
     });
 
     it("Proves Grade 1 and Grade 6 produce distinct pedagogical templates for the exact same input", () => {
@@ -1125,7 +1125,7 @@ describe("Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests", () =
 
       expect(g1.detailedKhmerExplanation).not.toEqual(g6.detailedKhmerExplanation);
       expect(g1.detailedKhmerExplanation).toContain("វត្ថុ");
-      expect(g6.detailedKhmerExplanation).toContain("សមីការ");
+      expect(g6.detailedKhmerExplanation).toContain("ខ្ទង់រាយ");
     });
   });
 

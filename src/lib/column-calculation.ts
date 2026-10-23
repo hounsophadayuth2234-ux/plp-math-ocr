@@ -1430,3 +1430,642 @@ export function toMathSolution(
 export const buildStructuredIntegerDivision = buildStructuredLongDivision;
 export const buildStructuredFractionArithmetic = buildStructuredFraction;
 
+// ====================================================================
+// Progressive Step-by-Step Column Calculation & Horizontal Breakdown Models
+// ====================================================================
+
+export interface ProgressiveColumnStep {
+  stepIndex: number;
+  placeKey: string;
+  placeNameKhmer: string;
+  stepTitleKhmer: string;
+  explanationKhmer: string;
+  columns: string[];
+  activeColIdx: number;
+  carryDigits?: string[];
+  operandRows: {
+    operator?: string;
+    digits: string[];
+  }[];
+  answerBoxes: {
+    digit: string;
+    status: "active" | "completed" | "empty";
+  }[];
+}
+
+export interface HorizontalBreakdown {
+  titleKhmer: string;
+  subTitleKhmer: string;
+  expressionKhmer: string;
+  bullets: string[];
+  conclusionKhmer: string;
+  operation: "addition" | "subtraction" | "multiplication" | "division";
+  finalAnswerKhmer: string;
+}
+
+/**
+ * Builds progressive step-by-step column calculation states (ones -> tens -> hundreds...)
+ * matching Cambodian MoEYS Primary School Textbook pedagogical models.
+ */
+export function buildProgressiveColumnSteps(
+  aNum: number,
+  op: string,
+  bNum: number,
+  resNum?: number
+): ProgressiveColumnStep[] {
+  const normOp = normalizeOperator(op);
+  const a = Math.abs(Math.round(aNum));
+  const b = Math.abs(Math.round(bNum));
+  const calculatedRes =
+    resNum !== undefined
+      ? Math.abs(Math.round(resNum))
+      : normOp === "+"
+      ? a + b
+      : normOp === "−"
+      ? a - b
+      : normOp === "×"
+      ? a * b
+      : b !== 0
+      ? Math.floor(a / b)
+      : 0;
+
+  const aDigits = String(a).split("").map(Number);
+  const bDigits = String(b).split("").map(Number);
+  const resDigits = String(calculatedRes).split("").map(Number);
+
+  const maxLen = Math.max(aDigits.length, bDigits.length, resDigits.length);
+  const columns: string[] = [];
+  for (let i = maxLen - 1; i >= 0; i--) {
+    columns.push(INTEGER_PLACE_NAMES[i] || `col_${i}`);
+  }
+
+  const placeKhmerNames = ["ខ្ទង់រាយ", "ខ្ទង់ដប់", "ខ្ទង់រយ", "ខ្ទង់ពាន់", "ខ្ទង់ម៉ឺន", "ខ្ទង់សែន"];
+  const stepPrefixes = ["ជំហានទី១", "ជំហានទី២", "ជំហានទី៣", "ជំហានទី៤", "ជំហានទី៥", "ជំហានទី៦"];
+
+  const steps: ProgressiveColumnStep[] = [];
+  const completedAnswers: string[] = Array(maxLen).fill("");
+
+  // -------------------------------------------------------------
+  // 1. ADDITION (+)
+  // -------------------------------------------------------------
+  if (normOp === "+") {
+    const aRev = [...aDigits].reverse();
+    const bRev = [...bDigits].reverse();
+    let carry = 0;
+    const carryDisplay = Array(maxLen).fill("");
+
+    const totalSteps = Math.max(aRev.length, bRev.length, resDigits.length);
+
+    for (let i = 0; i < totalSteps; i++) {
+      const colIdx = maxLen - 1 - i;
+      const dA = aRev[i] ?? 0;
+      const dB = bRev[i] ?? 0;
+
+      if (i >= aRev.length && i >= bRev.length && carry === 0) {
+        break;
+      }
+
+      const prevCarry = carry;
+      const sum = dA + dB + carry;
+      const nextCarry = Math.floor(sum / 10);
+      carry = nextCarry;
+      const ansDigit = sum % 10;
+      const ansKhmer = toKhmerNumeral(ansDigit);
+      completedAnswers[colIdx] = ansKhmer;
+
+      const pName = placeKhmerNames[i] || `ខ្ទង់ទី ${toKhmerNumeral(i + 1)}`;
+      const sPrefix = stepPrefixes[i] || `ជំហានទី ${toKhmerNumeral(i + 1)}`;
+
+      // Setup carry display for progressive view
+      const stepCarry = [...carryDisplay];
+      if (nextCarry > 0 && colIdx - 1 >= 0) {
+        carryDisplay[colIdx - 1] = toKhmerNumeral(nextCarry);
+      }
+
+      // Pedagogical explanation
+      let explanation = "";
+      if (i === 0) {
+        if (nextCarry === 0) {
+          explanation = `បូកចំនួនតាមខ្ទង់។ ខ្ទង់រាយបូកនឹងខ្ទង់រាយ គឺ ${toKhmerNumeral(dA)} + ${toKhmerNumeral(dB)} = ${toKhmerNumeral(sum)} (សរសេរលេខ ${ansKhmer} នៅខ្ទង់រាយ)។`;
+        } else {
+          explanation = `បូកខ្ទង់រាយ ${toKhmerNumeral(dA)} + ${toKhmerNumeral(dB)} = ${toKhmerNumeral(sum)} ។ រៀបជាក្រុមឡើងវិញ៖ សរសេរលេខ ${ansKhmer} នៅខ្ទង់រាយ និងត្រាទុក ${toKhmerNumeral(nextCarry)} នៅលើខ្ទង់ដប់។`;
+        }
+      } else if (i >= aRev.length && i >= bRev.length) {
+        explanation = `ទម្លាក់លេខ ${toKhmerNumeral(prevCarry)} ដែលនៅសល់ពីការត្រាទុក (សរសេរ ${toKhmerNumeral(prevCarry)})។`;
+      } else if (prevCarry > 0) {
+        if (nextCarry === 0) {
+          explanation = `បូក${pName}នឹង${pName} គឺ ${toKhmerNumeral(dA)} + ${toKhmerNumeral(dB)} + ${toKhmerNumeral(prevCarry)} (ត្រាទុក) = ${toKhmerNumeral(sum)} (សរសេរលេខ ${ansKhmer} នៅ${pName})។`;
+        } else {
+          explanation = `បូក${pName} គឺ ${toKhmerNumeral(dA)} + ${toKhmerNumeral(dB)} + ${toKhmerNumeral(prevCarry)} (ត្រាទុក) = ${toKhmerNumeral(sum)} ។ សរសេរលេខ ${ansKhmer} នៅ${pName} និងត្រាទុក ${toKhmerNumeral(nextCarry)} នៅលើខ្ទង់បន្ទាប់។`;
+        }
+      } else {
+        if (nextCarry === 0) {
+          explanation = `បូក${pName}នឹង${pName} គឺ ${toKhmerNumeral(dA)} + ${toKhmerNumeral(dB)} = ${toKhmerNumeral(sum)} (សរសេរលេខ ${ansKhmer} នៅ${pName})។`;
+        } else {
+          explanation = `បូក${pName} គឺ ${toKhmerNumeral(dA)} + ${toKhmerNumeral(dB)} = ${toKhmerNumeral(sum)} ។ សរសេរលេខ ${ansKhmer} នៅ${pName} និងត្រាទុក ${toKhmerNumeral(nextCarry)} នៅលើខ្ទង់បន្ទាប់។`;
+        }
+      }
+
+      // Pad operand rows to maxLen
+      const aPadded = padLeading(aDigits.map(toKhmerNumeral), maxLen, "");
+      const bPadded = padLeading(bDigits.map(toKhmerNumeral), maxLen, "");
+
+      const answerBoxes = columns.map((_, c) => {
+        if (c === colIdx) {
+          return { digit: ansKhmer, status: "active" as const };
+        } else if (c > colIdx && completedAnswers[c]) {
+          return { digit: completedAnswers[c], status: "completed" as const };
+        } else {
+          return { digit: "", status: "empty" as const };
+        }
+      });
+
+      steps.push({
+        stepIndex: i,
+        placeKey: columns[colIdx],
+        placeNameKhmer: pName,
+        stepTitleKhmer: `${sPrefix} — ${pName}`,
+        explanationKhmer: explanation,
+        columns,
+        activeColIdx: colIdx,
+        carryDigits: stepCarry.some((d) => d !== "") ? stepCarry : undefined,
+        operandRows: [
+          { operator: "", digits: aPadded },
+          { operator: "+", digits: bPadded },
+        ],
+        answerBoxes,
+      });
+    }
+
+    return steps;
+  }
+
+  // -------------------------------------------------------------
+  // 2. SUBTRACTION (−)
+  // -------------------------------------------------------------
+  if (normOp === "−" && a >= b) {
+    const aRev = [...aDigits].reverse();
+    const bRev = [...bDigits].reverse();
+    const currentA = [...aRev];
+    const borrowDisplay = Array(maxLen).fill("");
+
+    const totalSteps = Math.max(aRev.length, bRev.length);
+
+    for (let i = 0; i < totalSteps; i++) {
+      const colIdx = maxLen - 1 - i;
+      const colA = currentA[i] ?? 0;
+      const colB = bRev[i] ?? 0;
+      const origColA = aRev[i] ?? 0;
+
+      const pName = placeKhmerNames[i] || `ខ្ទង់ទី ${toKhmerNumeral(i + 1)}`;
+      const sPrefix = stepPrefixes[i] || `ជំហានទី ${toKhmerNumeral(i + 1)}`;
+
+      let diff = 0;
+      let explanation = "";
+
+      if (colA >= colB) {
+        diff = colA - colB;
+        if (i === 0) {
+          explanation = `ដកចំនួនតាមខ្ទង់។ ខ្ទង់រាយដកនឹងខ្ទង់រាយ គឺ ${toKhmerNumeral(colA)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)} ។ (ដោយសារ ${toKhmerNumeral(colA)} ធំជាង ${colB === 0 ? "ឬស្មើ " : ""}${toKhmerNumeral(colB)} យើងដកបានភ្លាមៗ សរសេរលេខ ${toKhmerNumeral(diff)} នៅខ្ទង់រាយ)។`;
+        } else if (colB === 0 && i >= bRev.length) {
+          explanation = `ទម្លាក់${pName} គឺ ${toKhmerNumeral(colA)} (ព្រោះគ្មានតួដក សរសេរលេខ ${toKhmerNumeral(diff)} នៅ${pName})។`;
+        } else {
+          explanation = `ដក${pName}នឹង${pName} គឺ ${toKhmerNumeral(colA)} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)} (សរសេរលេខ ${toKhmerNumeral(diff)} នៅ${pName})។`;
+        }
+      } else {
+        // Regrouping / Borrowing
+        let borrowIdx = i + 1;
+        while (borrowIdx < currentA.length && currentA[borrowIdx] === 0) {
+          borrowIdx++;
+        }
+        if (borrowIdx < currentA.length) {
+          currentA[borrowIdx]--;
+          borrowDisplay[maxLen - 1 - borrowIdx] = `(${toKhmerNumeral(currentA[borrowIdx])})`;
+          for (let k = borrowIdx - 1; k > i; k--) {
+            currentA[k] = 9;
+            borrowDisplay[maxLen - 1 - k] = `(${toKhmerNumeral(9)})`;
+          }
+          currentA[i] += 10;
+          borrowDisplay[colIdx] = toKhmerNumeral(currentA[i]);
+        }
+        diff = currentA[i] - colB;
+        const nextPName = placeKhmerNames[i + 1] || "ខ្ទង់បន្ទាប់";
+        explanation = `ដក${pName} ${toKhmerNumeral(origColA)} − ${toKhmerNumeral(colB)} មិនបានទេ (ព្រោះ ${toKhmerNumeral(origColA)} តូចជាង ${toKhmerNumeral(colB)})។ ត្រូវខ្ចី ១ ដប់ពី${nextPName}មកថែមបាន ${toKhmerNumeral(currentA[i])} រួចយក ${toKhmerNumeral(currentA[i])} − ${toKhmerNumeral(colB)} = ${toKhmerNumeral(diff)} (សរសេរលេខ ${toKhmerNumeral(diff)} នៅ${pName})។`;
+      }
+
+      const ansKhmer = toKhmerNumeral(diff);
+      completedAnswers[colIdx] = ansKhmer;
+
+      const aPadded = padLeading(aDigits.map(toKhmerNumeral), maxLen, "");
+      const bPadded = padLeading(bDigits.map(toKhmerNumeral), maxLen, "");
+
+      const answerBoxes = columns.map((_, c) => {
+        if (c === colIdx) {
+          return { digit: ansKhmer, status: "active" as const };
+        } else if (c > colIdx && completedAnswers[c]) {
+          return { digit: completedAnswers[c], status: "completed" as const };
+        } else {
+          return { digit: "", status: "empty" as const };
+        }
+      });
+
+      steps.push({
+        stepIndex: i,
+        placeKey: columns[colIdx],
+        placeNameKhmer: pName,
+        stepTitleKhmer: `${sPrefix} — ${pName}`,
+        explanationKhmer: explanation,
+        columns,
+        activeColIdx: colIdx,
+        carryDigits: borrowDisplay.some((d) => d !== "") ? [...borrowDisplay] : undefined,
+        operandRows: [
+          { operator: "", digits: aPadded },
+          { operator: "−", digits: bPadded },
+        ],
+        answerBoxes,
+      });
+    }
+
+    return steps;
+  }
+
+  // -------------------------------------------------------------
+  // 3. MULTIPLICATION (×)
+  // -------------------------------------------------------------
+  if (normOp === "×" && b < 10) {
+    const aRev = [...aDigits].reverse();
+    let carry = 0;
+    const carryDisplay = Array(maxLen).fill("");
+
+    for (let i = 0; i < aRev.length; i++) {
+      const colIdx = maxLen - 1 - i;
+      const dA = aRev[i];
+      const prevCarry = carry;
+      const prod = dA * b + carry;
+      carry = Math.floor(prod / 10);
+      const ansDigit = prod % 10;
+      const ansKhmer = toKhmerNumeral(ansDigit);
+      completedAnswers[colIdx] = ansKhmer;
+
+      const pName = placeKhmerNames[i] || `ខ្ទង់ទី ${toKhmerNumeral(i + 1)}`;
+      const sPrefix = stepPrefixes[i] || `ជំហានទី ${toKhmerNumeral(i + 1)}`;
+
+      const stepCarry = [...carryDisplay];
+      if (carry > 0 && colIdx - 1 >= 0) {
+        carryDisplay[colIdx - 1] = toKhmerNumeral(carry);
+      }
+
+      let explanation = "";
+      if (carry > 0) {
+        const nextPName = placeKhmerNames[i + 1] || "ខ្ទង់បន្ទាប់";
+        explanation = `គុណតួគុណនឹងលេខ${pName} គឺ ${toKhmerNumeral(b)} × ${toKhmerNumeral(dA)}${prevCarry > 0 ? ` + ${toKhmerNumeral(prevCarry)} (ត្រាទុក)` : ""} = ${toKhmerNumeral(prod)} ។ សរសេរលេខ ${ansKhmer} នៅ${pName} និងត្រាទុក ${toKhmerNumeral(carry)} នៅ${nextPName}។`;
+      } else {
+        explanation = `គុណតួគុណនឹងលេខ${pName} គឺ ${toKhmerNumeral(b)} × ${toKhmerNumeral(dA)}${prevCarry > 0 ? ` + ${toKhmerNumeral(prevCarry)} (ត្រាទុក)` : ""} = ${toKhmerNumeral(prod)} (សរសេរលេខ ${ansKhmer} នៅ${pName})។`;
+      }
+
+      const aPadded = padLeading(aDigits.map(toKhmerNumeral), maxLen, "");
+      const bPadded = padLeading(bDigits.map(toKhmerNumeral), maxLen, "");
+
+      const answerBoxes = columns.map((_, c) => {
+        if (c === colIdx) {
+          return { digit: ansKhmer, status: "active" as const };
+        } else if (c > colIdx && completedAnswers[c]) {
+          return { digit: completedAnswers[c], status: "completed" as const };
+        } else {
+          return { digit: "", status: "empty" as const };
+        }
+      });
+
+      steps.push({
+        stepIndex: i,
+        placeKey: columns[colIdx],
+        placeNameKhmer: pName,
+        stepTitleKhmer: `${sPrefix} — ${pName}`,
+        explanationKhmer: explanation,
+        columns,
+        activeColIdx: colIdx,
+        carryDigits: stepCarry.some((d) => d !== "") ? stepCarry : undefined,
+        operandRows: [
+          { operator: "", digits: aPadded },
+          { operator: "×", digits: bPadded },
+        ],
+        answerBoxes,
+      });
+    }
+
+    if (carry > 0 && maxLen - 1 - aRev.length >= 0) {
+      const colIdx = maxLen - 1 - aRev.length;
+      const ansKhmer = toKhmerNumeral(carry);
+      completedAnswers[colIdx] = ansKhmer;
+      const stepIdx = aRev.length;
+      const pName = placeKhmerNames[stepIdx] || "ខ្ទង់បន្ទាប់";
+      const sPrefix = stepPrefixes[stepIdx] || `ជំហានទី ${toKhmerNumeral(stepIdx + 1)}`;
+
+      const aPadded = padLeading(aDigits.map(toKhmerNumeral), maxLen, "");
+      const bPadded = padLeading(bDigits.map(toKhmerNumeral), maxLen, "");
+
+      const answerBoxes = columns.map((_, c) => {
+        if (c === colIdx) {
+          return { digit: ansKhmer, status: "active" as const };
+        } else if (c > colIdx && completedAnswers[c]) {
+          return { digit: completedAnswers[c], status: "completed" as const };
+        } else {
+          return { digit: "", status: "empty" as const };
+        }
+      });
+
+      steps.push({
+        stepIndex: stepIdx,
+        placeKey: columns[colIdx],
+        placeNameKhmer: pName,
+        stepTitleKhmer: `${sPrefix} — ${pName}`,
+        explanationKhmer: `ទម្លាក់លេខត្រាទុក ${ansKhmer} (សរសេរ ${ansKhmer})។`,
+        columns,
+        activeColIdx: colIdx,
+        carryDigits: undefined,
+        operandRows: [
+          { operator: "", digits: aPadded },
+          { operator: "×", digits: bPadded },
+        ],
+        answerBoxes,
+      });
+    }
+
+    return steps;
+  }
+
+  return steps;
+}
+
+/**
+ * Builds Horizontal Arithmetic Breakdown according to Cambodian MoEYS Primary Textbook models.
+ */
+export function buildHorizontalBreakdown(
+  problemText: string,
+  aNum?: number,
+  op?: string,
+  bNum?: number,
+  resNum?: number
+): HorizontalBreakdown | null {
+  let a = aNum;
+  let o = op;
+  let b = bNum;
+  let r = resNum;
+
+  if (a === undefined || o === undefined || b === undefined) {
+    const norm = fromKhmerNumeral(problemText)
+      .replace(/×/g, "*")
+      .replace(/[÷:]/g, "/")
+      .replace(/−/g, "-")
+      .replace(/\s+/g, "")
+      .replace(/=/g, "");
+    const match = norm.match(/^(-?\d+(?:\.\d+)?)([+\-*/])(-?\d+(?:\.\d+)?)$/);
+    if (!match) return null;
+    a = parseFloat(match[1]);
+    o = match[2];
+    b = parseFloat(match[3]);
+  }
+
+  const opSymbol = normalizeOperator(o);
+  if (r === undefined) {
+    if (opSymbol === "+") r = a + b;
+    else if (opSymbol === "−") r = a - b;
+    else if (opSymbol === "×") r = a * b;
+    else if (opSymbol === "÷") r = b !== 0 ? Math.floor(a / b) : 0;
+    else r = 0;
+  }
+
+  const aKhmer = toKhmerNumeral(a);
+  const bKhmer = toKhmerNumeral(b);
+  const rKhmer = toKhmerNumeral(r);
+
+  // 1. Multiplication (×)
+  if (opSymbol === "×") {
+    // 1a. Multiples of 10 or 10 x N
+    if (a === 10 || b === 10) {
+      const mult = a === 10 ? b : a;
+      const multKhmer = toKhmerNumeral(mult);
+      const repCount = Math.min(Math.max(1, mult), 10);
+      const repeated = Array(repCount).fill("១០").join(" + ");
+      return {
+        titleKhmer: "ការដោះស្រាយ",
+        subTitleKhmer: "គុណចំនួន ១០ នឹងលេខមួយខ្ទង់ ៖",
+        expressionKhmer: `${aKhmer} × ${bKhmer} = ____`,
+        bullets: [
+          `- ${aKhmer} × ${bKhmer} = ${repeated} = ${rKhmer} (យក ១០ បូកបញ្ចូលគ្នា ${multKhmer} ដង)`,
+          `- ១០ ចំនួន ${multKhmer} ដង ស្មើនឹង ${rKhmer}`,
+        ],
+        conclusionKhmer: `ដូច្នេះ ${aKhmer} × ${bKhmer} = ${rKhmer} ។`,
+        operation: "multiplication",
+        finalAnswerKhmer: rKhmer,
+      };
+    }
+
+    // 1b. Multiplication of 2-digit by 1-digit
+    if (b < 10 && a >= 10 && a < 100) {
+      const onesA = a % 10;
+      const tensA = Math.floor(a / 10);
+      const prodOnes = b * onesA;
+      const prodTens = b * tensA;
+      const hasCarry = prodOnes >= 10;
+      const onesKhmer = toKhmerNumeral(onesA);
+      const tensKhmer = toKhmerNumeral(tensA);
+      const prodOnesKhmer = toKhmerNumeral(prodOnes);
+      const prodTensKhmer = toKhmerNumeral(prodTens);
+
+      const bullets: string[] = [];
+      if (!hasCarry) {
+        bullets.push(`- ខ្ទង់រាយ ៖ យក ${bKhmer} × ${onesKhmer} = ${prodOnesKhmer} (គុណតួគុណនឹងលេខខ្ទង់រាយ សរសេរលេខ ${prodOnesKhmer} នៅខ្ទង់រាយ)`);
+        bullets.push(`- ខ្ទង់ដប់ ៖ យក ${bKhmer} × ${tensKhmer} = ${prodTensKhmer} (គុណតួគុណនឹងលេខខ្ទង់ដប់ សរសេរលេខ ${prodTensKhmer} នៅខ្ទង់ដប់)`);
+      } else {
+        const carryVal = Math.floor(prodOnes / 10);
+        const remOnes = prodOnes % 10;
+        bullets.push(`- ខ្ទង់រាយ ៖ យក ${bKhmer} × ${onesKhmer} = ${prodOnesKhmer} (សរសេរលេខ ${toKhmerNumeral(remOnes)} នៅខ្ទង់រាយ ត្រាទុក ${toKhmerNumeral(carryVal)} នៅខ្ទង់ដប់)`);
+        bullets.push(`- ខ្ទង់ដប់ ៖ យក ${bKhmer} × ${tensKhmer} + ${toKhmerNumeral(carryVal)} = ${toKhmerNumeral(prodTens + carryVal)} (សរសេរលេខ ${toKhmerNumeral(prodTens + carryVal)} នៅខ្ទង់ដប់)`);
+      }
+
+      return {
+        titleKhmer: "ការដោះស្រាយ",
+        subTitleKhmer: `គុណចំនួនពីរខ្ទង់នឹងមួយខ្ទង់${hasCarry ? "ដោយមានត្រាទុក" : "ដោយគ្មានត្រាទុក"} ៖`,
+        expressionKhmer: `${aKhmer} × ${bKhmer} = ____`,
+        bullets,
+        conclusionKhmer: `ដូច្នេះ ${aKhmer} × ${bKhmer} = ${rKhmer} ។`,
+        operation: "multiplication",
+        finalAnswerKhmer: rKhmer,
+      };
+    }
+  }
+
+  // 2. Subtraction (−)
+  if (opSymbol === "−" && a >= b) {
+    const aDigits = String(a).split("").map(Number).reverse();
+    const bDigits = String(b).split("").map(Number).reverse();
+    const bullets: string[] = [];
+    const placeNames = ["ខ្ទង់រាយ", "ខ្ទង់ដប់", "ខ្ទង់រយ", "ខ្ទង់ពាន់"];
+
+    for (let i = 0; i < Math.max(aDigits.length, bDigits.length); i++) {
+      const da = aDigits[i] ?? 0;
+      const db = bDigits[i] ?? 0;
+      const pName = placeNames[i] || `ខ្ទង់ទី ${toKhmerNumeral(i + 1)}`;
+      if (da >= db) {
+        const diff = da - db;
+        bullets.push(`- ${pName} ៖ យក ${toKhmerNumeral(da)} − ${toKhmerNumeral(db)} = ${toKhmerNumeral(diff)} (ដកលេខ${pName} សរសេរលេខ ${toKhmerNumeral(diff)} នៅ${pName})`);
+      } else {
+        const diff = da + 10 - db;
+        bullets.push(`- ${pName} ៖ ខ្ចី ១ ដប់ពីខ្ទង់បន្ទាប់ យក ${toKhmerNumeral(da + 10)} − ${toKhmerNumeral(db)} = ${toKhmerNumeral(diff)} (សរសេរលេខ ${toKhmerNumeral(diff)} នៅ${pName})`);
+      }
+    }
+
+    return {
+      titleKhmer: "ការដោះស្រាយ",
+      subTitleKhmer: a < 100 && b < 100 ? "ដកចំនួនពីរខ្ទង់នឹងពីរខ្ទង់តាមខ្ទង់ ៖" : "ដកចំនួនតាមខ្ទង់ ៖",
+      expressionKhmer: `${aKhmer} − ${bKhmer} = ____`,
+      bullets,
+      conclusionKhmer: `ដូច្នេះ ${aKhmer} − ${bKhmer} = ${rKhmer} ។`,
+      operation: "subtraction",
+      finalAnswerKhmer: rKhmer,
+    };
+  }
+
+  // 3. Addition (+)
+  if (opSymbol === "+") {
+    const aDigits = String(a).split("").map(Number).reverse();
+    const bDigits = String(b).split("").map(Number).reverse();
+    const bullets: string[] = [];
+    const placeNames = ["ខ្ទង់រាយ", "ខ្ទង់ដប់", "ខ្ទង់រយ", "ខ្ទង់ពាន់"];
+
+    for (let i = 0; i < Math.max(aDigits.length, bDigits.length); i++) {
+      const da = aDigits[i] ?? 0;
+      const db = bDigits[i] ?? 0;
+      const sum = da + db;
+      const pName = placeNames[i] || `ខ្ទង់ទី ${toKhmerNumeral(i + 1)}`;
+      bullets.push(`- ${pName} ៖ យក ${toKhmerNumeral(da)} + ${toKhmerNumeral(db)} = ${toKhmerNumeral(sum)} (បូកលេខ${pName} សរសេរលេខ ${toKhmerNumeral(sum % 10)} នៅ${pName}${sum >= 10 ? ` ត្រាទុក ${toKhmerNumeral(Math.floor(sum / 10))}` : ""})`);
+    }
+
+    return {
+      titleKhmer: "ការដោះស្រាយ",
+      subTitleKhmer: "បូកចំនួនតាមខ្ទង់ ៖",
+      expressionKhmer: `${aKhmer} + ${bKhmer} = ____`,
+      bullets,
+      conclusionKhmer: `ដូច្នេះ ${aKhmer} + ${bKhmer} = ${rKhmer} ។`,
+      operation: "addition",
+      finalAnswerKhmer: rKhmer,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Renders Progressive Step-by-Step Vertical Tables into self-contained HTML with Inline CSS
+ */
+export function renderProgressiveColumnStepsHtml(
+  steps: ProgressiveColumnStep[],
+  options?: {
+    operationTitle?: string;
+    finalEquation?: string;
+    conclusionText?: string;
+  }
+): string {
+  if (!steps || steps.length === 0) return "";
+  const parts: string[] = [];
+
+  parts.push('<div class="progressive-column-steps-wrapper" style="margin-top: 14px; margin-bottom: 20px;">\n');
+  if (options?.operationTitle) {
+    parts.push(`  <div style="color: #ef4444; font-weight: 700; font-size: 16px; margin-bottom: 4px;">ការដោះស្រាយ</div>\n`);
+    parts.push(`  <div style="color: #1e3a8a; font-weight: 700; font-size: 14px; margin-bottom: 16px;">${options.operationTitle}</div>\n`);
+  }
+
+  steps.forEach((step) => {
+    const numCols = step.columns.length;
+    parts.push(`  <div class="step-calculation-item" style="margin-bottom: 22px; padding: 14px 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">\n`);
+    parts.push(`    <div style="font-size: 13px; font-weight: 700; color: #475569; margin-bottom: 4px;">${step.stepTitleKhmer}</div>\n`);
+    parts.push(`    <div style="font-size: 14px; color: #1e293b; font-weight: 600; line-height: 1.6; margin-bottom: 12px;">${step.explanationKhmer}</div>\n`);
+
+    // Table
+    parts.push('    <table class="column-calculation column-step-table" role="math" aria-label="ការគណនាជួរឈរ" style="border-collapse: collapse; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-variant-numeric: tabular-nums;">\n');
+    parts.push('      <tbody>\n');
+
+    // Carry row
+    if (step.carryDigits && step.carryDigits.some((d) => d !== "")) {
+      parts.push('        <tr class="carry-row" style="height: 24px;">\n');
+      parts.push('          <td style="width: 38px;"></td>\n');
+      step.carryDigits.forEach((cDigit) => {
+        parts.push(`          <td class="digit-cell carry-cell" style="width: 38px; text-align: center; color: #15803d; font-weight: 700; font-size: 12px;">${cDigit || ""}</td>\n`);
+      });
+      parts.push('        </tr>\n');
+    }
+
+    // Operand rows
+    step.operandRows.forEach((row) => {
+      parts.push('        <tr class="operand-row" style="height: 38px;">\n');
+      parts.push(`          <td class="operator-cell" style="width: 38px; text-align: center; color: #2563eb; font-weight: 700; font-size: 18px;">${row.operator || ""}</td>\n`);
+      row.digits.forEach((digit, cIdx) => {
+        const isActive = cIdx === step.activeColIdx;
+        const color = isActive ? "#15803d" : "#2563eb";
+        const weight = isActive ? "800" : "700";
+        parts.push(`          <td class="digit-cell" style="width: 38px; text-align: center; color: ${color}; font-weight: ${weight}; font-size: 19px;">${digit}</td>\n`);
+      });
+      parts.push('        </tr>\n');
+    });
+
+    // Divider
+    parts.push('        <tr class="divider-row">\n');
+    parts.push(`          <td colspan="${numCols + 1}" style="border-bottom: 2px solid #94a3b8; height: 4px; padding: 0;"></td>\n`);
+    parts.push('        </tr>\n');
+
+    // Answer boxes
+    parts.push('        <tr class="answer-box-row" style="height: 48px;">\n');
+    parts.push('          <td style="width: 38px;"></td>\n');
+    step.answerBoxes.forEach((box) => {
+      if (box.status === "active") {
+        parts.push(`          <td class="digit-cell answer-box" style="width: 38px; height: 38px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; color: #15803d; font-weight: 800; font-size: 20px; background: #f0fdf4;">${box.digit}</td>\n`);
+      } else if (box.status === "completed") {
+        parts.push(`          <td class="digit-cell answer-box" style="width: 38px; height: 38px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; color: #2563eb; font-weight: 700; font-size: 20px; background: #ffffff;">${box.digit}</td>\n`);
+      } else {
+        parts.push('          <td class="digit-cell answer-box" style="width: 38px; height: 38px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; background: #ffffff;"></td>\n');
+      }
+    });
+    parts.push('        </tr>\n');
+
+    parts.push('      </tbody>\n');
+    parts.push('    </table>\n');
+    parts.push('  </div>\n');
+  });
+
+  // Final conclusion line
+  if (options?.conclusionText || options?.finalEquation) {
+    parts.push('  <div class="progressive-conclusion-box" style="margin-top: 14px; padding: 14px 18px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #2563eb;">\n');
+    if (options.conclusionText) {
+      parts.push(`    <div style="font-weight: 700; color: #1e293b; font-size: 14px;">${options.conclusionText}</div>\n`);
+    }
+    if (options.finalEquation) {
+      parts.push(`    <div style="font-weight: 800; color: #0f172a; font-size: 16px; margin-top: 4px;">${options.finalEquation}</div>\n`);
+    }
+    parts.push('  </div>\n');
+  }
+
+  parts.push('</div>\n');
+  return parts.join("");
+}
+
+/**
+ * Renders Horizontal Breakdown Card into self-contained HTML with Inline CSS
+ */
+export function renderHorizontalBreakdownHtml(breakdown: HorizontalBreakdown): string {
+  const parts: string[] = [];
+  parts.push('<div class="horizontal-breakdown-card" style="background: #fff8f6; border-left: 4px solid #f97316; border-radius: 10px; padding: 18px 20px; margin-top: 12px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">\n');
+  parts.push(`  <div style="color: #ef4444; font-weight: 700; font-size: 16px; margin-bottom: 4px;">${breakdown.titleKhmer}</div>\n`);
+  parts.push(`  <div style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 10px;">${breakdown.subTitleKhmer}</div>\n`);
+  parts.push(`  <div style="font-weight: 700; font-size: 16px; color: #1e293b; margin-bottom: 12px; font-family: monospace, sans-serif;">${breakdown.expressionKhmer}</div>\n`);
+  parts.push('  <div style="margin: 0 0 14px 0;">\n');
+  breakdown.bullets.forEach((bullet) => {
+    parts.push(`    <div style="font-size: 14px; color: #334155; margin-bottom: 6px; line-height: 1.6;">${bullet}</div>\n`);
+  });
+  parts.push('  </div>\n');
+  parts.push(`  <div style="font-weight: 800; font-size: 16px; color: #991b1b; border-top: 1px dashed #fdba74; padding-top: 10px; margin-top: 10px;">${breakdown.conclusionKhmer}</div>\n`);
+  parts.push('</div>\n');
+  return parts.join("");
+}
+
+
