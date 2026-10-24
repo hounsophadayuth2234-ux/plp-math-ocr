@@ -51,6 +51,7 @@ import {
   downloadSolutionAsPng,
 } from "@/lib/math-solution-html";
 import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
+import { ResultHistoryModal, HistoryItem } from "@/components/history/ResultHistoryModal";
 
 const GRADE_OPTIONS: { id: GradeLevel; label: string; sublabel: string }[] = [
   { id: "auto", label: "ស្វ័យប្រវត្តិ", sublabel: "Auto Detect" },
@@ -115,6 +116,7 @@ export default function MathSolverPage() {
   const [isDownloadingTopImage, setIsDownloadingTopImage] = useState<boolean>(false);
   const [showTopHtmlModal, setShowTopHtmlModal] = useState<boolean>(false);
   const [copiedTopModalHtml, setCopiedTopModalHtml] = useState<boolean>(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
   // Request & Abort Management
   const activeRequestIdRef = useRef<number>(0);
@@ -799,6 +801,9 @@ export default function MathSolverPage() {
             uploadedRecord={driveSync.uploadedRecord}
             errorMessage={driveSync.errorMessage}
             onRetry={driveSync.retryUpload}
+            cached={result?.cached !== undefined ? result.cached : undefined}
+            cacheKey={result?.cacheKey}
+            onOpenHistory={() => setIsHistoryOpen(true)}
             compact
             className="mt-3"
           />
@@ -1255,6 +1260,21 @@ export default function MathSolverPage() {
 
         </div>
       )}
+
+      <ResultHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        currentModule="module04_math_solver"
+        onSelectRecord={(item: HistoryItem) => {
+          if (item.outputFields) {
+            setResult({
+              ...item.outputFields,
+              cached: true,
+            });
+            setIsHistoryOpen(false);
+          }
+        }}
+      />
     </div>
   );
 }

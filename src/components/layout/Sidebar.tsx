@@ -133,8 +133,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* Navigation Content */}
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-          {/* Section 1: Dashboard Overview */}
-          <div>
+          {/* Section 1: Dashboard Overview & Result History */}
+          <div className="space-y-1">
             <Link
               href="/"
               onClick={onClose}
@@ -153,6 +153,26 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <span className="font-sans">ផ្ទាំងគ្រប់គ្រង (Dashboard)</span>
               </span>
               {pathname === "/" && <ChevronRight className="h-4 w-4 text-indigo-400" />}
+            </Link>
+
+            <Link
+              href="/history"
+              onClick={onClose}
+              className={`group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                pathname === "/history"
+                  ? "bg-cyan-600/20 text-white border border-cyan-500/40"
+                  : "text-slate-300 hover:bg-slate-900 hover:text-white"
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <History
+                  className={`h-4 w-4 ${
+                    pathname === "/history" ? "text-cyan-400" : "text-slate-400 group-hover:text-cyan-300"
+                  }`}
+                />
+                <span className="font-sans">ប្រវត្តិលទ្ធផល (History)</span>
+              </span>
+              {pathname === "/history" && <ChevronRight className="h-4 w-4 text-cyan-400" />}
             </Link>
           </div>
 

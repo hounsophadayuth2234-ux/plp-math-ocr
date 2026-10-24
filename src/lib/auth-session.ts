@@ -21,14 +21,15 @@ export type { SessionTokenPayload };
  * Verifies cryptographic signature AND checks whether the user is still active in persistent storage.
  */
 export async function getSessionUser(req: NextRequest): Promise<SafeUser | null> {
-  let token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  if (!req) return null;
+  let token = req.cookies?.get?.(SESSION_COOKIE_NAME)?.value;
   if (!token) {
     token =
-      req.cookies.get("__Secure-dyt_gate_session")?.value ||
-      req.cookies.get("dyt_gate_session")?.value;
+      req.cookies?.get?.("__Secure-dyt_gate_session")?.value ||
+      req.cookies?.get?.("dyt_gate_session")?.value;
   }
 
-  if (!token) {
+  if (!token && req.headers?.get) {
     const authHeader = req.headers.get("authorization");
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.slice(7).trim();

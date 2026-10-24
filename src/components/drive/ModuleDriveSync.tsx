@@ -26,6 +26,9 @@ export interface ModuleDriveSyncProps {
   onRetry?: () => void;
   compact?: boolean;
   className?: string;
+  cached?: boolean;
+  cacheKey?: string;
+  onOpenHistory?: () => void;
   // Deprecated/optional backward-compat parameters:
   saveToDrive?: boolean;
   onToggleSave?: (enabled: boolean) => void;
@@ -40,6 +43,9 @@ export function ModuleDriveSync({
   onRetry,
   compact = false,
   className = "",
+  cached,
+  cacheKey: _cacheKey,
+  onOpenHistory,
 }: ModuleDriveSyncProps) {
   // Aggregate records for multi-output modules
   const allRecords: DriveUploadFileRecord[] = React.useMemo(() => {
@@ -81,6 +87,16 @@ export function ModuleDriveSync({
               <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
                 <Lock className="w-2.5 h-2.5" /> Private
               </span>
+              {cached === true && (
+                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium">
+                  💾 បានយកពីលទ្ធផលដែលបានរក្សាទុក (Cached)
+                </span>
+              )}
+              {cached === false && (
+                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-medium">
+                  ⚡ ដំណើរការថ្មីតាម Gemini AI
+                </span>
+              )}
             </div>
             {!compact && (
               <p className="text-xs text-slate-400 mt-0.5">
@@ -90,17 +106,37 @@ export function ModuleDriveSync({
           </div>
         </div>
 
-        {/* Link to Admin -> Google Drive Storage */}
-        <a
-          href="/admin?tab=drive"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-sky-300 hover:text-sky-200 text-xs font-medium border border-slate-700/80 transition-colors shadow-xs"
-          title="Manage Google Drive Connection & Settings in Admin Portal"
-        >
-          <span>Admin → Google Drive Storage</span>
-          <ArrowUpRight className="w-3.5 h-3.5 opacity-70" />
-        </a>
+        {/* Action Links: History and Admin -> Google Drive Storage */}
+        <div className="flex items-center gap-2">
+          {onOpenHistory ? (
+            <button
+              type="button"
+              onClick={onOpenHistory}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-cyan-300 hover:text-cyan-200 text-xs font-medium border border-slate-700/80 transition-colors shadow-xs"
+              title="View saved results for this module"
+            >
+              <span>ប្រវត្តិ (History)</span>
+            </button>
+          ) : (
+            <a
+              href="/history"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-cyan-300 hover:text-cyan-200 text-xs font-medium border border-slate-700/80 transition-colors shadow-xs"
+              title="View saved results for this module"
+            >
+              <span>ប្រវត្តិ (History)</span>
+            </a>
+          )}
+          <a
+            href="/admin?tab=drive"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-sky-300 hover:text-sky-200 text-xs font-medium border border-slate-700/80 transition-colors shadow-xs"
+            title="Manage Google Drive Connection & Settings in Admin Portal"
+          >
+            <span>Admin → Google Drive Storage</span>
+            <ArrowUpRight className="w-3.5 h-3.5 opacity-70" />
+          </a>
+        </div>
       </div>
 
       {/* Dynamic Status Presentation */}

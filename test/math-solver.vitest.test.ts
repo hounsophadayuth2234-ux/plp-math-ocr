@@ -156,6 +156,9 @@ beforeEach(async () => {
     format: "image/png" as const,
   });
 
+  const { PersistentCacheStore } = await import("@/lib/persistent-cache-store");
+  await PersistentCacheStore.__resetTestStore();
+
   const mod = await import("@/app/api/math-solver/route");
   POST = mod.POST as unknown as (req: Request) => Promise<Response>;
 });

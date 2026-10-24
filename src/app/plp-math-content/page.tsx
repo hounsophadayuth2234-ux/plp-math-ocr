@@ -29,6 +29,7 @@ import type { MathOcrResponse } from "@/app/api/math-ocr/route";
 import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
 import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
+import { ResultHistoryModal, HistoryItem } from "@/components/history/ResultHistoryModal";
 
 // -----------------------------------------------------------
 // Canonical Sample Math Result (Instant Test Execution)
@@ -128,6 +129,7 @@ export default function PlpMathContentPage() {
   const [isResultStale, setIsResultStale] = useState<boolean>(false);
   const [errorRequestId, setErrorRequestId] = useState<string | null>(null);
   const [prepInfo, setPrepInfo] = useState<PreparedMathOcrImage | null>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // Advanced OCR Quality, Runtime Capabilities & Syntax Validation states
   const [profile, setProfile] = useState<PreprocessProfile>("printed_light_background");
@@ -770,6 +772,9 @@ export default function PlpMathContentPage() {
                 uploadedRecord={driveSync.uploadedRecord}
                 errorMessage={driveSync.errorMessage}
                 onRetry={driveSync.retryUpload}
+                cached={result?.cached !== undefined ? result.cached : undefined}
+                cacheKey={result?.cacheKey}
+                onOpenHistory={() => setIsHistoryOpen(true)}
                 compact
               />
             </div>
@@ -1141,6 +1146,21 @@ export default function PlpMathContentPage() {
           )}
         </div>
       </div>
+
+      <ResultHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        currentModule="module01_math_ocr"
+        onSelectRecord={(item: HistoryItem) => {
+          if (item.outputFields) {
+            setResult({
+              ...item.outputFields,
+              cached: true,
+            });
+            setIsHistoryOpen(false);
+          }
+        }}
+      />
     </div>
   );
 }

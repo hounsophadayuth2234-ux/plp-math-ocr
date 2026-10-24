@@ -335,6 +335,19 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
         createdTime: oauthResult.createdTime,
         folderId: oauthResult.folderId,
       };
+
+      const recordUserId = sessionUser?.id || driveUserId || "usr_anonymous";
+      await DriveHistoryStore.addRecord({
+        userId: recordUserId,
+        module: moduleName,
+        filename: result.name,
+        mimeType: result.mimeType,
+        size: result.size,
+        folderId: result.folderId,
+        resultDriveFileId: result.fileId,
+        webViewLink: result.webViewLink,
+        status: "uploaded",
+      });
     }
     // B. Priority 2: In test environment with service account mock/config
     else if (process.env.NODE_ENV === "test" && process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {

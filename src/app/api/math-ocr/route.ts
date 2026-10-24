@@ -37,6 +37,11 @@ export interface MathOcrResponse {
   regions?: MathOcrLineRegion[];
   inferenceProvider?: string;
   serverElapsedMs?: number;
+  cached?: boolean;
+  fromCache?: boolean;
+  cacheKey?: string;
+  driveFileIds?: Record<string, string>;
+  driveLinks?: Record<string, string>;
 }
 
 export interface MathOcrError {
@@ -241,6 +246,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
 import { enforceRouteAuth } from "@/lib/auth-gate";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { validateImageUpload } from "@/lib/image-upload-validator";
+import { getSessionUser } from "@/lib/auth-session";
+import {
+  PersistentCacheStore,
+  buildDeterministicCacheKey,
+  computeExactSha256,
+  computeNormalizedImageSha256,
+  computeNormalizedTextFingerprint,
+} from "@/lib/persistent-cache-store";
+import {
+  buildModule01Artifacts,
+  uploadArtifactsToGoogleDrive,
+} from "@/lib/gemini-cache-artifacts";
 
 // -----------------------------------------------------------
 // Route Handler
@@ -317,10 +334,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const sessionUser = await getSessionUser(req);
+    const userId = sessionUser?.id || (process.env.NODE_ENV === "test" ? "usr_test_default" : "usr_anonymous");
+    const username = sessionUser?.username || "user";
+
     let verifiedMimeType: "image/png" | "image/jpeg" | "image/webp" = "image/png";
+    let imageBytes: ArrayBuffer | null = null;
+    let exactImageSha256: string | undefined;
+    let normalizedImageSha256: string | undefined;
+    let inputFingerprint = "";
 
     if (imageFile) {
-      const imageBytes = await imageFile.arrayBuffer();
+      imageBytes = await imageFile.arrayBuffer();
       const validation = validateImageUpload(imageBytes, imageFile.name, {
         maxSizeBytes: 4.5 * 1024 * 1024,
         maxWidth: 4096,
@@ -353,10 +378,20 @@ export async function POST(req: NextRequest) {
       }
 
       verifiedMimeType = validation.format;
+      const buf = Buffer.from(imageBytes);
+      exactImageSha256 = computeExactSha256(buf);
+      normalizedImageSha256 = computeNormalizedImageSha256(buf);
+      inputFingerprint = exactImageSha256;
+    } else {
+      const norm = computeNormalizedTextFingerprint(trimmedText);
+      inputFingerprint = norm.fingerprint;
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const candidateModels = getCandidateModels();
+    const primaryModel = candidateModels[0] || "gemini-flash-lite-latest";
+    const promptVersion = "math_ocr_v2.0";
 
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === "your_gemini_api_key_here") {
       return NextResponse.json<MathOcrError>(
         {
@@ -366,18 +401,68 @@ export async function POST(req: NextRequest) {
           code: "PROVIDER_NOT_CONFIGURED",
           retryable: false,
           requestId,
-          message: "Gemini provider is not configured.",
         },
         { status: 503 }
       );
     }
 
+    const cacheKey = buildDeterministicCacheKey({
+      module: "module01_math_ocr",
+      userId,
+      grade: "auto",
+      mode: "default",
+      language: "km",
+      inputFingerprint,
+      options: customInstructions ? { customInstructions: customInstructions.trim() } : {},
+      modelName: primaryModel,
+      promptVersion,
+    });
+
+    // 3. Search Redis / Persistent Cache before calling Gemini
+    let cached = await PersistentCacheStore.get<MathOcrResponse>(cacheKey, userId);
+    if (!cached && exactImageSha256) {
+      cached = await PersistentCacheStore.lookupByContent<MathOcrResponse>({
+        userId,
+        module: "module01_math_ocr",
+        grade: "auto",
+        mode: "default",
+        language: "km",
+        modelName: primaryModel,
+        promptVersion,
+        exactImageSha256,
+        normalizedImageSha256,
+      });
+    }
+
+    if (cached) {
+      console.info(
+        JSON.stringify({
+          requestId,
+          event: "math_ocr_cache_hit",
+          cacheKey: cached.cacheKey,
+          durationMs: Date.now() - overallStartTime,
+        })
+      );
+      return NextResponse.json<MathOcrResponse>(
+        {
+          ...cached.outputFields,
+          cached: true,
+          fromCache: true,
+          cacheKey: cached.cacheKey,
+          driveFileIds: cached.driveFileIds,
+          driveLinks: cached.driveLinks,
+          serverElapsedMs: Date.now() - overallStartTime,
+        },
+        { status: 200 }
+      );
+    }
+
+
     const genAI = new GoogleGenerativeAI(apiKey);
 
     const parts: Part[] = [{ text: SYSTEM_PROMPT }];
 
-    if (imageFile) {
-      const imageBytes = await imageFile.arrayBuffer();
+    if (imageFile && imageBytes) {
       const base64Image = Buffer.from(imageBytes).toString("base64");
       parts.push({
         inlineData: {
@@ -407,7 +492,6 @@ export async function POST(req: NextRequest) {
     let selectedModel = "";
     let totalAttempts = 0;
     const attemptedModels: string[] = [];
-    const candidateModels = getCandidateModels();
     const OVERALL_BUDGET_MS = 38000;
     const PER_MODEL_TIMEOUT_MS = 8000;
 
@@ -629,6 +713,56 @@ export async function POST(req: NextRequest) {
       parsed.inferenceProvider = `Serverless Gemini Vision (${selectedModel})`;
       parsed.serverElapsedMs = Date.now() - overallStartTime;
       parsed.isDemoMode = false;
+
+      // 4. Save durable artifacts to Google Drive (DYT_Math_Images)
+      const artifacts = buildModule01Artifacts({
+        username,
+        originalImage: imageBytes
+          ? {
+              buffer: Buffer.from(imageBytes),
+              filename: imageFile?.name || "math_ocr.png",
+              mimeType: verifiedMimeType,
+            }
+          : undefined,
+        latex: parsed.latex,
+        html: parsed.joditHtml,
+        mathml: parsed.mathml,
+        transcription: parsed.transcription,
+      });
+
+      const uploadResult = await uploadArtifactsToGoogleDrive(userId, artifacts);
+
+      // 5. Write complete Redis index record
+      await PersistentCacheStore.set<MathOcrResponse>({
+        cacheKey,
+        userId,
+        module: "module01_math_ocr",
+        grade: "auto",
+        mode: "default",
+        language: "km",
+        normalizedInputFingerprint: inputFingerprint,
+        exactImageSha256,
+        normalizedImageSha256,
+        modelName: selectedModel,
+        promptVersion,
+        outputFields: parsed as MathOcrResponse,
+        driveFileIds: uploadResult.driveFileIds,
+        driveLinks: uploadResult.driveLinks,
+        mimeTypes: uploadResult.mimeTypes,
+        timestamps: {
+          createdAt: Date.now(),
+          cachedAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        },
+        processingStatus: uploadResult.allSucceeded ? "completed" : "partial",
+        source: "gemini",
+      });
+
+      parsed.cached = false;
+      parsed.fromCache = false;
+      parsed.cacheKey = cacheKey;
+      parsed.driveFileIds = uploadResult.driveFileIds;
+      parsed.driveLinks = uploadResult.driveLinks;
 
       return NextResponse.json<MathOcrResponse>(parsed as MathOcrResponse, { status: 200 });
     } catch (parseErr) {

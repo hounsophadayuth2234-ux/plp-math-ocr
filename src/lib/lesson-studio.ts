@@ -63,6 +63,11 @@ export interface LessonStudioResponse {
   requestId?: string;
   model?: string;
   durationMs?: number;
+  cached?: boolean;
+  fromCache?: boolean;
+  cacheKey?: string;
+  driveFileIds?: Record<string, string>;
+  driveLinks?: Record<string, string>;
 }
 
 export const GRADE_LABELS_KHMER: Record<GradeLevel, string> = {

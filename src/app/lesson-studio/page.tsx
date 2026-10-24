@@ -31,6 +31,7 @@ import {
 import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
 import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
+import { ResultHistoryModal, HistoryItem } from "@/components/history/ResultHistoryModal";
 
 const PRESETS: Record<LessonStudioMode, Array<{ label: string; prompt: string; grade: GradeLevel }>> = {
   visual_svg: [
@@ -130,6 +131,7 @@ export default function LessonStudioPage() {
   const [viewMode, setViewMode] = useState<"preview" | "code">("preview");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showAnswerKey, setShowAnswerKey] = useState<boolean>(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -731,6 +733,9 @@ export default function LessonStudioPage() {
               uploadedRecord={driveSync.uploadedRecord}
               errorMessage={driveSync.errorMessage}
               onRetry={driveSync.retryUpload}
+              cached={result?.cached !== undefined ? result.cached : undefined}
+              cacheKey={result?.cacheKey}
+              onOpenHistory={() => setIsHistoryOpen(true)}
               compact
             />
 
@@ -1041,6 +1046,21 @@ export default function LessonStudioPage() {
           </div>
         </div>
       </div>
+
+      <ResultHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        currentModule="module05_lesson_studio"
+        onSelectRecord={(item: HistoryItem) => {
+          if (item.outputFields) {
+            setResult({
+              ...item.outputFields,
+              cached: true,
+            });
+            setIsHistoryOpen(false);
+          }
+        }}
+      />
     </div>
   );
 }

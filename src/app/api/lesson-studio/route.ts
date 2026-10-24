@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { getSessionUser } from "@/lib/auth-session";
+import {
+  PersistentCacheStore,
+  buildDeterministicCacheKey,
+  computeExactSha256,
+  computeNormalizedImageSha256,
+  computeNormalizedTextFingerprint,
+} from "@/lib/persistent-cache-store";
+import {
+  buildModule05Artifacts,
+  uploadArtifactsToGoogleDrive,
+} from "@/lib/gemini-cache-artifacts";
 import {
   LessonStudioMode,
   GradeLevel,
@@ -15,7 +27,6 @@ import {
   normalizeQuizQuestions,
 } from "@/lib/lesson-studio";
 import { normalizeKhmerEducationalText } from "@/lib/khmer-text-normalizer";
-
 
 export const maxDuration = 60; // 60 seconds budget
 
@@ -74,6 +85,77 @@ export async function POST(req: NextRequest) {
           requestId,
         },
         { status: 400 }
+      );
+    }
+
+    const sessionUser = await getSessionUser(req);
+    const userId = sessionUser?.id || (process.env.NODE_ENV === "test" ? "usr_test_default" : "usr_anonymous");
+    const username = sessionUser?.username || "user";
+
+    let exactImageSha256: string | undefined;
+    let normalizedImageSha256: string | undefined;
+    let inputFingerprint = "";
+
+    if (imageBytes) {
+      const buf = Buffer.from(imageBytes);
+      exactImageSha256 = computeExactSha256(buf);
+      normalizedImageSha256 = computeNormalizedImageSha256(buf);
+      inputFingerprint = exactImageSha256;
+    } else {
+      const norm = computeNormalizedTextFingerprint(promptText);
+      inputFingerprint = norm.fingerprint;
+    }
+
+    const primaryModel = "gemini-flash-lite-latest";
+    const promptVersion = "lesson_studio_v2.0";
+
+    const cacheKey = buildDeterministicCacheKey({
+      module: "module05_lesson_studio",
+      userId,
+      grade: gradeLevel,
+      mode,
+      language: "km",
+      inputFingerprint,
+      options: { prompt: promptText.trim() },
+      modelName: primaryModel,
+      promptVersion,
+    });
+
+    let cached = await PersistentCacheStore.get<LessonStudioResponse>(cacheKey, userId);
+    if (!cached && exactImageSha256) {
+      cached = await PersistentCacheStore.lookupByContent<LessonStudioResponse>({
+        userId,
+        module: "module05_lesson_studio",
+        grade: gradeLevel,
+        mode,
+        language: "km",
+        modelName: primaryModel,
+        promptVersion,
+        exactImageSha256,
+        normalizedImageSha256,
+      });
+    }
+
+    if (cached) {
+      console.info(
+        JSON.stringify({
+          requestId,
+          event: "lesson_studio_cache_hit",
+          cacheKey: cached.cacheKey,
+          durationMs: Date.now() - startTime,
+        })
+      );
+      return NextResponse.json<LessonStudioResponse>(
+        {
+          ...cached.outputFields,
+          cached: true,
+          fromCache: true,
+          cacheKey: cached.cacheKey,
+          driveFileIds: cached.driveFileIds,
+          driveLinks: cached.driveLinks,
+          durationMs: Date.now() - startTime,
+        },
+        { status: 200 }
       );
     }
 
@@ -225,13 +307,15 @@ Output JSON format:
     const parsed = JSON.parse(rawJsonText);
     const durationMs = Date.now() - startTime;
 
+    let finalResponse: LessonStudioResponse;
+
     if (mode === "visual_svg") {
       const sanitizedSvg = sanitizeAndEnforceSvg(parsed.svg || "");
       const titleKhmer = parsed.titleKhmer || "រូបភាពគណិតវិទ្យា (Math Visual Diagram)";
       const descriptionKhmer = parsed.descriptionKhmer || promptText;
       const htmlCard = wrapSvgInHtmlCard(sanitizedSvg, titleKhmer, descriptionKhmer);
 
-      return NextResponse.json<LessonStudioResponse>({
+      finalResponse = {
         ok: true,
         mode: "visual_svg",
         visual: {
@@ -245,10 +329,8 @@ Output JSON format:
         model: chosenModel,
         durationMs,
         requestId,
-      });
-    }
-
-    if (mode === "quiz_generator") {
+      };
+    } else if (mode === "quiz_generator") {
       const titleKhmer = normalizeKhmerEducationalText(
         parsed.titleKhmer || "សន្លឹកកិច្ចការគណិតវិទ្យា (Math Worksheet)"
       );
@@ -269,37 +351,86 @@ Output JSON format:
       };
       quizData.htmlContent = renderQuizHtml(quizData);
 
-      return NextResponse.json<LessonStudioResponse>({
+      finalResponse = {
         ok: true,
         mode: "quiz_generator",
         quiz: quizData,
         model: chosenModel,
         durationMs,
         requestId,
-      });
+      };
+    } else {
+      // mode === "html_styler"
+      const titleKhmer = parsed.titleKhmer || "មេរៀនគណិតវិទ្យា (Math Lesson Notes)";
+      const correctedText = parsed.correctedText || promptText;
+      const boxes: HtmlBox[] = Array.isArray(parsed.boxes) ? parsed.boxes : [];
+      const notes = Array.isArray(parsed.notes) ? parsed.notes : [];
+      const htmlContent = boxes.map((box: HtmlBox) => renderHtmlBox(box)).join("\n");
+
+      finalResponse = {
+        ok: true,
+        mode: "html_styler",
+        styler: {
+          titleKhmer,
+          correctedText,
+          htmlContent,
+          boxes,
+          notes,
+        },
+        model: chosenModel,
+        durationMs,
+        requestId,
+      };
     }
 
-    // mode === "html_styler"
-    const titleKhmer = parsed.titleKhmer || "មេរៀនគណិតវិទ្យា (Math Lesson Notes)";
-    const correctedText = parsed.correctedText || promptText;
-    const boxes: HtmlBox[] = Array.isArray(parsed.boxes) ? parsed.boxes : [];
-    const notes = Array.isArray(parsed.notes) ? parsed.notes : [];
-    const htmlContent = boxes.map((box: HtmlBox) => renderHtmlBox(box)).join("\n");
-
-    return NextResponse.json<LessonStudioResponse>({
-      ok: true,
-      mode: "html_styler",
-      styler: {
-        titleKhmer,
-        correctedText,
-        htmlContent,
-        boxes,
-        notes,
-      },
-      model: chosenModel,
-      durationMs,
-      requestId,
+    // Save durable artifacts to Google Drive
+    const artifacts = buildModule05Artifacts({
+      username,
+      originalImage: imageBytes
+        ? { buffer: Buffer.from(imageBytes), filename: "reference.png", mimeType }
+        : undefined,
+      lessonHtml: finalResponse.styler?.htmlContent,
+      lessonText: finalResponse.styler?.correctedText || finalResponse.quiz?.textContent,
+      quizHtml: finalResponse.quiz?.htmlContent,
+      visualSvg: finalResponse.visual?.htmlCard || finalResponse.visual?.svg,
     });
+
+    const uploadResult = await uploadArtifactsToGoogleDrive(userId, artifacts);
+
+    // Save complete record to PersistentCacheStore
+    await PersistentCacheStore.set<LessonStudioResponse>({
+      cacheKey,
+      userId,
+      module: "module05_lesson_studio",
+      grade: gradeLevel,
+      mode,
+      language: "km",
+      normalizedInputFingerprint: inputFingerprint,
+      exactImageSha256,
+      normalizedImageSha256,
+      normalizedQuestionText: promptText.trim(),
+      modelName: chosenModel,
+      promptVersion,
+      outputFields: finalResponse,
+      driveFileIds: uploadResult.driveFileIds,
+      driveLinks: uploadResult.driveLinks,
+      mimeTypes: uploadResult.mimeTypes,
+      timestamps: {
+        createdAt: Date.now(),
+        cachedAt: Date.now(),
+        lastAccessedAt: Date.now(),
+      },
+      processingStatus: uploadResult.allSucceeded ? "completed" : "partial",
+      source: "gemini",
+    });
+
+    finalResponse.cached = false;
+    finalResponse.fromCache = false;
+    finalResponse.cacheKey = cacheKey;
+    finalResponse.driveFileIds = uploadResult.driveFileIds;
+    finalResponse.driveLinks = uploadResult.driveLinks;
+
+    return NextResponse.json<LessonStudioResponse>(finalResponse, { status: 200 });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Internal Lesson Studio Error";
     return NextResponse.json<LessonStudioResponse>(

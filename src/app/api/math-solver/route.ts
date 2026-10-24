@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 import { enforceRouteAuth } from "@/lib/auth-gate";
+import { getSessionUser } from "@/lib/auth-session";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { validateImageUpload } from "@/lib/image-upload-validator";
+import {
+  PersistentCacheStore,
+  buildDeterministicCacheKey,
+  computeExactSha256,
+  computeNormalizedImageSha256,
+  computeNormalizedTextFingerprint,
+} from "@/lib/persistent-cache-store";
+import {
+  buildModule04Artifacts,
+  uploadArtifactsToGoogleDrive,
+} from "@/lib/gemini-cache-artifacts";
+import {
+  renderCanonicalSolutionHtml,
+  renderCanonicalSolutionPlainText,
+} from "@/lib/math-solution-html";
 import {
   verifyMathResultDeterministically,
   DeterministicVerificationResult,
@@ -98,6 +114,11 @@ export interface MathSolverResponse {
     reasoningMs: number;
     totalMs: number;
   };
+  cached?: boolean;
+  fromCache?: boolean;
+  cacheKey?: string;
+  driveFileIds?: Record<string, string>;
+  driveLinks?: Record<string, string>;
 }
 
 export interface MathSolverError {
@@ -322,6 +343,86 @@ export async function POST(req: NextRequest) {
       }
 
       verifiedMimeType = validation.format;
+    }
+
+    const sessionUser = await getSessionUser(req);
+    const userId = sessionUser?.id || (process.env.NODE_ENV === "test" ? "usr_test_default" : "usr_anonymous");
+    const username = sessionUser?.username || "user";
+
+    let exactImageSha256: string | undefined;
+    let normalizedImageSha256: string | undefined;
+    let inputFingerprint = "";
+
+    if (imageBytes) {
+      const buf = Buffer.from(imageBytes);
+      exactImageSha256 = computeExactSha256(buf);
+      normalizedImageSha256 = computeNormalizedImageSha256(buf);
+      inputFingerprint = exactImageSha256;
+    } else {
+      const norm = computeNormalizedTextFingerprint(problemTextInput);
+      inputFingerprint = norm.fingerprint;
+    }
+
+    const primaryModel = "gemini-flash-lite-latest";
+    const promptVersion = "math_solver_v2.0";
+
+    const cacheKey = buildDeterministicCacheKey({
+      module: "module04_math_solver",
+      userId,
+      grade: gradeLevel,
+      mode: solverMode,
+      language: outputLanguage,
+      inputFingerprint,
+      options: {
+        action,
+        detailLevel,
+        existingAnswer: existingAnswerInput.trim(),
+        includeVerification,
+        solveQuestions: solveQuestions || "",
+      },
+      modelName: primaryModel,
+      promptVersion,
+    });
+
+    let cached = await PersistentCacheStore.get<MathSolverResponse>(cacheKey, userId);
+    if (!cached && exactImageSha256) {
+      cached = await PersistentCacheStore.lookupByContent<MathSolverResponse>({
+        userId,
+        module: "module04_math_solver",
+        grade: gradeLevel,
+        mode: solverMode,
+        language: outputLanguage,
+        modelName: primaryModel,
+        promptVersion,
+        exactImageSha256,
+        normalizedImageSha256,
+      });
+    }
+
+    if (cached) {
+      console.info(
+        JSON.stringify({
+          requestId,
+          event: "math_solver_cache_hit",
+          cacheKey: cached.cacheKey,
+          durationMs: Date.now() - overallStartTime,
+        })
+      );
+      return NextResponse.json<MathSolverResponse>(
+        {
+          ...cached.outputFields,
+          cached: true,
+          fromCache: true,
+          cacheKey: cached.cacheKey,
+          driveFileIds: cached.driveFileIds,
+          driveLinks: cached.driveLinks,
+          timings: {
+            ...cached.outputFields.timings,
+            totalMs: Date.now() - overallStartTime,
+          },
+        },
+        { status: 200 }
+      );
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -985,6 +1086,58 @@ Return a valid JSON object matching the standard schema.`;
           durationMs: totalMs,
         })
       );
+
+      // Save durable artifacts to Google Drive
+      const solutionHtml = problems.map((p) => renderCanonicalSolutionHtml(p)).join("\n<hr/>\n");
+      const solutionText = problems.map((p) => renderCanonicalSolutionPlainText(p)).join("\n\n---\n\n");
+
+      const artifacts = buildModule04Artifacts({
+        username,
+        originalImage: imageBytes
+          ? {
+              buffer: Buffer.from(imageBytes),
+              filename: imageFile?.name || "problem.png",
+              mimeType: verifiedMimeType,
+            }
+          : undefined,
+        problemText: problemTextInput,
+        solutionText,
+        solutionHtml,
+      });
+
+      const uploadResult = await uploadArtifactsToGoogleDrive(userId, artifacts);
+
+      await PersistentCacheStore.set<MathSolverResponse>({
+        cacheKey,
+        userId,
+        module: "module04_math_solver",
+        grade: gradeLevel,
+        mode: solverMode,
+        language: outputLanguage,
+        normalizedInputFingerprint: inputFingerprint,
+        exactImageSha256,
+        normalizedImageSha256,
+        normalizedQuestionText: problemTextInput.trim(),
+        modelName: selectedModel,
+        promptVersion,
+        outputFields: response,
+        driveFileIds: uploadResult.driveFileIds,
+        driveLinks: uploadResult.driveLinks,
+        mimeTypes: uploadResult.mimeTypes,
+        timestamps: {
+          createdAt: Date.now(),
+          cachedAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        },
+        processingStatus: uploadResult.allSucceeded ? "completed" : "partial",
+        source: "gemini",
+      });
+
+      response.cached = false;
+      response.fromCache = false;
+      response.cacheKey = cacheKey;
+      response.driveFileIds = uploadResult.driveFileIds;
+      response.driveLinks = uploadResult.driveLinks;
 
       return NextResponse.json<MathSolverResponse>(response, { status: 200 });
     } catch (parseErr) {
