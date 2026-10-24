@@ -302,18 +302,14 @@ export default function PlpMathContentPage() {
       const formData = new FormData();
       if (fileToSend) {
         formData.append("image", fileToSend, (imageFile && imageFile.name) || "math-input.jpg");
-        // Non-blocking upload to Google Drive if user setting enabled
-        if (driveSync.saveToDrive) {
-          const ext = ((imageFile && imageFile.name) || "image.png").split(".").pop() || "png";
-          const driveFilename = `module01_math_ocr_input_${Date.now()}.${ext}`;
-          driveSync.triggerUpload({
-            file: fileToSend,
-            filename: driveFilename,
-            description: "Module 01 Math OCR Input Image",
-          }).catch((driveErr) => {
-            console.warn("[Module 01] Non-blocking Google Drive upload warning:", driveErr);
-          });
-        }
+        // Pre-register file payload so it is ready for sync
+        const ext = ((imageFile && imageFile.name) || "image.png").split(".").pop() || "png";
+        const driveFilename = `module01_math_ocr_input_${Date.now()}.${ext}`;
+        driveSync.triggerUpload({
+          file: fileToSend,
+          filename: driveFilename,
+          description: "Module 01 Math OCR Input Image",
+        }).catch(() => {});
       }
       if (rawText.trim()) formData.append("rawText", rawText.trim());
       if (isRefine && customInstructions.trim()) {
@@ -474,6 +470,20 @@ export default function PlpMathContentPage() {
 
       (data as MathOcrResponse).transcription = normTranscription;
       setResult(data as MathOcrResponse);
+
+      // Non-blocking Google Drive upload AFTER successful OCR processing
+      if (fileToSend) {
+        const ext = ((imageFile && imageFile.name) || "image.png").split(".").pop() || "png";
+        const driveFilename = `module01_math_ocr_${Date.now()}.${ext}`;
+        driveSync.triggerUpload({
+          file: fileToSend,
+          filename: driveFilename,
+          description: "Module 01 Math OCR Processed Image",
+        }).catch((driveErr) => {
+          console.warn("[Module 01] Non-blocking Google Drive upload warning:", driveErr);
+        });
+      }
+
       setElapsedTime(measuredDuration);
       setFailedDuration(null);
       setIsResultStale(false);

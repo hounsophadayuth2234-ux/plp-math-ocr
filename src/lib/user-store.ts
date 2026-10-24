@@ -519,6 +519,21 @@ export class UserStore {
   }
 
   /**
+   * Finds the first active user (or administrator) with Google Drive connected.
+   */
+  static async findFirstConnectedDriveUser(): Promise<UserRecord | null> {
+    const users = await this.listUsers();
+    return (
+      users.find(
+        (u) =>
+          u.status === "ACTIVE" &&
+          u.googleDriveConnected &&
+          Boolean(u.googleDriveTokenEncrypted)
+      ) || null
+    );
+  }
+
+  /**
    * Stores encrypted Google Drive OAuth tokens on the user record.
    */
   static async updateGoogleDriveTokens(

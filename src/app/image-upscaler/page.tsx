@@ -425,8 +425,8 @@ export default function ImageUpscalerPage() {
       setResult(res);
       setInputDiagnostics(res.diagnostics);
 
-      // Non-blocking Google Drive upload if user setting enabled
-      if (driveSync.saveToDrive && res.blob) {
+      // Non-blocking Google Drive upload (automatically uploads if enabled, or queues for toggle)
+      if (res.blob) {
         const driveFilename = `module03_hd_upscaler_${res.scale}x_${Date.now()}.png`;
         driveSync.triggerUpload({
           file: res.blob,

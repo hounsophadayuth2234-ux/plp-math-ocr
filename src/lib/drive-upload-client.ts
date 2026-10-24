@@ -5,6 +5,8 @@ export interface DriveUploadOptions {
   mimeType?: string;
   description?: string;
   makePublic?: boolean;
+  moduleName?: string;
+  folderId?: string;
 }
 
 export interface DriveUploadFileRecord {
@@ -44,9 +46,16 @@ export async function uploadImageToDrive(options: DriveUploadOptions): Promise<D
     if (description) {
       formData.append("description", description);
     }
+    if (options.moduleName) {
+      formData.append("module", options.moduleName);
+    }
+    if (options.folderId) {
+      formData.append("folderId", options.folderId);
+    }
 
     response = await fetch("/api/upload-to-drive", {
       method: "POST",
+      credentials: "same-origin",
       body: formData,
     });
   } else if (dataUrl) {
@@ -55,12 +64,15 @@ export async function uploadImageToDrive(options: DriveUploadOptions): Promise<D
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "same-origin",
       body: JSON.stringify({
         image: dataUrl,
         filename,
         mimeType: mimeType || "image/png",
         description,
         makePublic,
+        module: options.moduleName,
+        folderId: options.folderId,
       }),
     });
   } else {

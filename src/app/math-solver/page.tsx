@@ -197,8 +197,8 @@ export default function MathSolverPage() {
         formData.append("gradeLevel", gradeLevel);
         formData.append("image", file, file.name);
 
-        // Non-blocking upload to Google Drive if user setting enabled
-        if (driveSync.saveToDrive && file) {
+        // Register and execute non-blocking Google Drive upload
+        if (file) {
           const ext = (file.name || "problem.png").split(".").pop() || "png";
           const driveFilename = `module04_math_solver_input_${Date.now()}.${ext}`;
           driveSync.triggerUpload({
@@ -282,7 +282,7 @@ export default function MathSolverPage() {
         }
       }
     },
-    [imageFile, isBusy, gradeLevel]
+    [imageFile, isBusy, gradeLevel, driveSync]
   );
 
   // When image is selected, automatically initiate text/visual extraction
@@ -373,6 +373,20 @@ export default function MathSolverPage() {
       if (successData.inferredGradeKhmer) {
         setInferredGradeDisplay(successData.inferredGradeKhmer);
       }
+
+      // Non-blocking Google Drive upload AFTER successful problem generation
+      if (imageFile) {
+        const ext = (imageFile.name || "problem.png").split(".").pop() || "png";
+        const driveFilename = `module04_math_solver_${Date.now()}.${ext}`;
+        driveSync.triggerUpload({
+          file: imageFile,
+          filename: driveFilename,
+          description: `Module 04 Khmer Math Solver: ${(textToSolve || imageFile.name).slice(0, 50)}`,
+        }).catch((driveErr) => {
+          console.warn("[Module 04] Non-blocking Google Drive upload warning:", driveErr);
+        });
+      }
+
       setError(null);
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;

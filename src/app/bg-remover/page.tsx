@@ -837,8 +837,8 @@ export default function BgRemoverPage() {
       setIsModelCached(true);
       setWorkflowStep("edit_mask");
 
-      // Non-blocking Google Drive upload if user setting enabled
-      if (driveSync.saveToDrive && output?.transparentBlob) {
+      // Non-blocking Google Drive upload (automatically uploads if enabled, or queues for toggle)
+      if (output?.transparentBlob) {
         const driveFilename = `module02_bg_remover_cutout_${Date.now()}.png`;
         driveSync.triggerUpload({
           file: output.transparentBlob,

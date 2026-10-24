@@ -16,6 +16,7 @@ import { getSessionUser } from "@/lib/auth-session";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { sanitizeFilename } from "@/lib/image-upload-validator";
 import { DriveHistoryStore } from "@/lib/drive-history-store";
+import { UserStore, toSafeUser } from "@/lib/user-store";
 
 export const maxDuration = 60;
 
@@ -38,16 +39,24 @@ export async function GET(req: NextRequest) {
     const sessionUser = await getSessionUser(req);
     const folderId = getTargetDriveFolderId();
 
-    // 1. If user is authenticated with personal OAuth connection
-    if (sessionUser?.googleDriveConnected) {
+    let targetUser = sessionUser?.googleDriveConnected ? sessionUser : null;
+    if (!targetUser) {
+      const connected = await UserStore.findFirstConnectedDriveUser();
+      if (connected) {
+        targetUser = toSafeUser(connected);
+      }
+    }
+
+    // 1. If user (or system administrator) is authenticated with personal OAuth connection
+    if (targetUser?.googleDriveConnected) {
       try {
-        const drive = await getUserDriveClient(sessionUser.id);
+        const drive = await getUserDriveClient(targetUser.id);
         const folderCheck = await verifyTargetFolderAccess(drive, folderId);
         return NextResponse.json({
           success: true,
           mode: "oauth-user",
           connected: true,
-          email: sessionUser.googleDriveEmail,
+          email: targetUser.googleDriveEmail,
           folderId,
           folderName: folderCheck.folderName,
           folderAccessible: folderCheck.accessible,
@@ -256,9 +265,17 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
 
     let result: DriveUploadResult;
 
+    let driveUserId = sessionUser?.googleDriveConnected ? sessionUser.id : null;
+    if (!driveUserId) {
+      const connectedUser = await UserStore.findFirstConnectedDriveUser();
+      if (connectedUser) {
+        driveUserId = connectedUser.id;
+      }
+    }
+
     // A. Priority 1: Personal OAuth Google Drive storage (uses owner's storage quota)
-    if (sessionUser?.googleDriveConnected) {
-      const oauthResult = await uploadUserBufferToGoogleDrive(sessionUser.id, {
+    if (driveUserId) {
+      const oauthResult = await uploadUserBufferToGoogleDrive(driveUserId, {
         buffer,
         filename,
         mimeType,

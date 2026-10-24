@@ -219,17 +219,15 @@ export default function LessonStudioPage() {
         formData.append("prompt", promptText);
         formData.append("image", selectedImage.file);
 
-        // Non-blocking upload to Google Drive if user setting enabled
-        if (driveSync.saveToDrive && selectedImage?.file) {
+        // Pre-register input image payload with Drive sync
+        if (selectedImage?.file) {
           const ext = (selectedImage.file.name || "image.png").split(".").pop() || "png";
           const driveFilename = `module05_lesson_studio_input_${Date.now()}.${ext}`;
           driveSync.triggerUpload({
             file: selectedImage.file,
             filename: driveFilename,
             description: "Module 05 Lesson Studio Input Image",
-          }).catch((driveErr) => {
-            console.warn("[Module 05] Non-blocking Google Drive upload warning:", driveErr);
-          });
+          }).catch(() => {});
         }
 
         response = await fetch("/api/lesson-studio", {
@@ -263,6 +261,20 @@ export default function LessonStudioPage() {
       }
 
       setResult(data);
+
+      // Non-blocking Google Drive upload AFTER successful lesson processing
+      if (selectedImage?.file) {
+        const ext = (selectedImage.file.name || "image.png").split(".").pop() || "png";
+        const driveFilename = `module05_lesson_studio_${Date.now()}.${ext}`;
+        driveSync.triggerUpload({
+          file: selectedImage.file,
+          filename: driveFilename,
+          description: "Module 05 Lesson Studio Input Image",
+        }).catch((driveErr) => {
+          console.warn("[Module 05] Non-blocking Google Drive upload warning:", driveErr);
+        });
+      }
+
       setIsLoading(false);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
