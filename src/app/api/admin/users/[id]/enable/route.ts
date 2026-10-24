@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth-session";
+import { requireSuperAdmin } from "@/lib/auth-session";
 import { validateCsrfToken } from "@/lib/auth-csrf";
 import { UserStore, toSafeUser } from "@/lib/user-store";
 import { AuditLogger } from "@/lib/audit-logger";
@@ -11,7 +11,7 @@ interface RouteParams {
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const adminCheck = await requireAdmin(req);
+  const adminCheck = await requireSuperAdmin(req);
   if ("response" in adminCheck) {
     return adminCheck.response;
   }

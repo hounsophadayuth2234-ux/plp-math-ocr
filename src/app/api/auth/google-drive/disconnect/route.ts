@@ -17,6 +17,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (user.role !== "SUPER_ADMIN") {
+    return NextResponse.json(
+      { error: "Forbidden: មានតែម្ចាស់ប្រព័ន្ធ SUPER_ADMIN ប៉ុណ្ណោះដែលអាចផ្តាច់ Google Drive បាន (Super Admin required)." },
+      { status: 403 }
+    );
+  }
+
   try {
     await disconnectUserDrive(user.id);
     return NextResponse.json({

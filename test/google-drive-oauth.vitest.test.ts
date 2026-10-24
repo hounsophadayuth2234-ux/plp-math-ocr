@@ -132,7 +132,7 @@ describe("Google Drive OAuth 2.0 Integration Suite", () => {
       username: "owner",
       email: "owner@gmail.com",
       displayName: "Owner",
-      role: "ADMIN",
+      role: "SUPER_ADMIN",
       status: "ACTIVE",
       mustChangePassword: false,
       createdAt: Date.now(),

@@ -195,18 +195,15 @@ export function ModuleDriveSync({
                     )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-auto">
-                    <div className="text-slate-400 hidden sm:block">
-                      ID: <span className="text-emerald-400 select-all font-mono">{rec.id}</span>
-                    </div>
                     {rec.webViewLink && (
                       <a
                         href={rec.webViewLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[11px] font-sans font-medium transition-colors border border-emerald-500/30"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[11px] font-sans font-medium transition-colors border border-emerald-500/30"
                       >
                         <ExternalLink className="w-3 h-3" />
-                        <span>បើកមើលក្នុង Drive (Open)</span>
+                        <span>បើកមើល (View)</span>
                       </a>
                     )}
                   </div>

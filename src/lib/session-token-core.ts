@@ -9,7 +9,7 @@ export const SESSION_MAX_AGE_SECONDS = 86400 * 7; // 7 days
 export interface SessionTokenPayload {
   userId: string;
   username: string;
-  role: "ADMIN" | "USER";
+  role: "SUPER_ADMIN" | "ADMIN" | "USER";
   displayName: string;
   iat: number;
   exp: number;
@@ -67,7 +67,7 @@ function base64UrlDecode(str: string): Uint8Array {
 export async function createSessionToken(params: {
   id: string;
   username: string;
-  role: "ADMIN" | "USER";
+  role: "SUPER_ADMIN" | "ADMIN" | "USER";
   displayName: string;
   mustChangePassword?: boolean;
 }): Promise<string> {

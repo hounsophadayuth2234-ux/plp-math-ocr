@@ -20,6 +20,7 @@ import {
   Activity,
   History,
   Palette,
+  User,
 } from "lucide-react";
 import { CORE_TOOLS, TEAM_MEMBERS, ToolModule } from "@/config/tools";
 
@@ -40,7 +41,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const [isAdmin, setIsAdmin] = React.useState(false);
+  const [userRole, setUserRole] = React.useState<"SUPER_ADMIN" | "ADMIN" | "USER">("USER");
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [checkedTime, setCheckedTime] = useState<string>("Just now");
 
@@ -48,13 +49,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     setCheckedTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
   }, []);
 
+  const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+
   React.useEffect(() => {
     let mounted = true;
     fetch("/api/auth/session")
       .then((res) => res.json())
       .then((data) => {
-        if (mounted && data.authenticated && data.user?.role === "ADMIN") {
-          setIsAdmin(true);
+        if (mounted && data.authenticated && data.user) {
+          setUserRole(data.user.role || "USER");
         }
       })
       .catch(() => {});
@@ -173,6 +176,26 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <span className="font-sans">ប្រវត្តិលទ្ធផល (History)</span>
               </span>
               {pathname === "/history" && <ChevronRight className="h-4 w-4 text-cyan-400" />}
+            </Link>
+
+            <Link
+              href="/profile"
+              onClick={onClose}
+              className={`group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                pathname === "/profile"
+                  ? "bg-amber-500/20 text-white border border-amber-500/40"
+                  : "text-slate-300 hover:bg-slate-900 hover:text-white"
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <User
+                  className={`h-4 w-4 ${
+                    pathname === "/profile" ? "text-amber-400" : "text-slate-400 group-hover:text-amber-300"
+                  }`}
+                />
+                <span className="font-sans">ប្រវត្តិរូប និងការកំណត់ (Profile Hub)</span>
+              </span>
+              {pathname === "/profile" && <ChevronRight className="h-4 w-4 text-amber-400" />}
             </Link>
           </div>
 
@@ -329,12 +352,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               {isAdmin && (
                 <div className="pt-2 border-t border-slate-800">
                   <Link
-                    href="/admin"
+                    href={userRole === "SUPER_ADMIN" ? "/profile?tab=users" : "/profile?tab=activity"}
                     onClick={onClose}
                     className="flex items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold transition-colors"
                   >
                     <Shield className="h-3 w-3" />
-                    <span>Admin Management Hub &rarr;</span>
+                    <span>
+                      {userRole === "SUPER_ADMIN" ? "Super Admin Management &rarr;" : "Activity Tracking Hub &rarr;"}
+                    </span>
                   </Link>
                 </div>
               )}

@@ -17,7 +17,7 @@ interface CurrentUser {
   id: string;
   username: string;
   displayName: string;
-  role: "ADMIN" | "USER";
+  role: "SUPER_ADMIN" | "ADMIN" | "USER";
 }
 
 export function Header({ onOpenSidebar, onOpenSettings, onOpenHelp }: HeaderProps) {
@@ -68,14 +68,14 @@ export function Header({ onOpenSidebar, onOpenSettings, onOpenHelp }: HeaderProp
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
 
-        {pathname === "/admin" ? (
+        {pathname === "/profile" || pathname === "/admin" ? (
           <div>
             <h1 className="text-sm font-bold text-white sm:text-base tracking-wide flex items-center gap-2">
               <Shield className="h-4 w-4 text-cyan-400" />
-              <span>Admin Management Hub</span>
+              <span>ប្រវត្តិរូប និងការកំណត់ (Profile & Hub)</span>
             </h1>
             <p className="hidden text-xs text-slate-400 sm:block">
-              User accounts, access controls, and security audit telemetry
+              User profile, security credentials, and role-based controls
             </p>
           </div>
         ) : activeTool ? (
@@ -142,19 +142,26 @@ export function Header({ onOpenSidebar, onOpenSettings, onOpenHelp }: HeaderProp
 
         {/* 4. User Profile */}
         {currentUser && (
-          <div className="hidden md:flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 px-2.5 py-1.5 text-xs">
+          <button
+            type="button"
+            onClick={() => router.push("/profile")}
+            title="ចូលទៅកាន់ប្រវត្តិរូប និងការកំណត់ (Go to Profile & Hub)"
+            className="hidden md:flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 hover:bg-slate-800/80 px-2.5 py-1.5 text-xs transition-all cursor-pointer"
+          >
             <User className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-            <span className="text-slate-300 font-medium">{currentUser.displayName || currentUser.username}</span>
+            <span className="text-slate-200 font-medium">{currentUser.displayName || currentUser.username}</span>
             <span
               className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider ${
-                currentUser.role === "ADMIN"
+                currentUser.role === "SUPER_ADMIN"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  : currentUser.role === "ADMIN"
                   ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
                   : "bg-slate-800 text-slate-400"
               }`}
             >
               {currentUser.role}
             </span>
-          </div>
+          </button>
         )}
 
         {/* 5. Logout */}

@@ -13,65 +13,84 @@ import { UserStore, UserRecord } from "./user-store";
  * 3. Does nothing if an active administrator account already exists.
  */
 export async function bootstrapFirstAdmin(): Promise<UserRecord | null> {
-  const activeAdmins = await UserStore.countActiveAdmins();
-  if (activeAdmins > 0) {
-    // Admin already provisioned
-    return null;
-  }
+  let superAdminUser: UserRecord | null = null;
 
-  const username = (process.env.INITIAL_ADMIN_USERNAME || "admin").trim().toLowerCase();
-  const email = (process.env.INITIAL_ADMIN_EMAIL || "admin@dyt-ecosystem.local").trim().toLowerCase();
+  // 1. Ensure SUPER_ADMIN account is seeded
+  const activeSuperAdmins = await UserStore.countActiveSuperAdmins();
+  if (activeSuperAdmins === 0) {
+    const superUsername = (process.env.INITIAL_SUPER_ADMIN_USERNAME || "superadmin").trim().toLowerCase();
+    const superEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "superadmin@dyt-ecosystem.local").trim().toLowerCase();
+    const superRawPassword = (process.env.INITIAL_SUPER_ADMIN_PASSWORD || "SuperAdmin2026!SecureBoot").trim();
+    const superPasswordHash = bcrypt.hashSync(superRawPassword, 12);
 
-  let passwordHash = "";
-
-  // 1. Try INITIAL_ADMIN_PASSWORD from environment
-  const envPassword = process.env.INITIAL_ADMIN_PASSWORD?.trim();
-  if (envPassword) {
-    passwordHash = bcrypt.hashSync(envPassword, 12);
-  }
-
-  // 2. Try pre-existing APP_GATE_PASSWORD_HASH
-  if (!passwordHash && process.env.APP_GATE_PASSWORD_HASH?.trim()) {
-    passwordHash = process.env.APP_GATE_PASSWORD_HASH.trim();
-  }
-
-  // 3. Try reading local secure uncommitted handoff file
-  if (!passwordHash) {
     try {
-      const handoffPath = path.join(process.cwd(), ".gate-credentials-handoff.json");
-      if (fs.existsSync(handoffPath)) {
-        const content = fs.readFileSync(handoffPath, "utf-8");
-        const parsed = JSON.parse(content);
-        if (parsed.passwordHash) {
-          passwordHash = parsed.passwordHash;
-        } else if (parsed.plainPassword) {
-          passwordHash = bcrypt.hashSync(parsed.plainPassword, 12);
+      superAdminUser = await UserStore.createUser({
+        username: superUsername,
+        email: superEmail,
+        displayName: "Super Administrator (ម្ចាស់ប្រព័ន្ធ)",
+        passwordHash: superPasswordHash,
+        role: "SUPER_ADMIN",
+        status: "ACTIVE",
+        mustChangePassword: false,
+      });
+      console.log(`[bootstrap-admin] Initial SUPER_ADMIN account created: ${superUsername}`);
+    } catch (_err) {
+      superAdminUser = await UserStore.getUserByUsernameOrEmail(superUsername);
+    }
+  }
+
+  // 2. Ensure ADMIN account is seeded
+  const activeAdmins = await UserStore.countActiveAdmins();
+  if (activeAdmins === 0) {
+    const adminUsername = (process.env.INITIAL_ADMIN_USERNAME || "admin").trim().toLowerCase();
+    const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || "admin@dyt-ecosystem.local").trim().toLowerCase();
+    let adminPasswordHash = "";
+
+    const envPassword = process.env.INITIAL_ADMIN_PASSWORD?.trim();
+    if (envPassword) {
+      adminPasswordHash = bcrypt.hashSync(envPassword, 12);
+    }
+
+    if (!adminPasswordHash && process.env.APP_GATE_PASSWORD_HASH?.trim()) {
+      adminPasswordHash = process.env.APP_GATE_PASSWORD_HASH.trim();
+    }
+
+    if (!adminPasswordHash) {
+      try {
+        const handoffPath = path.join(process.cwd(), ".gate-credentials-handoff.json");
+        if (fs.existsSync(handoffPath)) {
+          const content = fs.readFileSync(handoffPath, "utf-8");
+          const parsed = JSON.parse(content);
+          if (parsed.passwordHash) {
+            adminPasswordHash = parsed.passwordHash;
+          } else if (parsed.plainPassword) {
+            adminPasswordHash = bcrypt.hashSync(parsed.plainPassword, 12);
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
+
+    if (!adminPasswordHash) {
+      adminPasswordHash = bcrypt.hashSync("AdminPass2026!SecureBoot", 12);
+    }
+
+    try {
+      const admin = await UserStore.createUser({
+        username: adminUsername,
+        email: adminEmail,
+        displayName: "System Administrator",
+        passwordHash: adminPasswordHash,
+        role: "ADMIN",
+        status: "ACTIVE",
+        mustChangePassword: false,
+      });
+      console.log(`[bootstrap-admin] Initial ADMIN account created: ${adminUsername}`);
+      if (!superAdminUser) return admin;
+    } catch (_err) {
+      const existing = await UserStore.getUserByUsernameOrEmail(adminUsername);
+      if (!superAdminUser) return existing;
+    }
   }
 
-  // 4. Default high-entropy hash if nothing configured (prevents empty password)
-  if (!passwordHash) {
-    // Fallback secure default for testing environments
-    passwordHash = bcrypt.hashSync("AdminPass2026!SecureBoot", 12);
-  }
-
-  try {
-    const admin = await UserStore.createUser({
-      username,
-      email,
-      displayName: "System Administrator",
-      passwordHash,
-      role: "ADMIN",
-      status: "ACTIVE",
-      mustChangePassword: false,
-    });
-    console.log(`[bootstrap-admin] Initial administrator account created: ${username}`);
-    return admin;
-  } catch (_err) {
-    // Might already exist with another role or case
-    const existing = await UserStore.getUserByUsernameOrEmail(username);
-    return existing;
-  }
+  return superAdminUser;
 }

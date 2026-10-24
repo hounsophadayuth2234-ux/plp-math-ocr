@@ -23,9 +23,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  if (user.role !== "SUPER_ADMIN") {
+    return NextResponse.json(
+      { error: "Forbidden: មានតែម្ចាស់ប្រព័ន្ធ SUPER_ADMIN ប៉ុណ្ណោះដែលអាចកំណត់រចនាសម្ព័ន្ធ Google Drive បាន (Super Admin required)." },
+      { status: 403 }
+    );
+  }
+
   try {
     const stateNonce = crypto.randomUUID();
-    const returnTo = req.nextUrl.searchParams.get("returnTo") || "/admin?tab=drive";
+    const returnTo = req.nextUrl.searchParams.get("returnTo") || "/profile?tab=drive";
     const authUrl = generateDriveAuthUrl(user.id, stateNonce, returnTo);
 
     const isJson =

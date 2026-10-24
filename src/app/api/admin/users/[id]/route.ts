@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { requireAdmin } from "@/lib/auth-session";
+import { requireSuperAdmin } from "@/lib/auth-session";
 import { validateCsrfToken } from "@/lib/auth-csrf";
 import { UserStore, toSafeUser, toAdminSafeUser } from "@/lib/user-store";
 import { encryptManagedPassword } from "@/lib/managed-credential-vault";
@@ -20,7 +20,7 @@ interface RouteParams {
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const adminCheck = await requireAdmin(req);
+  const adminCheck = await requireSuperAdmin(req);
   if ("response" in adminCheck) {
     return adminCheck.response;
   }
@@ -80,7 +80,15 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const roleVal = validateRole(body.role);
     if (!roleVal.valid) return NextResponse.json({ error: roleVal.error }, { status: 400 });
 
-    if (existing.role === "ADMIN" && roleVal.value === "USER") {
+    if (existing.role === "SUPER_ADMIN" && roleVal.value !== "SUPER_ADMIN") {
+      const activeSuperAdmins = await UserStore.countActiveSuperAdmins();
+      if (activeSuperAdmins <= 1) {
+        return NextResponse.json(
+          { error: "មិនអាចបញ្ចុះតួនាទីគណនី Super Admin ចុងក្រោយបានទេ (Cannot demote the final active super administrator)" },
+          { status: 400 }
+        );
+      }
+    } else if (existing.role === "ADMIN" && roleVal.value === "USER") {
       const activeAdmins = await UserStore.countActiveAdmins();
       if (activeAdmins <= 1) {
         return NextResponse.json(
@@ -97,7 +105,15 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const statusVal = validateStatus(body.status);
     if (!statusVal.valid) return NextResponse.json({ error: statusVal.error }, { status: 400 });
 
-    if (existing.role === "ADMIN" && statusVal.value === "DISABLED") {
+    if (existing.role === "SUPER_ADMIN" && statusVal.value === "DISABLED") {
+      const activeSuperAdmins = await UserStore.countActiveSuperAdmins();
+      if (activeSuperAdmins <= 1) {
+        return NextResponse.json(
+          { error: "មិនអាចបិទដំណើរការគណនី Super Admin ចុងក្រោយបានទេ (Cannot disable the final active super administrator)" },
+          { status: 400 }
+        );
+      }
+    } else if (existing.role === "ADMIN" && statusVal.value === "DISABLED") {
       const activeAdmins = await UserStore.countActiveAdmins();
       if (activeAdmins <= 1) {
         return NextResponse.json(
@@ -130,7 +146,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const adminCheck = await requireAdmin(req);
+  const adminCheck = await requireSuperAdmin(req);
   if ("response" in adminCheck) {
     return adminCheck.response;
   }

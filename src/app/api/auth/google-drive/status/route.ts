@@ -30,6 +30,15 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  if (user.role !== "SUPER_ADMIN") {
+    return NextResponse.json({
+      success: true,
+      connected: Boolean(user.googleDriveConnected),
+      folderAccessible: Boolean(user.googleDriveConnected),
+      restricted: true,
+    });
+  }
+
   let folderAccessible = false;
   let folderName: string | undefined;
   let folderError: string | undefined;

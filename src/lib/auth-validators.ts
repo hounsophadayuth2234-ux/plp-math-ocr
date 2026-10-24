@@ -48,11 +48,11 @@ export function validateDisplayName(name: unknown): { valid: boolean; value?: st
   return { valid: true, value: clean };
 }
 
-export function validateRole(role: unknown): { valid: boolean; value?: "ADMIN" | "USER"; error?: string } {
-  if (role === "ADMIN" || role === "USER") {
+export function validateRole(role: unknown): { valid: boolean; value?: "SUPER_ADMIN" | "ADMIN" | "USER"; error?: string } {
+  if (role === "SUPER_ADMIN" || role === "ADMIN" || role === "USER") {
     return { valid: true, value: role };
   }
-  return { valid: false, error: "តួនាទីមិនត្រឹមត្រូវ (Role must be either ADMIN or USER)" };
+  return { valid: false, error: "តួនាទីមិនត្រឹមត្រូវ (Role must be SUPER_ADMIN, ADMIN, or USER)" };
 }
 
 export function validateStatus(status: unknown): { valid: boolean; value?: "ACTIVE" | "DISABLED"; error?: string } {

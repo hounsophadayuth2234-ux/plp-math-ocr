@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     } catch {}
   }
 
-  const returnTarget = decodedState?.returnTo || "/admin?tab=drive";
+  const returnTarget = decodedState?.returnTo || "/profile?tab=drive";
   const baseUrl = new URL(returnTarget, req.url);
 
   // 2. Check if user cancelled or Google returned an error

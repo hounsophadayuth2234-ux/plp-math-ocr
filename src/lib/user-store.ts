@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-export type UserRole = "ADMIN" | "USER";
+export type UserRole = "SUPER_ADMIN" | "ADMIN" | "USER";
 export type UserStatus = "ACTIVE" | "DISABLED";
 
 export interface UserRecord {
@@ -439,8 +439,13 @@ export class UserStore {
     const existing = await this.getUserById(id);
     if (!existing) return false;
 
-    // Guard final active admin
-    if (existing.role === "ADMIN" && existing.status === "ACTIVE") {
+    // Guard final active super admin or admin
+    if (existing.role === "SUPER_ADMIN" && existing.status === "ACTIVE") {
+      const activeSuperAdmins = await this.countActiveSuperAdmins();
+      if (activeSuperAdmins <= 1) {
+        throw new Error("Cannot delete the final active super administrator account.");
+      }
+    } else if (existing.role === "ADMIN" && existing.status === "ACTIVE") {
       const activeAdmins = await this.countActiveAdmins();
       if (activeAdmins <= 1) {
         throw new Error("Cannot delete the final active administrator account.");
@@ -497,6 +502,14 @@ export class UserStore {
     }
 
     return Array.from(localMemoryUsers.values()).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /**
+   * Counts active super administrators.
+   */
+  static async countActiveSuperAdmins(): Promise<number> {
+    const users = await this.listUsers();
+    return users.filter((u) => u.role === "SUPER_ADMIN" && u.status === "ACTIVE").length;
   }
 
   /**

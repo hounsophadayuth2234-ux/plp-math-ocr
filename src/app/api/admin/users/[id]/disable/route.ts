@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth-session";
+import { requireSuperAdmin } from "@/lib/auth-session";
 import { validateCsrfToken } from "@/lib/auth-csrf";
 import { UserStore, toSafeUser } from "@/lib/user-store";
 import { AuditLogger } from "@/lib/audit-logger";
@@ -11,7 +11,7 @@ interface RouteParams {
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const adminCheck = await requireAdmin(req);
+  const adminCheck = await requireSuperAdmin(req);
   if ("response" in adminCheck) {
     return adminCheck.response;
   }
@@ -41,8 +41,16 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // Guard final active admin
-  if (target.role === "ADMIN" && target.status === "ACTIVE") {
+  // Guard final active super admin or admin
+  if (target.role === "SUPER_ADMIN" && target.status === "ACTIVE") {
+    const activeSuperAdmins = await UserStore.countActiveSuperAdmins();
+    if (activeSuperAdmins <= 1) {
+      return NextResponse.json(
+        { error: "មិនអាចបិទដំណើរការគណនី Super Admin ចុងក្រោយបានទេ (Cannot disable the final active super administrator)" },
+        { status: 400 }
+      );
+    }
+  } else if (target.role === "ADMIN" && target.status === "ACTIVE") {
     const activeAdmins = await UserStore.countActiveAdmins();
     if (activeAdmins <= 1) {
       return NextResponse.json(

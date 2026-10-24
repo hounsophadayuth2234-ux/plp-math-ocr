@@ -100,7 +100,7 @@ export async function middleware(req: NextRequest) {
   }
 
   let isAuthenticated = false;
-  let userRole: "ADMIN" | "USER" = "USER";
+  let userRole: "SUPER_ADMIN" | "ADMIN" | "USER" = "USER";
   let mustChangePassword = false;
 
   if (sessionCookie) {
@@ -198,17 +198,17 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Enforce ADMIN role on /admin and /api/admin/* (excluding public recovery page)
+  // 5. Enforce ADMIN or SUPER_ADMIN role on /admin and /api/admin/* (excluding public recovery page)
   if (
     (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) &&
     pathname !== "/admin/recovery"
   ) {
-    if (userRole !== "ADMIN") {
+    if (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN") {
       if (pathname.startsWith("/api/")) {
         return applyCorsHeaders(
           NextResponse.json(
             {
-              error: "Forbidden: Administrator role required (ត្រូវការសិទ្ធិជាអ្នកគ្រប់គ្រងប្រព័ន្ធ ADMIN).",
+              error: "Forbidden: Administrator or Super Administrator role required (ត្រូវការសិទ្ធិជា ADMIN ឬ SUPER_ADMIN).",
               authenticated: true,
               role: userRole,
             },
@@ -227,6 +227,15 @@ export async function middleware(req: NextRequest) {
       const dashboardUrl = new URL("/", req.url);
       dashboardUrl.searchParams.set("error", "unauthorized_admin");
       return NextResponse.redirect(dashboardUrl);
+    }
+
+    // Canonical redirect from /admin to Unified Profile Hub
+    if (pathname === "/admin") {
+      const targetTab = userRole === "SUPER_ADMIN" ? "users" : "activity";
+      const profileUrl = new URL("/profile", req.url);
+      const tabParam = req.nextUrl.searchParams.get("tab") || targetTab;
+      profileUrl.searchParams.set("tab", tabParam);
+      return NextResponse.redirect(profileUrl);
     }
   }
 

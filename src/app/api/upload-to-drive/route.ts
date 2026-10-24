@@ -17,6 +17,7 @@ import { enforceRateLimit } from "@/lib/rate-limiter";
 import { sanitizeFilename } from "@/lib/image-upload-validator";
 import { DriveHistoryStore } from "@/lib/drive-history-store";
 import { UserStore, toSafeUser } from "@/lib/user-store";
+import { ActivityTracker } from "@/lib/activity-tracker";
 
 export const maxDuration = 60;
 
@@ -348,6 +349,19 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
         webViewLink: result.webViewLink,
         status: "uploaded",
       });
+
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: moduleName || "drive_storage",
+          action: "upload_drive",
+          title: result.name,
+          details: { size: result.size, folderId: result.folderId, fileId: result.fileId },
+        }).catch(() => {});
+      }
     }
     // B. Priority 2: In test environment with service account mock/config
     else if (process.env.NODE_ENV === "test" && process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
@@ -372,6 +386,17 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
           webViewLink: result.webViewLink,
           status: "uploaded",
         });
+
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: moduleName || "drive_storage",
+          action: "upload_drive",
+          title: result.name,
+          details: { size: result.size, folderId: result.folderId, fileId: result.fileId },
+        }).catch(() => {});
       }
     }
     // C. Not connected via OAuth

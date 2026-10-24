@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { requireAdmin } from "@/lib/auth-session";
+import { requireSuperAdmin } from "@/lib/auth-session";
 import { validateCsrfToken } from "@/lib/auth-csrf";
 import { UserStore, toSafeUser, toAdminSafeUser } from "@/lib/user-store";
 import { encryptManagedPassword } from "@/lib/managed-credential-vault";
@@ -19,7 +19,7 @@ import { AuditLogger } from "@/lib/audit-logger";
 import { getClientIp } from "@/lib/auth-gate";
 
 export async function GET(req: NextRequest) {
-  const adminCheck = await requireAdmin(req);
+  const adminCheck = await requireSuperAdmin(req);
   if ("response" in adminCheck) {
     return adminCheck.response;
   }
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const adminCheck = await requireAdmin(req);
+  const adminCheck = await requireSuperAdmin(req);
   if ("response" in adminCheck) {
     return adminCheck.response;
   }

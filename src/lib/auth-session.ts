@@ -131,8 +131,34 @@ export async function requireAuth(req: NextRequest): Promise<{ user: SafeUser } 
 }
 
 /**
- * Helper to enforce ADMIN role on an API route.
- * Returns 401 if unauthenticated, 403 if role !== ADMIN.
+ * Helper to enforce SUPER_ADMIN role on an API route.
+ * Returns 401 if unauthenticated, 403 if role !== SUPER_ADMIN.
+ */
+export async function requireSuperAdmin(req: NextRequest): Promise<{ user: SafeUser } | { response: NextResponse }> {
+  const authResult = await requireAuth(req);
+  if ("response" in authResult) {
+    return authResult;
+  }
+
+  if (authResult.user.role !== "SUPER_ADMIN") {
+    return {
+      response: NextResponse.json(
+        {
+          error: "Forbidden: Super Administrator role required (ត្រូវការសិទ្ធិជាម្ចាស់ប្រព័ន្ធជាន់ខ្ពស់ SUPER_ADMIN).",
+          authenticated: true,
+          role: authResult.user.role,
+        },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { user: authResult.user };
+}
+
+/**
+ * Helper to enforce ADMIN or SUPER_ADMIN role on an API route.
+ * Returns 401 if unauthenticated, 403 if role is USER.
  */
 export async function requireAdmin(req: NextRequest): Promise<{ user: SafeUser } | { response: NextResponse }> {
   const authResult = await requireAuth(req);
@@ -140,11 +166,11 @@ export async function requireAdmin(req: NextRequest): Promise<{ user: SafeUser }
     return authResult;
   }
 
-  if (authResult.user.role !== "ADMIN") {
+  if (authResult.user.role !== "ADMIN" && authResult.user.role !== "SUPER_ADMIN") {
     return {
       response: NextResponse.json(
         {
-          error: "Forbidden: Administrator role required (ត្រូវការសិទ្ធិជាអ្នកគ្រប់គ្រងប្រព័ន្ធ ADMIN).",
+          error: "Forbidden: Administrator or Super Administrator role required (ត្រូវការសិទ្ធិជា ADMIN ឬ SUPER_ADMIN).",
           authenticated: true,
           role: authResult.user.role,
         },

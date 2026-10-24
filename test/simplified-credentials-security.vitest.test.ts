@@ -42,7 +42,7 @@ describe("Simplified Account Credential Policy & Security Verification (23 Items
       email: "admin@dyt.local",
       displayName: "System Admin",
       passwordHash: bcrypt.hashSync("1234", 10),
-      role: "ADMIN",
+      role: "SUPER_ADMIN",
       status: "ACTIVE",
     });
 
@@ -363,7 +363,7 @@ describe("Simplified Account Credential Policy & Security Verification (23 Items
     const demoteRes = await adminUserPatch(demoteReq, { params: Promise.resolve({ id: adminUser.id }) });
     expect(demoteRes.status).toBe(400);
     const data = await demoteRes.json();
-    expect(data.error).toContain("មិនអាចបញ្ចុះតួនាទីគណនី Admin ចុងក្រោយបានទេ");
+    expect(data.error).toMatch(/មិនអាចបញ្ចុះតួនាទីគណនី (Super Admin|Admin) ចុងក្រោយបានទេ/);
   });
 
   // 23. Modules 01–04 are unchanged.
