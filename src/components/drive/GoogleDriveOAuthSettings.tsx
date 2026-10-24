@@ -304,9 +304,19 @@ export function GoogleDriveOAuthSettings() {
             </div>
 
             {!status.folderAccessible && (
-              <div className="mt-2 text-[11px] text-amber-300 bg-amber-950/50 p-2 rounded border border-amber-500/30">
-                {status.folderError ||
-                  "មិនអាចរកឃើញ Folder នេះនៅក្នុងគណនី Google របស់អ្នកឡើយ។ សូមប្រាកដថាអ្នកបានចែករំលែកសិទ្ធិ Folder DYT_Math_Images មកកាន់គណនីនេះ។"}
+              <div className="mt-2 text-[11px] text-amber-300 bg-amber-950/50 p-2.5 rounded-lg border border-amber-500/30 space-y-2">
+                <div>
+                  {status.folderError ||
+                    "Folder DYT_Math_Images ត្រូវបានបង្កើតមុនកម្មវិធី។ សូមចុចប៊ូតុងខាងក្រោមដើម្បីភ្ជាប់ឡើងវិញជាមួយសិទ្ធិ Drive ពេញលេញ។"}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleConnect}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 border border-amber-500/50 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-500/30 transition cursor-pointer"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  <span>ភ្ជាប់ឡើងវិញជាមួយសិទ្ធិពេញលេញ (Re-authorize Drive Scope)</span>
+                </button>
               </div>
             )}
           </div>

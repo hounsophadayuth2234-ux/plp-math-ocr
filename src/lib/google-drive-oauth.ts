@@ -42,18 +42,10 @@ export function getDriveOAuthScopes(): string[] {
     return customScopes.split(",").map((s) => s.trim());
   }
 
-  // If GOOGLE_OAUTH_PREFER_FULL_SCOPE is enabled, request drive scope so pre-existing folder can be read
-  if (process.env.GOOGLE_OAUTH_PREFER_FULL_SCOPE === "true") {
-    return [
-      "https://www.googleapis.com/auth/drive",
-      "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile",
-    ];
-  }
-
-  // Default: Minimum scope
+  // Option A (Owner-only private app): Drive scope required to read & write pre-existing folders
+  // like DYT_Math_Images (1dS_Ul_WnVCCbJAKsn6CAT0vy9AB8Yx8f) in owner's personal My Drive.
   return [
-    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
   ];
@@ -93,10 +85,9 @@ export function generateDriveAuthUrl(
 
   return oauth2Client.generateAuthUrl({
     access_type: "offline", // Mandatory to obtain refresh_token
-    prompt: "consent", // Force consent so Google sends refresh_token every time
+    prompt: "consent select_account", // Force fresh consent screen so Google issues token with new Drive scope
     scope: scopes,
     state: statePayload,
-    include_granted_scopes: true,
   });
 }
 
