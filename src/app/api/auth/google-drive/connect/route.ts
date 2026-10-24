@@ -25,7 +25,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const stateNonce = crypto.randomUUID();
-    const authUrl = generateDriveAuthUrl(user.id, stateNonce);
+    const returnTo = req.nextUrl.searchParams.get("returnTo") || "/admin?tab=drive";
+    const authUrl = generateDriveAuthUrl(user.id, stateNonce, returnTo);
 
     const isJson =
       req.headers.get("accept")?.includes("application/json") ||

@@ -79,12 +79,16 @@ export function getGoogleOAuth2Client(redirectUriOverride?: string): OAuth2Clien
 /**
  * Generates an OAuth 2.0 authorization URL for connecting personal Google Drive.
  */
-export function generateDriveAuthUrl(userId: string, stateNonce: string): string {
+export function generateDriveAuthUrl(
+  userId: string,
+  stateNonce: string,
+  returnTo?: string
+): string {
   const oauth2Client = getGoogleOAuth2Client();
   const scopes = getDriveOAuthScopes();
 
   const statePayload = Buffer.from(
-    JSON.stringify({ userId, nonce: stateNonce, timestamp: Date.now() })
+    JSON.stringify({ userId, nonce: stateNonce, timestamp: Date.now(), returnTo })
   ).toString("base64url");
 
   return oauth2Client.generateAuthUrl({

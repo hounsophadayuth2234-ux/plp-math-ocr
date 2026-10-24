@@ -21,12 +21,14 @@ import {
   EyeOff,
   Send,
   Download,
+  Cloud,
 } from "lucide-react";
 import {
   getOrRefreshCsrfToken,
   fetchFreshCsrfToken,
   CSRF_HEADER_NAME,
 } from "@/lib/csrf-client";
+import { GoogleDriveOAuthSettings } from "@/components/drive/GoogleDriveOAuthSettings";
 
 interface SafeUser {
   id: string;
@@ -64,7 +66,7 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [csrfToken, setCsrfToken] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"users" | "audit" | "mfa" | "telegram">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "mfa" | "telegram" | "drive">("users");
   const [currentTimestamp, setCurrentTimestamp] = useState<number>(0);
   const [sessionUser, setSessionUser] = useState<SafeUser | null>(null);
 
@@ -268,6 +270,20 @@ export default function AdminPage() {
         script.src = "https://telegram.org/js/telegram-widget.js?22";
         script.async = true;
         document.head.appendChild(script);
+      }
+    }
+
+    // Auto-select Google Drive tab if requested via query param or OAuth callback
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (
+        params.get("tab") === "drive" ||
+        params.get("drive_status") ||
+        params.get("drive_warning") ||
+        params.get("drive_error") ||
+        window.location.hash === "#drive"
+      ) {
+        setActiveTab("drive");
       }
     }
   }, [initSession, fetchUsers, fetchAuditLog, fetchMfaStatus]);
@@ -1094,6 +1110,19 @@ export default function AdminPage() {
           <Send className="h-3.5 w-3.5 text-sky-400" />
           <span>Telegram Link {sessionUser?.telegramLinked ? "✓ បានភ្ជាប់" : "មិនទាន់ភ្ជាប់"}</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("drive")}
+          className={`flex items-center gap-2 rounded-lg px-3 py-1.5 font-bold uppercase transition-all ${
+            activeTab === "drive"
+              ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Cloud className="h-3.5 w-3.5 text-blue-400" />
+          <span>Google Drive Storage</span>
+        </button>
       </div>
 
       {/* 4. Tab 1: User Accounts Table */}
@@ -1709,6 +1738,13 @@ export default function AdminPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* 5c. Tab 5: Google Drive Storage */}
+      {activeTab === "drive" && (
+        <div className="space-y-6">
+          <GoogleDriveOAuthSettings />
         </div>
       )}
 

@@ -145,7 +145,8 @@ export function GoogleDriveOAuthSettings() {
   };
 
   const handleConnect = () => {
-    window.location.href = "/api/auth/google-drive/connect";
+    const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `/api/auth/google-drive/connect?returnTo=${returnTo}`;
   };
 
   const formatFileSize = (bytes: number) => {

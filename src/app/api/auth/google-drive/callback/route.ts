@@ -21,32 +21,33 @@ export async function GET(req: NextRequest) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
-  const baseUrl = new URL("/math-upload", req.url);
+  // 1. Decode state if present to determine return route
+  let decodedState: { userId: string; nonce: string; timestamp: number; returnTo?: string } | null = null;
+  if (state) {
+    try {
+      const raw = Buffer.from(state, "base64url").toString("utf-8");
+      decodedState = JSON.parse(raw);
+    } catch {}
+  }
 
-  // 1. Check if user cancelled or Google returned an error
+  const returnTarget = decodedState?.returnTo || "/admin?tab=drive";
+  const baseUrl = new URL(returnTarget, req.url);
+
+  // 2. Check if user cancelled or Google returned an error
   if (error) {
     baseUrl.searchParams.set("drive_error", `Google OAuth rejected: ${error}`);
     return NextResponse.redirect(baseUrl);
   }
 
-  if (!code || !state) {
-    baseUrl.searchParams.set("drive_error", "Missing OAuth authorization code or state");
+  if (!code || !state || !decodedState) {
+    baseUrl.searchParams.set("drive_error", "Missing or invalid OAuth authorization code or state");
     return NextResponse.redirect(baseUrl);
   }
 
-  // 2. Validate CSRF state against HTTP cookie
+  // 3. Validate CSRF state against HTTP cookie
   const stateCookie = req.cookies.get("dyt_gdrive_oauth_state")?.value;
-  let decodedState: { userId: string; nonce: string; timestamp: number } | null = null;
 
-  try {
-    const raw = Buffer.from(state, "base64url").toString("utf-8");
-    decodedState = JSON.parse(raw);
-  } catch {
-    baseUrl.searchParams.set("drive_error", "Invalid state format");
-    return NextResponse.redirect(baseUrl);
-  }
-
-  if (!stateCookie || !decodedState || decodedState.nonce !== stateCookie) {
+  if (!stateCookie || decodedState.nonce !== stateCookie) {
     baseUrl.searchParams.set("drive_error", "State CSRF mismatch. Please try connecting again.");
     return NextResponse.redirect(baseUrl);
   }
