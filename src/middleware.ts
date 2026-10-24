@@ -89,8 +89,15 @@ export async function middleware(req: NextRequest) {
     pathname === "/api/health" ||
     pathname.startsWith("/health");
 
-  const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value ||
+  let sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value ||
     req.cookies.get("__Secure-dyt_gate_session")?.value;
+
+  if (!sessionCookie && pathname.startsWith("/api/")) {
+    const authHeader = req.headers.get("authorization");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      sessionCookie = authHeader.slice(7).trim();
+    }
+  }
 
   let isAuthenticated = false;
   let userRole: "ADMIN" | "USER" = "USER";

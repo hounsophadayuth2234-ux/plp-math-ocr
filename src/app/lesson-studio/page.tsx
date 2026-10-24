@@ -28,6 +28,8 @@ import {
   GradeLevel,
   LessonStudioResponse,
 } from "@/lib/lesson-studio";
+import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
+import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 
 const PRESETS: Record<LessonStudioMode, Array<{ label: string; prompt: string; grade: GradeLevel }>> = {
   visual_svg: [
@@ -111,6 +113,12 @@ export default function LessonStudioPage() {
   const [promptText, setPromptText] = useState<string>(() => PRESETS.visual_svg[0]?.prompt || "");
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
 
+  // Google Drive integration for Module 05
+  const driveSync = useModuleDriveUpload({
+    moduleName: "Module 05: Lesson Studio",
+    defaultSaveToDrive: false,
+  });
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [stageIndex, setStageIndex] = useState<number>(0);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
@@ -156,6 +164,7 @@ export default function LessonStudioPage() {
 
     const preview = URL.createObjectURL(file);
     setSelectedImage({ file, preview });
+    driveSync.resetDriveState();
     setErrorMsg(null);
   };
 
@@ -209,6 +218,19 @@ export default function LessonStudioPage() {
         formData.append("gradeLevel", gradeLevel);
         formData.append("prompt", promptText);
         formData.append("image", selectedImage.file);
+
+        // Non-blocking upload to Google Drive if user setting enabled
+        if (driveSync.saveToDrive && selectedImage?.file) {
+          const ext = (selectedImage.file.name || "image.png").split(".").pop() || "png";
+          const driveFilename = `module05_lesson_studio_input_${Date.now()}.${ext}`;
+          driveSync.triggerUpload({
+            file: selectedImage.file,
+            filename: driveFilename,
+            description: "Module 05 Lesson Studio Input Image",
+          }).catch((driveErr) => {
+            console.warn("[Module 05] Non-blocking Google Drive upload warning:", driveErr);
+          });
+        }
 
         response = await fetch("/api/lesson-studio", {
           method: "POST",
@@ -559,6 +581,18 @@ export default function LessonStudioPage() {
                 </label>
               )}
             </div>
+
+            {/* Module 05 Google Drive Storage Sync Card */}
+            <ModuleDriveSync
+              moduleName="Module 05: Lesson Studio"
+              saveToDrive={driveSync.saveToDrive}
+              onToggleSave={driveSync.setSaveToDrive}
+              status={driveSync.status}
+              uploadedRecord={driveSync.uploadedRecord}
+              errorMessage={driveSync.errorMessage}
+              onRetry={driveSync.retryUpload}
+              compact
+            />
 
             {/* Action Button & Active Progress */}
             <div className="pt-2">

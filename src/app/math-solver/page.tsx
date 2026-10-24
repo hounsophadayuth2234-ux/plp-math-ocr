@@ -30,6 +30,8 @@ import {
 import { SolverImageUpload } from "@/components/math-solver/SolverImageUpload";
 import { SolutionCard } from "@/components/math-solver/SolutionCard";
 import { MathStageProgressIndicator } from "@/components/ui/MathStageProgressIndicator";
+import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
+import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 import type {
   MathSolverResponse,
   MathSolverProblem,
@@ -72,6 +74,12 @@ export default function MathSolverPage() {
   const [detailLevel, setDetailLevel] = useState<DetailLevel>("step_by_step");
   const [gradeLevel, setGradeLevel] = useState<GradeLevel>("auto");
   const [inferredGradeDisplay, setInferredGradeDisplay] = useState<string | null>(null);
+
+  // Google Drive integration for Module 04
+  const driveSync = useModuleDriveUpload({
+    moduleName: "Module 04: Khmer Math Solver",
+    defaultSaveToDrive: false,
+  });
   const [selectedProblemIndex, setSelectedProblemIndex] = useState<number>(0);
 
   // Input State
@@ -189,6 +197,19 @@ export default function MathSolverPage() {
         formData.append("gradeLevel", gradeLevel);
         formData.append("image", file, file.name);
 
+        // Non-blocking upload to Google Drive if user setting enabled
+        if (driveSync.saveToDrive && file) {
+          const ext = (file.name || "problem.png").split(".").pop() || "png";
+          const driveFilename = `module04_math_solver_input_${Date.now()}.${ext}`;
+          driveSync.triggerUpload({
+            file,
+            filename: driveFilename,
+            description: "Module 04 Khmer Math Solver Input Problem Image",
+          }).catch((driveErr) => {
+            console.warn("[Module 04] Non-blocking Google Drive upload warning:", driveErr);
+          });
+        }
+
         const response = await fetch("/api/math-solver", {
           method: "POST",
           body: formData,
@@ -270,6 +291,7 @@ export default function MathSolverPage() {
       setImageFile(file);
       setResult(null);
       setError(null);
+      driveSync.resetDriveState();
       if (file) {
         handleExtract(file);
       } else {
@@ -700,6 +722,19 @@ export default function MathSolverPage() {
             onFileSelect={handleFileSelect}
             selectedFile={imageFile}
             disabled={isBusy}
+          />
+
+          {/* Module 04 Google Drive Storage Sync Card */}
+          <ModuleDriveSync
+            moduleName="Module 04: Khmer Math Solver"
+            saveToDrive={driveSync.saveToDrive}
+            onToggleSave={driveSync.setSaveToDrive}
+            status={driveSync.status}
+            uploadedRecord={driveSync.uploadedRecord}
+            errorMessage={driveSync.errorMessage}
+            onRetry={driveSync.retryUpload}
+            compact
+            className="mt-3"
           />
 
           {imageFile && !isExtracting && (

@@ -26,6 +26,8 @@ import { MathStageProgressIndicator } from "@/components/ui/MathStageProgressInd
 import { preprocessMathImageForUpload } from "@/lib/math-ocr-utils";
 import { prepareMathOcrImage, PreparedMathOcrImage } from "@/lib/math-ocr-prep";
 import type { MathOcrResponse } from "@/app/api/math-ocr/route";
+import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
+import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 
 // -----------------------------------------------------------
 // Canonical Sample Math Result (Instant Test Execution)
@@ -138,6 +140,12 @@ export default function PlpMathContentPage() {
   const activeRequestIdRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Google Drive integration for Module 01
+  const driveSync = useModuleDriveUpload({
+    moduleName: "Module 01: Math OCR",
+    defaultSaveToDrive: false,
+  });
+
   // Preload session capabilities on module entry
   useEffect(() => {
     ocrSessionManager.preloadSession().then(() => {
@@ -188,6 +196,7 @@ export default function PlpMathContentPage() {
     setImageFile(file);
     setPrepInfo(null);
     setQualityAssessment(null);
+    driveSync.resetDriveState();
     if (!file) return;
 
     if (typeof window !== "undefined" && "createImageBitmap" in window) {
@@ -293,6 +302,18 @@ export default function PlpMathContentPage() {
       const formData = new FormData();
       if (fileToSend) {
         formData.append("image", fileToSend, (imageFile && imageFile.name) || "math-input.jpg");
+        // Non-blocking upload to Google Drive if user setting enabled
+        if (driveSync.saveToDrive) {
+          const ext = ((imageFile && imageFile.name) || "image.png").split(".").pop() || "png";
+          const driveFilename = `module01_math_ocr_input_${Date.now()}.${ext}`;
+          driveSync.triggerUpload({
+            file: fileToSend,
+            filename: driveFilename,
+            description: "Module 01 Math OCR Input Image",
+          }).catch((driveErr) => {
+            console.warn("[Module 01] Non-blocking Google Drive upload warning:", driveErr);
+          });
+        }
       }
       if (rawText.trim()) formData.append("rawText", rawText.trim());
       if (isRefine && customInstructions.trim()) {
@@ -660,6 +681,18 @@ export default function PlpMathContentPage() {
                 onFileSelect={handleFileSelect}
                 selectedFile={imageFile}
                 disabled={isLoading || isRefining}
+              />
+
+              {/* Module 01 Google Drive Storage Sync Card */}
+              <ModuleDriveSync
+                moduleName="Module 01: Math OCR"
+                saveToDrive={driveSync.saveToDrive}
+                onToggleSave={driveSync.setSaveToDrive}
+                status={driveSync.status}
+                uploadedRecord={driveSync.uploadedRecord}
+                errorMessage={driveSync.errorMessage}
+                onRetry={driveSync.retryUpload}
+                compact
               />
             </div>
 

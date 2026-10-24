@@ -40,6 +40,8 @@ import { BgUploadZone } from "@/components/bg-remover/BgUploadZone";
 import { BgProcessingCard } from "@/components/bg-remover/BgProcessingCard";
 import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
+import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
+import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 import { recordExecutionTelemetry } from "@/lib/hardware-diagnostics";
 import { BgStudioNav, StudioFont, StudioTheme } from "@/components/bg-remover/BgStudioNav";
 import { BgStudioHero } from "@/components/bg-remover/BgStudioHero";
@@ -59,6 +61,12 @@ export default function BgRemoverPage() {
   const [initialCompositeUrl, setInitialCompositeUrl] = useState<string | null>(null);
   const [selectedPurpose, setSelectedPurpose] = useState<"white" | "pink" | "transparent" | "custom">("transparent");
   const [locale, setLocale] = useState<StudioLocale>(() => getSavedLocale());
+
+  // Google Drive integration for Module 02
+  const driveSync = useModuleDriveUpload({
+    moduleName: "Module 02: Background Remover",
+    defaultSaveToDrive: false,
+  });
   const [dehaloRadius, setDehaloRadius] = useState<number>(2);
   const [alphaChoke, setAlphaChoke] = useState<number>(1);
   const [featherRadius, setFeatherRadius] = useState<number>(1.5);
@@ -829,6 +837,18 @@ export default function BgRemoverPage() {
       setIsModelCached(true);
       setWorkflowStep("edit_mask");
 
+      // Non-blocking Google Drive upload if user setting enabled
+      if (driveSync.saveToDrive && output?.transparentBlob) {
+        const driveFilename = `module02_bg_remover_cutout_${Date.now()}.png`;
+        driveSync.triggerUpload({
+          file: output.transparentBlob,
+          filename: driveFilename,
+          description: "Module 02 Background Remover Cutout PNG",
+        }).catch((driveErr) => {
+          console.warn("[Module 02] Non-blocking Google Drive upload warning:", driveErr);
+        });
+      }
+
       recordExecutionTelemetry({
         isFirstRun: isFirstRunRef.current,
         totalMs: output.metrics?.totalMs || Math.round(performance.now() - startTime),
@@ -932,6 +952,7 @@ export default function BgRemoverPage() {
     setProgressInfo(null);
     setWorkflowStep("ready");
     excludedMaskRef.current = null;
+    driveSync.resetDriveState();
 
     if (file) {
       cyberAudio.playHydraulicHiss();
@@ -1199,6 +1220,18 @@ export default function BgRemoverPage() {
                 disabled={isProcessing}
                 label="Upload image"
                 hint="PNG, JPG, WEBP · Max 12MB"
+              />
+
+              {/* Module 02 Google Drive Storage Sync Card */}
+              <ModuleDriveSync
+                moduleName="Module 02: Background Remover"
+                saveToDrive={driveSync.saveToDrive}
+                onToggleSave={driveSync.setSaveToDrive}
+                status={driveSync.status}
+                uploadedRecord={driveSync.uploadedRecord}
+                errorMessage={driveSync.errorMessage}
+                onRetry={driveSync.retryUpload}
+                compact
               />
             </div>
 

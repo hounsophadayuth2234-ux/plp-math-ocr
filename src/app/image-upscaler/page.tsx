@@ -27,6 +27,8 @@ import { BeforeAfterSlider } from "@/components/image-upscaler/BeforeAfterSlider
 import { ImageDiagnosticsCard } from "@/components/image-upscaler/ImageDiagnosticsCard";
 import { UpscaleControls } from "@/components/image-upscaler/UpscaleControls";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
+import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
+import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ObjectUrlRegistry } from "@/lib/processing-utils";
 import {
@@ -45,6 +47,12 @@ export default function ImageUpscalerPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [inputDiagnostics, setInputDiagnostics] = useState<ImageDiagnostics | null>(null);
+
+  // Google Drive integration for Module 03
+  const driveSync = useModuleDriveUpload({
+    moduleName: "Module 03: HD Resize & Sharpen",
+    defaultSaveToDrive: false,
+  });
 
   // Authoritative Enhancement Configuration Object
   const [config, setConfig] = useState<EnhancementConfig>({
@@ -225,6 +233,7 @@ export default function ImageUpscalerPage() {
     setResult(null);
     setError(null);
     setInputDiagnostics(null);
+    driveSync.resetDriveState();
 
     if (file) {
       cyberAudio.playClick();
@@ -416,6 +425,18 @@ export default function ImageUpscalerPage() {
       setResult(res);
       setInputDiagnostics(res.diagnostics);
 
+      // Non-blocking Google Drive upload if user setting enabled
+      if (driveSync.saveToDrive && res.blob) {
+        const driveFilename = `module03_hd_upscaler_${res.scale}x_${Date.now()}.png`;
+        driveSync.triggerUpload({
+          file: res.blob,
+          filename: driveFilename,
+          description: `Module 03 HD Upscaler ${res.scale}x Enhanced Output`,
+        }).catch((driveErr) => {
+          console.warn("[Module 03] Non-blocking Google Drive upload warning:", driveErr);
+        });
+      }
+
       const autoName = generateUpscaleSmartName({
         originalName: imageFile?.name,
         preset: currentConfig.preset,
@@ -603,6 +624,19 @@ export default function ImageUpscalerPage() {
                 onFileSelect={handleFileSelect}
                 selectedFile={imageFile}
                 disabled={isLoading}
+              />
+
+              {/* Module 03 Google Drive Storage Sync Card */}
+              <ModuleDriveSync
+                moduleName="Module 03: HD Resize & Sharpen"
+                saveToDrive={driveSync.saveToDrive}
+                onToggleSave={driveSync.setSaveToDrive}
+                status={driveSync.status}
+                uploadedRecord={driveSync.uploadedRecord}
+                errorMessage={driveSync.errorMessage}
+                onRetry={driveSync.retryUpload}
+                compact
+                className="mt-3"
               />
 
               <div className="mt-2 flex items-center justify-between px-1 text-[11px] font-mono text-slate-500">
