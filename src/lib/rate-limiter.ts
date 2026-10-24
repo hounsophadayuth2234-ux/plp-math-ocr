@@ -8,7 +8,8 @@ export type RateLimitCategory =
   | "generate_image"
   | "web_scraper"
   | "settings"
-  | "auth_gate";
+  | "auth_gate"
+  | "drive_upload";
 
 export interface RateLimitConfig {
   limit: number; // Maximum allowed requests
@@ -24,6 +25,7 @@ export const RATE_LIMIT_CONFIGS: Record<RateLimitCategory, RateLimitConfig> = {
   web_scraper: { limit: 20, windowSeconds: 60 },
   settings: { limit: 60, windowSeconds: 60 },
   auth_gate: { limit: 5, windowSeconds: 60 },
+  drive_upload: { limit: 20, windowSeconds: 60 },
 };
 
 export interface RateLimitResult {
