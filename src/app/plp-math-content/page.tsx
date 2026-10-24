@@ -28,6 +28,7 @@ import { prepareMathOcrImage, PreparedMathOcrImage } from "@/lib/math-ocr-prep";
 import type { MathOcrResponse } from "@/app/api/math-ocr/route";
 import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
 import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
+import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
 
 // -----------------------------------------------------------
 // Canonical Sample Math Result (Instant Test Execution)
@@ -302,14 +303,6 @@ export default function PlpMathContentPage() {
       const formData = new FormData();
       if (fileToSend) {
         formData.append("image", fileToSend, (imageFile && imageFile.name) || "math-input.jpg");
-        // Pre-register file payload so it is ready for sync
-        const ext = ((imageFile && imageFile.name) || "image.png").split(".").pop() || "png";
-        const driveFilename = `module01_math_ocr_input_${Date.now()}.${ext}`;
-        driveSync.triggerUpload({
-          file: fileToSend,
-          filename: driveFilename,
-          description: "Module 01 Math OCR Input Image",
-        }).catch(() => {});
       }
       if (rawText.trim()) formData.append("rawText", rawText.trim());
       if (isRefine && customInstructions.trim()) {
@@ -471,15 +464,91 @@ export default function PlpMathContentPage() {
       (data as MathOcrResponse).transcription = normTranscription;
       setResult(data as MathOcrResponse);
 
-      // Non-blocking Google Drive upload AFTER successful OCR processing
+      // Automatic Google Drive upload AFTER successful OCR processing (Module 01: original image + LaTeX + HTML + MathML)
+      const drivePayloads: DriveUploadOptions[] = [];
+      const timestamp = Date.now();
+      const username = driveSync.currentUser;
+      const ocrData = data as MathOcrResponse;
+
       if (fileToSend) {
         const ext = ((imageFile && imageFile.name) || "image.png").split(".").pop() || "png";
-        const driveFilename = `module01_math_ocr_${Date.now()}.${ext}`;
-        driveSync.triggerUpload({
+        drivePayloads.push({
           file: fileToSend,
-          filename: driveFilename,
-          description: "Module 01 Math OCR Processed Image",
-        }).catch((driveErr) => {
+          filename: formatDriveFilename({
+            modulePrefix: "module01_math_ocr",
+            userIdOrName: username,
+            outputType: "original",
+            extension: ext,
+            timestamp,
+          }),
+          description: "Module 01 Math OCR Original Input Image",
+        });
+      }
+
+      const latexText = ocrData.latex || ocrData.transcription;
+      if (latexText) {
+        drivePayloads.push({
+          content: latexText,
+          filename: formatDriveFilename({
+            modulePrefix: "module01_math_ocr",
+            userIdOrName: username,
+            outputType: "latex",
+            extension: "tex",
+            timestamp,
+          }),
+          mimeType: "application/x-tex; charset=utf-8",
+          description: "Module 01 Math OCR Generated LaTeX Document",
+        });
+      }
+
+      const htmlContent = `<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="utf-8">
+  <title>Module 01 Math OCR Output</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; line-height: 1.6; color: #1e293b; background: #ffffff; }
+    .content { max-width: 800px; margin: 0 auto; }
+    .formula { font-family: monospace; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <h2>Module 01: Math OCR Recognition Output</h2>
+    ${ocrData.joditHtml || `<div class="formula">${ocrData.transcription}</div>`}
+  </div>
+</body>
+</html>`;
+      drivePayloads.push({
+        content: htmlContent,
+        filename: formatDriveFilename({
+          modulePrefix: "module01_math_ocr",
+          userIdOrName: username,
+          outputType: "preview",
+          extension: "html",
+          timestamp,
+        }),
+        mimeType: "text/html; charset=utf-8",
+        description: "Module 01 Math OCR Self-Contained HTML Output",
+      });
+
+      if (ocrData.mathml) {
+        drivePayloads.push({
+          content: ocrData.mathml,
+          filename: formatDriveFilename({
+            modulePrefix: "module01_math_ocr",
+            userIdOrName: username,
+            outputType: "mathml",
+            extension: "xml",
+            timestamp,
+          }),
+          mimeType: "application/xml; charset=utf-8",
+          description: "Module 01 Math OCR MathML Document",
+        });
+      }
+
+      if (drivePayloads.length > 0) {
+        driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
           console.warn("[Module 01] Non-blocking Google Drive upload warning:", driveErr);
         });
       }
@@ -696,9 +765,8 @@ export default function PlpMathContentPage() {
               {/* Module 01 Google Drive Storage Sync Card */}
               <ModuleDriveSync
                 moduleName="Module 01: Math OCR"
-                saveToDrive={driveSync.saveToDrive}
-                onToggleSave={driveSync.setSaveToDrive}
                 status={driveSync.status}
+                uploadedRecords={driveSync.uploadedRecords}
                 uploadedRecord={driveSync.uploadedRecord}
                 errorMessage={driveSync.errorMessage}
                 onRetry={driveSync.retryUpload}

@@ -42,6 +42,7 @@ import { ColorStudio } from "@/components/bg-remover/ColorStudio";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
 import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
+import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
 import { recordExecutionTelemetry } from "@/lib/hardware-diagnostics";
 import { BgStudioNav, StudioFont, StudioTheme } from "@/components/bg-remover/BgStudioNav";
 import { BgStudioHero } from "@/components/bg-remover/BgStudioHero";
@@ -837,14 +838,42 @@ export default function BgRemoverPage() {
       setIsModelCached(true);
       setWorkflowStep("edit_mask");
 
-      // Non-blocking Google Drive upload (automatically uploads if enabled, or queues for toggle)
+      // Automatic Google Drive upload (Module 02: original image + final transparent cutout)
+      const drivePayloads: DriveUploadOptions[] = [];
+      const timestamp = Date.now();
+      const username = driveSync.currentUser;
+
+      if (imageFile) {
+        const ext = (imageFile.name || "image.png").split(".").pop() || "png";
+        drivePayloads.push({
+          file: imageFile,
+          filename: formatDriveFilename({
+            modulePrefix: "module02_bg_remover",
+            userIdOrName: username,
+            outputType: "original",
+            extension: ext,
+            timestamp,
+          }),
+          description: "Module 02 Background Remover Original Input Image",
+        });
+      }
+
       if (output?.transparentBlob) {
-        const driveFilename = `module02_bg_remover_cutout_${Date.now()}.png`;
-        driveSync.triggerUpload({
+        drivePayloads.push({
           file: output.transparentBlob,
-          filename: driveFilename,
+          filename: formatDriveFilename({
+            modulePrefix: "module02_bg_remover",
+            userIdOrName: username,
+            outputType: "cutout",
+            extension: "png",
+            timestamp,
+          }),
           description: "Module 02 Background Remover Cutout PNG",
-        }).catch((driveErr) => {
+        });
+      }
+
+      if (drivePayloads.length > 0) {
+        driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
           console.warn("[Module 02] Non-blocking Google Drive upload warning:", driveErr);
         });
       }
@@ -1225,9 +1254,8 @@ export default function BgRemoverPage() {
               {/* Module 02 Google Drive Storage Sync Card */}
               <ModuleDriveSync
                 moduleName="Module 02: Background Remover"
-                saveToDrive={driveSync.saveToDrive}
-                onToggleSave={driveSync.setSaveToDrive}
                 status={driveSync.status}
+                uploadedRecords={driveSync.uploadedRecords}
                 uploadedRecord={driveSync.uploadedRecord}
                 errorMessage={driveSync.errorMessage}
                 onRetry={driveSync.retryUpload}

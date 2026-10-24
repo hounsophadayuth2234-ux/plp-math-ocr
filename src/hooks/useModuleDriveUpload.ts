@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   uploadImageToDrive,
   DriveUploadOptions,
@@ -15,111 +15,179 @@ export interface UseModuleDriveUploadOptions {
 
 export function useModuleDriveUpload({
   moduleName,
-  defaultSaveToDrive = false,
 }: UseModuleDriveUploadOptions) {
-  const [saveToDrive, setSaveToDriveState] = useState<boolean>(defaultSaveToDrive);
+  // Automatic saving is strictly enabled by default for all Modules 01-05
+  const [saveToDrive, setSaveToDriveState] = useState<boolean>(true);
   const [status, setStatus] = useState<DriveSyncStatus>("idle");
-  const [uploadedRecord, setUploadedRecord] = useState<DriveUploadFileRecord | null>(null);
+  const [uploadedRecords, setUploadedRecords] = useState<DriveUploadFileRecord[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<string>("user");
 
-  // References to eliminate stale closure bugs across callbacks and asynchronous events
-  const saveToDriveRef = useRef<boolean>(defaultSaveToDrive);
+  // Fetch session username for standardized filenames
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/auth/session")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (data?.user?.username) {
+          setCurrentUser(data.user.username);
+        } else if (data?.user?.id) {
+          setCurrentUser(data.user.id);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // References to eliminate stale closures across callbacks and async intervals
   const statusRef = useRef<DriveSyncStatus>("idle");
-  const uploadedRecordRef = useRef<DriveUploadFileRecord | null>(null);
-  // Set of uploaded fingerprints to prevent duplicate uploads across re-renders
+  const uploadedRecordsRef = useRef<DriveUploadFileRecord[]>([]);
   const uploadedFingerprintsRef = useRef<Set<string>>(new Set());
-  // Store last payload options for retry or deferred upload upon user enabling sync
-  const lastPayloadRef = useRef<DriveUploadOptions | null>(null);
+  const lastPayloadsRef = useRef<DriveUploadOptions[]>([]);
+  const failedPayloadsRef = useRef<DriveUploadOptions[]>([]);
 
-  saveToDriveRef.current = saveToDrive;
-  statusRef.current = status;
-  uploadedRecordRef.current = uploadedRecord;
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    uploadedRecordsRef.current = uploadedRecords;
+  }, [uploadedRecords]);
 
   const triggerUpload = useCallback(
     async (
-      payload: DriveUploadOptions,
+      payloadOrPayloads: DriveUploadOptions | DriveUploadOptions[],
       options?: { force?: boolean }
-    ): Promise<DriveUploadFileRecord | null> => {
-      lastPayloadRef.current = payload;
+    ): Promise<DriveUploadFileRecord[]> => {
+      const payloads = Array.isArray(payloadOrPayloads)
+        ? payloadOrPayloads
+        : [payloadOrPayloads];
 
-      // Honor user preference: only upload if consent is active or explicitly forced
-      const isConsentActive = options?.force || saveToDriveRef.current;
-      if (!isConsentActive) {
-        return null;
+      if (payloads.length === 0) {
+        return [];
       }
 
-      // Compute fingerprint to avoid duplicates on re-render
-      const fingerprint =
-        payload.filename +
-        (payload.file ? `_${payload.file.size}` : `_${payload.dataUrl?.slice(0, 50)}`);
+      lastPayloadsRef.current = payloads;
 
-      if (!options?.force && uploadedFingerprintsRef.current.has(fingerprint)) {
-        return uploadedRecordRef.current;
+      // Filter out payloads that have already been uploaded (idempotency against React re-renders)
+      const pendingPayloads = options?.force
+        ? payloads
+        : payloads.filter((p) => {
+            const fingerprint =
+              p.filename +
+              (p.file
+                ? `_${p.file.size}`
+                : `_${(p.content || p.text || p.dataUrl || "").slice(0, 50)}`);
+            return !uploadedFingerprintsRef.current.has(fingerprint);
+          });
+
+      if (pendingPayloads.length === 0) {
+        return uploadedRecordsRef.current;
       }
 
       setStatus("pending");
       setErrorMessage(null);
 
-      try {
-        const record = await uploadImageToDrive({
-          ...payload,
-          moduleName: payload.moduleName || moduleName,
-          description: payload.description || `Uploaded from ${moduleName}`,
-          makePublic: payload.makePublic || false, // Private by default
-        });
+      const newlyUploaded: DriveUploadFileRecord[] = [];
+      const stillFailed: DriveUploadOptions[] = [];
+      let lastErrMsg: string | null = null;
 
-        uploadedFingerprintsRef.current.add(fingerprint);
-        setUploadedRecord(record);
-        setStatus("uploaded");
-        return record;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[ModuleDriveSync:${moduleName}] Drive upload failed (non-blocking):`, msg);
-        setErrorMessage(msg);
-        setStatus("failed");
-        return null;
+      for (const payload of pendingPayloads) {
+        const fingerprint =
+          payload.filename +
+          (payload.file
+            ? `_${payload.file.size}`
+            : `_${(payload.content || payload.text || payload.dataUrl || "").slice(0, 50)}`);
+
+        try {
+          const record = await uploadImageToDrive({
+            ...payload,
+            moduleName: payload.moduleName || moduleName,
+            description: payload.description || `Uploaded from ${moduleName}`,
+            makePublic: payload.makePublic || false, // Private by default
+          });
+
+          uploadedFingerprintsRef.current.add(fingerprint);
+          newlyUploaded.push(record);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[ModuleDriveSync:${moduleName}] Upload failed for ${payload.filename}:`, msg);
+          stillFailed.push(payload);
+          lastErrMsg = msg;
+        }
       }
+
+      failedPayloadsRef.current = stillFailed;
+
+      if (newlyUploaded.length > 0) {
+        setUploadedRecords((prev) => {
+          const existingIds = new Set(prev.map((r) => r.id));
+          const unique = newlyUploaded.filter((r) => !existingIds.has(r.id));
+          return [...prev, ...unique];
+        });
+      }
+
+      if (stillFailed.length > 0) {
+        setStatus("failed");
+        setErrorMessage(
+          lastErrMsg || `Failed to upload ${stillFailed.length} file(s) to Google Drive.`
+        );
+      } else {
+        setStatus("uploaded");
+      }
+
+      return newlyUploaded;
     },
     [moduleName]
   );
 
-  // User setting checkbox toggle: when user enables "Save to Drive", immediately upload any pending image!
-  const setSaveToDrive = useCallback(
-    (enabled: boolean) => {
-      setSaveToDriveState(enabled);
-      saveToDriveRef.current = enabled;
-
-      if (
-        enabled &&
-        lastPayloadRef.current &&
-        statusRef.current !== "uploaded" &&
-        statusRef.current !== "pending"
-      ) {
-        triggerUpload(lastPayloadRef.current, { force: true });
-      }
-    },
-    [triggerUpload]
-  );
-
   const retryUpload = useCallback(() => {
-    if (lastPayloadRef.current) {
-      triggerUpload(lastPayloadRef.current, { force: true });
+    const toRetry = failedPayloadsRef.current.length > 0
+      ? failedPayloadsRef.current
+      : lastPayloadsRef.current;
+
+    if (toRetry.length > 0) {
+      triggerUpload(toRetry, { force: true });
     }
   }, [triggerUpload]);
 
   const resetDriveState = useCallback(() => {
     setStatus("idle");
-    setUploadedRecord(null);
+    setUploadedRecords([]);
     setErrorMessage(null);
-    lastPayloadRef.current = null;
+    lastPayloadsRef.current = [];
+    failedPayloadsRef.current = [];
   }, []);
+
+  // Backwards-compatible setter (always keeps state true in automatic mode)
+  const setSaveToDrive = useCallback(
+    (enabled: boolean) => {
+      setSaveToDriveState(enabled);
+      if (
+        enabled &&
+        failedPayloadsRef.current.length > 0 &&
+        statusRef.current !== "pending"
+      ) {
+        retryUpload();
+      }
+    },
+    [retryUpload]
+  );
+
+  const primaryUploadedRecord =
+    uploadedRecords.length > 0 ? uploadedRecords[uploadedRecords.length - 1] : null;
 
   return {
     saveToDrive,
     setSaveToDrive,
     status,
-    uploadedRecord,
+    uploadedRecords,
+    uploadedRecord: primaryUploadedRecord,
     errorMessage,
+    currentUser,
     triggerUpload,
     retryUpload,
     resetDriveState,

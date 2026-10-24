@@ -82,7 +82,7 @@ describe("Google Drive Uploader API & Utility Suite", () => {
       expect(data.error).toContain("Unsupported Content-Type");
     });
 
-    it("returns 400 when JSON body has no image payload", async () => {
+    it("returns 400 when JSON body has no file or text payload", async () => {
       const req = new NextRequest("http://localhost:3000/api/upload-to-drive", {
         method: "POST",
         headers: {
@@ -95,7 +95,7 @@ describe("Google Drive Uploader API & Utility Suite", () => {
       expect(res.status).toBe(400);
       const data = await res.json();
       expect(data.success).toBe(false);
-      expect(data.error).toContain("No image payload found");
+      expect(data.error).toContain("No file content found");
     });
 
     it("returns 400 when multipart form data has no file or image field", async () => {
@@ -152,6 +152,40 @@ describe("Google Drive Uploader API & Utility Suite", () => {
       expect(data.success).toBe(true);
       expect(data.file.fileId).toBe("drive_file_id_999");
       expect(data.file.webViewLink).toContain("drive_file_id_999");
+    });
+
+    it("successfully processes and uploads raw text and HTML document content", async () => {
+      const googleDriveModule = await import("../src/lib/google-drive");
+      const mockResult = {
+        fileId: "drive_file_id_doc_777",
+        name: "solution.html",
+        mimeType: "text/html; charset=utf-8",
+        size: 500,
+        webViewLink: "https://drive.google.com/file/d/drive_file_id_doc_777/view",
+        folderId: "test_folder_id_12345",
+        createdTime: "2026-10-24T00:00:00.000Z",
+      };
+
+      vi.spyOn(googleDriveModule, "uploadBufferToGoogleDrive").mockResolvedValue(mockResult);
+
+      const htmlBody = "<html><body><h1>Math Solution</h1></body></html>";
+      const req = new NextRequest("http://localhost:3000/api/upload-to-drive", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          content: htmlBody,
+          filename: "solution.html",
+          mimeType: "text/html",
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.file.fileId).toBe("drive_file_id_doc_777");
     });
   });
 });

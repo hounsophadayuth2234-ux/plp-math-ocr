@@ -190,22 +190,23 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
       const arrayBuffer = await file.arrayBuffer();
       buffer = Buffer.from(arrayBuffer);
     }
-    // Handle JSON Payload (base64 or dataURL)
+    // Handle JSON Payload (base64, dataURL, or raw text/document content)
     else if (contentType.includes("application/json")) {
       const body = await req.json();
       const rawImage = body.image || body.file || body.base64;
+      const rawText = body.content !== undefined ? body.content : body.text;
 
-      if (!rawImage || typeof rawImage !== "string") {
+      if (!rawImage && rawText === undefined) {
         return NextResponse.json<UploadToDriveApiResponse>(
           {
             success: false,
-            error: "No image payload found in JSON body. Expected 'image', 'file', or 'base64'.",
+            error: "No file content found in JSON body. Expected 'content', 'text', 'image', 'file', or 'base64'.",
           },
           { status: 400 }
         );
       }
 
-      filename = body.filename?.trim() || `image_${Date.now()}.png`;
+      filename = body.filename?.trim() || `upload_${Date.now()}`;
       folderId = body.folderId?.trim() || undefined;
       description = body.description?.trim() || undefined;
       makePublic = Boolean(body.makePublic);
@@ -214,15 +215,39 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
         moduleName = String(body.module || body.moduleName).trim();
       }
 
-      // Check if it's a data URL: data:image/png;base64,...
-      const dataUrlMatch = rawImage.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
-      if (dataUrlMatch) {
-        mimeType = dataUrlMatch[1];
-        buffer = Buffer.from(dataUrlMatch[2], "base64");
-      } else {
-        // Plain base64
-        mimeType = body.mimeType || "image/png";
-        buffer = Buffer.from(rawImage, "base64");
+      if (rawText !== undefined) {
+        const textStr = typeof rawText === "string" ? rawText : JSON.stringify(rawText, null, 2);
+        buffer = Buffer.from(textStr, "utf-8");
+        if (body.mimeType) {
+          mimeType = body.mimeType;
+        } else if (filename.endsWith(".html") || filename.endsWith(".htm")) {
+          mimeType = "text/html; charset=utf-8";
+        } else if (filename.endsWith(".tex")) {
+          mimeType = "application/x-tex; charset=utf-8";
+        } else if (filename.endsWith(".xml")) {
+          mimeType = "application/xml; charset=utf-8";
+        } else if (filename.endsWith(".json")) {
+          mimeType = "application/json; charset=utf-8";
+        } else {
+          mimeType = "text/plain; charset=utf-8";
+        }
+      } else if (typeof rawImage === "string") {
+        // Check if it's a data URL: data:image/png;base64,...
+        const dataUrlMatch = rawImage.match(/^data:([a-zA-Z0-9/.-]+)(?:;charset=[^;,]+)?(;base64)?,(.*)$/);
+        if (dataUrlMatch) {
+          mimeType = dataUrlMatch[1];
+          const isBase64 = Boolean(dataUrlMatch[2]);
+          const dataPayload = dataUrlMatch[3];
+          if (isBase64) {
+            buffer = Buffer.from(dataPayload, "base64");
+          } else {
+            buffer = Buffer.from(decodeURIComponent(dataPayload), "utf-8");
+          }
+        } else {
+          // Plain base64
+          mimeType = body.mimeType || "image/png";
+          buffer = Buffer.from(rawImage, "base64");
+        }
       }
     } else {
       return NextResponse.json<UploadToDriveApiResponse>(
@@ -259,7 +284,21 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
     // Sanitize filename against directory traversal
     filename = sanitizeFilename(filename);
     if (!filename || filename === "unknown" || !filename.includes(".")) {
-      const ext = mimeType.includes("jpeg") ? "jpg" : mimeType.includes("webp") ? "webp" : "png";
+      const ext = mimeType.includes("jpeg")
+        ? "jpg"
+        : mimeType.includes("webp")
+        ? "webp"
+        : mimeType.includes("html")
+        ? "html"
+        : mimeType.includes("tex")
+        ? "tex"
+        : mimeType.includes("xml")
+        ? "xml"
+        : mimeType.includes("json")
+        ? "json"
+        : mimeType.includes("plain")
+        ? "txt"
+        : "png";
       filename = `upload_${Date.now()}.${ext}`;
     }
 
@@ -339,6 +378,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
       file: {
         ...result,
         id: result.fileId,
+        module: moduleName,
+        status: "uploaded",
+        createdAt: Date.now(),
       } as any,
     });
   } catch (err: unknown) {

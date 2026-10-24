@@ -30,6 +30,7 @@ import {
 } from "@/lib/lesson-studio";
 import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
 import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
+import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
 
 const PRESETS: Record<LessonStudioMode, Array<{ label: string; prompt: string; grade: GradeLevel }>> = {
   visual_svg: [
@@ -219,17 +220,6 @@ export default function LessonStudioPage() {
         formData.append("prompt", promptText);
         formData.append("image", selectedImage.file);
 
-        // Pre-register input image payload with Drive sync
-        if (selectedImage?.file) {
-          const ext = (selectedImage.file.name || "image.png").split(".").pop() || "png";
-          const driveFilename = `module05_lesson_studio_input_${Date.now()}.${ext}`;
-          driveSync.triggerUpload({
-            file: selectedImage.file,
-            filename: driveFilename,
-            description: "Module 05 Lesson Studio Input Image",
-          }).catch(() => {});
-        }
-
         response = await fetch("/api/lesson-studio", {
           method: "POST",
           body: formData,
@@ -262,15 +252,154 @@ export default function LessonStudioPage() {
 
       setResult(data);
 
-      // Non-blocking Google Drive upload AFTER successful lesson processing
+      // Automatic Google Drive upload (Module 05: reference input image + generated lesson/worksheet outputs)
+      const drivePayloads: DriveUploadOptions[] = [];
+      const timestamp = Date.now();
+      const username = driveSync.currentUser;
+
       if (selectedImage?.file) {
         const ext = (selectedImage.file.name || "image.png").split(".").pop() || "png";
-        const driveFilename = `module05_lesson_studio_${Date.now()}.${ext}`;
-        driveSync.triggerUpload({
+        drivePayloads.push({
           file: selectedImage.file,
-          filename: driveFilename,
-          description: "Module 05 Lesson Studio Input Image",
-        }).catch((driveErr) => {
+          filename: formatDriveFilename({
+            modulePrefix: "module05_lesson_studio",
+            userIdOrName: username,
+            outputType: "reference",
+            extension: ext,
+            timestamp,
+          }),
+          description: "Module 05 Lesson Studio Reference Input Image",
+        });
+      }
+
+      if (data.visual) {
+        const svgHtml = `<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="utf-8">
+  <title>${data.visual.titleKhmer || "Math Visual Diagram"}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; text-align: center; background: #ffffff; color: #1e293b; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .svg-wrap { display: inline-block; margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>${data.visual.titleKhmer || "គំនូរបំព្រួញគណិតវិទ្យា"}</h2>
+    <p>${data.visual.descriptionKhmer || ""}</p>
+    <div class="svg-wrap">${data.visual.svg}</div>
+  </div>
+</body>
+</html>`;
+        drivePayloads.push({
+          content: svgHtml,
+          filename: formatDriveFilename({
+            modulePrefix: "module05_lesson_studio",
+            userIdOrName: username,
+            outputType: "visual_diagram",
+            extension: "html",
+            timestamp,
+          }),
+          mimeType: "text/html; charset=utf-8",
+          description: "Module 05 Lesson Studio Visual Diagram HTML Document",
+        });
+      }
+
+      if (data.quiz) {
+        const quizHtml = `<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="utf-8">
+  <title>${data.quiz.titleKhmer || "Math Quiz Worksheet"}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; line-height: 1.6; color: #1e293b; background: #ffffff; }
+    .container { max-width: 800px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    ${data.quiz.htmlContent}
+  </div>
+</body>
+</html>`;
+        drivePayloads.push({
+          content: quizHtml,
+          filename: formatDriveFilename({
+            modulePrefix: "module05_lesson_studio",
+            userIdOrName: username,
+            outputType: "quiz_worksheet",
+            extension: "html",
+            timestamp,
+          }),
+          mimeType: "text/html; charset=utf-8",
+          description: "Module 05 Lesson Studio Quiz Worksheet HTML Document",
+        });
+
+        if (data.quiz.textContent) {
+          drivePayloads.push({
+            content: data.quiz.textContent,
+            filename: formatDriveFilename({
+              modulePrefix: "module05_lesson_studio",
+              userIdOrName: username,
+              outputType: "quiz_questions",
+              extension: "txt",
+              timestamp,
+            }),
+            mimeType: "text/plain; charset=utf-8",
+            description: "Module 05 Lesson Studio Quiz Questions Plain Text",
+          });
+        }
+      }
+
+      if (data.styler) {
+        const lessonHtml = `<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="utf-8">
+  <title>${data.styler.titleKhmer || "Math Lesson Plan"}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; line-height: 1.6; color: #1e293b; background: #ffffff; }
+    .container { max-width: 800px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    ${data.styler.htmlContent}
+  </div>
+</body>
+</html>`;
+        drivePayloads.push({
+          content: lessonHtml,
+          filename: formatDriveFilename({
+            modulePrefix: "module05_lesson_studio",
+            userIdOrName: username,
+            outputType: "lesson_plan",
+            extension: "html",
+            timestamp,
+          }),
+          mimeType: "text/html; charset=utf-8",
+          description: "Module 05 Lesson Studio Lesson Plan HTML Document",
+        });
+
+        if (data.styler.correctedText) {
+          drivePayloads.push({
+            content: data.styler.correctedText,
+            filename: formatDriveFilename({
+              modulePrefix: "module05_lesson_studio",
+              userIdOrName: username,
+              outputType: "lesson_content",
+              extension: "txt",
+              timestamp,
+            }),
+            mimeType: "text/plain; charset=utf-8",
+            description: "Module 05 Lesson Studio Plain Text Content",
+          });
+        }
+      }
+
+      if (drivePayloads.length > 0) {
+        driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
           console.warn("[Module 05] Non-blocking Google Drive upload warning:", driveErr);
         });
       }
@@ -597,9 +726,8 @@ export default function LessonStudioPage() {
             {/* Module 05 Google Drive Storage Sync Card */}
             <ModuleDriveSync
               moduleName="Module 05: Lesson Studio"
-              saveToDrive={driveSync.saveToDrive}
-              onToggleSave={driveSync.setSaveToDrive}
               status={driveSync.status}
+              uploadedRecords={driveSync.uploadedRecords}
               uploadedRecord={driveSync.uploadedRecord}
               errorMessage={driveSync.errorMessage}
               onRetry={driveSync.retryUpload}

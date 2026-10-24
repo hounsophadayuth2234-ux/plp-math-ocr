@@ -29,6 +29,7 @@ import { UpscaleControls } from "@/components/image-upscaler/UpscaleControls";
 import { RoboticScanner } from "@/components/ui/RoboticScanner";
 import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
 import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
+import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
 import { cyberAudio } from "@/lib/cyber-audio";
 import { ObjectUrlRegistry } from "@/lib/processing-utils";
 import {
@@ -425,14 +426,42 @@ export default function ImageUpscalerPage() {
       setResult(res);
       setInputDiagnostics(res.diagnostics);
 
-      // Non-blocking Google Drive upload (automatically uploads if enabled, or queues for toggle)
+      // Automatic Google Drive upload (Module 03: original image + final HD Resize & Sharpen result)
+      const drivePayloads: DriveUploadOptions[] = [];
+      const timestamp = Date.now();
+      const username = driveSync.currentUser;
+
+      if (imageFile) {
+        const ext = (imageFile.name || "image.png").split(".").pop() || "png";
+        drivePayloads.push({
+          file: imageFile,
+          filename: formatDriveFilename({
+            modulePrefix: "module03_image_upscaler",
+            userIdOrName: username,
+            outputType: "original",
+            extension: ext,
+            timestamp,
+          }),
+          description: "Module 03 Image Upscaler Original Input Image",
+        });
+      }
+
       if (res.blob) {
-        const driveFilename = `module03_hd_upscaler_${res.scale}x_${Date.now()}.png`;
-        driveSync.triggerUpload({
+        drivePayloads.push({
           file: res.blob,
-          filename: driveFilename,
+          filename: formatDriveFilename({
+            modulePrefix: "module03_image_upscaler",
+            userIdOrName: username,
+            outputType: `upscaled_${res.scale}x`,
+            extension: "png",
+            timestamp,
+          }),
           description: `Module 03 HD Upscaler ${res.scale}x Enhanced Output`,
-        }).catch((driveErr) => {
+        });
+      }
+
+      if (drivePayloads.length > 0) {
+        driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
           console.warn("[Module 03] Non-blocking Google Drive upload warning:", driveErr);
         });
       }
@@ -629,9 +658,8 @@ export default function ImageUpscalerPage() {
               {/* Module 03 Google Drive Storage Sync Card */}
               <ModuleDriveSync
                 moduleName="Module 03: HD Resize & Sharpen"
-                saveToDrive={driveSync.saveToDrive}
-                onToggleSave={driveSync.setSaveToDrive}
                 status={driveSync.status}
+                uploadedRecords={driveSync.uploadedRecords}
                 uploadedRecord={driveSync.uploadedRecord}
                 errorMessage={driveSync.errorMessage}
                 onRetry={driveSync.retryUpload}

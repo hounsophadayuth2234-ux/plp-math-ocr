@@ -45,9 +45,12 @@ import {
   copyCanonicalSolutionToClipboard,
   copyCanonicalSolutionPlainTextToClipboard,
   renderCanonicalSolutionHtml,
+  renderCanonicalSolutionPlainText,
+  toMathSolution,
   copyTextFallback,
   downloadSolutionAsPng,
 } from "@/lib/math-solution-html";
+import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
 
 const GRADE_OPTIONS: { id: GradeLevel; label: string; sublabel: string }[] = [
   { id: "auto", label: "ស្វ័យប្រវត្តិ", sublabel: "Auto Detect" },
@@ -374,15 +377,65 @@ export default function MathSolverPage() {
         setInferredGradeDisplay(successData.inferredGradeKhmer);
       }
 
-      // Non-blocking Google Drive upload AFTER successful problem generation
+      // Automatic Google Drive upload (Module 04: original problem image + solution text + solution HTML)
+      const drivePayloads: DriveUploadOptions[] = [];
+      const timestamp = Date.now();
+      const username = driveSync.currentUser;
+
       if (imageFile) {
         const ext = (imageFile.name || "problem.png").split(".").pop() || "png";
-        const driveFilename = `module04_math_solver_${Date.now()}.${ext}`;
-        driveSync.triggerUpload({
+        drivePayloads.push({
           file: imageFile,
-          filename: driveFilename,
-          description: `Module 04 Khmer Math Solver: ${(textToSolve || imageFile.name).slice(0, 50)}`,
-        }).catch((driveErr) => {
+          filename: formatDriveFilename({
+            modulePrefix: "module04_math_solver",
+            userIdOrName: username,
+            outputType: "problem",
+            extension: ext,
+            timestamp,
+          }),
+          description: `Module 04 Khmer Math Solver Input Problem: ${(textToSolve || imageFile.name).slice(0, 50)}`,
+        });
+      }
+
+      const firstProb = successData.problems?.[0];
+      if (firstProb) {
+        const canonicalSol = toMathSolution(firstProb);
+
+        const plainText = renderCanonicalSolutionPlainText(canonicalSol);
+        if (plainText) {
+          drivePayloads.push({
+            content: plainText,
+            filename: formatDriveFilename({
+              modulePrefix: "module04_math_solver",
+              userIdOrName: username,
+              outputType: "solution",
+              extension: "txt",
+              timestamp,
+            }),
+            mimeType: "text/plain; charset=utf-8",
+            description: "Module 04 Khmer Math Solution Plain Text Document",
+          });
+        }
+
+        const htmlDoc = renderCanonicalSolutionHtml(canonicalSol);
+        if (htmlDoc) {
+          drivePayloads.push({
+            content: htmlDoc,
+            filename: formatDriveFilename({
+              modulePrefix: "module04_math_solver",
+              userIdOrName: username,
+              outputType: "solution",
+              extension: "html",
+              timestamp,
+            }),
+            mimeType: "text/html; charset=utf-8",
+            description: "Module 04 Khmer Math Solution Self-Contained HTML Document",
+          });
+        }
+      }
+
+      if (drivePayloads.length > 0) {
+        driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
           console.warn("[Module 04] Non-blocking Google Drive upload warning:", driveErr);
         });
       }
@@ -741,9 +794,8 @@ export default function MathSolverPage() {
           {/* Module 04 Google Drive Storage Sync Card */}
           <ModuleDriveSync
             moduleName="Module 04: Khmer Math Solver"
-            saveToDrive={driveSync.saveToDrive}
-            onToggleSave={driveSync.setSaveToDrive}
             status={driveSync.status}
+            uploadedRecords={driveSync.uploadedRecords}
             uploadedRecord={driveSync.uploadedRecord}
             errorMessage={driveSync.errorMessage}
             onRetry={driveSync.retryUpload}
