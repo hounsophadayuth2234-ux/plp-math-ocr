@@ -527,3 +527,5 @@ export function DriveUploader({
     </div>
   );
 }
+
+export default DriveUploader;
