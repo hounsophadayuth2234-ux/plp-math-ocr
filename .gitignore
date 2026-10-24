@@ -59,3 +59,4 @@ next-env.d.ts
 benchmark-*.json
 __pycache__/
 scratch/
+data/

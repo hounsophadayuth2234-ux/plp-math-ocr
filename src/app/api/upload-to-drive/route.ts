@@ -5,9 +5,17 @@ import {
   getGoogleDriveClient,
   DriveUploadResult,
 } from "@/lib/google-drive";
+import {
+  uploadUserBufferToGoogleDrive,
+  getTargetDriveFolderId,
+  getUserDriveClient,
+  verifyTargetFolderAccess,
+} from "@/lib/google-drive-oauth";
 import { enforceRouteAuth } from "@/lib/auth-gate";
+import { getSessionUser } from "@/lib/auth-session";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { sanitizeFilename } from "@/lib/image-upload-validator";
+import { DriveHistoryStore } from "@/lib/drive-history-store";
 
 export const maxDuration = 60;
 
@@ -27,23 +35,71 @@ export async function GET(req: NextRequest) {
     const authBlock = await enforceRouteAuth(req);
     if (authBlock) return authBlock;
 
-    const folderId = getDefaultDriveFolderId();
-    const drive = getGoogleDriveClient();
+    const sessionUser = await getSessionUser(req);
+    const folderId = getTargetDriveFolderId();
 
-    // Verify access to the configured folder
-    const folderRes = await drive.files.get({
-      fileId: folderId,
-      fields: "id, name, mimeType",
-      supportsAllDrives: true,
-    });
+    // 1. If user is authenticated with personal OAuth connection
+    if (sessionUser?.googleDriveConnected) {
+      try {
+        const drive = await getUserDriveClient(sessionUser.id);
+        const folderCheck = await verifyTargetFolderAccess(drive, folderId);
+        return NextResponse.json({
+          success: true,
+          mode: "oauth-user",
+          connected: true,
+          email: sessionUser.googleDriveEmail,
+          folderId,
+          folderName: folderCheck.folderName,
+          folderAccessible: folderCheck.accessible,
+          folderError: folderCheck.error,
+        });
+      } catch (oauthErr: unknown) {
+        return NextResponse.json({
+          success: false,
+          mode: "oauth-user",
+          connected: false,
+          error: oauthErr instanceof Error ? oauthErr.message : String(oauthErr),
+        });
+      }
+    }
+
+    // 2. Fallback check for service account (or unconfigured personal drive)
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      try {
+        const fallbackFolderId = getDefaultDriveFolderId();
+        const drive = getGoogleDriveClient();
+        const folderRes = await drive.files.get({
+          fileId: fallbackFolderId,
+          fields: "id, name, mimeType",
+          supportsAllDrives: true,
+        });
+
+        return NextResponse.json({
+          success: true,
+          mode: "service-account",
+          configured: true,
+          folderId: fallbackFolderId,
+          folderName: folderRes.data.name,
+          mimeType: folderRes.data.mimeType,
+          note: "Personal My Drive uploads require Google OAuth to use personal storage quota.",
+        });
+      } catch (saErr: unknown) {
+        const message = saErr instanceof Error ? saErr.message : String(saErr);
+        return NextResponse.json({
+          success: false,
+          mode: "service-account",
+          configured: false,
+          error: message,
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      service: "google-drive-uploader",
-      configured: true,
+      mode: "oauth-user",
+      connected: false,
       folderId,
-      folderName: folderRes.data.name,
-      mimeType: folderRes.data.mimeType,
+      message: "សូមភ្ជាប់គណនី Google Drive របស់អ្នកនៅក្នុងទំព័រ Settings (Please connect Google Drive).",
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -61,7 +117,8 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/upload-to-drive
- * Accepts image file via multipart/form-data or JSON (base64/dataURL) and uploads to Google Drive.
+ * Accepts image file via multipart/form-data or JSON (base64/dataURL).
+ * Routes upload through personal Google OAuth using the user's storage quota.
  */
 export async function POST(req: NextRequest): Promise<NextResponse<UploadToDriveApiResponse>> {
   // 1. Defense-in-depth route session verification (bypassed in test env unless explicitly enabled)
@@ -73,6 +130,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
   if (rateLimitBlock) return rateLimitBlock as NextResponse<UploadToDriveApiResponse>;
 
   try {
+    const sessionUser = await getSessionUser(req);
     const contentType = req.headers.get("content-type") || "";
 
     let buffer: Buffer | null = null;
@@ -81,6 +139,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
     let folderId: string | undefined;
     let description: string | undefined;
     let makePublic = false;
+    let moduleName = "DYT Math Studio";
 
     // Handle Multipart Form Data
     if (contentType.includes("multipart/form-data")) {
@@ -114,6 +173,11 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
       const rawPublic = formData.get("makePublic") as string | null;
       makePublic = rawPublic === "true" || rawPublic === "1";
 
+      const rawModule = formData.get("module") || formData.get("moduleName");
+      if (rawModule && typeof rawModule === "string" && rawModule.trim()) {
+        moduleName = rawModule.trim();
+      }
+
       const arrayBuffer = await file.arrayBuffer();
       buffer = Buffer.from(arrayBuffer);
     }
@@ -136,6 +200,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
       folderId = body.folderId?.trim() || undefined;
       description = body.description?.trim() || undefined;
       makePublic = Boolean(body.makePublic);
+
+      if (body.module || body.moduleName) {
+        moduleName = String(body.module || body.moduleName).trim();
+      }
 
       // Check if it's a data URL: data:image/png;base64,...
       const dataUrlMatch = rawImage.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
@@ -186,19 +254,75 @@ export async function POST(req: NextRequest): Promise<NextResponse<UploadToDrive
       filename = `upload_${Date.now()}.${ext}`;
     }
 
-    // Upload directly to Google Drive
-    const result = await uploadBufferToGoogleDrive({
-      buffer,
-      filename,
-      mimeType,
-      folderId,
-      description,
-      makePublic,
-    });
+    let result: DriveUploadResult;
+
+    // A. Priority 1: Personal OAuth Google Drive storage (uses owner's storage quota)
+    if (sessionUser?.googleDriveConnected) {
+      const oauthResult = await uploadUserBufferToGoogleDrive(sessionUser.id, {
+        buffer,
+        filename,
+        mimeType,
+        folderId,
+        description,
+        makePublic,
+        moduleName,
+      });
+
+      result = {
+        fileId: oauthResult.fileId,
+        name: oauthResult.name,
+        mimeType: oauthResult.mimeType,
+        size: oauthResult.size,
+        webViewLink: oauthResult.webViewLink,
+        webContentLink: oauthResult.webContentLink,
+        thumbnailLink: oauthResult.thumbnailLink,
+        createdTime: oauthResult.createdTime,
+        folderId: oauthResult.folderId,
+      };
+    }
+    // B. Priority 2: In test environment with service account mock/config
+    else if (process.env.NODE_ENV === "test" && process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      result = await uploadBufferToGoogleDrive({
+        buffer,
+        filename,
+        mimeType,
+        folderId,
+        description,
+        makePublic,
+      });
+
+      if (sessionUser) {
+        await DriveHistoryStore.addRecord({
+          userId: sessionUser.id,
+          module: moduleName,
+          filename: result.name,
+          mimeType: result.mimeType,
+          size: result.size,
+          folderId: result.folderId,
+          resultDriveFileId: result.fileId,
+          webViewLink: result.webViewLink,
+          status: "uploaded",
+        });
+      }
+    }
+    // C. Not connected via OAuth
+    else {
+      return NextResponse.json<UploadToDriveApiResponse>(
+        {
+          success: false,
+          error:
+            "Google Drive មិនទាន់ត្រូវបានភ្ជាប់ឡើយ (Google Drive not connected)。 សូមភ្ជាប់គណនី Google Drive របស់អ្នកនៅក្នុងទំព័រ Math-Upload Settings ដើម្បីរក្សាទុកឯកសារដោយប្រើប្រាស់ទំហំផ្ទុកផ្ទាល់ខ្លួន។",
+        },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json<UploadToDriveApiResponse>({
       success: true,
-      file: result,
+      file: {
+        ...result,
+        id: result.fileId,
+      } as any,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

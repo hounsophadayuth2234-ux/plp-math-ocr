@@ -51,7 +51,7 @@ export function DriveUploader({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [filename, setFilename] = useState<string>("");
-  const [makePublic, setMakePublic] = useState<boolean>(true);
+  const [makePublic, setMakePublic] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
   // Upload States
@@ -168,6 +168,7 @@ export function DriveUploader({
     formData.append("file", selectedFile);
     formData.append("filename", filename.trim() || selectedFile.name);
     formData.append("makePublic", makePublic ? "true" : "false");
+    formData.append("module", "Drive Uploader");
     if (defaultFolderId) {
       formData.append("folderId", defaultFolderId);
     }

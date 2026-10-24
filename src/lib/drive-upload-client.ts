@@ -81,10 +81,23 @@ export async function uploadImageToDrive(options: DriveUploadOptions): Promise<D
     throw new Error(`Upload to Drive failed with status ${response.status}: ${text.slice(0, 100)}`);
   }
 
-  if (!response.ok || !data.success || !data.file || !data.file.id) {
+  const rawFile = (data.file || {}) as Record<string, any>;
+  const resolvedId = rawFile.id || rawFile.fileId;
+
+  if (!response.ok || !data.success || !rawFile || !resolvedId) {
     const msg = data.error || data.details || `Drive upload failed with HTTP ${response.status}`;
     throw new Error(msg);
   }
 
-  return data.file;
+  return {
+    id: resolvedId,
+    name: rawFile.name || rawFile.filename || filename,
+    mimeType: rawFile.mimeType || mimeType || "image/png",
+    size: Number(rawFile.size) || 0,
+    webViewLink: rawFile.webViewLink || `https://drive.google.com/file/d/${resolvedId}/view`,
+    webContentLink: rawFile.webContentLink,
+    thumbnailLink: rawFile.thumbnailLink,
+    isPublic: Boolean(rawFile.isPublic),
+    folderId: rawFile.folderId,
+  };
 }

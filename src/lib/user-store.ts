@@ -30,6 +30,11 @@ export interface UserRecord {
   telegramUsername?: string;
   telegramLinkedAt?: number;
   telegramLastLoginAt?: number;
+  googleDriveConnected?: boolean;
+  googleDriveTokenEncrypted?: string;
+  googleDriveEmail?: string;
+  googleDriveConnectedAt?: number;
+  googleDriveScope?: string;
 }
 
 export type SafeUser = Omit<
@@ -41,6 +46,7 @@ export type SafeUser = Omit<
   | "mfaRecoveryCodesHashed"
   | "telegramIdEncrypted"
   | "telegramIdLookupHash"
+  | "googleDriveTokenEncrypted"
 > & {
   visiblePassword?: string | null;
   mfaEnabled?: boolean;
@@ -48,6 +54,9 @@ export type SafeUser = Omit<
   telegramUsername?: string;
   telegramLinkedAt?: number;
   telegramLastLoginAt?: number;
+  googleDriveConnected?: boolean;
+  googleDriveEmail?: string;
+  googleDriveConnectedAt?: number;
 };
 
 export function toSafeUser(user: UserRecord): SafeUser {
@@ -59,6 +68,7 @@ export function toSafeUser(user: UserRecord): SafeUser {
     mfaRecoveryCodesHashed: _mfaRec,
     telegramIdEncrypted: _telIdEnc,
     telegramIdLookupHash: _telLookupHash,
+    googleDriveTokenEncrypted: _gDriveEnc,
     ...safe
   } = user;
   return safe;
@@ -505,6 +515,39 @@ export class UserStore {
     return this.updateUser(id, {
       sessionRevokedAt: now,
       activeSessionsCount: 0,
+    });
+  }
+
+  /**
+   * Stores encrypted Google Drive OAuth tokens on the user record.
+   */
+  static async updateGoogleDriveTokens(
+    id: string,
+    params: {
+      googleDriveTokenEncrypted: string;
+      googleDriveEmail?: string;
+      googleDriveScope?: string;
+    }
+  ): Promise<UserRecord> {
+    return this.updateUser(id, {
+      googleDriveConnected: true,
+      googleDriveTokenEncrypted: params.googleDriveTokenEncrypted,
+      googleDriveEmail: params.googleDriveEmail,
+      googleDriveScope: params.googleDriveScope,
+      googleDriveConnectedAt: Date.now(),
+    });
+  }
+
+  /**
+   * Clears Google Drive OAuth tokens from the user record upon disconnect.
+   */
+  static async clearGoogleDriveTokens(id: string): Promise<UserRecord> {
+    return this.updateUser(id, {
+      googleDriveConnected: false,
+      googleDriveTokenEncrypted: undefined,
+      googleDriveEmail: undefined,
+      googleDriveScope: undefined,
+      googleDriveConnectedAt: undefined,
     });
   }
 }
