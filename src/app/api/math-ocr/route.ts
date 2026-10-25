@@ -11,6 +11,7 @@ import {
   computeLineConfidences,
 } from "@/lib/khmer-grapheme-normalizer";
 import { normalizeGeminiMathOutput } from "@/lib/math-ocr-normalizer";
+import { ActivityTracker } from "@/lib/activity-tracker";
 
 export const maxDuration = 45;
 
@@ -443,6 +444,18 @@ export async function POST(req: NextRequest) {
           durationMs: Date.now() - overallStartTime,
         })
       );
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "01_math_ocr",
+          action: "transcribe_ocr",
+          title: imageFile?.name || "Math OCR Image (Cached)",
+          details: { cached: true, detectedType: cached.outputFields?.detectedType },
+        }).catch(() => {});
+      }
       return NextResponse.json<MathOcrResponse>(
         {
           ...cached.outputFields,
@@ -758,11 +771,26 @@ export async function POST(req: NextRequest) {
         source: "gemini",
       });
 
-      parsed.cached = false;
-      parsed.fromCache = false;
       parsed.cacheKey = cacheKey;
       parsed.driveFileIds = uploadResult.driveFileIds;
       parsed.driveLinks = uploadResult.driveLinks;
+
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "01_math_ocr",
+          action: "transcribe_ocr",
+          title: imageFile?.name || "Math OCR Image",
+          details: {
+            detectedType: parsed.detectedType,
+            confidence: parsed.confidence,
+            model: selectedModel,
+          },
+        }).catch(() => {});
+      }
 
       return NextResponse.json<MathOcrResponse>(parsed as MathOcrResponse, { status: 200 });
     } catch (parseErr) {

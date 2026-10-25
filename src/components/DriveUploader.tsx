@@ -451,8 +451,10 @@ export function DriveUploader({
 
           <div className="rounded-lg bg-slate-900/90 border border-slate-800 p-3.5 space-y-2 text-xs">
             <div className="flex justify-between items-center text-slate-300">
-              <span className="text-slate-500">File ID:</span>
-              <span className="font-mono text-slate-200 select-all">{uploadedFile.fileId}</span>
+              <span className="text-slate-400">ស្ថានភាព៖</span>
+              <span className="font-semibold text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" /> រក្សាទុករួចរាល់លើ Drive
+              </span>
             </div>
 
             <div className="flex justify-between items-center text-slate-300">

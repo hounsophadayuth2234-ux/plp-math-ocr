@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 import { enforceRouteAuth } from "@/lib/auth-gate";
 import { getSessionUser } from "@/lib/auth-session";
+import { ActivityTracker } from "@/lib/activity-tracker";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { validateImageUpload } from "@/lib/image-upload-validator";
 import {
@@ -408,6 +409,19 @@ export async function POST(req: NextRequest) {
           durationMs: Date.now() - overallStartTime,
         })
       );
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "04_math_solver",
+          action: solverMode || "solve_problem",
+          title: problemTextInput?.slice(0, 80) || imageFile?.name || "Khmer Math Solution (Cached)",
+          details: { gradeLevel, solverMode, cached: true },
+        }).catch(() => {});
+      }
+
       return NextResponse.json<MathSolverResponse>(
         {
           ...cached.outputFields,
@@ -1138,6 +1152,18 @@ Return a valid JSON object matching the standard schema.`;
       response.cacheKey = cacheKey;
       response.driveFileIds = uploadResult.driveFileIds;
       response.driveLinks = uploadResult.driveLinks;
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "04_math_solver",
+          action: solverMode || "solve_problem",
+          title: problemTextInput?.slice(0, 80) || imageFile?.name || "Khmer Math Solution",
+          details: { gradeLevel, solverMode, finalAnswer: response.problems?.[0]?.finalAnswer },
+        }).catch(() => {});
+      }
 
       return NextResponse.json<MathSolverResponse>(response, { status: 200 });
     } catch (parseErr) {

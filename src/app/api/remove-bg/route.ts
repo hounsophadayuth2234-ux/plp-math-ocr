@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enforceRouteAuth } from "@/lib/auth-gate";
+import { getSessionUser } from "@/lib/auth-session";
+import { ActivityTracker } from "@/lib/activity-tracker";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { sanitizeFilename } from "@/lib/image-upload-validator";
 import { safeFetch, isBlockedHostname, isPrivateOrReservedIp } from "@/lib/ssrf-guard";
@@ -1163,6 +1165,20 @@ export async function POST(req: NextRequest) {
   }
 
   // 10. Deliver transparent cutout image with required headers (JSON or binary)
+  const sessionUser = await getSessionUser(req);
+  if (sessionUser) {
+    ActivityTracker.recordActivity({
+      userId: sessionUser.id,
+      username: sessionUser.username,
+      displayName: sessionUser.displayName,
+      role: sessionUser.role,
+      module: "02_canvas_cutout",
+      action: "remove_background",
+      title: fileName || "Canvas Cutout",
+      details: { quality, selectionMode, dims: inputDims },
+    }).catch(() => {});
+  }
+
   if (isJsonResponseExpected) {
     const base64Str = Buffer.from(outputBuffer).toString("base64");
     const mime = isWebp ? "image/webp" : "image/png";

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Replicate from "replicate";
 import { ProcessingStatusLabel } from "@/lib/types";
 import { enforceRouteAuth } from "@/lib/auth-gate";
+import { getSessionUser } from "@/lib/auth-session";
+import { ActivityTracker } from "@/lib/activity-tracker";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { validateImageUpload } from "@/lib/image-upload-validator";
 
@@ -35,6 +37,8 @@ export async function POST(req: NextRequest) {
   if (rateLimitBlock) {
     return rateLimitBlock;
   }
+
+  const sessionUser = await getSessionUser(req);
 
   try {
     const formData = await req.formData();
@@ -167,6 +171,19 @@ export async function POST(req: NextRequest) {
           resultUrl = `data:${workerBlob.type || "image/png"};base64,${workerBase64}`;
         }
 
+        if (sessionUser) {
+          ActivityTracker.recordActivity({
+            userId: sessionUser.id,
+            username: sessionUser.username,
+            displayName: sessionUser.displayName,
+            role: sessionUser.role,
+            module: "03_hd_upscale",
+            action: "upscale_image",
+            title: imageFile?.name || "Image Upscale",
+            details: { scale: 4, provider: "worker" },
+          }).catch(() => {});
+        }
+
         return NextResponse.json<UpscaleSuccess>(
           {
             outputUrl: resultUrl,
@@ -210,6 +227,19 @@ export async function POST(req: NextRequest) {
 
         if (!outputUrl || typeof outputUrl !== "string") {
           throw new Error("Invalid output received from Replicate.");
+        }
+
+        if (sessionUser) {
+          ActivityTracker.recordActivity({
+            userId: sessionUser.id,
+            username: sessionUser.username,
+            displayName: sessionUser.displayName,
+            role: sessionUser.role,
+            module: "03_hd_upscale",
+            action: "upscale_image",
+            title: imageFile?.name || "Image Upscale",
+            details: { scale, provider: "replicate" },
+          }).catch(() => {});
         }
 
         return NextResponse.json<UpscaleSuccess>(

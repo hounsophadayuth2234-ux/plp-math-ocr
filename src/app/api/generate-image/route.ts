@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { executeImageGeneration } from "@/lib/image-generator-adapters";
 import { ProcessingStatusLabel } from "@/lib/types";
 import { enforceRouteAuth } from "@/lib/auth-gate";
+import { getSessionUser } from "@/lib/auth-session";
+import { ActivityTracker } from "@/lib/activity-tracker";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 
 export interface GenerateSuccess {
@@ -32,6 +34,8 @@ export async function POST(req: NextRequest) {
   if (rateLimitBlock) {
     return rateLimitBlock;
   }
+
+  const sessionUser = await getSessionUser(req);
 
   try {
     const body = await req.json();
@@ -64,6 +68,19 @@ export async function POST(req: NextRequest) {
         numOutputs,
         allowDemo,
       });
+
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "image_generator",
+          action: "generate_image",
+          title: prompt.slice(0, 80),
+          details: { aspectRatio, model: result.model, count: result.images.length },
+        }).catch(() => {});
+      }
 
       return NextResponse.json<GenerateSuccess>(result, { status: 200 });
     } catch (adapterErr: unknown) {

@@ -6,6 +6,8 @@ import {
   ImageDiagnostics,
 } from "@/lib/image-upscale-engine";
 import { enforceRouteAuth } from "@/lib/auth-gate";
+import { getSessionUser } from "@/lib/auth-session";
+import { ActivityTracker } from "@/lib/activity-tracker";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { validateImageUpload } from "@/lib/image-upload-validator";
 
@@ -31,6 +33,8 @@ export async function POST(req: NextRequest) {
   if (rateLimitBlock) {
     return rateLimitBlock;
   }
+
+  const sessionUser = await getSessionUser(req);
 
   try {
     const formData = await req.formData();
@@ -118,6 +122,19 @@ export async function POST(req: NextRequest) {
             resultUrl = `data:${workerBlob.type || validation.format};base64,${workerBase64}`;
           }
 
+          if (sessionUser) {
+            ActivityTracker.recordActivity({
+              userId: sessionUser.id,
+              username: sessionUser.username,
+              displayName: sessionUser.displayName,
+              role: sessionUser.role,
+              module: "03_hd_upscale",
+              action: "upscale_image",
+              title: imageFile?.name || "Image Upscale",
+              details: { scale, engine: "remote_worker" },
+            }).catch(() => {});
+          }
+
           return NextResponse.json<ImageUpscaleApiResponse>(
             {
               success: true,
@@ -137,6 +154,19 @@ export async function POST(req: NextRequest) {
     // Default Hybrid Response: return metadata & instruct client Web Worker engine execution
     const base64 = buffer.toString("base64");
     const dataUri = `data:${validation.format};base64,${base64}`;
+
+    if (sessionUser) {
+      ActivityTracker.recordActivity({
+        userId: sessionUser.id,
+        username: sessionUser.username,
+        displayName: sessionUser.displayName,
+        role: sessionUser.role,
+        module: "03_hd_upscale",
+        action: "upscale_image",
+        title: imageFile?.name || "Image Upscale",
+        details: { scale, engine: "web_worker_hybrid" },
+      }).catch(() => {});
+    }
 
     return NextResponse.json<ImageUpscaleApiResponse>(
       {

@@ -96,6 +96,60 @@ interface AuditEvent {
 
 type ProfileTab = "profile" | "password" | "security" | "activity" | "users" | "drive" | "settings" | "audit";
 
+function formatModuleDisplayName(module: string): { label: string; page: string } {
+  switch (module) {
+    case "01_math_ocr":
+      return { label: "Module 01: Math OCR", page: "/plp-math-content" };
+    case "02_canvas_cutout":
+      return { label: "Module 02: Canvas Cutout", page: "/bg-remover" };
+    case "03_hd_upscale":
+      return { label: "Module 03: 4x HD Upscaler", page: "/image-upscaler" };
+    case "04_math_solver":
+      return { label: "Module 04: Khmer Math Solver", page: "/math-solver" };
+    case "05_lesson_studio":
+      return { label: "Module 05: Lesson Studio", page: "/lesson-studio" };
+    case "image_generator":
+      return { label: "AI Image Generator", page: "/image-generator" };
+    case "drive_storage":
+    case "Module 01: Math OCR":
+    case "Module 02: Background Remover":
+    case "Module 03: Image Upscaler":
+    case "Module 04: Khmer Math Solver":
+      return { label: "Google Drive Storage", page: "/math-upload" };
+    case "profile":
+      return { label: "Profile Hub", page: "/profile" };
+    default:
+      return { label: module.replace(/^0\d_/, ""), page: "/" };
+  }
+}
+
+function formatActionDisplayName(action: string): string {
+  switch (action) {
+    case "transcribe_ocr":
+      return "Upload & អានរូបមន្ត";
+    case "remove_background":
+      return "កាត់ត / លុបផ្ទៃខាងក្រោយ";
+    case "upscale_image":
+      return "ពង្រីកកម្រិតភាពច្បាស់ 4x HD";
+    case "solve_problem":
+    case "solve":
+      return "ដោះស្រាយលំហាត់គណិតវិទ្យា";
+    case "generate_lesson":
+    case "visual_svg":
+    case "quiz_generator":
+    case "html_styler":
+      return "ផលិតសន្លឹកកិច្ចការ / មេរៀន";
+    case "generate_image":
+      return "បង្កើតរូបភាព AI";
+    case "upload_drive":
+      return "Upload ទៅ Google Drive";
+    case "update_profile":
+      return "កែប្រែព័ត៌មាន Profile";
+    default:
+      return action;
+  }
+}
+
 function ProfileHubInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -1415,26 +1469,68 @@ function ProfileHubInner() {
                 ) : drillDownLogs.length === 0 ? (
                   <p className="text-xs text-slate-500 py-4 text-center font-mono">គ្មានប្រវត្តិលម្អិតឡើយ</p>
                 ) : (
-                  <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                    {drillDownLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className="p-3 rounded-xl border border-slate-800/80 bg-slate-950/70 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                      >
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 text-[10px] font-semibold border border-cyan-500/30">
-                              {log.module}
-                            </span>
-                            <span className="font-semibold text-slate-200">{log.action}</span>
+                  <div className="space-y-2.5 max-h-[30rem] overflow-y-auto pr-1">
+                    {drillDownLogs.map((log) => {
+                      const mod = formatModuleDisplayName(log.module);
+                      const actionLabel = formatActionDisplayName(log.action);
+                      return (
+                        <div
+                          key={log.id}
+                          className="p-3.5 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-cyan-500/30 transition-all text-xs space-y-2"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {/* សកម្មភាព (Action) */}
+                              <span className="font-semibold px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 text-[11px] border border-cyan-500/30">
+                                {actionLabel}
+                              </span>
+                              {/* ទំព័រ/ម៉ូឌុល (Module / Page) */}
+                              <a
+                                href={mod.page}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono px-2 py-0.5 rounded-md bg-slate-800/90 text-slate-300 text-[10px] hover:text-white hover:bg-slate-700 transition flex items-center gap-1 border border-slate-700"
+                                title="ទៅកាន់ទំព័រការងារនេះ"
+                              >
+                                <span>{mod.label}</span>
+                                <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                              </a>
+                            </div>
+
+                            {/* ម៉ោង និងកាលបរិច្ឆេទ (Timestamp) */}
+                            <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 shrink-0">
+                              <Clock className="h-3 w-3 text-slate-500" />
+                              <span>{new Date(log.timestamp).toLocaleString("km-KH", { dateStyle: "short", timeStyle: "medium" })}</span>
+                            </div>
                           </div>
-                          <p className="text-slate-300 font-sans text-xs">{log.title}</p>
+
+                          {/* ឈ្មោះឯកសារ / កិច្ចការ (File Name / Work Title) */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-0.5">
+                            <div className="flex items-center gap-2 text-slate-200">
+                              <FileText className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                              <span className="font-medium text-xs break-all">{log.title}</span>
+                            </div>
+
+                            {/* Technical Details Badges (if any) */}
+                            {log.details && Object.keys(log.details).length > 0 && (
+                              <div className="flex flex-wrap gap-1 shrink-0">
+                                {Object.entries(log.details)
+                                  .filter(([_, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+                                  .slice(0, 3)
+                                  .map(([k, v]) => (
+                                    <span
+                                      key={k}
+                                      className="px-1.5 py-0.5 rounded bg-slate-900 text-[10px] font-mono text-slate-400 border border-slate-800"
+                                    >
+                                      {k}: <b className="text-slate-300">{String(v)}</b>
+                                    </span>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-[11px] font-mono text-slate-400 shrink-0">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

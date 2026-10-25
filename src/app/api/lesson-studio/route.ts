@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 import { getSessionUser } from "@/lib/auth-session";
+import { ActivityTracker } from "@/lib/activity-tracker";
 import {
   PersistentCacheStore,
   buildDeterministicCacheKey,
@@ -145,6 +146,19 @@ export async function POST(req: NextRequest) {
           durationMs: Date.now() - startTime,
         })
       );
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "05_lesson_studio",
+          action: mode || "generate_lesson",
+          title: promptText?.slice(0, 80) || "Lesson Studio Task (Cached)",
+          details: { gradeLevel, mode, cached: true },
+        }).catch(() => {});
+      }
+
       return NextResponse.json<LessonStudioResponse>(
         {
           ...cached.outputFields,
@@ -429,6 +443,19 @@ Output JSON format:
     finalResponse.cacheKey = cacheKey;
     finalResponse.driveFileIds = uploadResult.driveFileIds;
     finalResponse.driveLinks = uploadResult.driveLinks;
+
+    if (sessionUser) {
+      ActivityTracker.recordActivity({
+        userId: sessionUser.id,
+        username: sessionUser.username,
+        displayName: sessionUser.displayName,
+        role: sessionUser.role,
+        module: "05_lesson_studio",
+        action: mode || "generate_lesson",
+        title: promptText?.slice(0, 80) || "Lesson Studio Task",
+        details: { gradeLevel, mode, model: chosenModel },
+      }).catch(() => {});
+    }
 
     return NextResponse.json<LessonStudioResponse>(finalResponse, { status: 200 });
   } catch (error: unknown) {

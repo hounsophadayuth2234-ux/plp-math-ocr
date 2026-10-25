@@ -50,11 +50,17 @@ export function GoogleDriveOAuthSettings() {
   const [history, setHistory] = useState<DriveHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+  const [isForbidden, setIsForbidden] = useState<boolean>(false);
 
   const fetchStatus = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch("/api/auth/google-drive/status", { cache: "no-store" });
+      if (res.status === 401 || res.status === 403) {
+        setIsForbidden(true);
+        setStatus(null);
+        return;
+      }
       const data: DriveStatusResponse = await res.json();
       setStatus(data);
     } catch (err: unknown) {
@@ -154,6 +160,10 @@ export function GoogleDriveOAuthSettings() {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
+
+  if (isForbidden) {
+    return null;
+  }
 
   return (
     <div className="mb-8 rounded-2xl border border-slate-700/60 bg-slate-900/90 p-6 backdrop-blur-xl shadow-2xl text-slate-100">
@@ -299,15 +309,18 @@ export function GoogleDriveOAuthSettings() {
               )}
             </div>
 
-            <div className="font-mono text-xs text-slate-300 truncate">
-              ID: {status.folderId || "1dS_Ul_WnVCCbJAKsn6CAT0vy9AB8Yx8f"}
+            <div className="flex items-center justify-between text-xs text-slate-300">
+              <span className="text-slate-400">ស្ថានភាព Folder៖</span>
+              <span className="font-medium text-cyan-300">
+                {status.folderAccessible ? "រួចរាល់សម្រាប់រក្សាទុក (Ready)" : "រង់ចាំការផ្ទៀងផ្ទាត់"}
+              </span>
             </div>
 
             {!status.folderAccessible && (
               <div className="mt-2 text-[11px] text-amber-300 bg-amber-950/50 p-2.5 rounded-lg border border-amber-500/30 space-y-2">
                 <div>
                   {status.folderError ||
-                    "Folder DYT_Math_Images ត្រូវបានបង្កើតមុនកម្មវិធី។ សូមចុចប៊ូតុងខាងក្រោមដើម្បីភ្ជាប់ឡើងវិញជាមួយសិទ្ធិ Drive ពេញលេញ។"}
+                    "Folder DYT_Math_Images ត្រូវការផ្ទៀងផ្ទាត់សិទ្ធិឡើងវិញជាមួយ Google Drive Scope ពេញលេញ។"}
                 </div>
                 <button
                   type="button"
@@ -325,15 +338,20 @@ export function GoogleDriveOAuthSettings() {
 
       {/* Info Box if disconnected */}
       {!status?.connected && !loading && (
-        <div className="mt-4 rounded-xl border border-blue-500/20 bg-blue-950/20 p-4 text-xs text-blue-200">
-          <p className="font-semibold text-blue-300 mb-1">
-            ហេតុអ្វីត្រូវភ្ជាប់គណនី Google Drive ផ្ទាល់ខ្លួន?
-          </p>
-          <p className="text-slate-300 leading-relaxed">
-            គណនីសេវាកម្ម Service Account គ្មានទំហំផ្ទុក (0 Storage Quota) សម្រាប់ Drive ផ្ទាល់ខ្លួនឡើយ។
-            ការភ្ជាប់តាមរយៈ Google OAuth 2.0 អនុញ្ញាតឱ្យឯកសាររូបភាពដែល Upload ត្រូវបានរក្សាទុកដោយផ្ទាល់ក្នុង Folder{" "}
-            <span className="font-mono text-cyan-300">DYT_Math_Images</span> ដោយប្រើទំហំផ្ទុក Google Drive ផ្ទាល់ខ្លួនរបស់អ្នក។
-          </p>
+        <div className="mt-4 rounded-xl border border-sky-500/20 bg-sky-950/20 p-3.5 text-xs text-sky-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <p className="font-semibold text-sky-300">Google Drive Personal Storage</p>
+            <p className="text-slate-300 text-[11px]">
+              ភ្ជាប់ Google OAuth 2.0 ដើម្បីរក្សាទុកឯកសារស្វ័យប្រវត្តិក្នង Folder DYT_Math_Images នៃ Drive ផ្ទាល់ខ្លួន។
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleConnect}
+            className="shrink-0 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs transition-colors"
+          >
+            ភ្ជាប់ឥឡូវនេះ
+          </button>
         </div>
       )}
 
