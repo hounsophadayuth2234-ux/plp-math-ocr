@@ -39,8 +39,7 @@ export function isValidRedisToken(candidate?: string | null): boolean {
   if (
     trimmed.startsWith("{") ||
     trimmed.startsWith("[") ||
-    trimmed.startsWith("\"") ||
-    trimmed.startsWith("ey")
+    trimmed.startsWith("\"")
   ) {
     return false;
   }

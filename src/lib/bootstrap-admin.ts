@@ -58,7 +58,10 @@ export async function bootstrapFirstAdmin(): Promise<UserRecord | null> {
     }
 
     if (!adminPasswordHash && process.env.APP_GATE_PASSWORD_HASH?.trim()) {
-      adminPasswordHash = process.env.APP_GATE_PASSWORD_HASH.trim();
+      const candidateHash = process.env.APP_GATE_PASSWORD_HASH.trim();
+      if (candidateHash.startsWith("$2")) {
+        adminPasswordHash = candidateHash;
+      }
     }
 
     if (!adminPasswordHash) {
