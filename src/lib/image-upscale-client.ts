@@ -180,6 +180,13 @@ export async function upscaleImageStudio(
     const outW = headerOutW || procW * factor;
     const outH = headerOutH || procH * factor;
 
+    const modelUsedHeader = res.headers.get("X-Model-Used") || "Real-ESRGAN (4x · Compact SRVGGNet)";
+    const processingSourceHeader = res.headers.get("X-Processing-Source") || "Local ONNX Neural Engine";
+    const isAlgorithmic =
+      processingSourceHeader.toLowerCase().includes("algorithmic") ||
+      modelUsedHeader.toLowerCase().includes("algorithmic") ||
+      modelUsedHeader.toLowerCase().includes("sharp");
+
     const contentType = res.headers.get("content-type") || "";
     let blob: Blob;
 
@@ -215,7 +222,7 @@ export async function upscaleImageStudio(
       percent: 100,
     });
 
-    diagnostics.actualEngine = "Real AI model";
+    diagnostics.actualEngine = isAlgorithmic ? "Browser resize/sharpen" : "Real AI model";
 
     return {
       outputUrl,
@@ -226,21 +233,23 @@ export async function upscaleImageStudio(
       outputHeight: outH,
       scale: (factor as UpscaleScale) || 4,
       requestedScale: 4,
-      isFallback: wasDownscaled,
-      fallbackReason: wasDownscaled
+      isFallback: isAlgorithmic || wasDownscaled,
+      fallbackReason: isAlgorithmic
+        ? "HD Resize & Sharpen — Algorithmic Fallback (ONNX neural inference unavailable)"
+        : wasDownscaled
         ? `រូបដើមធំជាង 1200px ត្រូវបានសម្រួលទំហំសុវត្ថិភាព CPU មុនពេលដំណើរការ Real-ESRGAN (Input capped at 1200px for CPU safety)`
         : undefined,
       diagnostics,
       elapsedMs,
-      label: "Local worker result",
-      model: "Real-ESRGAN (4x · Compact SRVGGNet)",
-      engine: "Real AI model",
+      label: isAlgorithmic ? "HD Resize & Sharpen" : "Local worker result",
+      // Truthful metadata: model: "Real-ESRGAN (4x · Compact SRVGGNet)"
+      model: isAlgorithmic ? "HD Resize & Sharpen — Algorithmic Fallback" : modelUsedHeader,
+      engine: isAlgorithmic ? "Browser resize/sharpen" : "Real AI model",
       jobId: options.jobId,
     };
   }
 
-  // Graceful on-device HD Resize & Sharpen engine (via Web Worker)
-  // Executes pure TypedArray Lanczos-3, Kuwahara, Curvature Flow, and Khmer text protection
+  // Graceful on-device HD Resize & Sharpen / ONNX engine (via Web Worker)
   const reqScale = options.scale || 2;
   const canvas = document.createElement("canvas");
   canvas.width = srcW;
@@ -253,14 +262,29 @@ export async function upscaleImageStudio(
   if (typeof bitmap.close === "function") bitmap.close();
   const srcImgData = ctx.getImageData(0, 0, srcW, srcH);
 
-  let workerRes: { data: Uint8ClampedArray; width: number; height: number; diagnostics: ImageDiagnostics };
+  let workerRes: {
+    data: Uint8ClampedArray;
+    width: number;
+    height: number;
+    diagnostics: ImageDiagnostics;
+    backend?: string;
+    model?: string;
+    isNeuralAi?: boolean;
+  };
+
   try {
     const { hdEnhancerWorkerManager } = await import("./hd-enhancer-manager");
     workerRes = await hdEnhancerWorkerManager.runInWorker(srcImgData, options);
   } catch (workerErr) {
     if (options.signal?.aborted) throw workerErr;
     const { runImageUpscalePipeline } = await import("./image-upscale-engine");
-    workerRes = await runImageUpscalePipeline(srcImgData, options);
+    const algRes = await runImageUpscalePipeline(srcImgData, options);
+    workerRes = {
+      ...algRes,
+      backend: "CPU / Algorithmic Fallback",
+      model: "HD Resize & Sharpen — Algorithmic Fallback",
+      isNeuralAi: false,
+    };
   }
 
   const outCanvas = document.createElement("canvas");
@@ -288,6 +312,8 @@ export async function upscaleImageStudio(
     percent: 100,
   });
 
+  const isNeural = Boolean(workerRes.isNeuralAi);
+
   return {
     outputUrl,
     blob: outBlob,
@@ -299,9 +325,9 @@ export async function upscaleImageStudio(
     requestedScale: reqScale,
     diagnostics: workerRes.diagnostics || diagnostics,
     elapsedMs,
-    label: "Browser AI result",
-    model: `HD Resize & Sharpen (${reqScale}x)`,
-    engine: "Browser resize/sharpen",
+    label: isNeural ? "Browser AI result" : "HD Resize & Sharpen",
+    model: workerRes.model || (isNeural ? `Real-ESRGAN (${reqScale}x · ONNX)` : "HD Resize & Sharpen — Algorithmic Fallback"),
+    engine: isNeural ? "Real AI model" : "Browser resize/sharpen",
     jobId: options.jobId,
   };
 }

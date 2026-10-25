@@ -221,18 +221,15 @@ export async function run4xKhmerOcrBenchmark(options?: {
   }
 
   const imageBuffer = fs.readFileSync(fixturePath);
-  const inputWidth = 640;
-  const inputHeight = 480;
+  const sharp = (await import("sharp")).default;
+  const { data: rawRgbaData, info } = await sharp(imageBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
 
-  // Create input RGBA buffer from fixture
-  const rawRgba = new Uint8ClampedArray(inputWidth * inputHeight * 4);
-  // Fill background white
-  for (let i = 0; i < inputWidth * inputHeight; i++) {
-    rawRgba[i * 4] = 255;
-    rawRgba[i * 4 + 1] = 255;
-    rawRgba[i * 4 + 2] = 255;
-    rawRgba[i * 4 + 3] = 255;
-  }
+  const inputWidth = info.width;
+  const inputHeight = info.height;
+  const rawRgba = new Uint8ClampedArray(rawRgbaData);
 
   // 1. Benchmark 4x Super-Resolution Engine: 1 Cold Run + 3 Warm Runs
   const timingSamples: number[] = [];
@@ -288,6 +285,17 @@ export async function run4xKhmerOcrBenchmark(options?: {
     height: lastUpscaled.height,
   };
 
+  // Convert the ACTUAL upscaled image to PNG buffer for truthful OCR verification
+  const upscaledPngBuffer = await sharp(Buffer.from(lastUpscaled.data), {
+    raw: {
+      width: outputDimensions.width,
+      height: outputDimensions.height,
+      channels: 4,
+    },
+  })
+    .png()
+    .toBuffer();
+
   // Verify exact 4x scaling (640x480 -> 2560x1920)
   const dimensionsExact =
     outputDimensions.width === 2560 && outputDimensions.height === 1920;
@@ -320,7 +328,7 @@ export async function run4xKhmerOcrBenchmark(options?: {
     };
   }
 
-  // Live OCR recognition via Gemini
+  // Live OCR recognition via Gemini on the ACTUAL upscaled 4x image
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
@@ -331,7 +339,7 @@ export async function run4xKhmerOcrBenchmark(options?: {
       },
     });
 
-    const base64Data = imageBuffer.toString("base64");
+    const base64Data = upscaledPngBuffer.toString("base64");
     const ocrResponse = await model.generateContent([
       {
         text: `You are an expert bilingual Khmer-English OCR engine.

@@ -855,7 +855,11 @@ export default function ImageUpscalerPage() {
                           {result.label}
                         </span>
                         <span>·</span>
-                        <span>{result.model}</span>
+                        <span className="font-semibold text-cyan-300">{result.model}</span>
+                        <span>·</span>
+                        <span className="rounded bg-cyan-950/70 px-2 py-0.5 text-cyan-200 border border-cyan-500/30 text-[10px] font-bold">
+                          {result.engine === "Real AI model" ? "⚡ ONNX Neural Engine (WebGPU/WASM/Node)" : "CPU Algorithmic Fallback"}
+                        </span>
                         <span>·</span>
                         <span className="text-cyan-400 font-bold">{result.elapsedMs} ms</span>
                       </div>

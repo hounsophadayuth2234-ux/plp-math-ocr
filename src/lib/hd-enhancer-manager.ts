@@ -36,7 +36,15 @@ class HdEnhancerWorkerManager {
   public async runInWorker(
     imageData: ImageData,
     options: UpscaleOptions
-  ): Promise<{ data: Uint8ClampedArray; width: number; height: number; diagnostics: ImageDiagnostics }> {
+  ): Promise<{
+    data: Uint8ClampedArray;
+    width: number;
+    height: number;
+    diagnostics: ImageDiagnostics;
+    backend?: string;
+    model?: string;
+    isNeuralAi?: boolean;
+  }> {
     const worker = this.getWorker();
     const jobId = options.jobId || `hd_${Date.now()}`;
     this.activeJobId = jobId;
@@ -91,6 +99,9 @@ class HdEnhancerWorkerManager {
             width: msg.width,
             height: msg.height,
             diagnostics: msg.diagnostics,
+            backend: msg.backend,
+            model: msg.model,
+            isNeuralAi: msg.isNeuralAi,
           });
         } else if (msg.type === "ERROR") {
           cleanup();

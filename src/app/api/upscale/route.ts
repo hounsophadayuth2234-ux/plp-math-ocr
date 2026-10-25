@@ -366,80 +366,133 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Local High-Precision Upscaler (Lanczos-3 + Adaptive USM Sharpening via sharp)
-    // Runs 100% on-device for free, ensuring authentic 4x resolution expansion and crisp formulas
-    const sharp = (await import("sharp")).default;
-    const meta = await sharp(Buffer.from(bytes)).metadata();
-    const srcW = meta.width || 512;
-    const srcH = meta.height || 512;
-    const targetW = srcW * scale;
-    const targetH = srcH * scale;
+    // 5. Local Neural AI Super-Resolution (Real-ESRGAN Compact ONNX with Tiled Inference)
+    // Runs genuine on-device deep learning super-resolution with zero GPU cost
+    try {
+      const { runServerOnnxSuperResolution } = await import("@/lib/server-onnx-upscaler");
+      const onnxResult = await runServerOnnxSuperResolution(Buffer.from(bytes), scale as 2 | 4);
 
-    let pipeline = sharp(Buffer.from(bytes)).resize(targetW, targetH, {
-      kernel: "lanczos3",
-      fit: "fill",
-    });
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "03_hd_upscale",
+          action: "upscale_image",
+          title: imageFile?.name || "Image Upscale",
+          details: { scale, provider: "local_onnx_realesrgan", backend: onnxResult.backend },
+        }).catch(() => {});
+      }
 
-    // Adaptive Unsharp Masking filter to crispen math formulas and text strokes
-    pipeline = pipeline.sharpen({
-      sigma: 1.5,
-      m1: 1.2,
-      m2: 2.0,
-    });
+      const wantsRawImage =
+        req.headers.get("accept")?.includes("image/") ||
+        req.headers.get("x-raw-response") === "true";
 
-    // Subtle clarity modulation
-    pipeline = pipeline.modulate({
-      brightness: 1.01,
-      saturation: 1.02,
-    });
+      if (wantsRawImage) {
+        return new NextResponse(new Uint8Array(onnxResult.outputBuffer), {
+          status: 200,
+          headers: {
+            "Content-Type": "image/png",
+            "Cache-Control": "no-store",
+            "X-Model-Used": onnxResult.model,
+            "X-Upscale-Factor": String(scale),
+            "X-Processed-Width": String(onnxResult.srcWidth),
+            "X-Processed-Height": String(onnxResult.srcHeight),
+            "X-Output-Width": String(onnxResult.outputWidth),
+            "X-Output-Height": String(onnxResult.outputHeight),
+            "X-Was-Downscaled": "false",
+            "X-Processing-Source": "Local Engine",
+          },
+        });
+      }
 
-    const outputBuffer = await pipeline.png({ quality: 100, compressionLevel: 6 }).toBuffer();
-
-    if (sessionUser) {
-      ActivityTracker.recordActivity({
-        userId: sessionUser.id,
-        username: sessionUser.username,
-        displayName: sessionUser.displayName,
-        role: sessionUser.role,
-        module: "03_hd_upscale",
-        action: "upscale_image",
-        title: imageFile?.name || "Image Upscale",
-        details: { scale, provider: "local_sharp_lanczos3" },
-      }).catch(() => {});
-    }
-
-    const wantsRawImage =
-      req.headers.get("accept")?.includes("image/") ||
-      req.headers.get("x-raw-response") === "true";
-
-    if (wantsRawImage) {
-      return new NextResponse(new Uint8Array(outputBuffer), {
-        status: 200,
-        headers: {
-          "Content-Type": "image/png",
-          "Cache-Control": "no-store",
-          "X-Model-Used": "Real-ESRGAN (4x · Compact SRVGGNet)",
-          "X-Upscale-Factor": String(scale),
-          "X-Processed-Width": String(srcW),
-          "X-Processed-Height": String(srcH),
-          "X-Output-Width": String(targetW),
-          "X-Output-Height": String(targetH),
-          "X-Was-Downscaled": "false",
-          "X-Processing-Source": "Local Engine",
+      const resultDataUri = `data:image/png;base64,${onnxResult.outputBuffer.toString("base64")}`;
+      return NextResponse.json<UpscaleSuccess>(
+        {
+          outputUrl: resultDataUri,
+          model: onnxResult.model,
+          scale,
+          label: "Local worker result",
         },
-      });
-    }
+        { status: 200 }
+      );
+    } catch (onnxErr) {
+      console.warn("[/api/upscale] Local ONNX neural inference unavailable, engaging honest Algorithmic Fallback:", onnxErr);
 
-    const resultDataUri = `data:image/png;base64,${outputBuffer.toString("base64")}`;
-    return NextResponse.json<UpscaleSuccess>(
-      {
-        outputUrl: resultDataUri,
-        model: "Real-ESRGAN (4x · Compact SRVGGNet)",
-        scale,
-        label: "HD Resize & Sharpen",
-      },
-      { status: 200 }
-    );
+      // 6. Emergency Algorithmic Fallback (Sharp Lanczos-3)
+      // HONEST LABELING: Never labeled as Real-ESRGAN
+      const sharp = (await import("sharp")).default;
+      const meta = await sharp(Buffer.from(bytes)).metadata();
+      const srcW = meta.width || 512;
+      const srcH = meta.height || 512;
+      const targetW = srcW * scale;
+      const targetH = srcH * scale;
+
+      let pipeline = sharp(Buffer.from(bytes)).resize(targetW, targetH, {
+        kernel: "lanczos3",
+        fit: "fill",
+      });
+
+      pipeline = pipeline.sharpen({
+        sigma: 1.5,
+        m1: 1.2,
+        m2: 2.0,
+      });
+
+      pipeline = pipeline.modulate({
+        brightness: 1.01,
+        saturation: 1.02,
+      });
+
+      const outputBuffer = await pipeline.png({ quality: 100, compressionLevel: 6 }).toBuffer();
+
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "03_hd_upscale",
+          action: "upscale_image",
+          title: imageFile?.name || "Image Upscale",
+          details: { scale, provider: "local_sharp_algorithmic_fallback" },
+        }).catch(() => {});
+      }
+
+      const wantsRawImage =
+        req.headers.get("accept")?.includes("image/") ||
+        req.headers.get("x-raw-response") === "true";
+
+      if (wantsRawImage) {
+        return new NextResponse(new Uint8Array(outputBuffer), {
+          status: 200,
+          headers: {
+            "Content-Type": "image/png",
+            "Cache-Control": "no-store",
+            "X-Model-Used": "HD Resize & Sharpen — Algorithmic Fallback",
+            "X-Upscale-Factor": String(scale),
+            "X-Processed-Width": String(srcW),
+            "X-Processed-Height": String(srcH),
+            "X-Output-Width": String(targetW),
+            "X-Output-Height": String(targetH),
+            "X-Was-Downscaled": "false",
+            "X-Processing-Source": "Sharp Algorithmic Fallback",
+          },
+        });
+      }
+
+      const resultDataUri = `data:image/png;base64,${outputBuffer.toString("base64")}`;
+      return NextResponse.json<UpscaleSuccess>(
+        {
+          outputUrl: resultDataUri,
+          model: "HD Resize & Sharpen — Algorithmic Fallback",
+          scale,
+          label: "HD Resize & Sharpen",
+        },
+        { status: 200 }
+      );
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unexpected error.";
     console.error("[/api/upscale]", err);
