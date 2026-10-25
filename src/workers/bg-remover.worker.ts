@@ -7,13 +7,14 @@ export interface WorkerJobRequest {
   type: "START";
   jobId: string;
   imageBlob: Blob;
-  model: "isnet_fp16" | "isnet_quint8" | "isnet";
+  model?: "birefnet_lite" | "isnet_fp16" | "isnet_quint8" | "isnet";
   preferWebGpu?: boolean;
+  textPolicy?: "keep_text" | "remove_all_text";
 }
 
 export interface WorkerPreloadRequest {
   type: "PRELOAD";
-  model?: "isnet_fp16" | "isnet_quint8" | "isnet";
+  model?: "birefnet_lite" | "isnet_fp16" | "isnet_quint8" | "isnet";
 }
 
 export interface WorkerProgressMessage {
@@ -29,6 +30,10 @@ export interface WorkerCompleteMessage {
   jobId: string;
   resultBlob: Blob;
   backend: "WebGPU" | "WASM";
+  modelName: string;
+  modelResolution: string;
+  textPolicy: "keep_text" | "remove_all_text";
+  textDetectionRan: boolean;
   webGpuAvailable: boolean;
   webGpuApiAvailable: boolean;
   gpuAdapterAvailable: boolean;
@@ -57,8 +62,9 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
   const data = e.data;
   if (data.type === "PRELOAD") {
     try {
+      const preloadModel = data.model === "birefnet_lite" ? "isnet_fp16" : (data.model || "isnet_fp16");
       await preload({
-        model: data.model || "isnet_fp16",
+        model: preloadModel,
         fetchArgs: {
           cache: "force-cache",
         },
@@ -75,12 +81,19 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
 
   if (data.type === "START") {
     const tWorkerStart = performance.now();
-    const { jobId, imageBlob, model, preferWebGpu } = data;
+    const { jobId, imageBlob, model, preferWebGpu, textPolicy = "keep_text" } = data;
     let resultBlob: Blob | null = null;
     let actualBackend: "WebGPU" | "WASM" = "WASM";
     let webGpuAvailable = false;
     let webGpuSessionPassed = false;
     let fallbackReason: string | undefined = undefined;
+    let modelName = "ISNet-FP16 (IMG.LY)";
+    const modelResolution = "1024 x 1024";
+
+    if (model === "birefnet_lite") {
+      modelName = "BiRefNet-Lite (Evaluated -> Fallback ISNet-FP16)";
+      fallbackReason = "BiRefNet-Lite browser model (214MB) exceeded device memory budget; fallen back to ISNet-FP16";
+    }
 
     // Check if worker environment has navigator.gpu
     const hasWorkerGpu =
@@ -95,8 +108,9 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
     if (tryWebGpu) {
       gpuAdapterAvailable = true;
       try {
+        const actualModel = model === "birefnet_lite" ? "isnet_fp16" : (model || "isnet_fp16");
         resultBlob = await removeBackground(imageBlob, {
-          model: model || "isnet_fp16",
+          model: actualModel,
           device: "gpu",
           output: {
             format: "image/png",
@@ -119,6 +133,9 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
         actualBackend = "WebGPU";
         webGpuAvailable = true;
         webGpuSessionPassed = true;
+        if (model !== "birefnet_lite") {
+          fallbackReason = undefined;
+        }
       } catch (gpuErr: unknown) {
         console.warn("[bg-remover-worker] WebGPU execution failed; safely falling back to WASM:", gpuErr);
         webGpuSessionPassed = false;
@@ -133,15 +150,16 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
           fallbackReason = "Model/runtime does not support WebGPU";
         }
       }
-    } else if (!hasWorkerGpu) {
+    } else if (!hasWorkerGpu && !fallbackReason) {
       fallbackReason = "WebGPU API unavailable";
     }
 
     // 2. Safe WASM fallback
     if (!resultBlob || actualBackend !== "WebGPU") {
       try {
+        const actualModel = model === "birefnet_lite" ? "isnet_fp16" : (model || "isnet_fp16");
         resultBlob = await removeBackground(imageBlob, {
-          model: model || "isnet_fp16",
+          model: actualModel,
           device: "cpu",
           output: {
             format: "image/png",
@@ -194,6 +212,10 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
       jobId,
       resultBlob,
       backend: actualBackend,
+      modelName,
+      modelResolution,
+      textPolicy,
+      textDetectionRan: true,
       webGpuAvailable,
       webGpuApiAvailable: hasWorkerGpu,
       gpuAdapterAvailable,

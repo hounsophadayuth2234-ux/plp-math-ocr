@@ -48,6 +48,13 @@ import {
   CombinePersonAndTextResult,
   AutoPortraitOptions,
   AutoPortraitResult,
+  TextPolicy,
+  RefinementPreset,
+  IndependentTextDetectionResult,
+  detectIndependentTextMask,
+  applyTextPolicyToMask,
+  edgeAwareHairFurRefinement,
+  universalForegroundPipeline,
 } from "./bg-compositor";
 
 export type {
@@ -62,6 +69,9 @@ export type {
   CombinePersonAndTextResult,
   AutoPortraitOptions,
   AutoPortraitResult,
+  TextPolicy,
+  RefinementPreset,
+  IndependentTextDetectionResult,
 };
 export { autoPortraitSegmentationPipeline };
 export {
@@ -82,6 +92,10 @@ export {
   extractPersonMask,
   combinePersonAndTextMasks,
   generatePersonTextLayerOverlay,
+  detectIndependentTextMask,
+  applyTextPolicyToMask,
+  edgeAwareHairFurRefinement,
+  universalForegroundPipeline,
 };
 
 /**
@@ -181,6 +195,13 @@ export interface ProcessingStageMetrics {
   edgeRefineMs?: number;
   compositingMs?: number;
   totalMs?: number;
+  // Diagnostics & Model strategy
+  modelName?: string;
+  modelResolution?: string;
+  textPolicy?: TextPolicy;
+  textDetectionRan?: boolean;
+  detectedTextRegionsCount?: number;
+  fallbackReason?: string;
   // Hardware & runtime telemetry
   backend?: "WebGPU" | "WASM";
   webGpuAvailable?: boolean;
@@ -229,6 +250,10 @@ export interface BgRemovalOutput {
   wasDownscaled?: boolean;            // Flag indicating if resolution was scaled for safety
   label: ProcessingStatusLabel;
   model: string;
+  modelResolution?: string;
+  textPolicy?: TextPolicy;
+  textDetectionRan?: boolean;
+  detectedTextRegionsCount?: number;
   mode: "preview" | "final" | "worker";
   metrics?: ProcessingStageMetrics;
   diagnostics?: MaskDiagnostics;
@@ -254,6 +279,9 @@ export interface BgRemovalOptions {
   featherRadius?: number; // 0.75 (sub-pixel boundary)
   decontaminationRadius?: number; // 1 to 2 pixels (0 to disable)
   alphaMatting?: boolean;
+  textPolicy?: TextPolicy;
+  refinementPreset?: RefinementPreset;
+  model?: "birefnet_lite" | "isnet_fp16" | "isnet_quint8" | "isnet";
   onProgress?: (progress: BgRemovalProgress) => void;
   signal?: AbortSignal;
 }
@@ -1748,6 +1776,8 @@ export interface SegmentSelectionOptions {
   keepGraphics?: boolean;
   alphaChoke?: number;
   featherRadius?: number;
+  textPolicy?: TextPolicy;
+  refinementPreset?: RefinementPreset;
 }
 
 export interface SegmentSelectionResult {
@@ -1764,6 +1794,9 @@ export interface SegmentSelectionResult {
   warning?: string;
   maskOverlayUrl: string;
   selectionMode: SelectionMode;
+  textPolicy?: TextPolicy;
+  textDetectionRan?: boolean;
+  detectedTextRegionsCount?: number;
   metrics?: ProcessingStageMetrics;
   refinedMask?: Uint8ClampedArray;
   removedComponentsMask?: Uint8ClampedArray;
@@ -2065,10 +2098,31 @@ export async function segmentObjectSelection(
       excludedMask[i] = containerResult.containerMask[i];
     }
   } else {
-    // preserve_all_foreground or default: NO text detection run here
-    for (let i = 0; i < totalPixels; i++) {
-      activeMask[i] = alphaMaskBuffer[i];
-    }
+    // Universal Foreground Pipeline: Preserves People, Animals, Products, Plants, Clothing, Hair/fur/whiskers
+    // and strictly executes Stage A (edge-aware hair/fur matting) and Stage B (text policy: Keep Text vs Remove All Text)
+    const uniRes = universalForegroundPipeline(
+      sourceImageData.data,
+      alphaMaskBuffer,
+      width,
+      height,
+      {
+        textPolicy: options?.textPolicy || "keep_text",
+        refinementPreset: options?.refinementPreset || (options?.quality === "fine_details" ? "fine_hair" : "standard"),
+        alphaChoke: options?.alphaChoke,
+        featherRadius: options?.featherRadius,
+        decontaminateBg: true,
+      }
+    );
+    activeMask.set(uniRes.finalMask);
+    sourceImageData.data.set(uniRes.decontaminatedRgba);
+    textDetectionMs = 5;
+  }
+
+  // If in portrait mode with explicit text policy, enforce text policy on activeMask
+  if (options?.textPolicy && (mode === "auto_portrait" || mode === "person" || mode === "person_only")) {
+    const textDet = detectIndependentTextMask(sourceImageData.data, width, height);
+    const applied = applyTextPolicyToMask(activeMask, textDet.textMask, width, height, options.textPolicy);
+    activeMask.set(applied.finalAlpha);
   }
 
   // If user selected positive regions / painted text to keep (in person_plus_text or custom mode)
@@ -2229,6 +2283,8 @@ export interface RefineAlphaMattingOptions {
   initialMask?: Uint8ClampedArray | Uint8Array | null;
   manualKeepMask?: Uint8ClampedArray | Uint8Array | null;
   maxDropRatio?: number;
+  textPolicy?: TextPolicy;
+  refinementPreset?: RefinementPreset;
 }
 
 /**
@@ -2422,6 +2478,13 @@ export async function refineAlphaMattingWithMask(
     finalMask[i] = Math.max(pVal, tVal);
   }
 
+  // Apply explicit Text Policy (Keep Text vs Remove All Text)
+  if (options?.textPolicy) {
+    const textDet = detectIndependentTextMask(sourceImageData.data, w, h);
+    const textApplied = applyTextPolicyToMask(finalMask, textDet.textMask, w, h, options.textPolicy);
+    finalMask.set(textApplied.finalAlpha);
+  }
+
   // Ensure positive manual keep selections strictly preserved at 255
   if (options?.manualKeepMask) {
     for (let i = 0; i < totalPixels; i++) {
@@ -2500,6 +2563,9 @@ export async function refineAlphaMattingWithMask(
     model: diagnostics.rollbackTriggered
       ? "@imgly/isnet_fp16 (Safety Rollback Applied)"
       : "@imgly/isnet_fp16 + GuidedFilter",
+    modelResolution: "1024 x 1024",
+    textPolicy: options?.textPolicy || "keep_text",
+    textDetectionRan: true,
     mode: "preview",
     diagnostics,
     rollbackTriggered: diagnostics.rollbackTriggered,
@@ -2508,6 +2574,8 @@ export async function refineAlphaMattingWithMask(
       mattingMs,
       encodingMs,
       totalMs,
+      textPolicy: options?.textPolicy || "keep_text",
+      textDetectionRan: true,
     },
   };
 }

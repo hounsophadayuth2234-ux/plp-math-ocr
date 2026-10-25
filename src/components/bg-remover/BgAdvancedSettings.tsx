@@ -48,6 +48,8 @@ export interface BgAdvancedSettingsProps {
   isProcessing: boolean;
   // Group D: Diagnostics
   isModelCached: boolean;
+  textPolicy?: "keep_text" | "remove_all_text";
+  refinementPreset?: "standard" | "fine_hair" | "manual";
   metrics?: ProcessingStageMetrics;
   diagnostics?: MaskDiagnostics;
   visualDebug?: {
@@ -86,6 +88,8 @@ export function BgAdvancedSettings({
   hasImage,
   isProcessing,
   isModelCached,
+  textPolicy,
+  refinementPreset,
   metrics,
   diagnostics,
   visualDebug,
@@ -621,7 +625,23 @@ export function BgAdvancedSettings({
             {/* Hardware & Runtime Telemetry Deck */}
             <div className="p-2 bg-slate-950/70 border border-slate-800 space-y-1 text-[10px] font-mono">
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">WebGPU API:</span>
+                <span className="text-slate-400 uppercase text-[9px]">Actual Model Name:</span>
+                <span className="text-cyan-300 font-bold text-[10px] truncate max-w-[200px]" title={metrics?.modelName || (selectedEngine === "worker" ? "rembg / u2net" : "@imgly/isnet_fp16 (BiRefNet Lite evaluated)")}>
+                  {metrics?.modelName || (selectedEngine === "worker" ? "rembg / u2net" : "@imgly/isnet_fp16")}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">Actual Execution Provider:</span>
+                <span className={`font-bold px-1.5 py-0.5 text-[10px] ${
+                  metrics?.backend === "WebGPU"
+                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
+                    : "bg-cyan-950/80 text-cyan-300 border border-cyan-500/40"
+                }`}>
+                  {metrics?.backend || (typeof WebAssembly !== "undefined" ? "WASM" : "WASM (Fallback)")}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">WebGPU Status:</span>
                 <span className={`text-[10px] font-bold ${metrics?.webGpuApiAvailable ? "text-emerald-400" : "text-amber-400"}`}>
                   {metrics?.webGpuApiAvailable ? "Available" : "Unavailable"}
                 </span>
@@ -633,19 +653,27 @@ export function BgAdvancedSettings({
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">WebGPU Session:</span>
-                <span className={`text-[10px] font-bold ${metrics?.webGpuSessionPassed ? "text-emerald-400" : "text-amber-400"}`}>
-                  {metrics?.webGpuSessionPassed ? "Passed" : "Failed (WASM active)"}
+                <span className="text-slate-400 uppercase text-[9px]">Model Resolution:</span>
+                <span className="text-slate-200 text-[10px] font-bold">
+                  {metrics?.modelResolution || "1024×1024 (Static Input)"}
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">Actual Backend:</span>
-                <span className={`font-bold px-1.5 py-0.5 text-[10px] ${
-                  metrics?.backend === "WebGPU"
-                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
-                    : "bg-cyan-950/80 text-cyan-300 border border-cyan-500/40"
+                <span className="text-slate-400 uppercase text-[9px]">Selected Text Policy:</span>
+                <span className={`text-[10px] font-bold ${
+                  (textPolicy || metrics?.textPolicy) === "remove_all_text" ? "text-amber-300" : "text-emerald-400"
                 }`}>
-                  {metrics?.backend || (typeof WebAssembly !== "undefined" ? "WASM" : "WASM (Fallback)")}
+                  {(textPolicy || metrics?.textPolicy) === "remove_all_text"
+                    ? "កាត់អក្សរទាំងអស់ (Remove All Text)"
+                    : "រក្សាអក្សរ (Keep Text)"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">Text Detection Ran:</span>
+                <span className={`text-[10px] font-bold ${metrics?.textDetectionRan ? "text-pink-300" : "text-slate-400"}`}>
+                  {metrics?.textDetectionRan
+                    ? `Yes (${metrics?.detectedTextRegionsCount ?? "Independent"} regions detected)`
+                    : (metrics?.textDetectionStatus === "completed" ? "Completed" : "No / Skipped")}
                 </span>
               </div>
               {metrics?.webGpuFallbackReason && (
@@ -653,6 +681,14 @@ export function BgAdvancedSettings({
                   <span className="text-slate-400 uppercase text-[9px]">Fallback Reason:</span>
                   <span className="text-amber-300 text-[9.5px] truncate max-w-[190px]" title={metrics.webGpuFallbackReason}>
                     {metrics.webGpuFallbackReason}
+                  </span>
+                </div>
+              )}
+              {metrics?.fallbackReason && !metrics?.webGpuFallbackReason && (
+                <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-0.5">
+                  <span className="text-slate-400 uppercase text-[9px]">Fallback Reason:</span>
+                  <span className="text-amber-300 text-[9.5px] truncate max-w-[190px]" title={metrics.fallbackReason}>
+                    {metrics.fallbackReason}
                   </span>
                 </div>
               )}

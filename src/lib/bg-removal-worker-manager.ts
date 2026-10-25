@@ -12,6 +12,10 @@ export interface WorkerProgressEvent {
 export interface WorkerExecutionResult {
   resultBlob: Blob;
   backend: "WebGPU" | "WASM";
+  modelName: string;
+  modelResolution: string;
+  textPolicy: "keep_text" | "remove_all_text";
+  textDetectionRan: boolean;
   webGpuAvailable: boolean;
   webGpuApiAvailable: boolean;
   gpuAdapterAvailable: boolean;
@@ -94,10 +98,10 @@ class BgWorkerManager {
    */
   public async executeJob(
     imageBlob: Blob,
-    model: "isnet_fp16" | "isnet_quint8" | "isnet",
+    model: "birefnet_lite" | "isnet_fp16" | "isnet_quint8" | "isnet" = "isnet_fp16",
     onProgress?: (event: WorkerProgressEvent) => void,
     signal?: AbortSignal,
-    options?: { preferWebGpu?: boolean }
+    options?: { preferWebGpu?: boolean; textPolicy?: "keep_text" | "remove_all_text" }
   ): Promise<WorkerExecutionResult> {
     if (signal?.aborted) {
       const err = new Error("Aborted by user.");
@@ -186,6 +190,10 @@ class BgWorkerManager {
           resolve({
             resultBlob: data.resultBlob,
             backend: data.backend || "WASM",
+            modelName: data.modelName || "ISNet-FP16 (IMG.LY)",
+            modelResolution: data.modelResolution || "1024 x 1024",
+            textPolicy: data.textPolicy || "keep_text",
+            textDetectionRan: Boolean(data.textDetectionRan),
             webGpuAvailable: Boolean(data.webGpuAvailable),
             webGpuApiAvailable: Boolean(data.webGpuApiAvailable),
             gpuAdapterAvailable: Boolean(data.gpuAdapterAvailable),
@@ -220,6 +228,7 @@ class BgWorkerManager {
         imageBlob,
         model,
         preferWebGpu: options?.preferWebGpu !== false,
+        textPolicy: options?.textPolicy || "keep_text",
       });
     });
   }

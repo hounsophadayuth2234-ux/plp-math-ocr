@@ -3689,3 +3689,619 @@ export function cropRgbaToContent(
   };
 }
 
+// ============================================================================
+// STAGE A & STAGE B: TWO-STAGE VISION PIPELINE (HAIR/FUR & TEXT POLICY ENGINE)
+// ============================================================================
+
+export type TextPolicy = "keep_text" | "remove_all_text";
+export type RefinementPreset = "standard" | "fine_hair" | "manual";
+
+export interface IndependentTextDetectionResult {
+  textMask: Uint8ClampedArray;
+  characterCount: number;
+  hasText: boolean;
+  textBoundingBoxes: Array<{ minX: number; minY: number; maxX: number; maxY: number }>;
+  durationMs: number;
+}
+
+/**
+ * Stage B — Independent Text Detection on Original RGB Image.
+ * Detects text characters, words, numerals, diacritics, and symbols
+ * across Khmer and Latin scripts with stroke width and gradient analysis.
+ */
+export function detectIndependentTextMask(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number
+): IndependentTextDetectionResult {
+  const t0 = performance.now();
+  const totalPixels = width * height;
+  const textMask = new Uint8ClampedArray(totalPixels);
+
+  if (totalPixels <= 0) {
+    return {
+      textMask,
+      characterCount: 0,
+      hasText: false,
+      textBoundingBoxes: [],
+      durationMs: 0,
+    };
+  }
+
+  // 1. Compute luminance
+  const lum = new Float32Array(totalPixels);
+  for (let i = 0; i < totalPixels; i++) {
+    const p = i * 4;
+    lum[i] = 0.299 * sourceRgba[p] + 0.587 * sourceRgba[p + 1] + 0.114 * sourceRgba[p + 2];
+  }
+
+  // 2. Multi-direction gradient energy and high-frequency edge response
+  const candidateStrokes = new Uint8Array(totalPixels);
+  for (let y = 1; y < height - 1; y++) {
+    const yOff = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = yOff + x;
+      const l = lum[idx - 1];
+      const r = lum[idx + 1];
+      const u = lum[idx - width];
+      const d = lum[idx + width];
+
+      const gx = Math.abs(r - l);
+      const gy = Math.abs(d - u);
+      const grad = Math.max(gx, gy);
+
+      // Contrast against local average
+      const localAvg = (l + r + u + d) * 0.25;
+      const contrast = Math.abs(lum[idx] - localAvg);
+
+      if (grad >= 22 || (contrast >= 18 && grad >= 14)) {
+        candidateStrokes[idx] = 1;
+      }
+    }
+  }
+
+  // 3. Connected-component clustering to classify text characters & diacritics
+  const visited = new Uint8Array(totalPixels);
+  const queue = new Int32Array(totalPixels);
+  let characterCount = 0;
+  const textBoundingBoxes: Array<{ minX: number; minY: number; maxX: number; maxY: number }> = [];
+
+  for (let y = 1; y < height - 1; y++) {
+    const yOff = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const startIdx = yOff + x;
+      if (candidateStrokes[startIdx] === 0 || visited[startIdx] === 1) continue;
+
+      let qHead = 0;
+      let qTail = 0;
+      queue[qTail++] = startIdx;
+      visited[startIdx] = 1;
+
+      let minX = x;
+      let maxX = x;
+      let minY = y;
+      let maxY = y;
+      let count = 0;
+
+      while (qHead < qTail) {
+        const curr = queue[qHead++];
+        count++;
+
+        const cy = Math.floor(curr / width);
+        const cx = curr % width;
+
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+
+        // 4-neighborhood
+        if (cx > 0) {
+          const n = curr - 1;
+          if (candidateStrokes[n] === 1 && visited[n] === 0) {
+            visited[n] = 1;
+            queue[qTail++] = n;
+          }
+        }
+        if (cx < width - 1) {
+          const n = curr + 1;
+          if (candidateStrokes[n] === 1 && visited[n] === 0) {
+            visited[n] = 1;
+            queue[qTail++] = n;
+          }
+        }
+        if (cy > 0) {
+          const n = curr - width;
+          if (candidateStrokes[n] === 1 && visited[n] === 0) {
+            visited[n] = 1;
+            queue[qTail++] = n;
+          }
+        }
+        if (cy < height - 1) {
+          const n = curr + width;
+          if (candidateStrokes[n] === 1 && visited[n] === 0) {
+            visited[n] = 1;
+            queue[qTail++] = n;
+          }
+        }
+      }
+
+      const w = maxX - minX + 1;
+      const h = maxY - minY + 1;
+      const area = count;
+      const boundingArea = w * h;
+      const aspect = w / Math.max(1, h);
+
+      // Text glyph criteria:
+      // - Area between 4px (small diacritic/punctuation) and 5000px (large headline character)
+      // - Fill factor between 0.08 and 0.92 (text has interior holes and thin strokes)
+      // - Aspect ratio between 0.12 (vertical stroke like 'I') and 7.5 (ligature/subscript phrase)
+      const fillFactor = area / Math.max(1, boundingArea);
+      const isGlyph =
+        area >= 4 &&
+        area <= 5000 &&
+        w <= Math.round(width * 0.45) &&
+        h <= Math.round(height * 0.35) &&
+        fillFactor >= 0.08 &&
+        fillFactor <= 0.92 &&
+        aspect >= 0.12 &&
+        aspect <= 7.5;
+
+      if (isGlyph) {
+        characterCount++;
+        textBoundingBoxes.push({ minX, minY, maxX, maxY });
+
+        // Fill detected glyph into text mask with anti-aliasing preservation
+        for (let k = 0; k < qTail; k++) {
+          textMask[queue[k]] = 255;
+        }
+
+        // Subpixel anti-aliasing edge fill: 1px boundary expansion to prevent jagged edges
+        for (let k = 0; k < qTail; k++) {
+          const p = queue[k];
+          const px = p % width;
+          const py = Math.floor(p / width);
+          for (let dy = -1; dy <= 1; dy++) {
+            const ny = py + dy;
+            if (ny < 0 || ny >= height) continue;
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = px + dx;
+              if (nx < 0 || nx >= width) continue;
+              const nIdx = ny * width + nx;
+              if (textMask[nIdx] < 200) {
+                // Smooth anti-aliased edge
+                textMask[nIdx] = Math.max(textMask[nIdx], 220);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const durationMs = Math.round(performance.now() - t0);
+  return {
+    textMask,
+    characterCount,
+    hasText: characterCount > 0,
+    textBoundingBoxes,
+    durationMs,
+  };
+}
+
+/**
+ * Stage B — Apply Text Policy:
+ * “រក្សាអក្សរ” / “Keep Text” vs “កាត់អក្សរទាំងអស់” / “Remove All Text”
+ *
+ * Mathematical formula:
+ * finalAlpha = clamp(refinedForegroundAlpha + preservedTextAlpha - removedTextAlpha, 0, 255)
+ */
+export function applyTextPolicyToMask(
+  foregroundAlpha: Uint8ClampedArray | Uint8Array,
+  textMask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  policy: TextPolicy = "keep_text",
+  paddingRadius = 2
+): {
+  finalAlpha: Uint8ClampedArray;
+  preservedTextAlpha: Uint8ClampedArray;
+  removedTextAlpha: Uint8ClampedArray;
+  removedTextPixelCount: number;
+  preservedTextPixelCount: number;
+} {
+  const totalPixels = width * height;
+  const finalAlpha = new Uint8ClampedArray(totalPixels);
+  const preservedTextAlpha = new Uint8ClampedArray(totalPixels);
+  const removedTextAlpha = new Uint8ClampedArray(totalPixels);
+
+  let removedTextPixelCount = 0;
+  let preservedTextPixelCount = 0;
+
+  if (policy === "keep_text") {
+    // Controlled union: preserve text with anti-aliasing, even when touching subject
+    for (let i = 0; i < totalPixels; i++) {
+      const t = textMask[i];
+      preservedTextAlpha[i] = t;
+      if (t > 10) preservedTextPixelCount++;
+      const fg = foregroundAlpha[i];
+      finalAlpha[i] = Math.max(fg, t);
+    }
+  } else {
+    // "Remove All Text": dilate text by paddingRadius (2px) to eliminate text outline halos
+    // without deleting the whole foreground object
+    const r = Math.max(1, Math.min(4, Math.round(paddingRadius)));
+    const rSq = r * r;
+
+    for (let y = 0; y < height; y++) {
+      const yOff = y * width;
+      for (let x = 0; x < width; x++) {
+        const idx = yOff + x;
+        if (textMask[idx] > 20) {
+          // Dilate locally
+          const minY = Math.max(0, y - r);
+          const maxY = Math.min(height - 1, y + r);
+          const minX = Math.max(0, x - r);
+          const maxX = Math.min(width - 1, x + r);
+
+          for (let dy = minY; dy <= maxY; dy++) {
+            const dyOff = dy * width;
+            const yDist = dy - y;
+            for (let dx = minX; dx <= maxX; dx++) {
+              const xDist = dx - x;
+              if (xDist * xDist + yDist * yDist <= rSq) {
+                removedTextAlpha[dyOff + dx] = 255;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Subtract dilated text from foreground alpha
+    for (let i = 0; i < totalPixels; i++) {
+      const rem = removedTextAlpha[i];
+      if (rem > 0) removedTextPixelCount++;
+      const fg = foregroundAlpha[i];
+      // finalAlpha = clamp(fg + 0 - rem, 0, 255)
+      finalAlpha[i] = Math.max(0, fg - rem);
+    }
+  }
+
+  return {
+    finalAlpha,
+    preservedTextAlpha,
+    removedTextAlpha,
+    removedTextPixelCount,
+    preservedTextPixelCount,
+  };
+}
+
+/**
+ * Stage A — Hair, Fur, and Edge Refinement.
+ * Preserves soft continuous alpha at hair, fur, whiskers, thin branches,
+ * and semi-transparent edges using edge-aware guided filtering and local decontamination.
+ */
+export function edgeAwareHairFurRefinement(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  rawAlpha: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  options?: {
+    preset?: RefinementPreset;
+    alphaChoke?: number;
+    featherRadius?: number;
+    decontaminateBg?: boolean;
+  }
+): {
+  refinedAlpha: Uint8ClampedArray;
+  decontaminatedRgba: Uint8ClampedArray;
+  softAlphaPixelCount: number;
+} {
+  const totalPixels = width * height;
+  const is4Ch = rawAlpha.length === totalPixels * 4;
+  const getAlpha = (i: number) => (is4Ch ? rawAlpha[i * 4 + 3] : rawAlpha[i]);
+
+  const preset = options?.preset || "fine_hair";
+  const isFine = preset === "fine_hair";
+  const winR = isFine ? 5 : 3;
+
+  // 1. Identify core foreground, core background, and narrow edge band
+  const trimap = new Uint8Array(totalPixels);
+  const refinedAlpha = new Uint8ClampedArray(totalPixels);
+  const decontaminatedRgba = new Uint8ClampedArray(sourceRgba);
+
+  for (let y = 0; y < height; y++) {
+    const yOff = y * width;
+    for (let x = 0; x < width; x++) {
+      const idx = yOff + x;
+      const a = getAlpha(idx);
+
+      if (a >= 240) {
+        // Check if near background
+        let nearBg = false;
+        const checkR = isFine ? 4 : 2;
+        const minY = Math.max(0, y - checkR);
+        const maxY = Math.min(height - 1, y + checkR);
+        const minX = Math.max(0, x - checkR);
+        const maxX = Math.min(width - 1, x + checkR);
+
+        for (let ny = minY; ny <= maxY; ny++) {
+          const nYOff = ny * width;
+          for (let nx = minX; nx <= maxX; nx++) {
+            if (getAlpha(nYOff + nx) <= 10) {
+              nearBg = true;
+              break;
+            }
+          }
+          if (nearBg) break;
+        }
+
+        if (nearBg) {
+          trimap[idx] = 128; // Narrow edge band
+        } else {
+          trimap[idx] = 255; // Core solid foreground
+          refinedAlpha[idx] = 255;
+        }
+      } else if (a <= 15) {
+        // Check if near foreground
+        let nearFg = false;
+        const checkR = isFine ? 4 : 2;
+        const minY = Math.max(0, y - checkR);
+        const maxY = Math.min(height - 1, y + checkR);
+        const minX = Math.max(0, x - checkR);
+        const maxX = Math.min(width - 1, x + checkR);
+
+        for (let ny = minY; ny <= maxY; ny++) {
+          const nYOff = ny * width;
+          for (let nx = minX; nx <= maxX; nx++) {
+            if (getAlpha(nYOff + nx) >= 200) {
+              nearFg = true;
+              break;
+            }
+          }
+          if (nearFg) break;
+        }
+
+        if (nearFg) {
+          trimap[idx] = 128; // Narrow edge band
+        } else {
+          trimap[idx] = 0; // Definite background
+          refinedAlpha[idx] = 0;
+        }
+      } else {
+        // Transition alpha (hair, fur, whiskers, semi-transparent edges)
+        trimap[idx] = 128;
+      }
+    }
+  }
+
+  // 2. Luminance-guided edge refinement for transition band (trimap === 128)
+  const lum = new Float32Array(totalPixels);
+  for (let i = 0; i < totalPixels; i++) {
+    const p = i * 4;
+    lum[i] = 0.299 * sourceRgba[p] + 0.587 * sourceRgba[p + 1] + 0.114 * sourceRgba[p + 2];
+  }
+
+  let softAlphaPixelCount = 0;
+  const eps = 1e-4;
+
+  for (let y = 0; y < height; y++) {
+    const yOff = y * width;
+    const minY = Math.max(0, y - winR);
+    const maxY = Math.min(height - 1, y + winR);
+
+    for (let x = 0; x < width; x++) {
+      const idx = yOff + x;
+
+      if (trimap[idx] === 255) {
+        refinedAlpha[idx] = 255;
+        continue;
+      }
+      if (trimap[idx] === 0) {
+        refinedAlpha[idx] = 0;
+        continue;
+      }
+
+      // Transition band: compute local covariance between guide luminance and alpha
+      const minX = Math.max(0, x - winR);
+      const maxX = Math.min(width - 1, x + winR);
+
+      let sumI = 0;
+      let sumP = 0;
+      let sumII = 0;
+      let sumIP = 0;
+      let n = 0;
+
+      for (let ny = minY; ny <= maxY; ny++) {
+        const nYOff = ny * width;
+        for (let nx = minX; nx <= maxX; nx++) {
+          const nIdx = nYOff + nx;
+          const I = lum[nIdx];
+          const P = getAlpha(nIdx);
+          sumI += I;
+          sumP += P;
+          sumII += I * I;
+          sumIP += I * P;
+          n++;
+        }
+      }
+
+      if (n > 0) {
+        const meanI = sumI / n;
+        const meanP = sumP / n;
+        const varI = sumII / n - meanI * meanI;
+        const covIP = sumIP / n - meanI * meanP;
+
+        const a = covIP / (varI + eps);
+        const b = meanP - a * meanI;
+
+        const estAlpha = a * lum[idx] + b;
+        const origAlpha = getAlpha(idx);
+
+        // Blend estimated with original alpha to preserve soft hair/fur contours
+        const blended = Math.round(estAlpha * 0.65 + origAlpha * 0.35);
+        const clampedAlpha = Math.max(0, Math.min(255, blended));
+        refinedAlpha[idx] = clampedAlpha;
+
+        if (clampedAlpha > 10 && clampedAlpha < 240) {
+          softAlphaPixelCount++;
+        }
+      } else {
+        refinedAlpha[idx] = getAlpha(idx);
+      }
+    }
+  }
+
+  // 3. Decontamination / Anti-Halo Pass
+  // Removes old background color spill from boundary pixels (green screen, blue, pink, white spill)
+  if (options?.decontaminateBg !== false) {
+    for (let y = 0; y < height; y++) {
+      const yOff = y * width;
+      const minY = Math.max(0, y - 4);
+      const maxY = Math.min(height - 1, y + 4);
+
+      for (let x = 0; x < width; x++) {
+        const idx = yOff + x;
+        const a = refinedAlpha[idx];
+
+        // Apply only to boundary transition pixels
+        if (a <= 15 || a >= 245) continue;
+
+        const minX = Math.max(0, x - 4);
+        const maxX = Math.min(width - 1, x + 4);
+
+        let bgR = 0;
+        let bgG = 0;
+        let bgB = 0;
+        let bgCount = 0;
+
+        for (let ny = minY; ny <= maxY; ny++) {
+          const nYOff = ny * width;
+          for (let nx = minX; nx <= maxX; nx++) {
+            const nIdx = nYOff + nx;
+            if (refinedAlpha[nIdx] <= 10) {
+              const np = nIdx * 4;
+              bgR += sourceRgba[np];
+              bgG += sourceRgba[np + 1];
+              bgB += sourceRgba[np + 2];
+              bgCount++;
+            }
+          }
+        }
+
+        if (bgCount > 0) {
+          const avgBgR = bgR / bgCount;
+          const avgBgG = bgG / bgCount;
+          const avgBgB = bgB / bgCount;
+
+          const p = idx * 4;
+          const aNorm = a / 255;
+          const safeAlpha = Math.max(aNorm, 0.2);
+
+          // C_fg = (C_obs - (1 - aNorm) * C_bg) / safeAlpha
+          const unmixedR = Math.max(0, Math.min(255, Math.round((sourceRgba[p] - (1 - aNorm) * avgBgR) / safeAlpha)));
+          const unmixedG = Math.max(0, Math.min(255, Math.round((sourceRgba[p + 1] - (1 - aNorm) * avgBgG) / safeAlpha)));
+          const unmixedB = Math.max(0, Math.min(255, Math.round((sourceRgba[p + 2] - (1 - aNorm) * avgBgB) / safeAlpha)));
+
+          decontaminatedRgba[p] = unmixedR;
+          decontaminatedRgba[p + 1] = unmixedG;
+          decontaminatedRgba[p + 2] = unmixedB;
+        }
+      }
+    }
+  }
+
+  return {
+    refinedAlpha,
+    decontaminatedRgba,
+    softAlphaPixelCount,
+  };
+}
+
+/**
+ * Universal Foreground Pipeline:
+ * Stage A: Foreground Segmentation + Edge-Aware Hair/Fur Refinement
+ * Stage B: Independent Text Detection + Text Policy Application
+ *
+ * Preserves People, Animals, Products, Plants, Clothing, and Hair/fur/whiskers.
+ */
+export function universalForegroundPipeline(
+  sourceRgba: Uint8ClampedArray | Uint8Array,
+  rawInitialMask: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  options?: {
+    textPolicy?: TextPolicy;
+    refinementPreset?: RefinementPreset;
+    alphaChoke?: number;
+    featherRadius?: number;
+    decontaminateBg?: boolean;
+    precomputedTextMask?: Uint8ClampedArray;
+  }
+): {
+  finalMask: Uint8ClampedArray;
+  refinedForegroundMask: Uint8ClampedArray;
+  textMask: Uint8ClampedArray;
+  removedTextMask: Uint8ClampedArray;
+  decontaminatedRgba: Uint8ClampedArray;
+  textPolicy: TextPolicy;
+  textDetectionRan: boolean;
+  characterCount: number;
+  softAlphaPixelCount: number;
+} {
+  const policy: TextPolicy = options?.textPolicy || "keep_text";
+  const preset: RefinementPreset = options?.refinementPreset || "fine_hair";
+
+  // Stage A: Edge-aware hair, fur, and edge refinement
+  const stageAResult = edgeAwareHairFurRefinement(
+    sourceRgba,
+    rawInitialMask,
+    width,
+    height,
+    {
+      preset,
+      alphaChoke: options?.alphaChoke,
+      featherRadius: options?.featherRadius,
+      decontaminateBg: options?.decontaminateBg !== false,
+    }
+  );
+
+  // Stage B: Independent text detection
+  let textMask: Uint8ClampedArray;
+  let characterCount = 0;
+
+  if (options?.precomputedTextMask) {
+    textMask = options.precomputedTextMask;
+    for (let i = 0; i < textMask.length; i++) {
+      if (textMask[i] > 128) characterCount++;
+    }
+  } else {
+    const textDet = detectIndependentTextMask(sourceRgba, width, height);
+    textMask = textDet.textMask;
+    characterCount = textDet.characterCount;
+  }
+
+  // Combine Stage A and Stage B using the selected Text Policy
+  const stageBResult = applyTextPolicyToMask(
+    stageAResult.refinedAlpha,
+    textMask,
+    width,
+    height,
+    policy,
+    2
+  );
+
+  return {
+    finalMask: stageBResult.finalAlpha,
+    refinedForegroundMask: stageAResult.refinedAlpha,
+    textMask,
+    removedTextMask: stageBResult.removedTextAlpha,
+    decontaminatedRgba: stageAResult.decontaminatedRgba,
+    textPolicy: policy,
+    textDetectionRan: true,
+    characterCount,
+    softAlphaPixelCount: stageAResult.softAlphaPixelCount,
+  };
+}
+
