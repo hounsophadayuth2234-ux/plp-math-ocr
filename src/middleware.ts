@@ -9,9 +9,9 @@ export const config = {
      * 1. _next/static (static files)
      * 2. _next/image (image optimization files)
      * 3. favicon.ico, sitemap.xml, robots.txt
-     * 4. Static images/vectors in public folder
+     * 4. Static images, models, and binaries in public folder
      */
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|models/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|onnx|wasm|bin)$).*)",
   ],
 };
 
@@ -87,7 +87,8 @@ export async function middleware(req: NextRequest) {
     pathname === "/api/auth/telegram/login" ||
     pathname === "/api/auth/telegram/config" ||
     pathname === "/api/health" ||
-    pathname.startsWith("/health");
+    pathname.startsWith("/health") ||
+    pathname.startsWith("/models/");
 
   let sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value ||
     req.cookies.get("__Secure-dyt_gate_session")?.value;
