@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
+import { getValidRedisConfig } from "./redis-config";
 export { getClientIp } from "./rate-limiter";
 
 // Session lifespan: 10 hours
@@ -285,21 +286,20 @@ export async function checkRateLimitAndLockout(
   hashedId: string
 ): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
   const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
-  const redisUrl = process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const redisToken = process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const redisCfg = getValidRedisConfig();
 
-  if (redisUrl && redisToken) {
+  if (redisCfg) {
     try {
       const lockKey = `gate:${envPrefix}:lock:${hashedId}`;
-      const lockRes = await fetch(`${redisUrl}/get/${lockKey}`, {
-        headers: { Authorization: `Bearer ${redisToken}` },
+      const lockRes = await fetch(`${redisCfg.url}/get/${lockKey}`, {
+        headers: { Authorization: `Bearer ${redisCfg.token}` },
         cache: "no-store",
       });
       if (lockRes.ok) {
         const lockData = await lockRes.json();
         if (lockData.result) {
-          const ttlRes = await fetch(`${redisUrl}/ttl/${lockKey}`, {
-            headers: { Authorization: `Bearer ${redisToken}` },
+          const ttlRes = await fetch(`${redisCfg.url}/ttl/${lockKey}`, {
+            headers: { Authorization: `Bearer ${redisCfg.token}` },
             cache: "no-store",
           });
           const ttlData = await ttlRes.json();
@@ -307,8 +307,8 @@ export async function checkRateLimitAndLockout(
           return { allowed: false, retryAfterSeconds: retryAfter };
         }
       }
-    } catch (redisErr) {
-      console.warn("[auth-gate] Redis connection warning, falling back to local tracker:", redisErr);
+    } catch (redisErr: any) {
+      console.warn("[auth-gate] Redis connection warning, falling back to local tracker:", redisErr?.name || "NetworkError");
     }
   }
 
@@ -333,17 +333,16 @@ export async function recordFailedAttempt(
   hashedId: string
 ): Promise<{ locked: boolean; retryAfterSeconds?: number; attempts: number }> {
   const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
-  const redisUrl = process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const redisToken = process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const redisCfg = getValidRedisConfig();
 
-  if (redisUrl && redisToken) {
+  if (redisCfg) {
     try {
       const attemptsKey = `gate:${envPrefix}:attempts:${hashedId}`;
       const lockKey = `gate:${envPrefix}:lock:${hashedId}`;
 
       // Increment attempt counter with 1 hour expiration
-      const incrRes = await fetch(`${redisUrl}/incr/${attemptsKey}`, {
-        headers: { Authorization: `Bearer ${redisToken}` },
+      const incrRes = await fetch(`${redisCfg.url}/incr/${attemptsKey}`, {
+        headers: { Authorization: `Bearer ${redisCfg.token}` },
         cache: "no-store",
       });
       const incrData = await incrRes.json();
@@ -351,24 +350,24 @@ export async function recordFailedAttempt(
 
       if (attempts === 1) {
         // Set attempt expiry window
-        await fetch(`${redisUrl}/expire/${attemptsKey}/3600`, {
-          headers: { Authorization: `Bearer ${redisToken}` },
+        await fetch(`${redisCfg.url}/expire/${attemptsKey}/3600`, {
+          headers: { Authorization: `Bearer ${redisCfg.token}` },
           cache: "no-store",
         });
       }
 
       if (attempts >= MAX_FAILED_ATTEMPTS) {
         // Activate 30-minute lock
-        await fetch(`${redisUrl}/setex/${lockKey}/${LOCKOUT_DURATION_SECONDS}/1`, {
-          headers: { Authorization: `Bearer ${redisToken}` },
+        await fetch(`${redisCfg.url}/setex/${lockKey}/${LOCKOUT_DURATION_SECONDS}/1`, {
+          headers: { Authorization: `Bearer ${redisCfg.token}` },
           cache: "no-store",
         });
         return { locked: true, retryAfterSeconds: LOCKOUT_DURATION_SECONDS, attempts };
       }
 
       return { locked: false, attempts };
-    } catch (redisErr) {
-      console.warn("[auth-gate] Redis failed to record attempt, using local tracker:", redisErr);
+    } catch (redisErr: any) {
+      console.warn("[auth-gate] Redis failed to record attempt, using local tracker:", redisErr?.name || "NetworkError");
     }
   }
 
@@ -394,16 +393,15 @@ export async function recordFailedAttempt(
  */
 export async function clearFailedAttempts(hashedId: string): Promise<void> {
   const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
-  const redisUrl = process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const redisToken = process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const redisCfg = getValidRedisConfig();
 
-  if (redisUrl && redisToken) {
+  if (redisCfg) {
     try {
       const attemptsKey = `gate:${envPrefix}:attempts:${hashedId}`;
       const lockKey = `gate:${envPrefix}:lock:${hashedId}`;
-      await fetch(`${redisUrl}/pipeline`, {
+      await fetch(`${redisCfg.url}/pipeline`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${redisToken}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${redisCfg.token}`, "Content-Type": "application/json" },
         body: JSON.stringify([
           ["DEL", attemptsKey],
           ["DEL", lockKey],

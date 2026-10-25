@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { getValidRedisConfig } from "./redis-config";
 import { normalizeKhmerText } from "./khmer-grapheme-normalizer";
 
 export const DEFAULT_DRIVE_FOLDER_ID = "1dS_Ul_WnVCCbJAKsn6CAT0vy9AB8Yx8f";
@@ -274,10 +275,7 @@ export function buildDeterministicCacheKey(params: CacheKeyParams): string {
 // ----------------------------------------------------------------------------
 
 function getRedisConfig(): { url: string; token: string } | null {
-  const url = process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const token = process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
-  if (url && token) return { url, token };
-  return null;
+  return getValidRedisConfig();
 }
 
 async function redisCommand<T = unknown>(command: any[]): Promise<T | null> {

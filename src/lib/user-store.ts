@@ -78,24 +78,14 @@ export function toAdminSafeUser(user: UserRecord): SafeUser {
   return toSafeUser(user);
 }
 
+import { getValidRedisConfig } from "./redis-config";
+
 // ============================================================================
 // Upstash Redis / Vercel KV REST Client
 // ============================================================================
 
 function getRedisConfig(): { url: string; token: string } | null {
-  const url =
-    process.env.KV_REST_API_URL?.trim() ||
-    process.env.UPSTASH_REDIS_REST_URL?.trim() ||
-    "";
-  const token =
-    process.env.KV_REST_API_TOKEN?.trim() ||
-    process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ||
-    "";
-
-  if (url && token) {
-    return { url, token };
-  }
-  return null;
+  return getValidRedisConfig();
 }
 
 async function redisCommand<T = any>(command: any[]): Promise<T | null> {
@@ -120,8 +110,8 @@ async function redisCommand<T = any>(command: any[]): Promise<T | null> {
 
     const data = await res.json();
     return data.result as T;
-  } catch (err) {
-    console.warn("[user-store] Redis command network error:", err);
+  } catch (err: any) {
+    console.warn("[user-store] Redis command network error:", err?.name || "NetworkError");
     return null;
   }
 }
@@ -144,8 +134,8 @@ async function redisPipeline(commands: any[][]): Promise<any[] | null> {
     if (!res.ok) return null;
     const data = await res.json();
     return data.map((d: any) => d.result);
-  } catch (err) {
-    console.warn("[user-store] Redis pipeline error:", err);
+  } catch (err: any) {
+    console.warn("[user-store] Redis pipeline error:", err?.name || "NetworkError");
     return null;
   }
 }

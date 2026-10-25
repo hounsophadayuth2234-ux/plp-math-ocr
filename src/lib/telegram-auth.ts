@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { getValidRedisConfig } from "./redis-config";
 import {
   encryptManagedPassword,
   decryptManagedPassword,
@@ -140,19 +141,7 @@ const localActiveChallenges = new Map<
 >(); // challengeNonce -> data
 
 function getRedisConfig(): { url: string; token: string } | null {
-  const url =
-    process.env.KV_REST_API_URL?.trim() ||
-    process.env.UPSTASH_REDIS_REST_URL?.trim() ||
-    "";
-  const token =
-    process.env.KV_REST_API_TOKEN?.trim() ||
-    process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ||
-    "";
-
-  if (url && token) {
-    return { url, token };
-  }
-  return null;
+  return getValidRedisConfig();
 }
 
 async function redisCommand<T = any>(command: any[]): Promise<T | null> {

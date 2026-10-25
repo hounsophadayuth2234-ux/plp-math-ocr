@@ -1,4 +1,5 @@
 import { anonymizeIdentifier } from "./auth-gate";
+import { getValidRedisConfig } from "./redis-config";
 
 export type AuditEventType =
   | "LOGIN_SUCCESS"
@@ -49,19 +50,7 @@ export interface AuditEventRecord {
 const localAuditEvents: AuditEventRecord[] = [];
 
 function getRedisConfig(): { url: string; token: string } | null {
-  const url =
-    process.env.KV_REST_API_URL?.trim() ||
-    process.env.UPSTASH_REDIS_REST_URL?.trim() ||
-    "";
-  const token =
-    process.env.KV_REST_API_TOKEN?.trim() ||
-    process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ||
-    "";
-
-  if (url && token) {
-    return { url, token };
-  }
-  return null;
+  return getValidRedisConfig();
 }
 
 export class AuditLogger {
@@ -148,8 +137,8 @@ export class AuditLogger {
           body: JSON.stringify(payload),
           cache: "no-store",
         });
-      } catch (err) {
-        console.warn("[audit-logger] Failed to push to Redis audit log:", err);
+      } catch (err: any) {
+        console.warn("[audit-logger] Failed to push to Redis audit log:", err?.name || "NetworkError");
       }
     }
 

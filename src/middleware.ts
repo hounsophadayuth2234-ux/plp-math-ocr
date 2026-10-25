@@ -20,9 +20,24 @@ const ALLOWED_ORIGINS = [
   "https://math.dytcore.com",
 ];
 
-function isOriginAllowed(origin: string | null): boolean {
+function isOriginAllowed(origin: string | null, request?: NextRequest): boolean {
   if (!origin) return true; // same-origin or non-browser client
   if (ALLOWED_ORIGINS.includes(origin)) return true;
+
+  // Allow same-origin requests when origin matches request nextUrl origin
+  if (request && origin === request.nextUrl.origin) {
+    return true;
+  }
+
+  // For Vercel Preview, allow only the current request origin when it is a verified Vercel deployment origin
+  if (
+    request &&
+    /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin) &&
+    (origin === request.nextUrl.origin || origin === `https://${request.headers.get("host")}`)
+  ) {
+    return true;
+  }
+
   const envAllowedOrigin = process.env.TELEGRAM_ALLOWED_ORIGIN?.trim();
   if (envAllowedOrigin && origin === envAllowedOrigin) return true;
   // Allow localhost in development
@@ -38,7 +53,7 @@ export async function middleware(req: NextRequest) {
 
   // Handle CORS Preflight and validation for API routes
   if (pathname.startsWith("/api/")) {
-    const isAllowed = isOriginAllowed(origin);
+    const isAllowed = isOriginAllowed(origin, req);
 
     if (req.method === "OPTIONS") {
       if (!isAllowed) {
@@ -66,7 +81,7 @@ export async function middleware(req: NextRequest) {
 
   // Helper to append CORS headers to API responses
   const applyCorsHeaders = (res: NextResponse) => {
-    if (pathname.startsWith("/api/") && origin && isOriginAllowed(origin)) {
+    if (pathname.startsWith("/api/") && origin && isOriginAllowed(origin, req)) {
       res.headers.set("Access-Control-Allow-Origin", origin);
       res.headers.set("Access-Control-Allow-Credentials", "true");
       res.headers.set("Vary", "Origin");

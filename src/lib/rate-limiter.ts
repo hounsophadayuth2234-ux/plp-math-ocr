@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getValidRedisConfig } from "./redis-config";
 
 export type RateLimitCategory =
   | "math_ocr"
@@ -238,17 +239,16 @@ export async function checkRateLimit(
     process.env.NODE_ENV ||
     "development";
 
-  const redisUrl = process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const redisToken = process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const redisCfg = getValidRedisConfig();
 
-  if (redisUrl && redisToken) {
+  if (redisCfg) {
     const redisResult = await checkRedisRateLimit(
       envPrefix,
       category,
       hashedId,
       config,
-      redisUrl,
-      redisToken
+      redisCfg.url,
+      redisCfg.token
     );
     if (redisResult) {
       return redisResult;
