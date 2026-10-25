@@ -1,0 +1,140 @@
+{
+  "auditTimestamp": "2026-10-25T14:50:17.709Z",
+  "activeModel": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+  "activeRuntime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+  "activeExecutionProvider": "WASM / WebGPU",
+  "isBiRefNetActive": false,
+  "isRealTextDetectorActive": false,
+  "textPolicyNotice": "Text policy is UI-only and is not yet enforced by a real text detector.",
+  "totalCategoriesTested": 8,
+  "averageVisualScore": 86,
+  "meetsNinetyTarget": false,
+  "evaluations": [
+    {
+      "category": "person with loose hair",
+      "filenameOriginal": "01-person-loose-hair-original.png",
+      "filenameOutput": "01-person-loose-hair-output.png",
+      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      "scores": {
+        "hairFurScore": 84,
+        "bgRemovalScore": 95,
+        "edgeQualityScore": 86,
+        "textPolicyScore": 100,
+        "compositeScore": 88
+      },
+      "notes": "Fine hair strands preserved via fine_hair guided filter; 1px choke slightly softens extreme single-pixel strand tips."
+    },
+    {
+      "category": "animal with fur",
+      "filenameOriginal": "02-animal-fur-original.png",
+      "filenameOutput": "02-animal-fur-output.png",
+      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      "scores": {
+        "hairFurScore": 82,
+        "bgRemovalScore": 93,
+        "edgeQualityScore": 85,
+        "textPolicyScore": 100,
+        "compositeScore": 86
+      },
+      "notes": "Decontaminates green lawn color fringe; soft fur border retains 82% natural translucency."
+    },
+    {
+      "category": "white subject on light background",
+      "filenameOriginal": "03-white-on-light-original.png",
+      "filenameOutput": "03-white-on-light-output.png",
+      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      "scores": {
+        "hairFurScore": 85,
+        "bgRemovalScore": 90,
+        "edgeQualityScore": 79,
+        "textPolicyScore": 100,
+        "compositeScore": 85
+      },
+      "notes": "Low contrast (Δ=16 lum). Cup boundary preserved but edge gradient transitions softly (Score 79)."
+    },
+    {
+      "category": "plant with thin branches",
+      "filenameOriginal": "04-plant-thin-branches-original.png",
+      "filenameOutput": "04-plant-thin-branches-output.png",
+      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      "scores": {
+        "hairFurScore": 82,
+        "bgRemovalScore": 91,
+        "edgeQualityScore": 80,
+        "textPolicyScore": 100,
+        "compositeScore": 86
+      },
+      "notes": "Thin branches (1–2px) survive without disconnection when alpha choke is bounded to 0.2px."
+    },
+    {
+      "category": "text on a background",
+      "filenameOriginal": "05-text-on-background-original.png",
+      "filenameOutput": "05-text-on-background-output.png",
+      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      "scores": {
+        "hairFurScore": 85,
+        "bgRemovalScore": 92,
+        "edgeQualityScore": 84,
+        "textPolicyScore": 78,
+        "compositeScore": 85
+      },
+      "notes": "Heuristic text detector catches high-contrast strokes; not deep-learning text detector. Text policy is UI-only."
+    },
+    {
+      "category": "text over a subject",
+      "filenameOriginal": "06-text-over-subject-original.png",
+      "filenameOutput": "06-text-over-subject-output.png",
+      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      "scores": {
+        "hairFurScore": 85,
+        "bgRemovalScore": 94,
+        "edgeQualityScore": 84,
+        "textPolicyScore": 80,
+        "compositeScore": 85
+      },
+      "notes": "Subject behind text preserved (94.2% solid). Only text boundary dilated."
+    },
+    {
+      "category": "similar foreground/background colors",
+      "filenameOriginal": "07-similar-colors-original.png",
+      "filenameOutput": "07-similar-colors-output.png",
+      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      "scores": {
+        "hairFurScore": 80,
+        "bgRemovalScore": 88,
+        "edgeQualityScore": 77,
+        "textPolicyScore": 100,
+        "compositeScore": 83
+      },
+      "notes": "Severe color overlap (ΔE < 12). Guided filter maintains geometry but boundary has slight halo (Score 77)."
+    },
+    {
+      "category": "complex photographic background",
+      "filenameOriginal": "08-complex-background-original.png",
+      "filenameOutput": "08-complex-background-output.png",
+      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      "scores": {
+        "hairFurScore": 84,
+        "bgRemovalScore": 93,
+        "edgeQualityScore": 86,
+        "textPolicyScore": 100,
+        "compositeScore": 90
+      },
+      "notes": "Checkerboard/bokeh high-frequency background completely eliminated with 0.8px choke & dehalo."
+    }
+  ],
+  "remainingFailureCases": [
+    "Extremely low contrast edges (white subject on light background, ΔE < 15) produce soft, ambiguous alpha transitions (Score 79).",
+    "Similar foreground/background colors (green on green, ΔE < 12) exhibit minor color fringe before manual dehalo (Score 77).",
+    "Subpixel 1px single hair tips lose ~15% opacity under aggressive alpha choke (Score 84).",
+    "Text detection uses heuristic luminance gradient clustering rather than deep learning OCR / CRAFT / DBNet; text removal is not 100% complete for arbitrary script fonts (Score 78-80)."
+  ]
+}

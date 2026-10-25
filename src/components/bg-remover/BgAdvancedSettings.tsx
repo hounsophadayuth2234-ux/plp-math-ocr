@@ -623,75 +623,70 @@ export function BgAdvancedSettings({
             </div>
 
             {/* Hardware & Runtime Telemetry Deck */}
-            <div className="p-2 bg-slate-950/70 border border-slate-800 space-y-1 text-[10px] font-mono">
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">Actual Model Name:</span>
-                <span className="text-cyan-300 font-bold text-[10px] truncate max-w-[200px]" title={metrics?.modelName || (selectedEngine === "worker" ? "rembg / u2net" : "@imgly/isnet_fp16 (BiRefNet Lite evaluated)")}>
-                  {metrics?.modelName || (selectedEngine === "worker" ? "rembg / u2net" : "@imgly/isnet_fp16")}
+            <div className="p-2.5 bg-slate-950/70 border border-slate-800 space-y-2 text-[10px] font-mono">
+              <div className="flex justify-between items-start text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px] font-bold">actualModel:</span>
+                <span className="text-cyan-300 font-bold text-[10px] text-right truncate max-w-[210px]" title={metrics?.actualModel || "@imgly/isnet_fp16 (BiRefNet is not currently active)"}>
+                  {metrics?.actualModel || "@imgly/isnet_fp16 (BiRefNet is not currently active)"}
+                </span>
+              </div>
+              <div className="flex justify-between items-start text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">actualModelFile:</span>
+                <span className="text-slate-300 text-[9px] text-right truncate max-w-[210px]" title={metrics?.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16"}>
+                  {metrics?.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16"}
+                </span>
+              </div>
+              <div className="flex justify-between items-start text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">actualRuntime:</span>
+                <span className="text-slate-200 text-[9.5px] text-right">
+                  {metrics?.actualRuntime || "@imgly/background-removal v1.7.0 (onnxruntime-web)"}
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">Actual Execution Provider:</span>
+                <span className="text-slate-400 uppercase text-[9px]">actualExecutionProvider:</span>
                 <span className={`font-bold px-1.5 py-0.5 text-[10px] ${
-                  metrics?.backend === "WebGPU"
+                  (metrics?.actualExecutionProvider || metrics?.backend) === "WebGPU"
                     ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
                     : "bg-cyan-950/80 text-cyan-300 border border-cyan-500/40"
                 }`}>
-                  {metrics?.backend || (typeof WebAssembly !== "undefined" ? "WASM" : "WASM (Fallback)")}
+                  {metrics?.actualExecutionProvider || metrics?.backend || (typeof WebAssembly !== "undefined" ? "WASM" : "WASM (Fallback)")}
+                </span>
+              </div>
+              <div className="space-y-1 text-slate-300 border-t border-slate-900 pt-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 uppercase text-[9px]">actualTextDetector:</span>
+                  <span className="text-amber-300 text-[9.5px] font-bold">None / Heuristic only</span>
+                </div>
+                <div className="text-[9px] text-amber-400/90 italic bg-amber-950/30 p-1.5 border border-amber-900/40">
+                  ⚠️ Text policy is UI-only and is not yet enforced by a real text detector.
+                </div>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400 uppercase text-[9px]">actualTextPolicy:</span>
+                <span className="text-slate-200 text-[10px] font-bold">
+                  {(textPolicy || metrics?.actualTextPolicy || metrics?.textPolicy) === "remove_all_text"
+                    ? "Remove All Text (UI-only)"
+                    : "Keep Text"}
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">WebGPU Status:</span>
-                <span className={`text-[10px] font-bold ${metrics?.webGpuApiAvailable ? "text-emerald-400" : "text-amber-400"}`}>
-                  {metrics?.webGpuApiAvailable ? "Available" : "Unavailable"}
+                <span className="text-slate-400 uppercase text-[9px]">actualRefinementPreset:</span>
+                <span className="text-cyan-300 text-[10px] font-bold">
+                  {refinementPreset || metrics?.actualRefinementPreset || "standard"}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">GPU Adapter:</span>
-                <span className={`text-[10px] font-bold ${metrics?.gpuAdapterAvailable ? "text-emerald-400" : "text-slate-400"}`}>
-                  {metrics?.gpuAdapterAvailable ? "Available" : "Not found"}
+              <div className="flex justify-between items-start text-slate-300 border-t border-slate-900 pt-1.5">
+                <span className="text-slate-400 uppercase text-[9px] font-bold">fallbackReason:</span>
+                <span className="text-amber-300 text-[9px] text-right truncate max-w-[210px]" title={metrics?.fallbackReason || metrics?.webGpuFallbackReason || "BiRefNet is not currently active; using isnet_fp16"}>
+                  {metrics?.fallbackReason || metrics?.webGpuFallbackReason || "BiRefNet is not currently active; using isnet_fp16"}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-slate-300">
+              <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-1">
                 <span className="text-slate-400 uppercase text-[9px]">Model Resolution:</span>
                 <span className="text-slate-200 text-[10px] font-bold">
                   {metrics?.modelResolution || "1024×1024 (Static Input)"}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">Selected Text Policy:</span>
-                <span className={`text-[10px] font-bold ${
-                  (textPolicy || metrics?.textPolicy) === "remove_all_text" ? "text-amber-300" : "text-emerald-400"
-                }`}>
-                  {(textPolicy || metrics?.textPolicy) === "remove_all_text"
-                    ? "កាត់អក្សរទាំងអស់ (Remove All Text)"
-                    : "រក្សាអក្សរ (Keep Text)"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">Text Detection Ran:</span>
-                <span className={`text-[10px] font-bold ${metrics?.textDetectionRan ? "text-pink-300" : "text-slate-400"}`}>
-                  {metrics?.textDetectionRan
-                    ? `Yes (${metrics?.detectedTextRegionsCount ?? "Independent"} regions detected)`
-                    : (metrics?.textDetectionStatus === "completed" ? "Completed" : "No / Skipped")}
-                </span>
-              </div>
-              {metrics?.webGpuFallbackReason && (
-                <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-0.5">
-                  <span className="text-slate-400 uppercase text-[9px]">Fallback Reason:</span>
-                  <span className="text-amber-300 text-[9.5px] truncate max-w-[190px]" title={metrics.webGpuFallbackReason}>
-                    {metrics.webGpuFallbackReason}
-                  </span>
-                </div>
-              )}
-              {metrics?.fallbackReason && !metrics?.webGpuFallbackReason && (
-                <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-0.5">
-                  <span className="text-slate-400 uppercase text-[9px]">Fallback Reason:</span>
-                  <span className="text-amber-300 text-[9.5px] truncate max-w-[190px]" title={metrics.fallbackReason}>
-                    {metrics.fallbackReason}
-                  </span>
-                </div>
-              )}
               <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-0.5">
                 <span className="text-slate-400 uppercase text-[9px]">WASM SIMD Status:</span>
                 <span className={`text-[10px] ${metrics?.wasmSimd !== false ? "text-emerald-400 font-bold" : "text-slate-400"}`}>

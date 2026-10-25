@@ -16,6 +16,13 @@ export interface WorkerExecutionResult {
   modelResolution: string;
   textPolicy: "keep_text" | "remove_all_text";
   textDetectionRan: boolean;
+  actualModel: string;
+  actualModelFile: string;
+  actualRuntime: string;
+  actualExecutionProvider: "WebGPU" | "WASM";
+  actualTextDetector: string;
+  actualTextPolicy: string;
+  actualRefinementPreset: string;
   webGpuAvailable: boolean;
   webGpuApiAvailable: boolean;
   gpuAdapterAvailable: boolean;
@@ -98,7 +105,7 @@ class BgWorkerManager {
    */
   public async executeJob(
     imageBlob: Blob,
-    model: "birefnet_lite" | "isnet_fp16" | "isnet_quint8" | "isnet" = "isnet_fp16",
+    model: "isnet_fp16" | "isnet_quint8" | "isnet" = "isnet_fp16",
     onProgress?: (event: WorkerProgressEvent) => void,
     signal?: AbortSignal,
     options?: { preferWebGpu?: boolean; textPolicy?: "keep_text" | "remove_all_text" }
@@ -190,15 +197,22 @@ class BgWorkerManager {
           resolve({
             resultBlob: data.resultBlob,
             backend: data.backend || "WASM",
-            modelName: data.modelName || "ISNet-FP16 (IMG.LY)",
+            modelName: data.modelName || "ISNet-FP16",
             modelResolution: data.modelResolution || "1024 x 1024",
             textPolicy: data.textPolicy || "keep_text",
             textDetectionRan: Boolean(data.textDetectionRan),
+            actualModel: data.actualModel || "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+            actualModelFile: data.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
+            actualRuntime: data.actualRuntime || "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+            actualExecutionProvider: data.actualExecutionProvider || data.backend || "WASM",
+            actualTextDetector: data.actualTextDetector || "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
+            actualTextPolicy: data.actualTextPolicy || (data.textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text"),
+            actualRefinementPreset: data.actualRefinementPreset || "standard",
             webGpuAvailable: Boolean(data.webGpuAvailable),
             webGpuApiAvailable: Boolean(data.webGpuApiAvailable),
             gpuAdapterAvailable: Boolean(data.gpuAdapterAvailable),
             webGpuSessionPassed: Boolean(data.webGpuSessionPassed),
-            fallbackReason: data.fallbackReason,
+            fallbackReason: data.fallbackReason || "BiRefNet is not currently active; using isnet_fp16",
             wasmSimd: data.wasmSimd ?? true,
             wasmThreads: data.wasmThreads ?? 1,
             wasmThreadsStatus: data.wasmThreadsStatus ?? false,

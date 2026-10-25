@@ -202,6 +202,13 @@ export interface ProcessingStageMetrics {
   textDetectionRan?: boolean;
   detectedTextRegionsCount?: number;
   fallbackReason?: string;
+  actualModel?: string;
+  actualModelFile?: string;
+  actualRuntime?: string;
+  actualExecutionProvider?: string;
+  actualTextDetector?: string;
+  actualTextPolicy?: string;
+  actualRefinementPreset?: string;
   // Hardware & runtime telemetry
   backend?: "WebGPU" | "WASM";
   webGpuAvailable?: boolean;
@@ -254,6 +261,14 @@ export interface BgRemovalOutput {
   textPolicy?: TextPolicy;
   textDetectionRan?: boolean;
   detectedTextRegionsCount?: number;
+  actualModel?: string;
+  actualModelFile?: string;
+  actualRuntime?: string;
+  actualExecutionProvider?: string;
+  actualTextDetector?: string;
+  actualTextPolicy?: string;
+  actualRefinementPreset?: string;
+  fallbackReason?: string;
   mode: "preview" | "final" | "worker";
   metrics?: ProcessingStageMetrics;
   diagnostics?: MaskDiagnostics;
@@ -281,7 +296,7 @@ export interface BgRemovalOptions {
   alphaMatting?: boolean;
   textPolicy?: TextPolicy;
   refinementPreset?: RefinementPreset;
-  model?: "birefnet_lite" | "isnet_fp16" | "isnet_quint8" | "isnet";
+  model?: "isnet_fp16" | "isnet_quint8" | "isnet";
   onProgress?: (progress: BgRemovalProgress) => void;
   signal?: AbortSignal;
 }
@@ -1068,6 +1083,14 @@ export async function removeBackgroundBrowser(
       wasDownscaled: wasScaled,
       label: "Browser AI result",
       model: "@imgly/isnet_fp16",
+      actualModel: "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
+      actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      actualExecutionProvider: (workerResult.backend || "WASM") as "WebGPU" | "WASM",
+      actualTextDetector: "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
+      actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text",
+      actualRefinementPreset: options?.refinementPreset || "standard",
+      fallbackReason: workerResult.fallbackReason || "BiRefNet is not currently active; using isnet_fp16",
       mode,
       metrics: {
         decodeMs,
@@ -1077,6 +1100,14 @@ export async function removeBackgroundBrowser(
         edgeRefineMs: tRefine,
         compositingMs: 15,
         totalMs,
+        actualModel: "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+        actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
+        actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+        actualExecutionProvider: (workerResult.backend || "WASM") as "WebGPU" | "WASM",
+        actualTextDetector: "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
+        actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text",
+        actualRefinementPreset: options?.refinementPreset || "standard",
+        fallbackReason: workerResult.fallbackReason || "BiRefNet is not currently active; using isnet_fp16",
         backend: workerResult.backend,
         webGpuAvailable: workerResult.webGpuAvailable,
         webGpuApiAvailable: workerResult.webGpuApiAvailable ?? gpuProbe.apiAvailable,
@@ -1507,7 +1538,7 @@ export async function removeBackgroundRemote(
   }
 
   const headerSource = res.headers.get("X-Processing-Source");
-  const modelHeader = res.headers.get("X-Segmentation-Model") || "BiRefNet / RMBG Worker";
+  const modelHeader = res.headers.get("X-Segmentation-Model") || "rembg / isnet-general-use";
 
   const label: ProcessingStatusLabel =
     headerSource === "Local worker result"
@@ -2566,6 +2597,14 @@ export async function refineAlphaMattingWithMask(
     modelResolution: "1024 x 1024",
     textPolicy: options?.textPolicy || "keep_text",
     textDetectionRan: true,
+    actualModel: "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+    actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
+    actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+    actualExecutionProvider: "WASM",
+    actualTextDetector: "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
+    actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text",
+    actualRefinementPreset: options?.refinementPreset || "standard",
+    fallbackReason: "BiRefNet is not currently active; using isnet_fp16",
     mode: "preview",
     diagnostics,
     rollbackTriggered: diagnostics.rollbackTriggered,
@@ -2574,6 +2613,14 @@ export async function refineAlphaMattingWithMask(
       mattingMs,
       encodingMs,
       totalMs,
+      actualModel: "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
+      actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      actualExecutionProvider: "WASM",
+      actualTextDetector: "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
+      actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text",
+      actualRefinementPreset: options?.refinementPreset || "standard",
+      fallbackReason: "BiRefNet is not currently active; using isnet_fp16",
       textPolicy: options?.textPolicy || "keep_text",
       textDetectionRan: true,
     },

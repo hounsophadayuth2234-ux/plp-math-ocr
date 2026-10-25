@@ -1691,7 +1691,7 @@ export function ColorStudio({
 
   const displayProvenance = useMemo(() => {
     if (mode === "worker") {
-      return `Remote Worker — ${provider || "BiRefNet"}`;
+      return `Remote Worker — ${provider || "rembg / isnet-general-use"}`;
     }
     if (
       provider.includes("Manual") ||

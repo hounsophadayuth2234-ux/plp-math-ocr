@@ -7,14 +7,14 @@ export interface WorkerJobRequest {
   type: "START";
   jobId: string;
   imageBlob: Blob;
-  model?: "birefnet_lite" | "isnet_fp16" | "isnet_quint8" | "isnet";
+  model?: "isnet_fp16" | "isnet_quint8" | "isnet";
   preferWebGpu?: boolean;
   textPolicy?: "keep_text" | "remove_all_text";
 }
 
 export interface WorkerPreloadRequest {
   type: "PRELOAD";
-  model?: "birefnet_lite" | "isnet_fp16" | "isnet_quint8" | "isnet";
+  model?: "isnet_fp16" | "isnet_quint8" | "isnet";
 }
 
 export interface WorkerProgressMessage {
@@ -34,6 +34,13 @@ export interface WorkerCompleteMessage {
   modelResolution: string;
   textPolicy: "keep_text" | "remove_all_text";
   textDetectionRan: boolean;
+  actualModel: string;
+  actualModelFile: string;
+  actualRuntime: string;
+  actualExecutionProvider: "WebGPU" | "WASM";
+  actualTextDetector: string;
+  actualTextPolicy: string;
+  actualRefinementPreset: string;
   webGpuAvailable: boolean;
   webGpuApiAvailable: boolean;
   gpuAdapterAvailable: boolean;
@@ -62,7 +69,7 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
   const data = e.data;
   if (data.type === "PRELOAD") {
     try {
-      const preloadModel = data.model === "birefnet_lite" ? "isnet_fp16" : (data.model || "isnet_fp16");
+      const preloadModel = data.model || "isnet_fp16";
       await preload({
         model: preloadModel,
         fetchArgs: {
@@ -71,7 +78,7 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
       });
       self.postMessage({
         type: "PRELOAD_COMPLETE",
-        model: data.model || "isnet_fp16",
+        model: preloadModel,
       });
     } catch (err: unknown) {
       console.warn("[bg-remover-worker] Preload skipped or failed:", err);
@@ -81,19 +88,14 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
 
   if (data.type === "START") {
     const tWorkerStart = performance.now();
-    const { jobId, imageBlob, model, preferWebGpu, textPolicy = "keep_text" } = data;
+    const { jobId, imageBlob, model = "isnet_fp16", preferWebGpu, textPolicy = "keep_text" } = data;
     let resultBlob: Blob | null = null;
     let actualBackend: "WebGPU" | "WASM" = "WASM";
     let webGpuAvailable = false;
     let webGpuSessionPassed = false;
     let fallbackReason: string | undefined = undefined;
-    let modelName = "ISNet-FP16 (IMG.LY)";
+    const modelName = model === "isnet_quint8" ? "ISNet-QUINT8" : model === "isnet" ? "ISNet-FP32" : "ISNet-FP16";
     const modelResolution = "1024 x 1024";
-
-    if (model === "birefnet_lite") {
-      modelName = "BiRefNet-Lite (Evaluated -> Fallback ISNet-FP16)";
-      fallbackReason = "BiRefNet-Lite browser model (214MB) exceeded device memory budget; fallen back to ISNet-FP16";
-    }
 
     // Check if worker environment has navigator.gpu
     const hasWorkerGpu =
@@ -108,9 +110,8 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
     if (tryWebGpu) {
       gpuAdapterAvailable = true;
       try {
-        const actualModel = model === "birefnet_lite" ? "isnet_fp16" : (model || "isnet_fp16");
         resultBlob = await removeBackground(imageBlob, {
-          model: actualModel,
+          model,
           device: "gpu",
           output: {
             format: "image/png",
@@ -133,9 +134,7 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
         actualBackend = "WebGPU";
         webGpuAvailable = true;
         webGpuSessionPassed = true;
-        if (model !== "birefnet_lite") {
-          fallbackReason = undefined;
-        }
+        fallbackReason = undefined;
       } catch (gpuErr: unknown) {
         console.warn("[bg-remover-worker] WebGPU execution failed; safely falling back to WASM:", gpuErr);
         webGpuSessionPassed = false;
@@ -157,9 +156,8 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
     // 2. Safe WASM fallback
     if (!resultBlob || actualBackend !== "WebGPU") {
       try {
-        const actualModel = model === "birefnet_lite" ? "isnet_fp16" : (model || "isnet_fp16");
         resultBlob = await removeBackground(imageBlob, {
-          model: actualModel,
+          model,
           device: "cpu",
           output: {
             format: "image/png",
@@ -216,11 +214,18 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
       modelResolution,
       textPolicy,
       textDetectionRan: true,
+      actualModel: "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
+      actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      actualExecutionProvider: actualBackend,
+      actualTextDetector: "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
+      actualTextPolicy: textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text",
+      actualRefinementPreset: "standard",
       webGpuAvailable,
       webGpuApiAvailable: hasWorkerGpu,
       gpuAdapterAvailable,
       webGpuSessionPassed,
-      fallbackReason,
+      fallbackReason: fallbackReason || "BiRefNet is not currently active; using isnet_fp16 fallback",
       wasmSimd,
       wasmThreads,
       wasmThreadsStatus,
