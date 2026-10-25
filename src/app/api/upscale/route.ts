@@ -483,7 +483,7 @@ export async function POST(req: NextRequest) {
           headers: {
             "Content-Type": "image/png",
             "Cache-Control": "no-store",
-            "X-Model-Used": "HD Resize & Sharpen — Algorithmic Fallback",
+            "X-Model-Used": "HD Resize & Sharpen - Algorithmic Fallback",
             "X-Upscale-Factor": String(scale),
             "X-Processed-Width": String(srcW),
             "X-Processed-Height": String(srcH),
