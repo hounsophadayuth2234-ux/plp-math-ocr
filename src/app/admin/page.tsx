@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Shield,
   Users,
@@ -60,6 +61,12 @@ interface AuditEvent {
 }
 
 export default function AdminPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/profile");
+  }, [router]);
+
   const [users, setUsers] = useState<SafeUser[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);

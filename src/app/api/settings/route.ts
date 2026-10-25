@@ -4,6 +4,7 @@ import path from "path";
 import { enforceRouteAuth } from "@/lib/auth-gate";
 import { enforceRateLimit } from "@/lib/rate-limiter";
 import { isBlockedHostname, isPrivateOrReservedIp } from "@/lib/ssrf-guard";
+import { getDualApiConfigStatus } from "@/lib/gemini-dual-api";
 
 const ENV_FILE_PATH = path.join(process.cwd(), ".env.local");
 
@@ -163,6 +164,7 @@ export async function GET(req?: NextRequest) {
       imageWorkerUrl && !imageWorkerUrl.includes("your_worker_url")
     ),
     imageWorkerUrl: maskUrl(imageWorkerUrl),
+    dualApi: getDualApiConfigStatus(),
   });
 }
 
@@ -186,6 +188,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       geminiKey,
+      secondaryGeminiKey,
       replicateToken,
       removeBgKey,
       huggingFaceKey,
@@ -196,6 +199,7 @@ export async function POST(req: NextRequest) {
       imageWorkerToken,
     } = body as {
       geminiKey?: string;
+      secondaryGeminiKey?: string;
       replicateToken?: string;
       removeBgKey?: string;
       huggingFaceKey?: string;
@@ -273,6 +277,10 @@ export async function POST(req: NextRequest) {
     if (geminiKey !== undefined && geminiKey.trim()) {
       updated = updateOrAppend(updated, "GEMINI_API_KEY", geminiKey.trim());
       process.env.GEMINI_API_KEY = geminiKey.trim();
+    }
+    if (secondaryGeminiKey !== undefined && secondaryGeminiKey.trim()) {
+      updated = updateOrAppend(updated, "GEMINI_API_KEY_SECONDARY", secondaryGeminiKey.trim());
+      process.env.GEMINI_API_KEY_SECONDARY = secondaryGeminiKey.trim();
     }
     if (replicateToken !== undefined && replicateToken.trim()) {
       updated = updateOrAppend(

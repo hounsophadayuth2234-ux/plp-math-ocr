@@ -6,6 +6,7 @@ import { Menu, Settings, HelpCircle, Shield, User, LogOut } from "lucide-react";
 import { CORE_TOOLS } from "@/config/tools";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { MotionSpeedControl } from "@/components/layout/MotionSpeedControl";
+import { DualToneThemeToggle } from "@/components/ui/DualToneThemeToggle";
 
 interface HeaderProps {
   onOpenSidebar: () => void;
@@ -108,7 +109,10 @@ export function Header({ onOpenSidebar, onOpenSettings, onOpenHelp }: HeaderProp
           <MotionSpeedControl compact={true} />
         </div>
 
-        {/* 1. Language Selector */}
+        {/* 1. Dual-Tone Theme Selector */}
+        <DualToneThemeToggle compact={true} />
+
+        {/* 2. Language Selector */}
         <LanguageSwitcher />
 
         {/* 2. Help / Guide trigger */}

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const records =
-      user.role === "ADMIN"
+      user.role === "SUPER_ADMIN"
         ? await DriveHistoryStore.listAllRecords()
         : await DriveHistoryStore.listRecordsForUser(user.id);
 

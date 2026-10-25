@@ -16,13 +16,13 @@ export async function bootstrapFirstAdmin(): Promise<UserRecord | null> {
   let superAdminUser: UserRecord | null = null;
 
   // 1. Ensure SUPER_ADMIN account is seeded
-  const activeSuperAdmins = await UserStore.countActiveSuperAdmins();
-  if (activeSuperAdmins === 0) {
-    const superUsername = (process.env.INITIAL_SUPER_ADMIN_USERNAME || "superadmin").trim().toLowerCase();
-    const superEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "superadmin@dyt-ecosystem.local").trim().toLowerCase();
-    const superRawPassword = (process.env.INITIAL_SUPER_ADMIN_PASSWORD || "SuperAdmin2026!SecureBoot").trim();
+  const superUsername = (process.env.INITIAL_SUPER_ADMIN_USERNAME || "superadmin").trim().toLowerCase();
+  const superEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "superadmin@dyt-ecosystem.local").trim().toLowerCase();
+  const superRawPassword = (process.env.INITIAL_SUPER_ADMIN_PASSWORD || "SuperAdmin2026!SecureBoot").trim();
+  
+  const existingSuper = await UserStore.getUserByUsernameOrEmail(superUsername);
+  if (!existingSuper) {
     const superPasswordHash = bcrypt.hashSync(superRawPassword, 12);
-
     try {
       superAdminUser = await UserStore.createUser({
         username: superUsername,
@@ -37,13 +37,19 @@ export async function bootstrapFirstAdmin(): Promise<UserRecord | null> {
     } catch (_err) {
       superAdminUser = await UserStore.getUserByUsernameOrEmail(superUsername);
     }
+  } else {
+    superAdminUser = existingSuper;
+    if (existingSuper.role !== "SUPER_ADMIN") {
+      await UserStore.updateUser(existingSuper.id, { role: "SUPER_ADMIN" });
+    }
   }
 
-  // 2. Ensure ADMIN account is seeded
-  const activeAdmins = await UserStore.countActiveAdmins();
-  if (activeAdmins === 0) {
-    const adminUsername = (process.env.INITIAL_ADMIN_USERNAME || "admin").trim().toLowerCase();
-    const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || "admin@dyt-ecosystem.local").trim().toLowerCase();
+  // 2. Ensure ADMIN account is seeded with demoted ADMIN role
+  const adminUsername = (process.env.INITIAL_ADMIN_USERNAME || "admin").trim().toLowerCase();
+  const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || "admin@dyt-ecosystem.local").trim().toLowerCase();
+  const existingAdmin = await UserStore.getUserByUsernameOrEmail(adminUsername);
+
+  if (!existingAdmin) {
     let adminPasswordHash = "";
 
     const envPassword = process.env.INITIAL_ADMIN_PASSWORD?.trim();
@@ -90,6 +96,9 @@ export async function bootstrapFirstAdmin(): Promise<UserRecord | null> {
       const existing = await UserStore.getUserByUsernameOrEmail(adminUsername);
       if (!superAdminUser) return existing;
     }
+  } else if (existingAdmin.role === "SUPER_ADMIN") {
+    // Demote legacy admin to ADMIN role now that superadmin exists
+    await UserStore.updateUser(existingAdmin.id, { role: "ADMIN" });
   }
 
   return superAdminUser;

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth-session";
 import { generateCsrfToken, setCsrfCookie, CSRF_COOKIE_NAME } from "@/lib/auth-csrf";
+import { bootstrapFirstAdmin } from "@/lib/bootstrap-admin";
 
 export async function GET(req: NextRequest) {
+  await bootstrapFirstAdmin();
   const user = await getSessionUser(req);
 
   if (!user) {

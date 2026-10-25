@@ -34,8 +34,10 @@ import {
   ArrowRight,
   BarChart3,
   Sparkles,
+  Sliders,
 } from "lucide-react";
 import { GoogleDriveOAuthSettings } from "@/components/drive/GoogleDriveOAuthSettings";
+import { SystemSettingsTab } from "@/components/profile/SystemSettingsTab";
 import { getOrRefreshCsrfToken, fetchFreshCsrfToken, CSRF_HEADER_NAME } from "@/lib/csrf-client";
 
 interface SafeUser {
@@ -92,7 +94,7 @@ interface AuditEvent {
   details?: Record<string, any>;
 }
 
-type ProfileTab = "profile" | "password" | "security" | "activity" | "users" | "drive" | "audit";
+type ProfileTab = "profile" | "password" | "security" | "activity" | "users" | "drive" | "settings" | "audit";
 
 function ProfileHubInner() {
   const searchParams = useSearchParams();
@@ -186,6 +188,21 @@ function ProfileHubInner() {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
+
+  // Strict RBAC Tab Guard: Redirect unauthorized tab attempts back to profile
+  useEffect(() => {
+    if (!currentUser) return;
+    const allowedTabs: ProfileTab[] =
+      currentUser.role === "SUPER_ADMIN"
+        ? ["profile", "password", "security", "activity", "users", "drive", "settings", "audit"]
+        : currentUser.role === "ADMIN"
+        ? ["profile", "password", "security", "activity"]
+        : ["profile", "password", "security"];
+
+    if (!allowedTabs.includes(activeTab)) {
+      setActiveTab("profile");
+    }
+  }, [currentUser, activeTab]);
 
   // Load Session & Profile
   const fetchSessionAndProfile = useCallback(async () => {
@@ -841,6 +858,19 @@ function ProfileHubInner() {
               >
                 <Cloud className="h-4 w-4 text-sky-400" />
                 <span>Google Drive Storage</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("settings")}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                  activeTab === "settings"
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
+                }`}
+              >
+                <Sliders className="h-4 w-4 text-emerald-400" />
+                <span>ការកំណត់ប្រព័ន្ធ (Settings)</span>
               </button>
 
               <button
@@ -1815,6 +1845,13 @@ function ProfileHubInner() {
           <div className="space-y-4">
             <GoogleDriveOAuthSettings />
           </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            TAB: System Settings (SUPER_ADMIN ONLY)
+            ══════════════════════════════════════════════════════════════ */}
+        {activeTab === "settings" && currentUser.role === "SUPER_ADMIN" && (
+          <SystemSettingsTab />
         )}
 
         {/* ══════════════════════════════════════════════════════════════

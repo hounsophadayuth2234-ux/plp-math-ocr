@@ -84,6 +84,122 @@
   --studio-text: #0f172a;
 }
 
+/* -------------------------------------------------------------
+ * Dual-Tone UI Theme System (Cyber Sapphire + Royal Gold / Multi-Theme)
+ * ----------------------------------------------------------- */
+:root {
+  /* Default: Cyber Sapphire Cyan (Primary) + Royal Gold Amber (Secondary) */
+  --dyt-primary: #00f0ff;
+  --dyt-primary-rgb: 0, 240, 255;
+  --dyt-secondary: #f59e0b;
+  --dyt-secondary-rgb: 245, 158, 11;
+  --dyt-accent-glow: rgba(0, 240, 255, 0.35);
+  --dyt-gold-glow: rgba(245, 158, 11, 0.35);
+  --dyt-dual-gradient: linear-gradient(135deg, #00f0ff 0%, #38bdf8 38%, #f59e0b 100%);
+  --dyt-dual-gradient-soft: linear-gradient(135deg, rgba(0, 240, 255, 0.12) 0%, rgba(245, 158, 11, 0.12) 100%);
+  --dyt-dual-border: linear-gradient(90deg, rgba(0, 240, 255, 0.6) 0%, rgba(245, 158, 11, 0.6) 100%);
+  --dyt-surface: #0b1120;
+}
+
+/* 1. Cyber Gold (ខៀវរន្ទះ & មាសរាជវង្ស - High-Tech Khmer Gold) */
+[data-theme="cyber-gold"] {
+  --dyt-primary: #00f0ff;
+  --dyt-primary-rgb: 0, 240, 255;
+  --dyt-secondary: #fbbf24;
+  --dyt-secondary-rgb: 251, 191, 36;
+  --dyt-accent-glow: rgba(0, 240, 255, 0.4);
+  --dyt-gold-glow: rgba(251, 191, 36, 0.4);
+  --dyt-dual-gradient: linear-gradient(135deg, #00f0ff 0%, #38bdf8 35%, #fbbf24 100%);
+  --dyt-dual-gradient-soft: linear-gradient(135deg, rgba(0, 240, 255, 0.15) 0%, rgba(251, 191, 36, 0.15) 100%);
+  --dyt-dual-border: linear-gradient(90deg, rgba(0, 240, 255, 0.7) 0%, rgba(251, 191, 36, 0.7) 100%);
+}
+
+/* 2. Sapphire Amber (ខៀវសមុទ្រ & អាំប៊ើរ) */
+[data-theme="sapphire-amber"] {
+  --dyt-primary: #38bdf8;
+  --dyt-primary-rgb: 56, 189, 248;
+  --dyt-secondary: #f97316;
+  --dyt-secondary-rgb: 249, 115, 22;
+  --dyt-accent-glow: rgba(56, 189, 248, 0.4);
+  --dyt-gold-glow: rgba(249, 115, 22, 0.4);
+  --dyt-dual-gradient: linear-gradient(135deg, #38bdf8 0%, #60a5fa 35%, #f97316 100%);
+  --dyt-dual-gradient-soft: linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(249, 115, 22, 0.15) 100%);
+  --dyt-dual-border: linear-gradient(90deg, rgba(56, 189, 248, 0.7) 0%, rgba(249, 115, 22, 0.7) 100%);
+}
+
+/* 3. Emerald Gold (ត្បូងមរកត & មាស) */
+[data-theme="emerald-gold"] {
+  --dyt-primary: #10b981;
+  --dyt-primary-rgb: 16, 185, 129;
+  --dyt-secondary: #f59e0b;
+  --dyt-secondary-rgb: 245, 158, 11;
+  --dyt-accent-glow: rgba(16, 185, 129, 0.4);
+  --dyt-gold-glow: rgba(245, 158, 11, 0.4);
+  --dyt-dual-gradient: linear-gradient(135deg, #10b981 0%, #34d399 35%, #f59e0b 100%);
+  --dyt-dual-gradient-soft: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%);
+  --dyt-dual-border: linear-gradient(90deg, rgba(16, 185, 129, 0.7) 0%, rgba(245, 158, 11, 0.7) 100%);
+}
+
+/* 4. Amethyst Rose (ស្វាយអធ្រាត្រ & ផ្កាឈូកនីអុង) */
+[data-theme="amethyst-rose"] {
+  --dyt-primary: #c084fc;
+  --dyt-primary-rgb: 192, 132, 252;
+  --dyt-secondary: #fb7185;
+  --dyt-secondary-rgb: 251, 113, 133;
+  --dyt-accent-glow: rgba(192, 132, 252, 0.4);
+  --dyt-gold-glow: rgba(251, 113, 133, 0.4);
+  --dyt-dual-gradient: linear-gradient(135deg, #c084fc 0%, #e879f9 35%, #fb7185 100%);
+  --dyt-dual-gradient-soft: linear-gradient(135deg, rgba(192, 132, 252, 0.15) 0%, rgba(251, 113, 133, 0.15) 100%);
+  --dyt-dual-border: linear-gradient(90deg, rgba(192, 132, 252, 0.7) 0%, rgba(251, 113, 133, 0.7) 100%);
+}
+
+/* 5. Clean Dual Light (ស្ទូឌីយោពន្លឺថ្ងៃ - Daylight Dual Studio) */
+[data-theme="clean-dual-light"] {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --dyt-primary: #0284c7;
+  --dyt-primary-rgb: 2, 132, 199;
+  --dyt-secondary: #d97706;
+  --dyt-secondary-rgb: 217, 119, 6;
+  --dyt-accent-glow: rgba(2, 132, 199, 0.25);
+  --dyt-gold-glow: rgba(217, 119, 6, 0.25);
+  --dyt-dual-gradient: linear-gradient(135deg, #0284c7 0%, #0369a1 40%, #d97706 100%);
+  --dyt-dual-gradient-soft: linear-gradient(135deg, rgba(2, 132, 199, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+  --dyt-dual-border: linear-gradient(90deg, rgba(2, 132, 199, 0.6) 0%, rgba(217, 119, 6, 0.6) 100%);
+  --dyt-surface: #ffffff;
+}
+
+/* Dual-Tone Utilities */
+.text-dual-gradient {
+  background: var(--dyt-dual-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.bg-dual-gradient {
+  background: var(--dyt-dual-gradient);
+}
+
+.bg-dual-soft {
+  background: var(--dyt-dual-gradient-soft);
+}
+
+.border-dual-gradient {
+  border-image: var(--dyt-dual-border) 1;
+}
+
+.glow-dual-primary {
+  box-shadow: 0 0 25px var(--dyt-accent-glow);
+}
+
+.glow-dual-secondary {
+  box-shadow: 0 0 25px var(--dyt-gold-glow);
+}
+
+.theme-transition {
+  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease, box-shadow 0.35s ease;
+}
+
 
 @theme inline {
   --color-background: var(--background);

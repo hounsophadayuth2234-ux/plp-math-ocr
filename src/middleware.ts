@@ -198,7 +198,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Enforce ADMIN or SUPER_ADMIN role on /admin and /api/admin/* (excluding public recovery page)
+  // 5. Enforce 3-Tier RBAC on /admin and /api/admin/* (excluding public recovery page)
   if (
     (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) &&
     pathname !== "/admin/recovery"
@@ -229,6 +229,30 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(dashboardUrl);
     }
 
+    // Demoted ADMIN role is strictly forbidden from User Management, Audit Logs, and MFA overrides
+    if (
+      userRole === "ADMIN" &&
+      (pathname.startsWith("/api/admin/users") ||
+        pathname.startsWith("/api/admin/audit-log") ||
+        pathname.startsWith("/api/admin/mfa"))
+    ) {
+      return applyCorsHeaders(
+        NextResponse.json(
+          {
+            error: "Forbidden: Super Administrator role required for user management and audit logs (ត្រូវការសិទ្ធិជា SUPER_ADMIN).",
+            authenticated: true,
+            role: userRole,
+          },
+          {
+            status: 403,
+            headers: {
+              "Cache-Control": "no-store, private",
+              "X-Content-Type-Options": "nosniff",
+            },
+          }
+        )
+      );
+    }
     // Canonical redirect from /admin to Unified Profile Hub
     if (pathname === "/admin") {
       const targetTab = userRole === "SUPER_ADMIN" ? "users" : "activity";
@@ -236,6 +260,28 @@ export async function middleware(req: NextRequest) {
       const tabParam = req.nextUrl.searchParams.get("tab") || targetTab;
       profileUrl.searchParams.set("tab", tabParam);
       return NextResponse.redirect(profileUrl);
+    }
+  }
+
+  // 6. Enforce SUPER_ADMIN role on Google Drive Management API routes
+  if (pathname.startsWith("/api/auth/google-drive")) {
+    if (userRole !== "SUPER_ADMIN") {
+      return applyCorsHeaders(
+        NextResponse.json(
+          {
+            error: "Forbidden: Super Administrator role required for Google Drive Storage configuration (ត្រូវការសិទ្ធិជា SUPER_ADMIN).",
+            authenticated: true,
+            role: userRole,
+          },
+          {
+            status: 403,
+            headers: {
+              "Cache-Control": "no-store, private",
+              "X-Content-Type-Options": "nosniff",
+            },
+          }
+        )
+      );
     }
   }
 

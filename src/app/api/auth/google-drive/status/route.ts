@@ -20,6 +20,16 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  if (user.role !== "SUPER_ADMIN") {
+    return NextResponse.json(
+      {
+        error: "Forbidden: Super Administrator role required for Google Drive Storage (ត្រូវការសិទ្ធិជា SUPER_ADMIN).",
+        connected: false,
+      },
+      { status: 403 }
+    );
+  }
+
   const folderId = getTargetDriveFolderId();
 
   if (!user.googleDriveConnected) {
@@ -27,15 +37,6 @@ export async function GET(req: NextRequest) {
       success: true,
       connected: false,
       folderId,
-    });
-  }
-
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({
-      success: true,
-      connected: Boolean(user.googleDriveConnected),
-      folderAccessible: Boolean(user.googleDriveConnected),
-      restricted: true,
     });
   }
 
