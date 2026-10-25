@@ -966,12 +966,17 @@ export function chokeAndFeatherAlphaMask(
         if (minVal === 0) break;
       }
 
-      if (hasBg) {
-        // Boundary pixel: choke inward
-        if (a < 180) {
-          choked[idx] = Math.round(minVal * 0.7);
+      if (hasBg && chokeRadius > 0) {
+        // Boundary pixel: edge-local choke that strictly preserves soft hair/fur strands
+        if (a <= 40) {
+          // Outermost faint fringe pixel: gentle choke
+          choked[idx] = Math.round(a * 0.7);
+        } else if (a <= 220) {
+          // Soft hair/fur/whiskers strand: preserve continuous soft alpha without wiping out
+          choked[idx] = a;
         } else {
-          choked[idx] = Math.min(a, Math.round(a * 0.92));
+          // Solid boundary edge: subtle inward tightening
+          choked[idx] = Math.min(a, Math.round(a * 0.95));
         }
       } else {
         choked[idx] = a;
@@ -4149,6 +4154,16 @@ export function edgeAwareHairFurRefinement(
         }
       } else {
         refinedAlpha[idx] = getAlpha(idx);
+      }
+    }
+  }
+
+  // 2b. Edge-local choke applied only to outermost faint fringe pixels (a <= 40), strictly preserving soft hair/fur
+  if (options?.alphaChoke && options.alphaChoke > 0) {
+    const chokeFactor = Math.max(0.6, 1 - options.alphaChoke * 0.12);
+    for (let i = 0; i < totalPixels; i++) {
+      if (trimap[i] === 128 && refinedAlpha[i] > 0 && refinedAlpha[i] <= 40) {
+        refinedAlpha[i] = Math.round(refinedAlpha[i] * chokeFactor);
       }
     }
   }

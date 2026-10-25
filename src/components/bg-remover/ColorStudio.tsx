@@ -79,6 +79,7 @@ export type ViewChannel =
   | "initial_mask"
   | "refined_mask"
   | "mask"
+  | "mask_compare"
   | "overlay"
   | "original"
   | "split";
@@ -347,11 +348,8 @@ export function ColorStudio({
       }
     }
 
-    // If initial mode is person + text only, extract person and text masks immediately
-    if (
-      sourceImageData &&
-      (initialSelectionMode === "person_text_only" || initialSelectionMode === "person_plus_text")
-    ) {
+    // Extract person and text masks so Text Mask and Person Mask previews are immediately ready before export
+    if (sourceImageData) {
       try {
         const pRes = extractPersonMask(sourceImageData.data, baseAlphaMaskRef.current, width, height);
         const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
@@ -359,19 +357,21 @@ export function ColorStudio({
         textMaskRef.current = tRes.textStrokeMask;
         graphicsMaskRef.current = tRes.graphicsMask;
 
-        const combined = combinePersonAndTextMasks(
-          pRes.personMask,
-          tRes.textStrokeMask,
-          width,
-          height,
-          {
-            keepPerson: true,
-            keepText: true,
-            keepGraphics: false,
-            graphicsMask: tRes.graphicsMask,
-          }
-        );
-        setPersonTextDiagnostics(combined.diagnostics);
+        if (initialSelectionMode === "person_text_only" || initialSelectionMode === "person_plus_text") {
+          const combined = combinePersonAndTextMasks(
+            pRes.personMask,
+            tRes.textStrokeMask,
+            width,
+            height,
+            {
+              keepPerson: true,
+              keepText: true,
+              keepGraphics: false,
+              graphicsMask: tRes.graphicsMask,
+            }
+          );
+          setPersonTextDiagnostics(combined.diagnostics);
+        }
       } catch (err) {
         console.warn("Failed to extract initial person/text masks:", err);
       }
@@ -547,6 +547,16 @@ export function ColorStudio({
     const data = imgData.data;
     const total = w * h;
 
+    if (activeChannel === "text_mask" && !textMaskRef.current && sourceImageData) {
+      try {
+        const tRes = extractTextStrokeMask(sourceImageData.data, width, height);
+        textMaskRef.current = tRes.textStrokeMask;
+        graphicsMaskRef.current = tRes.graphicsMask;
+      } catch (e) {
+        console.warn("Failed lazy text mask extraction", e);
+      }
+    }
+
     for (let i = 0; i < total; i++) {
       const pIdx = i * 4;
       const a = mask[i];
@@ -560,6 +570,43 @@ export function ColorStudio({
         data[pIdx + 1] = initA;
         data[pIdx + 2] = initA;
         data[pIdx + 3] = 255;
+      } else if (activeChannel === "mask_compare") {
+        // Real Before/After Mask Comparison: Left = Before AI Mask, Right = After Refined/Edited Mask
+        const splitX = Math.floor(width / 2);
+        const curX = i % width;
+        const baseA = baseMask ? baseMask[i] : a;
+        if (Math.abs(curX - splitX) <= 1) {
+          // Sharp divider line: bright cyan indicator (#00f0ff)
+          data[pIdx] = 0;
+          data[pIdx + 1] = 240;
+          data[pIdx + 2] = 255;
+          data[pIdx + 3] = 255;
+        } else if (curX < splitX) {
+          // Left: Before AI Raw Mask (clean grayscale)
+          data[pIdx] = baseA;
+          data[pIdx + 1] = baseA;
+          data[pIdx + 2] = baseA;
+          data[pIdx + 3] = 255;
+        } else {
+          // Right: After Refined / User-Edited Mask
+          // Highlight differences: Green tint if kept/restored, Red tint if removed/erased
+          if (a > baseA + 20) {
+            data[pIdx] = 34;
+            data[pIdx + 1] = 197;
+            data[pIdx + 2] = 94;
+            data[pIdx + 3] = 255;
+          } else if (a < baseA - 20) {
+            data[pIdx] = 239;
+            data[pIdx + 1] = 68;
+            data[pIdx + 2] = 68;
+            data[pIdx + 3] = 255;
+          } else {
+            data[pIdx] = a;
+            data[pIdx + 1] = a;
+            data[pIdx + 2] = a;
+            data[pIdx + 3] = 255;
+          }
+        }
       } else if (activeChannel === "person_mask") {
         // Blue overlay for person mask (#3b82f6)
         const pVal = personMaskRef.current ? personMaskRef.current[i] : a;
@@ -1970,6 +2017,20 @@ export function ColorStudio({
 
         <button
           type="button"
+          data-testid="preview-tab-mask-compare"
+          onClick={() => handleSelectChannel("mask_compare")}
+          className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
+            activeChannel === "mask_compare"
+              ? "bg-slate-900 border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+              : "border-slate-800 text-slate-400 hover:text-white bg-slate-950/60"
+          }`}
+        >
+          <Sliders className="h-3.5 w-3.5 text-cyan-400" />
+          <span>Mask Compare (Before vs After)</span>
+        </button>
+
+        <button
+          type="button"
           data-testid="preview-tab-person-mask"
           onClick={() => handleSelectChannel("person_mask")}
           className={`min-h-[40px] px-3 py-1.5 flex items-center gap-1.5 border font-bold text-xs transition-all ${
@@ -2302,6 +2363,18 @@ export function ColorStudio({
           <span className="text-slate-500">ZOOM:</span>
           <span className="text-white font-bold">{Math.round(zoom * 100)}%</span>
         </div>
+
+        {/* Real Mask Comparison Header Overlay */}
+        {activeChannel === "mask_compare" && (
+          <div className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 z-20 flex flex-wrap items-center gap-2.5 bg-slate-950/95 border border-cyan-500/50 px-3 py-1 text-[11px] font-mono shadow-lg">
+            <span className="text-slate-300 font-bold">◀ BEFORE (AI MASK)</span>
+            <span className="text-cyan-400 font-bold">|</span>
+            <span className="text-emerald-400 font-bold">AFTER (REFINED / EDITED) ▶</span>
+            <span className="text-[10px] text-slate-400 border-l border-slate-700 pl-2">
+              <span className="text-emerald-400">Green</span> = Kept · <span className="text-red-400">Red</span> = Erased
+            </span>
+          </div>
+        )}
 
         {/* View Mode: Split Comparison Slider vs Interactive Canvas vs Image */}
         {activeChannel === "split" ? (
@@ -3174,6 +3247,19 @@ export function ColorStudio({
               >
                 <Eye className="h-3.5 w-3.5 text-amber-400" />
                 <span>ពិនិត្យម៉ាសអាល់ហ្វា (MASK DEBUG)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectChannel("mask_compare")}
+                className={`min-h-[44px] flex items-center gap-1.5 rounded-none px-3 py-1.5 text-xs transition-all tracking-wider ${
+                  activeChannel === "mask_compare"
+                    ? "bg-slate-900 border border-cyan-400 text-white font-bold"
+                    : "border border-slate-800 bg-slate-900/60 text-slate-300 hover:text-white"
+                }`}
+              >
+                <Sliders className="h-3.5 w-3.5 text-cyan-400" />
+                <span>ប្រៀបធៀបម៉ាស (MASK COMPARE)</span>
               </button>
 
               <button

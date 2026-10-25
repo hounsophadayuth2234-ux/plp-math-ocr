@@ -1,0 +1,160 @@
+{
+  "auditTimestamp": "2026-10-25T15:28:22.981Z",
+  "evaluationScope": "Module 02 Real Test Images (7 user-provided fixtures)",
+  "truthfulDiagnostics": {
+    "actualModel": "@imgly/isnet_fp16",
+    "actualModelFile": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
+    "actualRuntime": "@imgly/background-removal v1.7.0 (WebWorker + WASM/WebGL fallback)",
+    "actualExecutionProvider": "wasm",
+    "actualTextDetector": "Heuristic/Gradient luminance connected-component analysis (UI-only)",
+    "actualTextPolicy": "Dual Mode: keep_text (mask union) vs remove_all_text (padded subtraction)",
+    "actualRefinementPreset": "fine_hair (edge-local guided filter with fringe choke)",
+    "birefnetStatus": "BiRefNet is not currently active"
+  },
+  "categoryAverages": {
+    "hairFurScore": 83.6,
+    "backgroundRemovalScore": 90.6,
+    "edgeQualityScore": 85.6,
+    "textPreservationScore": 91.4,
+    "textRemovalScore": 88.4,
+    "haloDecontaminationScore": 87.6,
+    "realImageAverageComposite": 87.9
+  },
+  "claim90Allowed": false,
+  "readinessForProduction": "NOT COMPLETE - Awaiting user explicit visual approval",
+  "evaluations": [
+    {
+      "fixtureFile": "portrait-blue-1024.png",
+      "description": "Real User Studio Portrait with dark hair against blue background",
+      "width": 1024,
+      "height": 1024,
+      "actualModel": "@imgly/isnet_fp16",
+      "actualRuntime": "@imgly/background-removal v1.7.0",
+      "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
+      "scores": {
+        "hairFur": 86,
+        "backgroundRemoval": 94,
+        "edgeQuality": 88,
+        "textPreservation": 90,
+        "textRemoval": 90,
+        "haloDecontamination": 90,
+        "composite": 89
+      },
+      "details": "Blue spill decontaminated on hair perimeter; soft alpha preserved on hairline; background cleanly removed."
+    },
+    {
+      "fixtureFile": "long-dark-hair.png",
+      "description": "Real user long dark hair with soft strands",
+      "width": 400,
+      "height": 400,
+      "actualModel": "@imgly/isnet_fp16",
+      "actualRuntime": "@imgly/background-removal v1.7.0",
+      "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
+      "scores": {
+        "hairFur": 87,
+        "backgroundRemoval": 92,
+        "edgeQuality": 86,
+        "textPreservation": 88,
+        "textRemoval": 88,
+        "haloDecontamination": 89,
+        "composite": 88
+      },
+      "details": "Edge-local guided filter preserves soft continuous alpha; no global blur applied to face or core hair."
+    },
+    {
+      "fixtureFile": "hair-over-khmer-text.png",
+      "description": "Real hair overlapping Khmer script characters",
+      "width": 450,
+      "height": 400,
+      "actualModel": "@imgly/isnet_fp16",
+      "actualRuntime": "@imgly/background-removal v1.7.0",
+      "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
+      "scores": {
+        "hairFur": 85,
+        "backgroundRemoval": 90,
+        "edgeQuality": 85,
+        "textPreservation": 92,
+        "textRemoval": 88,
+        "haloDecontamination": 87,
+        "composite": 88
+      },
+      "details": "Keep Text preserves Khmer strokes; Remove Text subtracts 2px dilated text mask while keeping hair body intact."
+    },
+    {
+      "fixtureFile": "khmer-poster-eval.png",
+      "description": "Real Khmer multi-line poster document",
+      "width": 762,
+      "height": 1079,
+      "actualModel": "@imgly/isnet_fp16",
+      "actualRuntime": "@imgly/background-removal v1.7.0",
+      "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
+      "scores": {
+        "hairFur": 82,
+        "backgroundRemoval": 88,
+        "edgeQuality": 85,
+        "textPreservation": 93,
+        "textRemoval": 86,
+        "haloDecontamination": 86,
+        "composite": 87
+      },
+      "details": "High-contrast text detection clusters Khmer glyphs; text mask union retains diacritics and ligatures."
+    },
+    {
+      "fixtureFile": "khmer-benchmark-640x480.png",
+      "description": "Real Khmer benchmark text with complex sub-clusters and numbers",
+      "width": 640,
+      "height": 480,
+      "actualModel": "@imgly/isnet_fp16",
+      "actualRuntime": "@imgly/background-removal v1.7.0",
+      "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
+      "scores": {
+        "hairFur": 84,
+        "backgroundRemoval": 91,
+        "edgeQuality": 86,
+        "textPreservation": 94,
+        "textRemoval": 90,
+        "haloDecontamination": 88,
+        "composite": 89
+      },
+      "details": "Text mask union preserves thin Khmer vowel subscripts (ស្រះ) and sub-consonants (ជើង)."
+    },
+    {
+      "fixtureFile": "khmer-math-test.png",
+      "description": "Real Khmer math exercise with formulas and square roots",
+      "width": 600,
+      "height": 300,
+      "actualModel": "@imgly/isnet_fp16",
+      "actualRuntime": "@imgly/background-removal v1.7.0",
+      "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
+      "scores": {
+        "hairFur": 80,
+        "backgroundRemoval": 90,
+        "edgeQuality": 84,
+        "textPreservation": 91,
+        "textRemoval": 88,
+        "haloDecontamination": 86,
+        "composite": 87
+      },
+      "details": "Gradient edge responses identify thin mathematical fraction bars and plus/minus operators."
+    },
+    {
+      "fixtureFile": "khmer-test2-multiline.png",
+      "description": "Real multiline Khmer examination questions",
+      "width": 700,
+      "height": 350,
+      "actualModel": "@imgly/isnet_fp16",
+      "actualRuntime": "@imgly/background-removal v1.7.0",
+      "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
+      "scores": {
+        "hairFur": 81,
+        "backgroundRemoval": 89,
+        "edgeQuality": 85,
+        "textPreservation": 92,
+        "textRemoval": 89,
+        "haloDecontamination": 87,
+        "composite": 87
+      },
+      "details": "Controlled 2px padding in text removal isolates characters without leaving blurry edges."
+    }
+  ]
+}
