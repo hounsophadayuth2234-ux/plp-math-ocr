@@ -44,50 +44,50 @@ export function BgStudioHero({
           {isCloudActive ? (
             <div
               data-testid="active-engine-badge"
-              className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/40 px-3 py-1.5 text-purple-300"
-              title="ផ្ញើរូបភាពទៅកាត់នៅលើ Server សម្រាប់រូបស្មុគស្មាញ (Processed on remote server)"
+              className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/40 px-3 py-1.5 text-purple-300 shadow-sm"
+              title="ដំណើរការកាត់ផ្ទៃខាងក្រោយតាមរយៈ RunPod Cloud GPU (Processed on RunPod)"
             >
-              <Cloud className="h-4 w-4 text-purple-400" />
+              <Cloud className="h-4 w-4 text-purple-400 shrink-0" />
               <div className="leading-tight">
-                <div className="text-[10px] text-purple-400/80 font-mono">ACTIVE ENGINE</div>
-                <div className="font-bold">ម៉ាស៊ីនមេកម្រិតខ្ពស់ (Cloud Server AI)</div>
+                <div className="text-[10px] text-purple-400/80 font-mono font-bold">ENGINE MODE</div>
+                <div className="font-bold text-xs sm:text-sm">☁️ RunPod Cloud GPU</div>
                 <div className="text-[9.5px] text-purple-300/80 font-mono mt-0.5">
-                  ផ្ញើរូបភាពទៅកាត់នៅលើ Server (Processed on remote server)
+                  Cloud Serverless Inference
                 </div>
               </div>
             </div>
           ) : isCloudOffline ? (
             <div
               data-testid="active-engine-badge"
-              className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-950/40 px-3 py-1.5 text-amber-300"
-              title="Remote Worker Offline — Automatically fallback to Browser AI"
+              className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-950/40 px-3 py-1.5 text-amber-300 shadow-sm"
+              title="Remote Worker Offline — Automatically fallback to Local Engine"
             >
-              <CloudOff className="h-4 w-4 text-amber-400" />
+              <CloudOff className="h-4 w-4 text-amber-400 shrink-0" />
               <div className="leading-tight">
-                <div className="text-[10px] text-amber-400/80 font-mono">ACTIVE ENGINE</div>
-                <div className="font-bold">ម៉ាស៊ីនមេកម្រិតខ្ពស់ (Cloud Server AI) — ក្រៅបណ្តាញ</div>
+                <div className="text-[10px] text-amber-400/80 font-mono font-bold">ENGINE MODE</div>
+                <div className="font-bold text-xs sm:text-sm">⚡ Local Engine (ដំណើរការលើម៉ាស៊ីនផ្ទាល់ - ឥតគិតថ្លៃ)</div>
                 <div className="text-[9.5px] text-amber-200/80 font-mono mt-0.5">
-                  Fallback: ដំណើរការលើ Browser AI ជំនួសវិញ (Processed locally)
+                  Fallback: Auto-fallback to On-Device Engine
                 </div>
               </div>
             </div>
           ) : (
             <div
               data-testid="active-engine-badge"
-              className="flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-950/40 px-3 py-1.5 text-cyan-300"
-              title="រូបភាពត្រូវបានកាត់នៅក្នុង Browser របស់អ្នកផ្ទាល់ មិនផ្ញើទៅ Server ទេ (Processed locally in your browser)"
+              className="flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-950/40 px-3 py-1.5 text-cyan-300 shadow-sm"
+              title="ដំណើរការលើម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ មិនផ្ញើទៅ Server ទេ (100% On-Device Engine)"
             >
-              <Cpu className="h-4 w-4 text-cyan-400" />
+              <Cpu className="h-4 w-4 text-cyan-400 shrink-0" />
               <div className="leading-tight">
-                <div className="text-[10px] text-cyan-400/80 font-mono">ACTIVE ENGINE</div>
-                <div className="font-bold flex items-center gap-1.5">
-                  <span>ដំណើរការលើឧបករណ៍ផ្ទាល់ (Browser AI • 100% On-Device)</span>
+                <div className="text-[10px] text-cyan-400/80 font-mono font-bold">ENGINE MODE</div>
+                <div className="font-bold text-xs sm:text-sm flex items-center gap-1.5">
+                  <span>⚡ Local Engine (ដំណើរការលើម៉ាស៊ីនផ្ទាល់ - ឥតគិតថ្លៃ)</span>
                   <span className="text-[10px] text-slate-400 font-normal">
                     {isModelCached ? "• Warm" : "• Local"}
                   </span>
                 </div>
                 <div className="text-[9.5px] text-cyan-200/70 font-mono mt-0.5">
-                  រូបភាពត្រូវបានកាត់នៅក្នុង Browser ផ្ទាល់ (Processed locally in your browser)
+                  100% On-Device · Browser Web Worker / Canvas Processing
                 </div>
               </div>
             </div>

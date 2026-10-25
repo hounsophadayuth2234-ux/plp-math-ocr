@@ -95,6 +95,9 @@ export default function ImageUpscalerPage() {
   const [exportFormat, setExportFormat] = useState<"png" | "jpeg">("png");
   const [customFilename, setCustomFilename] = useState<string>("");
 
+  // Mode state: local engine vs RunPod Cloud GPU
+  const [engineMode, setEngineMode] = useState<"local" | "runpod">("local");
+
   // State management
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -107,6 +110,20 @@ export default function ImageUpscalerPage() {
   const activeJobIdRef = useRef<string | null>(null);
   const urlRegistryRef = useRef<ObjectUrlRegistry>(new ObjectUrlRegistry());
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Probe backend engine configuration on mount
+  useEffect(() => {
+    fetch("/api/upscale")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.hasRunPod || data?.engine === "runpod") {
+          setEngineMode("runpod");
+        } else {
+          setEngineMode("local");
+        }
+      })
+      .catch(() => setEngineMode("local"));
+  }, []);
 
   useEffect(() => {
     const registry = urlRegistryRef.current;
@@ -478,6 +495,24 @@ export default function ImageUpscalerPage() {
       });
       setCustomFilename(autoName);
 
+      // Silently record activity into the Activity Tracking Dashboard
+      try {
+        fetch("/api/user/activity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            module: "03_hd_upscale",
+            action: "upscale_image",
+            title: imageFile?.name || "Image Upscale",
+            details: {
+              scale: res.scale,
+              engine: engineMode === "runpod" ? "runpod_cloud" : "local_on_device",
+              dimensions: `${res.outputWidth}x${res.outputHeight}`,
+            },
+          }),
+        }).catch(() => {});
+      } catch {}
+
       cyberAudio.stopScanningHum();
       cyberAudio.playSuccessChime();
     } catch (err: unknown) {
@@ -582,8 +617,29 @@ export default function ImageUpscalerPage() {
             </div>
           </div>
 
-          {/* Unified Status Area */}
-          <div className="flex items-center gap-2 font-mono text-xs">
+          {/* Unified Mode Badge & Status Area */}
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            {/* Mode Indicator Badge */}
+            <div
+              data-testid="engine-mode-badge"
+              className={`rounded-xl px-3 py-1.5 flex items-center gap-1.5 shadow-sm font-sans text-xs border font-bold transition-all ${
+                engineMode === "runpod"
+                  ? "border-purple-500/40 bg-purple-950/50 text-purple-300"
+                  : "border-cyan-500/40 bg-cyan-950/50 text-cyan-300"
+              }`}
+              title={
+                engineMode === "runpod"
+                  ? "ដំណើរការលើ RunPod Cloud GPU"
+                  : "ដំណើរការលើម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ"
+              }
+            >
+              <span>
+                {engineMode === "runpod"
+                  ? "☁️ RunPod Cloud GPU"
+                  : "⚡ Local Engine (ដំណើរការលើម៉ាស៊ីនផ្ទាល់ - ឥតគិតថ្លៃ)"}
+              </span>
+            </div>
+
             <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 flex items-center gap-2 shadow-sm">
               <span className="text-slate-400">STATUS:</span>
               <span
@@ -612,10 +668,10 @@ export default function ImageUpscalerPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="font-bold uppercase text-cyan-300">
-                Engine: HD Resize &amp; Sharpen / Smart Enhance
+                Engine: {engineMode === "runpod" ? "RunPod Cloud GPU · Real-ESRGAN" : "HD Resize & Sharpen / Smart Enhance"}
               </span>
               <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
-                On-Device Web Worker
+                {engineMode === "runpod" ? "Cloud GPU" : "On-Device Web Worker & Local Sharp"}
               </span>
             </div>
             <p className="text-[11px] text-cyan-100/80 leading-relaxed">

@@ -85,7 +85,77 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(bytes);
 
-    // Check for configured external AI providers (Local GPU Worker or Replicate)
+    // 1. Check for RunPod Cloud GPU (Tier 1 Cloud Mode)
+    const runpodKey = (process.env.RUNPOD_API_KEY || "").trim();
+    const runpodUpscaleUrl = (process.env.RUNPOD_UPSCALE_ENDPOINT || "").trim().replace(/\/+$/, "");
+
+    if (runpodKey && runpodUpscaleUrl && !runpodUpscaleUrl.includes("your_")) {
+      try {
+        const targetUrl = runpodUpscaleUrl.includes("/run")
+          ? runpodUpscaleUrl
+          : `${runpodUpscaleUrl}/runsync`;
+
+        const runpodRes = await fetch(targetUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${runpodKey}`,
+          },
+          body: JSON.stringify({
+            input: {
+              image: `data:${validation.format};base64,${buffer.toString("base64")}`,
+              scale,
+              preset,
+            },
+          }),
+        });
+
+        if (runpodRes.ok) {
+          const runpodData = await runpodRes.json();
+          const outImg =
+            runpodData.output?.image ||
+            runpodData.output?.output_image_base64 ||
+            runpodData.output?.outputUrl ||
+            runpodData.image ||
+            runpodData.outputUrl;
+
+          if (outImg) {
+            let resultUrl = outImg;
+            if (!outImg.startsWith("data:") && !outImg.startsWith("http")) {
+              resultUrl = `data:image/png;base64,${outImg}`;
+            }
+
+            if (sessionUser) {
+              ActivityTracker.recordActivity({
+                userId: sessionUser.id,
+                username: sessionUser.username,
+                displayName: sessionUser.displayName,
+                role: sessionUser.role,
+                module: "03_hd_upscale",
+                action: "upscale_image",
+                title: imageFile?.name || "Image Upscale",
+                details: { scale, engine: "runpod_cloud" },
+              }).catch(() => {});
+            }
+
+            return NextResponse.json<ImageUpscaleApiResponse>(
+              {
+                success: true,
+                outputUrl: resultUrl,
+                model: `Real-ESRGAN (${scale}x · RunPod Cloud GPU)`,
+                scale,
+                fallbackToClient: false,
+              },
+              { status: 200 }
+            );
+          }
+        }
+      } catch (runpodErr) {
+        console.warn("[/api/image-upscale] RunPod error, falling back:", runpodErr);
+      }
+    }
+
+    // 2. Check for configured external AI providers (Local GPU Worker or Replicate)
     const workerUrl = (
       process.env.UPSCALER_WORKER_URL ||
       process.env.LOCAL_UPSCALER_URL ||
@@ -151,33 +221,76 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Default Hybrid Response: return metadata & instruct client Web Worker engine execution
-    const base64 = buffer.toString("base64");
-    const dataUri = `data:${validation.format};base64,${base64}`;
+    // 3. Local High-Precision Upscaler (Lanczos-3 + Adaptive USM Sharpening via sharp)
+    try {
+      const sharp = (await import("sharp")).default;
+      const meta = await sharp(buffer).metadata();
+      const srcW = meta.width || 512;
+      const srcH = meta.height || 512;
+      const targetW = srcW * scale;
+      const targetH = srcH * scale;
 
-    if (sessionUser) {
-      ActivityTracker.recordActivity({
-        userId: sessionUser.id,
-        username: sessionUser.username,
-        displayName: sessionUser.displayName,
-        role: sessionUser.role,
-        module: "03_hd_upscale",
-        action: "upscale_image",
-        title: imageFile?.name || "Image Upscale",
-        details: { scale, engine: "web_worker_hybrid" },
-      }).catch(() => {});
+      const outputBuffer = await sharp(buffer)
+        .resize(targetW, targetH, { kernel: "lanczos3", fit: "fill" })
+        .sharpen({ sigma: 1.5, m1: 1.2, m2: 2.0 })
+        .modulate({ brightness: 1.01, saturation: 1.02 })
+        .png({ quality: 100, compressionLevel: 6 })
+        .toBuffer();
+
+      const dataUri = `data:image/png;base64,${outputBuffer.toString("base64")}`;
+
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "03_hd_upscale",
+          action: "upscale_image",
+          title: imageFile?.name || "Image Upscale",
+          details: { scale, engine: "local_sharp_lanczos3" },
+        }).catch(() => {});
+      }
+
+      return NextResponse.json<ImageUpscaleApiResponse>(
+        {
+          success: true,
+          outputUrl: dataUri,
+          model: `Studio Super-Resolution (${scale}x · Local High-Precision Engine)`,
+          scale,
+          fallbackToClient: false,
+        },
+        { status: 200 }
+      );
+    } catch {
+      // Fallback to client Web Worker hybrid engine
+      const base64 = buffer.toString("base64");
+      const dataUri = `data:${validation.format};base64,${base64}`;
+
+      if (sessionUser) {
+        ActivityTracker.recordActivity({
+          userId: sessionUser.id,
+          username: sessionUser.username,
+          displayName: sessionUser.displayName,
+          role: sessionUser.role,
+          module: "03_hd_upscale",
+          action: "upscale_image",
+          title: imageFile?.name || "Image Upscale",
+          details: { scale, engine: "web_worker_hybrid" },
+        }).catch(() => {});
+      }
+
+      return NextResponse.json<ImageUpscaleApiResponse>(
+        {
+          success: true,
+          outputUrl: dataUri,
+          model: `Studio Super-Resolution (${scale}x · Web Worker Hybrid Engine)`,
+          scale,
+          fallbackToClient: true,
+        },
+        { status: 200 }
+      );
     }
-
-    return NextResponse.json<ImageUpscaleApiResponse>(
-      {
-        success: true,
-        outputUrl: dataUri,
-        model: `Studio Super-Resolution (${scale}x · Web Worker Hybrid Engine)`,
-        scale,
-        fallbackToClient: true,
-      },
-      { status: 200 }
-    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unexpected server error.";
     console.error("[/api/image-upscale] Error:", err);

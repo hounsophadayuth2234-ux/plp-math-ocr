@@ -277,8 +277,16 @@ function getWorkerConfig(): WorkerConfig {
     Boolean(process.env.VERCEL_ENV) ||
     process.env.STRICT_SSRF === "1";
 
+  const runpodKey = (process.env.RUNPOD_API_KEY || "").trim();
+  const runpodEndpoint = (
+    process.env.RUNPOD_REMOVE_BG_ENDPOINT ||
+    process.env.RUNPOD_ENDPOINT_URL ||
+    ""
+  ).trim();
+
   const rawUrl = (
     process.env.BACKGROUND_REMOVAL_WORKER_URL ||
+    runpodEndpoint ||
     process.env.REMBG_SPACE_URL ||
     process.env.HF_SPACE_URL ||
     ""
@@ -289,6 +297,7 @@ function getWorkerConfig(): WorkerConfig {
 
   const rawToken = (
     process.env.BACKGROUND_REMOVAL_WORKER_TOKEN ||
+    runpodKey ||
     process.env.HF_SPACE_TOKEN ||
     process.env.HUGGINGFACE_API_KEY ||
     ""
@@ -357,12 +366,20 @@ export async function GET(req?: NextRequest) {
   const searchParams = req?.nextUrl?.searchParams;
   const checkHealth = searchParams?.get("checkHealth") === "true";
 
+  const isRunPod = Boolean(
+    (process.env.RUNPOD_REMOVE_BG_ENDPOINT || "").trim() &&
+    (process.env.RUNPOD_API_KEY || "").trim()
+  );
+
   if (config.configError) {
     return NextResponse.json(
       {
         configured: false,
         status: "invalid_configuration",
         error: config.configError,
+        engine: "local",
+        badgeText: "⚡ Local Engine (ដំណើរការលើម៉ាស៊ីនផ្ទាល់ - ឥតគិតថ្លៃ)",
+        isRunPod: false,
         maxUploadBytes: config.maxUploadBytes,
         timeoutMs: config.timeoutMs,
       },
@@ -378,6 +395,9 @@ export async function GET(req?: NextRequest) {
       {
         configured: false,
         status: "not_configured",
+        engine: "local",
+        badgeText: "⚡ Local Engine (ដំណើរការលើម៉ាស៊ីនផ្ទាល់ - ឥតគិតថ្លៃ)",
+        isRunPod: false,
         maxUploadBytes: config.maxUploadBytes,
         timeoutMs: config.timeoutMs,
       },
@@ -393,6 +413,9 @@ export async function GET(req?: NextRequest) {
       {
         configured: true,
         status: "configured",
+        engine: isRunPod ? "runpod" : "worker",
+        badgeText: isRunPod ? "☁️ RunPod Cloud GPU" : "☁️ Remote Cloud GPU",
+        isRunPod,
         directUrl: !config.token
           ? config.url.endsWith("/remove") || config.url.endsWith("/matting")
             ? config.url
@@ -1056,15 +1079,38 @@ export async function POST(req: NextRequest) {
   const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
   const requestId = crypto.randomUUID();
 
+  const isRunPodServerless = targetWithQuery.includes("api.runpod.ai") || targetWithQuery.includes("/runsync");
+
   let workerRes: Response;
   try {
-    workerRes = await fetch(targetWithQuery, {
-      method: "POST",
-      headers,
-      body: forwardFormData,
-      signal: controller.signal,
-      cache: "no-store",
-    });
+    if (isRunPodServerless) {
+      const base64Data = Buffer.from(imageBuffer).toString("base64");
+      headers["Content-Type"] = "application/json";
+      const runpodPayload = {
+        input: {
+          image: `data:${imageMime};base64,${base64Data}`,
+          endpoint: "remove",
+          mode: selectionMode,
+          quality,
+          refine: true,
+        },
+      };
+      workerRes = await fetch(targetWithQuery, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(runpodPayload),
+        signal: controller.signal,
+        cache: "no-store",
+      });
+    } else {
+      workerRes = await fetch(targetWithQuery, {
+        method: "POST",
+        headers,
+        body: forwardFormData,
+        signal: controller.signal,
+        cache: "no-store",
+      });
+    }
   } catch {
     if (controller.signal.aborted) {
       return NextResponse.json(
@@ -1107,6 +1153,26 @@ export async function POST(req: NextRequest) {
         headers: { "Cache-Control": "no-store, private" },
       }
     );
+  }
+
+  // Check RunPod serverless JSON response
+  if (isRunPodServerless) {
+    const runpodData = await workerRes.json().catch(() => null);
+    const b64 = runpodData?.output?.output_image_base64 || runpodData?.output_image_base64 || runpodData?.output?.image;
+    if (b64) {
+      const cleanB64 = b64.includes(",") ? b64.split(",")[1] : b64;
+      const pngBuf = Buffer.from(cleanB64, "base64");
+      return new NextResponse(pngBuf, {
+        status: 200,
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "no-store, private",
+          "X-Processing-Source": "RunPod Cloud GPU",
+          "X-Segmentation-Model": "RunPod Serverless (rembg / u2net)",
+          "X-Request-Id": requestId,
+        },
+      });
+    }
   }
 
   // 8. Validate worker Content-Type (Only image/png or image/webp)

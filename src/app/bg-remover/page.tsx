@@ -502,8 +502,13 @@ export default function BgRemoverPage() {
     setSelectedEngine(engine);
   };
 
-  const handleRunSegmentation = async (mode: "preview" | "final" | "worker", targetMaxDim?: number) => {
-    if (!imageFile || isProcessingRef.current) {
+  const handleRunSegmentation = async (
+    mode: "preview" | "final" | "worker",
+    targetMaxDim?: number,
+    overrideFile?: File
+  ) => {
+    const activeFile = overrideFile || imageFile;
+    if (!activeFile || isProcessingRef.current) {
       console.log("[bg-remover] Ignoring duplicate click or missing image during processing");
       return;
     }
@@ -513,10 +518,10 @@ export default function BgRemoverPage() {
       setPreviousResult(cachedResult);
     }
     const startTime = performance.now();
-    if (!imageFile) return;
+    if (!activeFile) return;
 
     // Safe optimization: Reuse previous result when image bytes and settings are unchanged
-    const runKey = `${imageFile.name}_${imageFile.size}_${imageFile.lastModified}_${mode}_${targetMaxDim || "def"}_${activeSelectionMode}`;
+    const runKey = `${activeFile.name}_${activeFile.size}_${activeFile.lastModified}_${mode}_${targetMaxDim || "def"}_${activeSelectionMode}`;
     if (lastCompletedRunKeyRef.current === runKey && cachedResult) {
       console.log(`[bg-remover] Reusing previous result for unchanged image & settings: ${runKey}`);
       return;
@@ -566,7 +571,7 @@ export default function BgRemoverPage() {
     }, hardTimeoutMs);
 
     try {
-      console.log(`[bg-remover] Starting segmentation for ${imageFile.name}, mode=${mode}`);
+      console.log(`[bg-remover] Starting segmentation for ${activeFile.name}, mode=${mode}`);
       const output = await bgRemovalQueue.enqueue(
         async () => {
           let segOutput: BgRemovalOutput;
@@ -574,7 +579,7 @@ export default function BgRemoverPage() {
           if (activeSelectionMode === "document_poster" || activeSelectionMode === "whole_poster") {
         // DOCUMENT SAFE MODE: AI MATTE DISABLED
         // Zero worker calls, zero model inference, 100% byte-identical RGB preservation.
-        const segResult = await segmentObjectSelection(imageFile, {
+        const segResult = await segmentObjectSelection(activeFile, {
           mode: activeSelectionMode,
           signal: abortController.signal,
         });
@@ -643,7 +648,7 @@ export default function BgRemoverPage() {
         if (requiresTextDetection(activeSelectionMode)) {
           precomputedTextDetection = await runRequiredTextDetection({
             keepMode: activeSelectionMode,
-            image: imageFile,
+            image: activeFile,
             detectText: async (blob) => detectTextRegionsFromBlob(blob, abortController.signal),
             signal: abortController.signal,
           });
@@ -682,7 +687,7 @@ export default function BgRemoverPage() {
         });
         const effectiveDim = isWorkerMode ? undefined : (targetMaxDim ?? autoRes.resolution);
 
-        const segResult = await segmentObjectSelection(imageFile, {
+        const segResult = await segmentObjectSelection(activeFile, {
           mode: activeSelectionMode,
           targetMaxDimension: effectiveDim,
           quality: edgeQuality,
@@ -797,14 +802,14 @@ export default function BgRemoverPage() {
         }
       );
 
-      console.log(`[bg-remover] Segmentation finished for ${imageFile.name}`);
+      console.log(`[bg-remover] Segmentation finished for ${activeFile.name}`);
 
       if (
         requestGenerationIdRef.current !== currentGenerationId ||
         abortController.signal.aborted ||
         activeAbortControllerRef.current !== abortController
       ) {
-        console.log(`[bg-remover] Discarding result for ${imageFile.name} because superseded/stale`);
+        console.log(`[bg-remover] Discarding result for ${activeFile.name} because superseded/stale`);
         return;
       }
 
@@ -843,10 +848,10 @@ export default function BgRemoverPage() {
       const timestamp = Date.now();
       const username = driveSync.currentUser;
 
-      if (imageFile) {
-        const ext = (imageFile.name || "image.png").split(".").pop() || "png";
+      if (activeFile) {
+        const ext = (activeFile.name || "image.png").split(".").pop() || "png";
         drivePayloads.push({
-          file: imageFile,
+          file: activeFile,
           filename: formatDriveFilename({
             modulePrefix: "module02_bg_remover",
             userIdOrName: username,
@@ -891,6 +896,24 @@ export default function BgRemoverPage() {
       isFirstRunRef.current = false;
       lastCompletedRunKeyRef.current = runKey;
 
+      // Silently record activity into the Activity Tracking Dashboard
+      try {
+        fetch("/api/user/activity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            module: "02_canvas_cutout",
+            action: "remove_background",
+            title: activeFile.name || "Image Cutout",
+            details: {
+              mode: activeSelectionMode,
+              engine: mode === "worker" ? "runpod_cloud" : "local_on_device",
+              dimensions: `${output.width}x${output.height}`,
+            },
+          }),
+        }).catch(() => {});
+      } catch {}
+
       cyberAudio.playShutter();
       cyberAudio.playMetallicDing();
     } catch (err: unknown) {
@@ -931,7 +954,7 @@ export default function BgRemoverPage() {
         (err instanceof Error &&
           (err.name === "AbortError" || errMessage.toLowerCase().includes("abort")))
       ) {
-        console.log(`[bg-remover] Exiting catch silently for ${imageFile.name} (aborted/superseded)`);
+        console.log(`[bg-remover] Exiting catch silently for ${activeFile?.name || "image"} (aborted/superseded)`);
         return;
       }
 
@@ -987,6 +1010,10 @@ export default function BgRemoverPage() {
       cyberAudio.playHydraulicHiss();
       const url = urlRegistryRef.current.create(file);
       setOriginalUrl(url);
+      // Auto-start segmentation on file drop/select so user gets instant transparent PNG
+      setTimeout(() => {
+        handleRunSegmentation("preview", 1024, file);
+      }, 50);
     } else {
       setOriginalUrl(null);
     }
