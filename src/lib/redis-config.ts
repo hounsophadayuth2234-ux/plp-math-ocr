@@ -36,39 +36,35 @@ export function isValidHttpUrl(candidate?: string | null): boolean {
 export function isValidRedisToken(candidate?: string | null): boolean {
   if (!candidate || typeof candidate !== "string") return false;
   const trimmed = candidate.trim();
-  if (trimmed.startsWith("{") || trimmed.startsWith("[") || trimmed.startsWith("\"")) {
+  if (
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("[") ||
+    trimmed.startsWith("\"") ||
+    trimmed.startsWith("ey")
+  ) {
     return false;
   }
   return trimmed.length > 0;
 }
 
 /**
- * Resolves the active Redis credentials with safe fallback.
- * Prioritizes KV_REST_API_URL if valid, else falls back to UPSTASH_REDIS_REST_URL.
+ * Resolves the active Redis credentials with safe pair fallback.
+ * Prioritizes (KV_REST_API_URL + KV_REST_API_TOKEN) if both are valid.
+ * Otherwise safely falls back to (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
  */
 export function getValidRedisConfig(): ValidRedisConfig | null {
   const kvUrl = process.env.KV_REST_API_URL?.trim();
-  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
 
-  let resolvedUrl: string | null = null;
-  if (isValidHttpUrl(kvUrl)) {
-    resolvedUrl = kvUrl!;
-  } else if (isValidHttpUrl(upstashUrl)) {
-    resolvedUrl = upstashUrl!;
+  if (isValidHttpUrl(kvUrl) && isValidRedisToken(kvToken)) {
+    return { url: kvUrl!, token: kvToken! };
   }
 
-  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
-  let resolvedToken: string | null = null;
-  if (isValidRedisToken(kvToken)) {
-    resolvedToken = kvToken!;
-  } else if (isValidRedisToken(upstashToken)) {
-    resolvedToken = upstashToken!;
-  }
-
-  if (resolvedUrl && resolvedToken) {
-    return { url: resolvedUrl, token: resolvedToken };
+  if (isValidHttpUrl(upstashUrl) && isValidRedisToken(upstashToken)) {
+    return { url: upstashUrl!, token: upstashToken! };
   }
 
   return null;
