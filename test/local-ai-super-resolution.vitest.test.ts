@@ -162,7 +162,7 @@ describe("Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)", ()
     const processingSource = res.headers.get("X-Processing-Source");
 
     expect(modelUsed).toContain("Real-ESRGAN");
-    expect(processingSource).toBe("Local Engine");
+    expect(processingSource).toBe("Local ONNX Neural Engine");
     expect(res.headers.get("X-Output-Width")).toBe("2560");
     expect(res.headers.get("X-Output-Height")).toBe("1920");
   }, 35000);

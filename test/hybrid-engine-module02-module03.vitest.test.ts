@@ -87,7 +87,7 @@ describe("Hybrid Architecture: Local On-Device + RunPod Ready (Module 02 & Modul
       expect(res.headers.get("x-upscale-factor")).toBe("4");
       expect(res.headers.get("x-processed-width")).toBe("40");
       expect(res.headers.get("x-output-width")).toBe("160");
-      expect(res.headers.get("x-processing-source")).toBe("Local Engine");
+      expect(res.headers.get("x-processing-source")).toBe("Local ONNX Neural Engine");
 
       const outBuffer = Buffer.from(await res.arrayBuffer());
       const outMeta = await sharp(outBuffer).metadata();
