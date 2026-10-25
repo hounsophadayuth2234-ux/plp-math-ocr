@@ -176,7 +176,7 @@ export async function middleware(req: NextRequest) {
 
   // 3. Allow public auth route
   if (isPublicAuthRoute) {
-    return NextResponse.next();
+    return applyCorsHeaders(NextResponse.next());
   }
 
   // 3b. Safe canonical redirect for legacy route alias
@@ -190,19 +190,21 @@ export async function middleware(req: NextRequest) {
   if (!isAuthenticated) {
     // API routes return clean 401 JSON
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized: Access requires active gate authentication.",
-          authenticated: false,
-        },
-        {
-          status: 401,
-          headers: {
-            "Cache-Control": "no-store, private",
-            "X-Content-Type-Options": "nosniff",
-            "X-Frame-Options": "DENY",
+      return applyCorsHeaders(
+        NextResponse.json(
+          {
+            error: "Unauthorized: Access requires active gate authentication.",
+            authenticated: false,
           },
-        }
+          {
+            status: 401,
+            headers: {
+              "Cache-Control": "no-store, private",
+              "X-Content-Type-Options": "nosniff",
+              "X-Frame-Options": "DENY",
+            },
+          }
+        )
       );
     }
 
