@@ -232,7 +232,7 @@ export function BgStudioNav({
         {/* Center: Engine & Privacy Telemetry */}
         <div className="hidden lg:flex items-center gap-2 border border-slate-800 bg-slate-950/80 px-3 py-1 text-[10px]">
           <span className="text-slate-400">ENGINE:</span>
-          <span className="text-cyan-300 font-bold">@IMGLY/ISNET_FP16 (WASM)</span>
+          <span className="text-cyan-300 font-bold">ISNet-FP16 (@imgly/isnet_fp16 WASM)</span>
           <span className="text-slate-600">|</span>
           <span className="flex items-center gap-1 text-emerald-400">
             <ShieldCheck className="h-3 w-3" />

@@ -114,7 +114,7 @@ describe("Module 02 Hard Visual Verification Audit (8 Mandatory Categories)", ()
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const modelString = "@imgly/isnet_fp16 (BiRefNet is not currently active)";
+  const modelString = "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active";
   const runtimeString = "@imgly/background-removal v1.7.0 (onnxruntime-web)";
 
   // ── 1. Person with loose hair ──

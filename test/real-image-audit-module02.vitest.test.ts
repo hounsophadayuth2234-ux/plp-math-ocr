@@ -186,7 +186,7 @@ describe("Module 02 Real-Image Hard Evaluation & Scoring Audit", () => {
 
   const evaluations: RealImageEvaluation[] = [];
 
-  const actualModel = "@imgly/isnet_fp16";
+  const actualModel = "ISNet-FP16 (@imgly/isnet_fp16)";
   const actualRuntime = "@imgly/background-removal v1.7.0";
   const actualTextDetector = "Heuristic/Connected-Component (UI-only)";
 
@@ -602,7 +602,7 @@ describe("Module 02 Real-Image Hard Evaluation & Scoring Audit", () => {
       auditTimestamp: new Date().toISOString(),
       evaluationScope: "Module 02 Real Test Images (7 user-provided fixtures)",
       truthfulDiagnostics: {
-        actualModel: "@imgly/isnet_fp16",
+        actualModel: "ISNet-FP16 (@imgly/isnet_fp16)",
         actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
         actualRuntime: "@imgly/background-removal v1.7.0 (WebWorker + WASM/WebGL fallback)",
         actualExecutionProvider: "wasm",

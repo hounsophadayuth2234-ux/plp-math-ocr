@@ -626,8 +626,8 @@ export function BgAdvancedSettings({
             <div className="p-2.5 bg-slate-950/70 border border-slate-800 space-y-2 text-[10px] font-mono">
               <div className="flex justify-between items-start text-slate-300">
                 <span className="text-slate-400 uppercase text-[9px] font-bold">actualModel:</span>
-                <span className="text-cyan-300 font-bold text-[10px] text-right truncate max-w-[210px]" title={metrics?.actualModel || "@imgly/isnet_fp16 (BiRefNet is not currently active)"}>
-                  {metrics?.actualModel || "@imgly/isnet_fp16 (BiRefNet is not currently active)"}
+                <span className="text-cyan-300 font-bold text-[10px] text-right truncate max-w-[210px]" title={metrics?.actualModel || "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active"}>
+                  {metrics?.actualModel || "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active"}
                 </span>
               </div>
               <div className="flex justify-between items-start text-slate-300">

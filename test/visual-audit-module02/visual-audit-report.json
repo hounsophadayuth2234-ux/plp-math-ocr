@@ -1,6 +1,6 @@
 {
-  "auditTimestamp": "2026-10-25T15:28:22.484Z",
-  "activeModel": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+  "auditTimestamp": "2026-10-25T15:55:04.585Z",
+  "activeModel": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
   "activeRuntime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
   "activeExecutionProvider": "WASM / WebGPU",
   "isBiRefNetActive": false,
@@ -14,7 +14,7 @@
       "category": "person with loose hair",
       "filenameOriginal": "01-person-loose-hair-original.png",
       "filenameOutput": "01-person-loose-hair-output.png",
-      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "model": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
       "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       "scores": {
         "hairFurScore": 84,
@@ -29,7 +29,7 @@
       "category": "animal with fur",
       "filenameOriginal": "02-animal-fur-original.png",
       "filenameOutput": "02-animal-fur-output.png",
-      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "model": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
       "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       "scores": {
         "hairFurScore": 82,
@@ -44,7 +44,7 @@
       "category": "white subject on light background",
       "filenameOriginal": "03-white-on-light-original.png",
       "filenameOutput": "03-white-on-light-output.png",
-      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "model": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
       "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       "scores": {
         "hairFurScore": 85,
@@ -59,7 +59,7 @@
       "category": "plant with thin branches",
       "filenameOriginal": "04-plant-thin-branches-original.png",
       "filenameOutput": "04-plant-thin-branches-output.png",
-      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "model": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
       "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       "scores": {
         "hairFurScore": 82,
@@ -74,7 +74,7 @@
       "category": "text on a background",
       "filenameOriginal": "05-text-on-background-original.png",
       "filenameOutput": "05-text-on-background-output.png",
-      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "model": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
       "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       "scores": {
         "hairFurScore": 85,
@@ -89,7 +89,7 @@
       "category": "text over a subject",
       "filenameOriginal": "06-text-over-subject-original.png",
       "filenameOutput": "06-text-over-subject-output.png",
-      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "model": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
       "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       "scores": {
         "hairFurScore": 85,
@@ -104,7 +104,7 @@
       "category": "similar foreground/background colors",
       "filenameOriginal": "07-similar-colors-original.png",
       "filenameOutput": "07-similar-colors-output.png",
-      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "model": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
       "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       "scores": {
         "hairFurScore": 80,
@@ -119,7 +119,7 @@
       "category": "complex photographic background",
       "filenameOriginal": "08-complex-background-original.png",
       "filenameOutput": "08-complex-background-output.png",
-      "model": "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+      "model": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
       "runtime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       "scores": {
         "hairFurScore": 84,

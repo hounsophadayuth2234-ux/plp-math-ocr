@@ -1,8 +1,8 @@
 {
-  "auditTimestamp": "2026-10-25T15:28:22.981Z",
+  "auditTimestamp": "2026-10-25T15:55:05.074Z",
   "evaluationScope": "Module 02 Real Test Images (7 user-provided fixtures)",
   "truthfulDiagnostics": {
-    "actualModel": "@imgly/isnet_fp16",
+    "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",
     "actualModelFile": "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
     "actualRuntime": "@imgly/background-removal v1.7.0 (WebWorker + WASM/WebGL fallback)",
     "actualExecutionProvider": "wasm",
@@ -28,7 +28,7 @@
       "description": "Real User Studio Portrait with dark hair against blue background",
       "width": 1024,
       "height": 1024,
-      "actualModel": "@imgly/isnet_fp16",
+      "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",
       "actualRuntime": "@imgly/background-removal v1.7.0",
       "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
       "scores": {
@@ -47,7 +47,7 @@
       "description": "Real user long dark hair with soft strands",
       "width": 400,
       "height": 400,
-      "actualModel": "@imgly/isnet_fp16",
+      "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",
       "actualRuntime": "@imgly/background-removal v1.7.0",
       "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
       "scores": {
@@ -66,7 +66,7 @@
       "description": "Real hair overlapping Khmer script characters",
       "width": 450,
       "height": 400,
-      "actualModel": "@imgly/isnet_fp16",
+      "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",
       "actualRuntime": "@imgly/background-removal v1.7.0",
       "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
       "scores": {
@@ -85,7 +85,7 @@
       "description": "Real Khmer multi-line poster document",
       "width": 762,
       "height": 1079,
-      "actualModel": "@imgly/isnet_fp16",
+      "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",
       "actualRuntime": "@imgly/background-removal v1.7.0",
       "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
       "scores": {
@@ -104,7 +104,7 @@
       "description": "Real Khmer benchmark text with complex sub-clusters and numbers",
       "width": 640,
       "height": 480,
-      "actualModel": "@imgly/isnet_fp16",
+      "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",
       "actualRuntime": "@imgly/background-removal v1.7.0",
       "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
       "scores": {
@@ -123,7 +123,7 @@
       "description": "Real Khmer math exercise with formulas and square roots",
       "width": 600,
       "height": 300,
-      "actualModel": "@imgly/isnet_fp16",
+      "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",
       "actualRuntime": "@imgly/background-removal v1.7.0",
       "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
       "scores": {
@@ -142,7 +142,7 @@
       "description": "Real multiline Khmer examination questions",
       "width": 700,
       "height": 350,
-      "actualModel": "@imgly/isnet_fp16",
+      "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",
       "actualRuntime": "@imgly/background-removal v1.7.0",
       "actualTextDetector": "Heuristic/Connected-Component (UI-only)",
       "scores": {

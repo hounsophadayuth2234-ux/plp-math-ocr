@@ -2357,12 +2357,22 @@ export function ColorStudio({
         </div>
         <div className="pointer-events-none absolute bottom-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
           <span className="text-slate-500">ENGINE:</span>
-          <span className="text-white font-bold">@IMGLY/ISNET_FP16</span>
+          <span className="text-white font-bold">ISNet-FP16 (@imgly/isnet_fp16)</span>
         </div>
         <div className="pointer-events-none absolute bottom-2 right-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
           <span className="text-slate-500">ZOOM:</span>
           <span className="text-white font-bold">{Math.round(zoom * 100)}%</span>
         </div>
+
+        {/* Text Mask Preview Header Overlay */}
+        {activeChannel === "text_mask" && (
+          <div className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 z-20 flex flex-wrap items-center gap-2.5 bg-slate-950/95 border border-yellow-500/50 px-3 py-1 text-[11px] font-mono shadow-lg">
+            <span className="text-yellow-300 font-bold">TEXT MASK PREVIEW</span>
+            <span className="text-slate-400 border-l border-slate-700 pl-2">
+              <span className="text-yellow-400">Yellow</span> = Detected Text Regions · Editable before export
+            </span>
+          </div>
+        )}
 
         {/* Real Mask Comparison Header Overlay */}
         {activeChannel === "mask_compare" && (
