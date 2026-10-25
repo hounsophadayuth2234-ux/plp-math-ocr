@@ -12,9 +12,6 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  outputFileTracingIncludes: {
-    "/api/**/*": ["./node_modules/onnxruntime-node/**/*", "./public/models/**/*"],
-  },
   async headers() {
     return [
       {
