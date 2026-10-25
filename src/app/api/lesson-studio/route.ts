@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { getPrimaryGeminiKey, getSecondaryGeminiKey } from "@/lib/gemini-dual-api";
 import { getSessionUser } from "@/lib/auth-session";
 import { ActivityTracker } from "@/lib/activity-tracker";
 import {
@@ -173,14 +174,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const primaryKey = getPrimaryGeminiKey();
+    const secondaryKeyObj = getSecondaryGeminiKey();
+    const effectiveApiKey = primaryKey || secondaryKeyObj.key;
 
     // Deterministic fallback if API key is not configured or in offline test mode
-    if (!apiKey || apiKey === "your_gemini_api_key_here") {
+    if (!effectiveApiKey || effectiveApiKey === "your_gemini_api_key_here") {
       return handleOfflineFallback(mode, gradeLevel, promptText, requestId, startTime);
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI(effectiveApiKey);
+    const secondaryClient = secondaryKeyObj.isDistinct ? new GoogleGenerativeAI(secondaryKeyObj.key) : null;
     const candidateModels = [
       "gemini-flash-lite-latest",
       "gemini-flash-latest",
@@ -307,8 +311,32 @@ Output JSON format:
           chosenModel = modelName;
           break;
         }
-      } catch {
-        // Try fallback candidate model
+      } catch (err: unknown) {
+        if (secondaryClient) {
+          try {
+            const secModel = secondaryClient.getGenerativeModel({
+              model: modelName,
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.2,
+              },
+            });
+            const secResult = await withTimeout(
+              secModel.generateContent({ contents: [{ role: "user", parts }] }),
+              18000,
+              `Secondary Model ${modelName} timed out after 18s`
+            );
+            const secText = secResult.response.text()?.trim();
+            if (secText && secText.startsWith("{")) {
+              rawJsonText = secText;
+              chosenModel = modelName;
+              break;
+            }
+          } catch {
+            // Secondary also failed, continue to next candidate model
+          }
+        }
+        // Try next fallback candidate model
         continue;
       }
     }

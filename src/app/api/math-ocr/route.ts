@@ -392,8 +392,16 @@ export async function POST(req: NextRequest) {
     const primaryModel = candidateModels[0] || "gemini-flash-lite-latest";
     const promptVersion = "math_ocr_v2.0";
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey === "your_gemini_api_key_here") {
+    const primaryKey = process.env.GEMINI_API_KEY?.trim() || "";
+    const secondaryKey = (
+      process.env.GEMINI_API_KEY_SECONDARY ||
+      process.env.SECONDARY_GEMINI_API_KEY ||
+      process.env.BACKUP_GEMINI_API_KEY ||
+      process.env.GEMINI_BACKUP_KEY
+    )?.trim() || "";
+    const apiKey = (!primaryKey.includes("your_") && primaryKey) || (!secondaryKey.includes("your_") && secondaryKey) || "";
+
+    if (!apiKey) {
       return NextResponse.json<MathOcrError>(
         {
           ok: false,
@@ -577,6 +585,41 @@ export async function POST(req: NextRequest) {
 
           if (/\b429\b|rate limit|too many requests|resource exhausted/i.test(safeErrorMsg)) {
             isLastRateLimited = true;
+
+            if (secondaryKey && secondaryKey !== primaryKey && !secondaryKey.includes("your_")) {
+              console.warn(
+                JSON.stringify({
+                  requestId,
+                  event: "math_ocr_secondary_failover",
+                  model: modelName,
+                  message: "Primary key quota exhausted. Failing over to secondary API key in background.",
+                })
+              );
+              try {
+                const secGenAI = new GoogleGenerativeAI(secondaryKey);
+                const secModel = secGenAI.getGenerativeModel({
+                  model: modelName,
+                  generationConfig: {
+                    responseMimeType: "application/json",
+                    temperature: 0.1,
+                  },
+                });
+                const secResult = await withTimeout(
+                  secModel.generateContent({ contents: [{ role: "user", parts }] }),
+                  currentTimeout,
+                  `Secondary Model ${modelName} timed out after ${currentTimeout}ms`
+                );
+                const secCandidateText = secResult.response.text()?.trim();
+                if (secCandidateText && secCandidateText.startsWith("{")) {
+                  responseText = secCandidateText;
+                  selectedModel = modelName;
+                  modelSuccess = true;
+                  break;
+                }
+              } catch (secErr) {
+                console.warn("[math-ocr] Secondary failover attempt error:", secErr);
+              }
+            }
           }
 
           console.warn(

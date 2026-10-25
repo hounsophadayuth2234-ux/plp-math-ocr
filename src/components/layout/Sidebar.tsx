@@ -23,6 +23,7 @@ import {
   User,
 } from "lucide-react";
 import { CORE_TOOLS, TEAM_MEMBERS, ToolModule } from "@/config/tools";
+import { DualToneThemeToggle } from "@/components/ui/DualToneThemeToggle";
 
 const ICON_MAP: Record<ToolModule["iconName"], React.ComponentType<{ className?: string }>> = {
   Calculator,
@@ -303,6 +304,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <Clock className="h-3 w-3 text-slate-400" />
               <span>Checked: {checkedTime}</span>
             </p>
+          </div>
+          {/* Dual-Tone Theme Switcher */}
+          <div className="flex items-center justify-between px-1 py-1 pt-2">
+            <span className="text-[11px] text-slate-400 font-sans">ស្បែកពណ៌ (Theme)</span>
+            <DualToneThemeToggle compact={true} />
           </div>
         </nav>
 

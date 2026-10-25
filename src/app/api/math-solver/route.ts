@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { getPrimaryGeminiKey, getSecondaryGeminiKey } from "@/lib/gemini-dual-api";
 import { enforceRouteAuth } from "@/lib/auth-gate";
 import { getSessionUser } from "@/lib/auth-session";
 import { ActivityTracker } from "@/lib/activity-tracker";
@@ -439,8 +440,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey === "your_gemini_api_key_here") {
+    const primaryKey = getPrimaryGeminiKey();
+    const secondaryKeyObj = getSecondaryGeminiKey();
+    const effectiveApiKey = primaryKey || secondaryKeyObj.key;
+
+    if (!effectiveApiKey || effectiveApiKey === "your_gemini_api_key_here") {
       return NextResponse.json<MathSolverError>(
         {
           ok: false,
@@ -471,7 +475,8 @@ export async function POST(req: NextRequest) {
         : "";
 
     // Build Gemini request parts
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI(effectiveApiKey);
+    const secondaryClient = secondaryKeyObj.isDistinct ? new GoogleGenerativeAI(secondaryKeyObj.key) : null;
     const parts: Part[] = [];
 
     // System prompt with visual mathematics and pedagogical constraints
@@ -752,6 +757,45 @@ Return a valid JSON object matching the standard schema.`;
               error: safeMsg,
             })
           );
+
+          if (secondaryClient && /\b(429|quota|resource exhausted|too many requests)\b/i.test(safeMsg)) {
+            console.warn(
+              JSON.stringify({
+                requestId,
+                event: "math_solver_secondary_key_failover",
+                model: modelName,
+                message: "Primary API key quota exhausted. Failing over to secondary key in background.",
+              })
+            );
+            try {
+              const secModel = secondaryClient.getGenerativeModel({
+                model: modelName,
+                generationConfig: {
+                  responseMimeType: "application/json",
+                  temperature: 0.15,
+                },
+              });
+              const secResult = await withTimeout(
+                secModel.generateContent({ contents: [{ role: "user", parts }] }),
+                timeout,
+                `Secondary Model ${modelName} timed out after ${timeout}ms`
+              );
+              const secCandidateText = secResult.response.text()?.trim();
+              if (secCandidateText) {
+                const cleaned = secCandidateText
+                  .replace(/^```(?:json)?\s*/i, "")
+                  .replace(/\s*```$/i, "")
+                  .trim();
+                if (cleaned.startsWith("{") || cleaned.startsWith("[")) {
+                  responseText = cleaned;
+                  selectedModel = modelName;
+                  break;
+                }
+              }
+            } catch (secErr) {
+              console.warn("[math-solver] Secondary API key failover attempt error:", secErr);
+            }
+          }
 
           if (!isTransientError(err)) break;
           if (attempt === 0) {

@@ -35,9 +35,11 @@ import {
   BarChart3,
   Sparkles,
   Sliders,
+  Palette,
 } from "lucide-react";
 import { GoogleDriveOAuthSettings } from "@/components/drive/GoogleDriveOAuthSettings";
 import { SystemSettingsTab } from "@/components/profile/SystemSettingsTab";
+import { DualToneThemeToggle } from "@/components/ui/DualToneThemeToggle";
 import { getOrRefreshCsrfToken, fetchFreshCsrfToken, CSRF_HEADER_NAME } from "@/lib/csrf-client";
 
 interface SafeUser {
@@ -1053,6 +1055,30 @@ function ProfileHubInner() {
                   <span className="text-slate-300">{new Date(currentUser.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Dual-Tone Theme Customizer Card */}
+            <div className="lg:col-span-3 p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-amber-400" />
+                    <span>ស្បែកពណ៌ប្រព័ន្ធទាំងពីរ (Dual-Tone UI Theme System)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    ផ្លាស់ប្តូរ និងភ្ជាប់ពណ៌ទីពីរ (Royal Gold / ពណ៌មាស) ជាមួយពណ៌ទីមួយ (Electric Cyan) ឱ្យស៊ីចង្វាក់គ្នាទូទាំងប្រព័ន្ធ ជាមួយ Smooth Transition ទំនើប។
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                    <span className="h-2 w-2 rounded-full bg-amber-400" />
+                    <span>Cyber Gold Default</span>
+                  </span>
+                </div>
+              </div>
+
+              <DualToneThemeToggle compact={false} />
             </div>
           </div>
         )}

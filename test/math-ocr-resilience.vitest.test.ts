@@ -8,6 +8,7 @@ import {
 import { sanitizeJoditHtml } from "../src/lib/math-ocr-utils";
 import nextConfig from "../next.config";
 import { metadata as plpMetadata } from "../src/app/plp-math-content/layout";
+import { PersistentCacheStore } from "../src/lib/persistent-cache-store";
 
 // Mock GoogleGenerativeAI
 const mockGenerateContent = vi.fn();
@@ -33,9 +34,10 @@ vi.mock("@google/generative-ai", () => {
 describe("Math OCR Resilient Provider, Fallback & Security Suite", () => {
   const originalEnv = { ...process.env };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockGenerateContent.mockReset();
     mockGetGenerativeModel.mockClear();
+    await PersistentCacheStore.__resetTestStore();
     process.env = { ...originalEnv };
     process.env.GEMINI_API_KEY = "test-secret-gemini-key-12345";
   });
