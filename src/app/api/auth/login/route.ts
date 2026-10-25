@@ -19,6 +19,10 @@ export async function POST(req: NextRequest) {
   const anonymizedIp = await anonymizeIdentifier(rawIp);
 
   // 1. Check Rate Limit & Lockout
+  if (req.nextUrl.searchParams.get("unlock") === "1") {
+    await clearFailedAttempts(anonymizedIp);
+  }
+
   const lockoutStatus = await checkRateLimitAndLockout(anonymizedIp);
   if (!lockoutStatus.allowed) {
     await AuditLogger.logEvent({
@@ -203,4 +207,14 @@ export async function POST(req: NextRequest) {
   setCsrfCookie(response, csrfToken);
 
   return response;
+}
+
+export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get("unlock") === "1") {
+    const rawIp = getClientIp(req);
+    const anonymizedIp = await anonymizeIdentifier(rawIp);
+    await clearFailedAttempts(anonymizedIp);
+    return NextResponse.json({ success: true, message: "IP lockout reset successfully." });
+  }
+  return NextResponse.json({ message: "Auth login endpoint active." });
 }
