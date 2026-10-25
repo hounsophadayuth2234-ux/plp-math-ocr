@@ -30,11 +30,11 @@ function isOriginAllowed(origin: string | null, request?: NextRequest): boolean 
   }
 
   // For Vercel Preview, allow only the current request origin when it is a verified Vercel deployment origin
-  if (
-    request &&
-    /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin) &&
-    (origin === request.nextUrl.origin || origin === `https://${request.headers.get("host")}`)
-  ) {
+  const isVerifiedVercelDeployment =
+    /^https:\/\/plp-math-content-[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin) ||
+    /^https:\/\/[a-zA-Z0-9_-]+-hounsophadayuth2234-6445s-projects\.vercel\.app$/.test(origin);
+
+  if (isVerifiedVercelDeployment) {
     return true;
   }
 
