@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -106,8 +107,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Brand Header */}
         <div className="flex h-16 items-center justify-between border-b border-slate-800 px-5 bg-slate-950/40 backdrop-blur-sm">
           <Link href="/" className="flex items-center gap-3" onClick={onClose}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 via-indigo-600 to-violet-600 text-white shadow-md">
-              <Cpu className="h-5 w-5" />
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden border border-amber-500/40 shadow-md bg-black">
+              <Image
+                src="/brand/plp-math-content-logo.jpg"
+                alt="PLP Math Content logo"
+                width={40}
+                height={40}
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
               <div className="flex items-center gap-1.5">

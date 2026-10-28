@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -578,17 +579,29 @@ function LoginContent() {
             </div>
 
             {/* Primary System Name & Title */}
-            <div className="space-y-2">
-              <h1 className="text-3xl sm:text-4xl xl:text-5xl font-black tracking-tight text-white leading-tight">
-                PLP MATH CONTENT
-              </h1>
-              <p className="text-base sm:text-lg font-medium text-cyan-300/90 tracking-wide font-khmer">
-                ការចូលប្រើប្រាស់ប្រព័ន្ធមានសុវត្ថិភាព
-                <span className="hidden sm:inline text-slate-500 font-mono text-sm mx-2">·</span>
-                <span className="hidden sm:inline text-xs font-mono uppercase tracking-wider text-slate-400 font-normal">
-                  Secure Workspace Access
-                </span>
-              </p>
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+              <div className="relative h-16 w-16 xl:h-20 xl:w-20 shrink-0 rounded-2xl overflow-hidden border border-amber-500/40 shadow-[0_0_25px_rgba(245,158,11,0.25)] bg-black">
+                <Image
+                  src="/brand/plp-math-content-logo.jpg"
+                  alt="PLP Math Content logo"
+                  width={80}
+                  height={80}
+                  className="h-full w-full object-contain"
+                  priority
+                />
+              </div>
+              <div className="space-y-1">
+                <h1 className="text-3xl sm:text-4xl xl:text-5xl font-black tracking-tight text-white leading-tight">
+                  PLP MATH CONTENT
+                </h1>
+                <p className="text-base sm:text-lg font-medium text-cyan-300/90 tracking-wide font-khmer">
+                  ការចូលប្រើប្រាស់ប្រព័ន្ធមានសុវត្ថិភាព
+                  <span className="hidden sm:inline text-slate-500 font-mono text-sm mx-2">·</span>
+                  <span className="hidden sm:inline text-xs font-mono uppercase tracking-wider text-slate-400 font-normal">
+                    Secure Workspace Access
+                  </span>
+                </p>
+              </div>
             </div>
 
             {/* Subtitle */}
@@ -639,14 +652,27 @@ function LoginContent() {
             <div className="login-glass-card relative z-10 w-full max-w-[440px]">
               
               {/* Card Header */}
-              <div className="space-y-2 mb-6 text-center lg:text-left">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-cyan-500/25 bg-cyan-950/40 text-[10px] font-mono tracking-wider text-cyan-300 uppercase">
-                  <span>DYT ECOSYSTEM</span>
+              <div className="space-y-3 mb-6 text-center lg:text-left">
+                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3">
+                  <div className="relative h-14 w-14 shrink-0 rounded-2xl overflow-hidden border border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.2)] bg-black">
+                    <Image
+                      src="/brand/plp-math-content-logo.jpg"
+                      alt="PLP Math Content logo"
+                      width={56}
+                      height={56}
+                      className="h-full w-full object-contain"
+                      priority
+                    />
+                  </div>
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-cyan-500/25 bg-cyan-950/40 text-[10px] font-mono tracking-wider text-cyan-300 uppercase">
+                      <span>DYT ECOSYSTEM</span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                      {mustChangePassword ? "ផ្លាស់ប្តូរពាក្យសម្ងាត់" : "PLP MATH CONTENT"}
+                    </h2>
+                  </div>
                 </div>
-                
-                <h2 className="text-2xl font-black tracking-tight text-white">
-                  {mustChangePassword ? "ផ្លាស់ប្តូរពាក្យសម្ងាត់" : "PLP MATH CONTENT"}
-                </h2>
 
                 <p className="text-xs text-slate-300 leading-relaxed font-khmer">
                   {mustChangePassword

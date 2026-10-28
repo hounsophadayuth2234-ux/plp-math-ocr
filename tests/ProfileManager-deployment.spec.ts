@@ -38,12 +38,14 @@ test.describe('ProfileManager Deployment & Route Security Verification', () => {
     expect(consoleErrors.filter((e) => !e.includes('eval()') && !e.includes('favicon'))).toHaveLength(0);
   });
 
-  test('3. Login page renders without server errors (HTTP 200)', async ({ page }) => {
+  test('3. Login page renders without server errors and displays PLP Math Content logo (desktop & mobile)', async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
+    // Desktop viewport check (1280x800)
+    await page.setViewportSize({ width: 1280, height: 800 });
     const response = await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     expect(response?.status()).toBe(200);
 
@@ -53,6 +55,29 @@ test.describe('ProfileManager Deployment & Route Security Verification', () => {
 
     const usernameInput = page.locator('input[type="text"], input[name="username"], input[name="usernameOrEmail"], input#username');
     await expect(usernameInput.first()).toBeVisible({ timeout: 10000 });
+
+    // Verify PLP logo on desktop
+    const logoImgDesktop = page.locator('img[alt*="PLP Math Content logo"], img[src*="plp-math-content-logo"]').first();
+    await expect(logoImgDesktop).toBeVisible({ timeout: 10000 });
+
+    const altText = await logoImgDesktop.getAttribute('alt');
+    expect(altText && altText.trim().length > 0).toBeTruthy();
+
+    // Verify image loads successfully (naturalWidth > 0)
+    await expect(async () => {
+      const isImageLoaded = await logoImgDesktop.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0);
+      expect(isImageLoaded).toBe(true);
+    }).toPass({ timeout: 10000 });
+
+    // Mobile viewport check (375x667)
+    await page.setViewportSize({ width: 375, height: 667 });
+    const logoImgMobile = page.locator('img[alt*="PLP Math Content logo"], img[src*="plp-math-content-logo"]').first();
+    await expect(logoImgMobile).toBeVisible({ timeout: 10000 });
+
+    await expect(async () => {
+      const isMobileImageLoaded = await logoImgMobile.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0);
+      expect(isMobileImageLoaded).toBe(true);
+    }).toPass({ timeout: 10000 });
 
     expect(consoleErrors.filter((e) => !e.includes('eval()') && !e.includes('favicon'))).toHaveLength(0);
   });

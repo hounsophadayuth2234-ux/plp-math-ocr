@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, Settings, HelpCircle, Shield, User, LogOut } from "lucide-react";
 import { CORE_TOOLS } from "@/config/tools";
@@ -68,6 +70,19 @@ export function Header({ onOpenSidebar, onOpenSettings, onOpenHelp }: HeaderProp
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
+
+        {/* Canonical Brand Mark */}
+        <Link href="/" className="flex items-center gap-2.5 shrink-0 group" title="PLP Math Content">
+          <div className="relative h-9 w-9 shrink-0 rounded-xl overflow-hidden border border-amber-500/30 bg-black shadow-xs transition-transform group-hover:scale-105">
+            <Image
+              src="/brand/plp-math-content-logo.jpg"
+              alt="PLP Math Content logo"
+              width={36}
+              height={36}
+              className="h-full w-full object-contain"
+            />
+          </div>
+        </Link>
 
         {pathname === "/profile" || pathname === "/admin" ? (
           <div>
