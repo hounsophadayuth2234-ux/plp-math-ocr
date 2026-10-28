@@ -213,10 +213,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Enforce 3-Tier RBAC on /admin and /api/admin/* (excluding public recovery page)
+  // 5. Enforce 3-Tier RBAC on /admin and /api/admin/* (excluding public recovery page and /admin/dashboard where server-side 404 concealment is enforced)
   if (
     (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) &&
-    pathname !== "/admin/recovery"
+    pathname !== "/admin/recovery" &&
+    !pathname.startsWith("/admin/dashboard")
   ) {
     if (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN") {
       if (pathname.startsWith("/api/")) {
