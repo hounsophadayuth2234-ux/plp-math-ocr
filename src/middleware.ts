@@ -302,6 +302,10 @@ export async function middleware(req: NextRequest) {
   }
 
   const response = NextResponse.next();
+  if (pathname.startsWith("/admin")) {
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    response.headers.set("Pragma", "no-cache");
+  }
   return applyCorsHeaders(response);
 }
 
