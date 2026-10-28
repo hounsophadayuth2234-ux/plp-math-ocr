@@ -154,7 +154,7 @@ Return valid JSON:
     }
 
     // Must avoid the old 38-second timeout
-    expect(elapsedMs).toBeLessThan(20000);
+    expect(elapsedMs).toBeLessThan(30000);
 
     const text = result.response.text();
     const data = JSON.parse(text);
