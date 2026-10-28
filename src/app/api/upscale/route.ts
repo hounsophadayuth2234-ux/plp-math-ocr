@@ -48,7 +48,7 @@ export async function GET() {
     badgeLabel,
     hasRunPod,
     isLocal: !hasRunPod,
-    supportedScales: [2, 4],
+    supportedScales: [1, 2, 4],
   }, {
     status: 200,
     headers: { "Cache-Control": "no-store, private" },
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const scale = Math.min(4, Math.max(2, parseInt(scaleStr ?? "4", 10)));
+    const scale = Math.min(4, Math.max(1, parseInt(scaleStr ?? "2", 10)));
     const replicateToken = process.env.REPLICATE_API_TOKEN?.trim();
     const explicitWorkerUrl = (
       process.env.UPSCALER_WORKER_URL ||

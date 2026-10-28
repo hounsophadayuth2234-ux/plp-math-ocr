@@ -63,7 +63,7 @@ export function OcrDiagnosticsDeck({
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-cyan-400" />
           <span className="uppercase tracking-wider font-bold">
-            Runtime & Structure Diagnostics // ប្រព័ន្ធវិនិច្ឆ័យ
+            Advanced Diagnostics (Admin Only) // ការវិភាគកម្រិតខ្ពស់
           </span>
         </div>
         <div className="flex items-center gap-2">

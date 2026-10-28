@@ -781,7 +781,7 @@ function ProfileHubInner() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100 py-8 px-4 sm:px-6 lg:px-8 overflow-x-hidden">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* ── Hub Header ── */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90 backdrop-blur-xl shadow-2xl relative overflow-hidden">

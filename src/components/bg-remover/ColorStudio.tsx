@@ -1748,9 +1748,9 @@ export function ColorStudio({
       return "Manual Mask Studio (User Defined)";
     }
     if (hasAppliedCorrections) {
-      return "Browser AI result — @imgly/isnet_fp16 + Manual Corrections";
+      return "On-Device AI result — ISNet-FP16 + Manual Refinements";
     }
-    return `Browser AI result — ${provider || "@imgly/isnet_fp16"}`;
+    return `On-Device AI result — ${provider || "ISNet-FP16"}`;
   }, [mode, provider, processingLabel, hasAppliedCorrections]);
 
   return (
@@ -1869,7 +1869,7 @@ export function ColorStudio({
         <summary className="cursor-pointer p-3 text-xs font-bold text-slate-400 hover:text-cyan-300 select-none flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <Sliders className="h-3.5 w-3.5 text-cyan-400" />
-            <span>Diagnostics & Hardware Telemetry / ការវិភាគប្រព័ន្ធ</span>
+            <span>Advanced Diagnostics (Admin Only / ការវិភាគកម្រិតខ្ពស់)</span>
           </div>
           <div className="flex items-center gap-2">
             <span

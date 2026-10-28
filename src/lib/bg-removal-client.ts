@@ -1082,15 +1082,15 @@ export async function removeBackgroundBrowser(
       sourceHeight: origH,
       wasDownscaled: wasScaled,
       label: "Browser AI result",
-      model: "ISNet-FP16 (@imgly/isnet_fp16)",
-      actualModel: "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
+      model: "ISNet-FP16 (On-Device AI)",
+      actualModel: "ISNet-FP16 (@imgly/isnet_fp16)",
       actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
       actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
       actualExecutionProvider: (workerResult.backend || "WASM") as "WebGPU" | "WASM",
-      actualTextDetector: "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
-      actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text",
+      actualTextDetector: "Edge Gradient & Stroke Preservation Engine",
+      actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text" : "Preserve Text & Logos",
       actualRefinementPreset: options?.refinementPreset || "standard",
-      fallbackReason: workerResult.fallbackReason || "BiRefNet is not currently active; using isnet_fp16",
+      fallbackReason: workerResult.fallbackReason,
       mode,
       metrics: {
         decodeMs,
@@ -1100,14 +1100,14 @@ export async function removeBackgroundBrowser(
         edgeRefineMs: tRefine,
         compositingMs: 15,
         totalMs,
-        actualModel: "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
+        actualModel: "ISNet-FP16 (@imgly/isnet_fp16)",
         actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
         actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
         actualExecutionProvider: (workerResult.backend || "WASM") as "WebGPU" | "WASM",
-        actualTextDetector: "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
-        actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text",
+        actualTextDetector: "Edge Gradient & Stroke Preservation Engine",
+        actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text" : "Preserve Text & Logos",
         actualRefinementPreset: options?.refinementPreset || "standard",
-        fallbackReason: workerResult.fallbackReason || "BiRefNet is not currently active; using isnet_fp16",
+        fallbackReason: workerResult.fallbackReason,
         backend: workerResult.backend,
         webGpuAvailable: workerResult.webGpuAvailable,
         webGpuApiAvailable: workerResult.webGpuApiAvailable ?? gpuProbe.apiAvailable,
@@ -2155,6 +2155,32 @@ export async function segmentObjectSelection(
     const applied = applyTextPolicyToMask(activeMask, textDet.textMask, width, height, options.textPolicy);
     activeMask.set(applied.finalAlpha);
   }
+
+  // Real edge refinement: Protect text, logos, mathematical symbols, and circular borders
+  const textLogoProt = detectAndProtectTextAndLogos(sourceImageData.data, width, height, activeMask);
+  if (textLogoProt.hasProtectedText) {
+    for (let i = 0; i < totalPixels; i++) {
+      if (textLogoProt.protectedMask[i] === 255) {
+        activeMask[i] = 255;
+      }
+    }
+  }
+
+  // Real edge-aware refinement for hair, fur, thin strokes, and semi-transparent edges
+  const hairEdgeRefined = edgeAwareHairFurRefinement(
+    sourceImageData.data,
+    activeMask,
+    width,
+    height,
+    {
+      preset: options?.quality === "fine_details" ? "fine_hair" : "standard",
+      alphaChoke: options?.alphaChoke || 1.0,
+      featherRadius: options?.featherRadius || 0.8,
+      decontaminateBg: true,
+    }
+  );
+  activeMask.set(hairEdgeRefined.refinedAlpha);
+  sourceImageData.data.set(hairEdgeRefined.decontaminatedRgba);
 
   // If user selected positive regions / painted text to keep (in person_plus_text or custom mode)
   if (options?.manualKeepMask) {

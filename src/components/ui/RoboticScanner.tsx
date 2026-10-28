@@ -22,11 +22,11 @@ const DEFAULT_STEPS = [
 
 export function RoboticScanner({
   active,
-  moduleName = "PLP NEURAL ENGINE",
+  moduleName = "PLP AI Engine",
   steps = DEFAULT_STEPS,
   subtext = "High-precision AI processing underway",
   elapsedSeconds,
-  providerLabel = "SERVERLESS VISION API",
+  providerLabel = "High quality / គុណភាពខ្ពស់",
 }: RoboticScannerProps) {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
@@ -172,7 +172,7 @@ export function RoboticScanner({
         <div className="mb-2 flex items-center justify-between border-b border-slate-800/80 pb-1.5 text-slate-500 text-[10px]">
           <span className="flex items-center gap-1.5 text-slate-400">
             <Terminal className="h-3 w-3 text-cyan-400" aria-hidden="true" />
-            TELEMETRY STREAM
+            Processing / កំពុងដំណើរការ
           </span>
           <span className="text-emerald-400">STATUS: ACTIVE</span>
         </div>

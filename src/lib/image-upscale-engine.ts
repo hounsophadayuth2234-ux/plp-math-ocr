@@ -88,6 +88,8 @@ export interface UpscaleResult {
   requestedScale?: number;
   isFallback?: boolean;
   fallbackReason?: string;
+  wasCapped?: boolean;
+  cappedReason?: string;
   diagnostics: ImageDiagnostics;
   elapsedMs: number;
   label: ProcessingStatusLabel;

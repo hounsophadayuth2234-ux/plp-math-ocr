@@ -18,6 +18,7 @@ import {
   Edit2,
   Save,
   X,
+  Trash2,
 } from "lucide-react";
 import { getOrRefreshCsrfToken, CSRF_HEADER_NAME } from "@/lib/csrf-client";
 
@@ -49,6 +50,7 @@ export function ProfileManager({ initialUser, onUserUpdated }: ProfileManagerPro
 
   // Avatar state
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -164,59 +166,92 @@ export function ProfileManager({ initialUser, onUserUpdated }: ProfileManagerPro
     }
   };
 
-  // 2. Avatar / Profile Picture Upload (Convert to Base64)
+  // 2. Avatar / Profile Picture Upload Validation & Selection
   const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      setErrorMessage("Please select a valid image file.");
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    // Validate MIME type
+    const validMimes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validMimes.includes(file.type)) {
+      setErrorMessage("ប្រភេទឯកសារមិនត្រឹមត្រូវ។ សូមជ្រើសរើសរូបភាព JPEG, PNG ឬ WebP (Invalid image format. Allowed: JPEG, PNG, WebP).");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
+    // Validate file size (max 5MB)
+    const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      setErrorMessage("ទំហំឯកសារធំជាង 5MB (File size exceeds 5MB limit).");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const objectUrl = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          const maxDim = 4096;
+          if (img.naturalWidth <= 0 || img.naturalHeight <= 0) {
+            reject(new Error("រូបភាពខូច មិនអាចអានបានទេ (Corrupted or empty image)."));
+            return;
+          }
+          if (img.naturalWidth > maxDim || img.naturalHeight > maxDim) {
+            reject(new Error(`ទំហំរូបភាពលើសពី ${maxDim}px (Dimensions exceed max 4096px).`));
+            return;
+          }
+          // Downscale to 256x256 max square for clean avatar storage
+          const canvas = document.createElement("canvas");
+          const targetDim = 256;
+          let w = img.naturalWidth;
+          let h = img.naturalHeight;
+          if (w > h) {
+            if (w > targetDim) {
+              h = Math.round((h * targetDim) / w);
+              w = targetDim;
+            }
+          } else {
+            if (h > targetDim) {
+              w = Math.round((w * targetDim) / h);
+              h = targetDim;
+            }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Could not initialize 2D canvas context."));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.88));
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("មិនអាចដំណើរការរូបភាពនេះបានទេ (Failed to decode image safely)."));
+        };
+        img.src = objectUrl;
+      });
+
+      setPendingAvatar(base64);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to process image.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!pendingAvatar) return;
     setUploadingAvatar(true);
     setErrorMessage(null);
     setSuccessMessage(null);
 
     try {
-      // Downscale to 256x256 max to store clean, compact Base64 in Redis
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement("canvas");
-            const maxDim = 256;
-            let w = img.width;
-            let h = img.height;
-            if (w > h) {
-              if (w > maxDim) {
-                h = Math.round((h * maxDim) / w);
-                w = maxDim;
-              }
-            } else {
-              if (h > maxDim) {
-                w = Math.round((w * maxDim) / h);
-                h = maxDim;
-              }
-            }
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext("2d");
-            if (!ctx) return resolve(event.target?.result as string);
-            ctx.drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL("image/jpeg", 0.85));
-          };
-          img.onerror = reject;
-          img.src = event.target?.result as string;
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      setAvatarPreview(base64);
-
-      // Persist to Upstash Redis via PUT /api/auth/profile
       const csrfToken = await getOrRefreshCsrfToken();
       const res = await fetch("/api/auth/profile", {
         method: "PUT",
@@ -225,7 +260,7 @@ export function ProfileManager({ initialUser, onUserUpdated }: ProfileManagerPro
           ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
         },
         body: JSON.stringify({
-          avatar: base64,
+          avatar: pendingAvatar,
           csrfToken,
         }),
       });
@@ -236,10 +271,54 @@ export function ProfileManager({ initialUser, onUserUpdated }: ProfileManagerPro
       }
 
       setUser(data.user);
-      setSuccessMessage("Avatar successfully updated and saved in Redis!");
+      setAvatarPreview(data.user.avatar || pendingAvatar);
+      setPendingAvatar(null);
+      setSuccessMessage("រូបភាព Profile ត្រូវបានរក្សាទុកជោគជ័យ (Profile picture saved successfully)!");
       if (onUserUpdated) onUserUpdated(data.user);
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to upload avatar.");
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleCancelAvatar = () => {
+    setPendingAvatar(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleRemoveAvatar = async () => {
+    setUploadingAvatar(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const csrfToken = await getOrRefreshCsrfToken();
+      const res = await fetch("/api/auth/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
+        },
+        body: JSON.stringify({
+          avatar: "",
+          csrfToken,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to remove avatar.");
+      }
+
+      setUser(data.user);
+      setAvatarPreview(null);
+      setPendingAvatar(null);
+      setSuccessMessage("រូបភាព Profile ត្រូវបានលុបរួចរាល់ (Profile picture removed)!");
+      if (onUserUpdated) onUserUpdated(data.user);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to remove avatar.");
     } finally {
       setUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -303,54 +382,114 @@ export function ProfileManager({ initialUser, onUserUpdated }: ProfileManagerPro
     <div className="space-y-6 max-w-2xl mx-auto">
       {/* Account Info Card with Circular Avatar & Username Editing */}
       <div className="rounded-2xl border border-slate-700/60 bg-slate-900/60 p-6 backdrop-blur-xl shadow-xl space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-5">
-          <div className="flex items-center space-x-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-5 gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             {/* Circular Avatar */}
-            <div className="relative group">
-              <div className="h-16 w-16 rounded-full overflow-hidden border-2 border-indigo-500/60 bg-slate-950 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <div className="relative shrink-0">
+              <div className="h-20 w-20 rounded-full overflow-hidden border-2 border-indigo-500/60 bg-slate-950 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                 {uploadingAvatar ? (
-                  <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
-                ) : avatarPreview ? (
+                  <Loader2 className="h-7 w-7 animate-spin text-indigo-400" />
+                ) : (pendingAvatar || avatarPreview) ? (
                   <img
-                    src={avatarPreview}
+                    src={pendingAvatar || avatarPreview!}
                     alt="User Avatar"
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <User className="h-8 w-8 text-indigo-400" />
+                  <User className="h-9 w-9 text-indigo-400" />
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingAvatar}
-                className="absolute inset-0 rounded-full bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[9px] font-bold cursor-pointer"
-                title="Upload Profile Picture"
-              >
-                <Camera className="h-4 w-4 mb-0.5" />
-                <span>Upload</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarSelect}
-                className="hidden"
-              />
+              {pendingAvatar && (
+                <span className="absolute -bottom-1 -right-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-slate-950 shadow">
+                  Preview
+                </span>
+              )}
             </div>
 
-            <div>
+            {/* Avatar Actions & Identity */}
+            <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-100">
                   {user?.displayName || user?.username || "Admin Profile"}
                 </h2>
               </div>
               <p className="text-xs text-slate-400">Authenticated account credentials</p>
+
+              {/* Explicit, Accessible Avatar Action Buttons (Visible on desktop, tablet, mobile) */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {pendingAvatar ? (
+                  <>
+                    <button
+                      type="button"
+                      data-testid="save-avatar-btn"
+                      onClick={handleSaveAvatar}
+                      disabled={uploadingAvatar}
+                      className="min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-md shadow-emerald-900/40 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {uploadingAvatar ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                      <span>Save / រក្សាទុក</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="cancel-avatar-btn"
+                      onClick={handleCancelAvatar}
+                      disabled={uploadingAvatar}
+                      className="min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" />
+                      <span>Cancel / បោះបង់</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      data-testid="change-avatar-btn"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingAvatar}
+                      className="min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 text-white font-medium text-xs flex items-center gap-1.5 border border-indigo-400/40 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                      aria-label="Change Profile Picture / ប្តូររូប Profile"
+                    >
+                      <Camera className="h-4 w-4" />
+                      <span>Change Profile Picture / ប្តូររូប Profile</span>
+                    </button>
+
+                    {avatarPreview && (
+                      <button
+                        type="button"
+                        data-testid="remove-avatar-btn"
+                        onClick={handleRemoveAvatar}
+                        disabled={uploadingAvatar}
+                        className="min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                        title="Remove Profile Picture"
+                        aria-label="Remove profile image"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Remove / លុបរូបភាព</span>
+                      </button>
+                    )}
+                  </>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  id="avatar-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleAvatarSelect}
+                  className="sr-only"
+                  aria-label="Upload profile image"
+                />
+              </div>
             </div>
           </div>
 
           {user?.role && (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="self-start sm:self-center inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <Shield className="h-3.5 w-3.5 mr-1" />
               {user.role}
             </span>

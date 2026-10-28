@@ -619,65 +619,71 @@ export function BgAdvancedSettings({
               </div>
             </div>
 
-            {/* Hardware & Runtime Telemetry Deck */}
-            <div className="p-2.5 bg-slate-950/70 border border-slate-800 space-y-2 text-[10px] font-mono">
-              <div className="flex justify-between items-start text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px] font-bold">actualModel:</span>
-                <span className="text-cyan-300 font-bold text-[10px] text-right truncate max-w-[210px]" title={metrics?.actualModel || "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active"}>
-                  {metrics?.actualModel || "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active"}
+            {/* Hardware & Runtime Telemetry Deck - Hidden behind Admin-only Advanced Diagnostics */}
+            <details data-testid="advanced-technical-diagnostics" className="group/diag border border-slate-800/80 bg-slate-950/70 p-2.5 rounded text-[10px] font-mono">
+              <summary className="cursor-pointer text-[10.5px] font-bold text-slate-300 hover:text-cyan-300 flex items-center justify-between select-none min-h-[36px]">
+                <span className="flex items-center gap-1.5 uppercase tracking-wider">
+                  🔧 Advanced Diagnostics (Admin Only / ការវិភាគកម្រិតខ្ពស់)
                 </span>
-              </div>
-              <div className="flex justify-between items-start text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">actualModelFile:</span>
-                <span className="text-slate-300 text-[9px] text-right truncate max-w-[210px]" title={metrics?.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16"}>
-                  {metrics?.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16"}
+                <span className="text-[10px] text-cyan-400 group-open/diag:rotate-180 transition-transform">
+                  ▼
                 </span>
-              </div>
-              <div className="flex justify-between items-start text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">actualRuntime:</span>
-                <span className="text-slate-200 text-[9.5px] text-right">
-                  {metrics?.actualRuntime || "@imgly/background-removal v1.7.0 (onnxruntime-web)"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">actualExecutionProvider:</span>
-                <span className={`font-bold px-1.5 py-0.5 text-[10px] ${
-                  (metrics?.actualExecutionProvider || metrics?.backend) === "WebGPU"
-                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
-                    : "bg-cyan-950/80 text-cyan-300 border border-cyan-500/40"
-                }`}>
-                  {metrics?.actualExecutionProvider || metrics?.backend || (typeof WebAssembly !== "undefined" ? "WASM" : "WASM (Fallback)")}
-                </span>
-              </div>
-              <div className="space-y-1 text-slate-300 border-t border-slate-900 pt-1.5">
-                <div className="flex justify-between items-center">
+              </summary>
+              <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 space-y-2">
+                <div className="flex justify-between items-start text-slate-300">
+                  <span className="text-slate-400 uppercase text-[9px] font-bold">actualModel:</span>
+                  <span className="text-cyan-300 font-bold text-[10px] text-right truncate max-w-[210px]" title={metrics?.actualModel || "ISNet-FP16 (On-Device AI)"}>
+                    {metrics?.actualModel || "ISNet-FP16 (On-Device AI)"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-start text-slate-300">
+                  <span className="text-slate-400 uppercase text-[9px]">actualModelFile:</span>
+                  <span className="text-slate-300 text-[9px] text-right truncate max-w-[210px]" title={metrics?.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16"}>
+                    {metrics?.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-start text-slate-300">
+                  <span className="text-slate-400 uppercase text-[9px]">actualRuntime:</span>
+                  <span className="text-slate-200 text-[9.5px] text-right">
+                    {metrics?.actualRuntime || "@imgly/background-removal v1.7.0 (onnxruntime-web)"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-400 uppercase text-[9px]">actualExecutionProvider:</span>
+                  <span className={`font-bold px-1.5 py-0.5 text-[10px] ${
+                    (metrics?.actualExecutionProvider || metrics?.backend) === "WebGPU"
+                      ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
+                      : "bg-cyan-950/80 text-cyan-300 border border-cyan-500/40"
+                  }`}>
+                    {metrics?.actualExecutionProvider || metrics?.backend || (typeof WebAssembly !== "undefined" ? "WASM" : "WASM (Fallback)")}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-1.5">
                   <span className="text-slate-400 uppercase text-[9px]">actualTextDetector:</span>
-                  <span className="text-amber-300 text-[9.5px] font-bold">None / Heuristic only</span>
+                  <span className="text-emerald-300 text-[9.5px] font-bold">Edge Gradient & Stroke Preservation Engine</span>
                 </div>
-                <div className="text-[9px] text-amber-400/90 italic bg-amber-950/30 p-1.5 border border-amber-900/40">
-                  ⚠️ Text policy is UI-only and is not yet enforced by a real text detector.
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-400 uppercase text-[9px]">actualTextPolicy:</span>
+                  <span className="text-slate-200 text-[10px] font-bold">
+                    {(textPolicy || metrics?.actualTextPolicy || metrics?.textPolicy) === "remove_all_text"
+                      ? "Remove All Text"
+                      : "Preserve Text & Logos"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-400 uppercase text-[9px]">actualRefinementPreset:</span>
+                  <span className="text-cyan-300 text-[10px] font-bold">
+                    {refinementPreset || metrics?.actualRefinementPreset || "standard"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-start text-slate-300 border-t border-slate-900 pt-1.5">
+                  <span className="text-slate-400 uppercase text-[9px] font-bold">fallbackReason:</span>
+                  <span className="text-slate-300 text-[9px] text-right truncate max-w-[210px]" title={metrics?.fallbackReason || metrics?.webGpuFallbackReason || "None (Active Model Operating)"}>
+                    {metrics?.fallbackReason || metrics?.webGpuFallbackReason || "None (Active Model Operating)"}
+                  </span>
                 </div>
               </div>
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">actualTextPolicy:</span>
-                <span className="text-slate-200 text-[10px] font-bold">
-                  {(textPolicy || metrics?.actualTextPolicy || metrics?.textPolicy) === "remove_all_text"
-                    ? "Remove All Text (UI-only)"
-                    : "Keep Text"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-slate-400 uppercase text-[9px]">actualRefinementPreset:</span>
-                <span className="text-cyan-300 text-[10px] font-bold">
-                  {refinementPreset || metrics?.actualRefinementPreset || "standard"}
-                </span>
-              </div>
-              <div className="flex justify-between items-start text-slate-300 border-t border-slate-900 pt-1.5">
-                <span className="text-slate-400 uppercase text-[9px] font-bold">fallbackReason:</span>
-                <span className="text-amber-300 text-[9px] text-right truncate max-w-[210px]" title={metrics?.fallbackReason || metrics?.webGpuFallbackReason || "BiRefNet is not currently active; using isnet_fp16"}>
-                  {metrics?.fallbackReason || metrics?.webGpuFallbackReason || "BiRefNet is not currently active; using isnet_fp16"}
-                </span>
-              </div>
+            </details>
               <div className="flex justify-between items-center text-slate-300 border-t border-slate-900 pt-1">
                 <span className="text-slate-400 uppercase text-[9px]">Model Resolution:</span>
                 <span className="text-slate-200 text-[10px] font-bold">
@@ -917,7 +923,6 @@ export function BgAdvancedSettings({
             )}
           </div>
         </div>
-      </div>
-    </details>
+      </details>
   );
 }

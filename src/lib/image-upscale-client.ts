@@ -107,12 +107,14 @@ export async function upscaleImageStudio(
     percent: 20,
   });
 
-  // Stage 2: Dispatching to Real-ESRGAN Backend
+  const reqScale = options.scale || 2;
+
+  // Stage 2: Dispatching to Backend
   options.onProgress?.({
     stage: 2,
     totalStages: 5,
-    stageName: "Preparing AI Inference Payload",
-    stageNameKh: "រៀបចំទិន្នន័យបញ្ជូនទៅ Real-ESRGAN AI",
+    stageName: "Preparing Enhancement Payload",
+    stageNameKh: "រៀបចំទិន្នន័យបញ្ជូនទៅម៉ាស៊ីនដំណើរការ",
     percent: 40,
   });
 
@@ -123,19 +125,19 @@ export async function upscaleImageStudio(
   } else {
     formData.append("image", imageSource, "input-image.png");
   }
-  formData.append("scale", "4");
+  formData.append("scale", String(reqScale));
 
   // Determine backend endpoint
   const endpoint =
     (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HF_UPSCALE_URL) ||
     "/api/upscale";
 
-  // Stage 3: Neural Inference
+  // Stage 3: Enhancement Inference
   options.onProgress?.({
     stage: 3,
     totalStages: 5,
-    stageName: "Real-ESRGAN 4X Super-Resolution",
-    stageNameKh: "ដំណើរការ Real-ESRGAN AI Super-Resolution (4X)",
+    stageName: `HD Resize & Sharpen (${reqScale}X)`,
+    stageNameKh: `ដំណើរការ HD Resize & Sharpen (${reqScale}X)`,
     percent: 65,
   });
 
@@ -231,26 +233,26 @@ export async function upscaleImageStudio(
       srcHeight: srcH,
       outputWidth: outW,
       outputHeight: outH,
-      scale: (factor as UpscaleScale) || 4,
-      requestedScale: 4,
-      isFallback: isAlgorithmic || wasDownscaled,
+      scale: (factor as UpscaleScale) || reqScale,
+      requestedScale: reqScale,
+      wasCapped: wasDownscaled,
+      cappedReason: wasDownscaled
+        ? "រូបដើមធំជាង 1200px ត្រូវបានសម្រួលទំហំសុវត្ថិភាព CPU មុនពេលដំណើរការ Real-ESRGAN (Input capped at 1200px for CPU safety)"
+        : undefined,
+      isFallback: isAlgorithmic,
       fallbackReason: isAlgorithmic
         ? "HD Resize & Sharpen — Algorithmic Fallback (ONNX neural inference unavailable)"
-        : wasDownscaled
-        ? `រូបដើមធំជាង 1200px ត្រូវបានសម្រួលទំហំសុវត្ថិភាព CPU មុនពេលដំណើរការ Real-ESRGAN (Input capped at 1200px for CPU safety)`
         : undefined,
       diagnostics,
       elapsedMs,
       label: isAlgorithmic ? "HD Resize & Sharpen" : "Local worker result",
-      // Truthful metadata: model: "Real-ESRGAN (4x · Compact SRVGGNet)"
-      model: isAlgorithmic ? "HD Resize & Sharpen — Algorithmic Fallback" : modelUsedHeader,
+      model: isAlgorithmic ? "Algorithmic Resize (Lanczos-3 Sharpen)" : modelUsedHeader,
       engine: isAlgorithmic ? "Browser resize/sharpen" : "Real AI model",
       jobId: options.jobId,
     };
   }
 
   // Graceful on-device HD Resize & Sharpen / ONNX engine (via Web Worker)
-  const reqScale = options.scale || 2;
   const canvas = document.createElement("canvas");
   canvas.width = srcW;
   canvas.height = srcH;
@@ -323,11 +325,14 @@ export async function upscaleImageStudio(
     outputHeight: workerRes.height,
     scale: reqScale,
     requestedScale: reqScale,
+    wasCapped: false,
     diagnostics: workerRes.diagnostics || diagnostics,
     elapsedMs,
     label: isNeural ? "Browser AI result" : "HD Resize & Sharpen",
-    model: workerRes.model || (isNeural ? `Real-ESRGAN (${reqScale}x · ONNX)` : "HD Resize & Sharpen — Algorithmic Fallback"),
+    model: workerRes.model || (isNeural ? `Real-ESRGAN (${reqScale}x · ONNX)` : `Algorithmic Resize (${reqScale}x · Lanczos-3 Sharpen)`),
     engine: isNeural ? "Real AI model" : "Browser resize/sharpen",
+    isFallback: !isNeural,
+    fallbackReason: !isNeural ? "Algorithmic Resize (ONNX neural inference offline)" : undefined,
     jobId: options.jobId,
   };
 }

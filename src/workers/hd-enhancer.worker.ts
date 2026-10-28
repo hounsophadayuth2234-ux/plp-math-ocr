@@ -299,8 +299,8 @@ self.onmessage = async (e: MessageEvent<EnhancerWorkerStartRequest>) => {
       width: result.width,
       height: result.height,
       diagnostics: result.diagnostics,
-      backend: "CPU / Algorithmic Fallback",
-      model: "HD Resize & Sharpen — Algorithmic Fallback",
+      backend: "Algorithmic Engine (CPU)",
+      model: "Algorithmic Resize (Lanczos-3 Sharpen)",
       isNeuralAi: false,
     };
 

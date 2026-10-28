@@ -40,7 +40,7 @@ export function ImageDiagnosticsCard({
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-cyan-400" />
           <h3 className="font-mono text-sm font-bold text-white uppercase tracking-wider">
-            ព័ត៌មានបច្ចេកទេស (Technical Diagnostics)
+            Advanced Diagnostics (Admin Only / ការវិភាគកម្រិតខ្ពស់)
           </h3>
         </div>
         <div className="flex items-center gap-2">

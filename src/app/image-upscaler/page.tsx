@@ -590,7 +590,7 @@ export default function ImageUpscalerPage() {
     : "Ready";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
       <div className="mx-auto max-w-7xl space-y-6">
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-cyan-500/20 pb-5">
@@ -769,9 +769,9 @@ export default function ImageUpscalerPage() {
                   afterSrc={result.outputUrl}
                   beforeLabel="BEFORE (រូបដើម)"
                   afterLabel={
-                    result.isFallback
+                    result.wasCapped
                       ? `AFTER (${result.scale}X HD Resize & Sharpen · Capped at 1200px)`
-                      : `AFTER (${result.scale}X HD Resize & Sharpen)`
+                      : `AFTER (${result.scale}X ${result.engine === "Real AI model" ? "Neural Super-Resolution" : "HD Resize & Sharpen"})`
                   }
                   srcWidth={result.srcWidth}
                   srcHeight={result.srcHeight}
@@ -787,7 +787,9 @@ export default function ImageUpscalerPage() {
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                         <span className="font-mono text-xs font-bold text-white uppercase tracking-wider">
-                          លទ្ធផលកែសម្រួលរួចរាល់ ({result.scale}X HD Complete)
+                          {result.engine === "Real AI model"
+                            ? `លទ្ធផលកែសម្រួលរួចរាល់ (${result.scale}X Neural HD Complete)`
+                            : `លទ្ធផលកែសម្រួលរួចរាល់ (${result.scale}X Algorithmic Resize Complete)`}
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-slate-400">
@@ -798,7 +800,7 @@ export default function ImageUpscalerPage() {
                         <span className="font-semibold text-cyan-300">{result.model}</span>
                         <span>·</span>
                         <span className="rounded bg-cyan-950/70 px-2 py-0.5 text-cyan-200 border border-cyan-500/30 text-[10px] font-bold">
-                          {result.engine === "Real AI model" ? "⚡ ONNX Neural Engine (WebGPU/WASM/Node)" : "CPU Algorithmic Fallback"}
+                          {result.engine === "Real AI model" ? "⚡ ONNX Neural Engine (WebGPU/WASM/Node)" : "CPU Algorithmic Engine"}
                         </span>
                         <span>·</span>
                         <span className="text-cyan-400 font-bold">{result.elapsedMs} ms</span>
@@ -807,6 +809,11 @@ export default function ImageUpscalerPage() {
                         <span className="rounded bg-emerald-950/80 px-2 py-0.5 text-emerald-300 border border-emerald-500/30">
                           ✓ Exact {result.outputWidth}×{result.outputHeight} ({result.scale}x Verified)
                         </span>
+                        {result.wasCapped && (
+                          <span className="rounded bg-amber-950/80 px-2 py-0.5 text-amber-300 border border-amber-500/30">
+                            ⚠ Capped at 1200px (CPU safety)
+                          </span>
+                        )}
                         <span className="rounded bg-slate-900 px-2 py-0.5 text-slate-300 border border-slate-700">
                           ✓ Ringing Clamp Active
                         </span>

@@ -213,8 +213,8 @@ export function BgStudioNav({
           </div>
           <div>
             <div className="flex items-center gap-1.5 font-bold tracking-wider text-white text-[11px]">
-              <span>WORKSTATION // UNIT-02</span>
-              <span className="text-cyan-400 text-[10px]">[BG-REMOVER]</span>
+              <span>AI Background Studio</span>
+              <span className="text-cyan-400 text-[10px]">[កាត់ផ្ទៃ]</span>
             </div>
             <div className="text-[9px] text-slate-400 flex items-center gap-1.5">
               <span
@@ -223,20 +223,20 @@ export function BgStudioNav({
                 }`}
               />
               <span className={isProcessing ? "text-amber-300 font-bold font-sans" : "text-emerald-400 font-sans"}>
-                {isProcessing ? "កំពុងដំណើរការ... (Processing...)" : "ត្រៀមរួចរាល់ (Ready)"}
+                {isProcessing ? "កំពុងដំណើរការ (Processing)" : "ត្រៀមរួចរាល់ (Ready)"}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Center: Engine & Privacy Telemetry */}
+        {/* Center: High Quality / Text Protection Status */}
         <div className="hidden lg:flex items-center gap-2 border border-slate-800 bg-slate-950/80 px-3 py-1 text-[10px]">
-          <span className="text-slate-400">ENGINE:</span>
-          <span className="text-cyan-300 font-bold">ISNet-FP16 (@imgly/isnet_fp16 WASM)</span>
+          <span className="text-slate-400">គុណភាពខ្ពស់ (High quality):</span>
+          <span className="text-cyan-300 font-bold">On-Device AI</span>
           <span className="text-slate-600">|</span>
           <span className="flex items-center gap-1 text-emerald-400">
             <ShieldCheck className="h-3 w-3" />
-            100% ON-DEVICE
+            ការពារអក្សរ (Text protection)
           </span>
         </div>
 

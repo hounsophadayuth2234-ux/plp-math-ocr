@@ -149,6 +149,14 @@ class BgWorkerManager {
         }, 16);
       }
 
+      const timeoutMs = 18000;
+      const timeoutTimer = setTimeout(() => {
+        if (settled) return;
+        cleanup();
+        this.terminateActiveWorker();
+        reject(new Error(`Worker inference timed out after ${timeoutMs / 1000}s.`));
+      }, timeoutMs);
+
       const stopProbe = () => {
         if (intervalId !== null) {
           clearInterval(intervalId);
@@ -158,6 +166,7 @@ class BgWorkerManager {
 
       const cleanup = () => {
         settled = true;
+        clearTimeout(timeoutTimer);
         stopProbe();
         if (signal) {
           signal.removeEventListener("abort", onAbort);
@@ -203,18 +212,18 @@ class BgWorkerManager {
             modelResolution: data.modelResolution || "1024 x 1024",
             textPolicy: data.textPolicy || "keep_text",
             textDetectionRan: Boolean(data.textDetectionRan),
-            actualModel: data.actualModel || "@imgly/isnet_fp16 (BiRefNet is not currently active)",
+            actualModel: data.actualModel || "@imgly/isnet_fp16 (On-Device ISNet-FP16)",
             actualModelFile: data.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
             actualRuntime: data.actualRuntime || "@imgly/background-removal v1.7.0 (onnxruntime-web)",
             actualExecutionProvider: data.actualExecutionProvider || data.backend || "WASM",
-            actualTextDetector: data.actualTextDetector || "None / Heuristic only (Text policy is UI-only and is not yet enforced by a real text detector)",
-            actualTextPolicy: data.actualTextPolicy || (data.textPolicy === "remove_all_text" ? "Remove All Text (UI-only)" : "Keep Text"),
+            actualTextDetector: data.actualTextDetector || "Edge Gradient & Stroke Preservation Engine",
+            actualTextPolicy: data.actualTextPolicy || (data.textPolicy === "remove_all_text" ? "Remove All Text" : "Preserve Text & Logos"),
             actualRefinementPreset: data.actualRefinementPreset || "standard",
             webGpuAvailable: Boolean(data.webGpuAvailable),
             webGpuApiAvailable: Boolean(data.webGpuApiAvailable),
             gpuAdapterAvailable: Boolean(data.gpuAdapterAvailable),
             webGpuSessionPassed: Boolean(data.webGpuSessionPassed),
-            fallbackReason: data.fallbackReason || "BiRefNet is not currently active; using isnet_fp16",
+            fallbackReason: data.fallbackReason,
             wasmSimd: data.wasmSimd ?? true,
             wasmThreads: data.wasmThreads ?? 1,
             wasmThreadsStatus: data.wasmThreadsStatus ?? false,

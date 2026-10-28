@@ -934,6 +934,9 @@ export default function BgRemoverPage() {
           .replace("ASSET_LOAD_TIMEOUT: ", "")
           .replace("INFERENCE_TIMEOUT: ", "");
         setError(cleanMsg);
+        setWorkflowStep("failed");
+        setIsProcessing(false);
+        isProcessingRef.current = false;
         return;
       }
 
@@ -944,6 +947,9 @@ export default function BgRemoverPage() {
         setError(
           "Remote Worker microservice is not configured in settings. Switched to Browser AI mode (runs locally with complete privacy and zero cost)."
         );
+        setWorkflowStep("failed");
+        setIsProcessing(false);
+        isProcessingRef.current = false;
         setProcessingMode("preview");
         return;
       }
@@ -1157,7 +1163,7 @@ export default function BgRemoverPage() {
 
   return (
     <div
-      className={`relative space-y-5 text-slate-100 transition-colors duration-300 ${studioFont}`}
+      className={`relative space-y-5 text-slate-100 transition-colors duration-300 overflow-x-hidden ${studioFont}`}
       data-app-state={manualState}
       data-studio-theme={studioTheme}
     >

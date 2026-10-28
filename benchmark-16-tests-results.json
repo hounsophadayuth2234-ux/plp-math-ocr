@@ -2,19 +2,19 @@
   {
     "testNumber": 1,
     "testName": "Fast 512px Cold",
-    "measuredMs": 52,
+    "measuredMs": 57,
     "details": {
       "resolution": "512x512",
-      "decodeMs": 0.0019999999999527063,
-      "resizeMs": 13.945200000000114,
+      "decodeMs": 0.0028999999999541615,
+      "resizeMs": 21.967099999999846,
       "modelLoadMs": 28.5,
-      "inferenceMs": 9.761700000000019
+      "inferenceMs": 6.691699999999855
     }
   },
   {
     "testNumber": 2,
     "testName": "Fast 512px Warm",
-    "measuredMs": 10,
+    "measuredMs": 12,
     "details": {
       "resolution": "512x512",
       "modelLoadMs": 0
@@ -32,7 +32,7 @@
   {
     "testNumber": 4,
     "testName": "Fast 640px Warm",
-    "measuredMs": 15,
+    "measuredMs": 16,
     "details": {
       "resolution": "640x640",
       "modelLoadMs": 0
@@ -41,7 +41,7 @@
   {
     "testNumber": 5,
     "testName": "Fast 768px Cold",
-    "measuredMs": 60,
+    "measuredMs": 55,
     "details": {
       "resolution": "768x768",
       "modelLoadMs": 26.5
@@ -59,7 +59,7 @@
   {
     "testNumber": 7,
     "testName": "Fast 1024px",
-    "measuredMs": 9,
+    "measuredMs": 10,
     "details": {
       "resolution": "1024x1024",
       "modelLoadMs": 0
@@ -68,7 +68,7 @@
   {
     "testNumber": 8,
     "testName": "Balanced Mode",
-    "measuredMs": 628,
+    "measuredMs": 506,
     "details": {
       "choke": 1,
       "feather": 0.7,
@@ -78,7 +78,7 @@
   {
     "testNumber": 9,
     "testName": "Fine Details Mode",
-    "measuredMs": 690,
+    "measuredMs": 730,
     "details": {
       "choke": 1.5,
       "feather": 1,
@@ -88,10 +88,10 @@
   {
     "testNumber": 10,
     "testName": "Person + Text Mode (Khmer & English)",
-    "measuredMs": 272,
+    "measuredMs": 245,
     "details": {
-      "khmerTextMs": 131,
-      "englishTextMs": 18,
+      "khmerTextMs": 139,
+      "englishTextMs": 24,
       "khmerStrokeRetention": "100.0%",
       "englishStrokeRetention": "100%"
     }
@@ -99,7 +99,7 @@
   {
     "testNumber": 11,
     "testName": "Person-Only Mode",
-    "measuredMs": 675,
+    "measuredMs": 499,
     "details": {
       "textDetection": "Skipped (Mode does not require text detection)",
       "personAreaRatio": 1
@@ -108,7 +108,7 @@
   {
     "testNumber": 12,
     "testName": "Product-Only Mode",
-    "measuredMs": 145,
+    "measuredMs": 160,
     "details": {
       "textDetection": "Skipped (Mode does not require text detection)"
     }
@@ -116,9 +116,9 @@
   {
     "testNumber": 13,
     "testName": "UI Responsiveness on Mobile Viewport",
-    "measuredMs": 52,
+    "measuredMs": 50,
     "details": {
-      "mainThreadBlockingMs": 2,
+      "mainThreadBlockingMs": 0,
       "uiResponsiveness": "Responsive (<16ms main thread lag)"
     }
   },
@@ -143,7 +143,7 @@
   {
     "testNumber": 16,
     "testName": "Original-Resolution Export Test",
-    "measuredMs": 364,
+    "measuredMs": 335,
     "details": {
       "originalDimensions": "1024x1024",
       "exportDimensions": "1024x1024",
