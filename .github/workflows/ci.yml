@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Dependency installation
+        run: npm ci
+
+      - name: Linting
+        run: npm run lint
+
+      - name: Type Checking
+        run: npx tsc --noEmit
+
+      - name: Vitest Unit Tests
+        run: npm test
+
+      - name: Install Playwright browsers and dependencies
+        run: npx playwright install --with-deps
+
+      - name: Playwright E2E Tests
+        run: npx playwright test
+        env:
+          CI: true
+          APP_GATE_SESSION_SECRET: ${{ secrets.APP_GATE_SESSION_SECRET }}
+          E2E_SUPERADMIN_USERNAME: ${{ secrets.E2E_SUPERADMIN_USERNAME }}
+          E2E_SUPERADMIN_PASSWORD: ${{ secrets.E2E_SUPERADMIN_PASSWORD }}
