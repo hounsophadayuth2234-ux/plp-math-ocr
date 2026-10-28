@@ -9,6 +9,7 @@ export default defineConfig({
     timeout: 30000,
   },
   use: {
+    baseURL: (process.env.BASE_URL || 'https://math.dytcore.com').replace(/\/+$/, ''),
     channel: 'chrome',
     headless: true,
     viewport: { width: 1280, height: 800 },

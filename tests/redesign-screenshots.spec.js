@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import fs from 'node:fs';
+import { injectAuthenticatedSession } from './test-auth-helper.js';
 
-const BASE_URL =
-  process.env.PREVIEW_URL ||
-  'https://ai-toolkit-qw4irw7ss-hounsophadayuth2234-6445s-projects.vercel.app';
+const getBaseUrl = (baseURL) =>
+  (process.env.BASE_URL || process.env.PREVIEW_URL || baseURL || 'https://math.dytcore.com').replace(/\/+$/, '');
 const FIXTURES_DIR = path.resolve('tests/fixtures');
 const SCREENSHOTS_DIR = path.resolve('test-results/redesign-screenshots');
 
@@ -15,10 +15,16 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     }
   });
 
-  test('Page 1: Dashboard (/) Command Center - 1440px and 375px', async ({ page }) => {
+  test.beforeEach(async ({ context, baseURL }) => {
+    const target = getBaseUrl(baseURL);
+    await injectAuthenticatedSession(context, target);
+  });
+
+  test('Page 1: Dashboard (/) Command Center - 1440px and 375px', async ({ page, baseURL }) => {
+    const targetBase = getBaseUrl(baseURL);
     // 1. Desktop 1440px
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${BASE_URL}/`, { waitUntil: 'load', timeout: 60000 });
+    await page.goto(`${targetBase}/`, { waitUntil: 'load', timeout: 60000 });
     await page.waitForTimeout(1000);
 
     // Verify Untouched Sidebar Elements
@@ -53,10 +59,11 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     });
   });
 
-  test('Page 2: PLP Math Content (/plp-math-content) - 1440px and 375px', async ({ page }) => {
+  test('Page 2: PLP Math Content (/plp-math-content) - 1440px and 375px', async ({ page, baseURL }) => {
+    const targetBase = getBaseUrl(baseURL);
     // 1. Desktop 1440px
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${BASE_URL}/plp-math-content`, { waitUntil: 'load', timeout: 60000 });
+    await page.goto(`${targetBase}/plp-math-content`, { waitUntil: 'load', timeout: 60000 });
     await page.waitForTimeout(1000);
 
     // Verify Untouched Sidebar Elements
@@ -87,7 +94,9 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
 
   test('Page 3: Background Remover (/bg-remover) - 1440px, 375px, 3-Step Process & Mask Verification', async ({
     page,
+    baseURL,
   }) => {
+    const targetBase = getBaseUrl(baseURL);
     test.setTimeout(240000);
     page.on('console', (msg) => {
       console.log(`[BROWSER ${msg.type().toUpperCase()}] ${msg.text()}`);
@@ -98,7 +107,7 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
 
     // 1. Desktop 1440px Standby Chamber
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${BASE_URL}/bg-remover`, { waitUntil: 'load', timeout: 60000 });
+    await page.goto(`${targetBase}/bg-remover`, { waitUntil: 'load', timeout: 60000 });
     await page.waitForTimeout(1000);
 
     // Verify Untouched Sidebar Elements

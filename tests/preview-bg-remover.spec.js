@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import fs from 'node:fs';
+import { injectAuthenticatedSession } from './test-auth-helper.js';
 
-const PREVIEW_URL = process.env.PREVIEW_URL || 'https://ai-toolkit-mn5mgzsgz-hounsophadayuth2234-6445s-projects.vercel.app/bg-remover';
 const FIXTURES_DIR = process.env.FIXTURES_DIR || path.resolve('tests/fixtures');
 const RESULTS_DIR = path.resolve('test-results/bg-remover');
 
@@ -21,7 +21,11 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
   ];
 
   for (const fixture of fixtures) {
-    test(`Acceptance: ${fixture.desc} (${fixture.name})`, async ({ page }, testInfo) => {
+    test(`Acceptance: ${fixture.desc} (${fixture.name})`, async ({ page, context, baseURL }, testInfo) => {
+      const targetBase = (process.env.BASE_URL || baseURL || 'https://math.dytcore.com').replace(/\/+$/, '');
+      const previewUrl = process.env.PREVIEW_URL || `${targetBase}/bg-remover`;
+      await injectAuthenticatedSession(context, targetBase);
+
       const fixturePath = path.join(FIXTURES_DIR, fixture.name);
       if (!fs.existsSync(fixturePath)) {
         test.skip(!fs.existsSync(fixturePath), `Fixture file missing: ${fixturePath}`);
@@ -36,7 +40,7 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
       });
 
       // 1. Navigate to Preview URL
-      await page.goto(PREVIEW_URL, { waitUntil: 'load', timeout: 60000 });
+      await page.goto(previewUrl, { waitUntil: 'load', timeout: 60000 });
       await page.waitForLoadState('networkidle').catch(() => {});
 
       // 2. Upload image fixture (hydration-safe retry)
@@ -192,7 +196,7 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
       const metricsData = {
         fixture: fixture.name,
         description: fixture.desc,
-        previewUrl: PREVIEW_URL,
+        previewUrl: previewUrl,
         coldRunMs: coldRunDuration,
         diagnostics: {
           webGpuAvailable: webGpuAvail,

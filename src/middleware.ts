@@ -213,7 +213,22 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Enforce 3-Tier RBAC on /admin and /api/admin/* (excluding public recovery page and /admin/dashboard where server-side 404 concealment is enforced)
+  // 5. Enforce 3-Tier RBAC on /admin and /api/admin/*
+  // 404 concealment: Non-SUPER_ADMIN authenticated visits to /admin/dashboard return immediate 404
+  if (pathname.startsWith("/admin/dashboard")) {
+    if (userRole !== "SUPER_ADMIN") {
+      return applyCorsHeaders(
+        new NextResponse("404 Not Found", {
+          status: 404,
+          headers: {
+            "Cache-Control": "no-store, private",
+            "X-Content-Type-Options": "nosniff",
+          },
+        })
+      );
+    }
+  }
+
   if (
     (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) &&
     pathname !== "/admin/recovery" &&

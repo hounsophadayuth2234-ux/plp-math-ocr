@@ -113,10 +113,14 @@ describe("Image-Only Khmer + Math OCR Regression (Requirements 1, 7, 13, 16)", (
     const imgBytes = fs.readFileSync(fixturePath);
     const base64Data = imgBytes.toString("base64");
 
-    const t0 = performance.now();
-    const result = await model.generateContent([
-      {
-        text: `You are a bilingual Khmer-English mathematical document transcription engine.
+    let result: any;
+    let elapsedMs = 0;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const t0 = performance.now();
+        result = await model.generateContent([
+          {
+            text: `You are a bilingual Khmer-English mathematical document transcription engine.
 Transcribe BOTH Khmer educational text and mathematical formulas from this image without solving.
 Return valid JSON:
 {
@@ -127,19 +131,28 @@ Return valid JSON:
   "confidence": 0.98,
   "uncertainParts": []
 }`,
-      },
-      {
-        inlineData: {
-          mimeType: "image/png",
-          data: base64Data,
-        },
-      },
-      {
-        text: "Transcribe all visible Khmer text and mathematical formulas from this image exactly.",
-      },
-    ]);
+          },
+          {
+            inlineData: {
+              mimeType: "image/png",
+              data: base64Data,
+            },
+          },
+          {
+            text: "Transcribe all visible Khmer text and mathematical formulas from this image exactly.",
+          },
+        ]);
+        elapsedMs = performance.now() - t0;
+        break;
+      } catch (err: any) {
+        if (attempt < 3 && (err?.message?.includes("503") || err?.message?.includes("429") || err?.message?.includes("demand"))) {
+          await new Promise((r) => setTimeout(r, 2500));
+          continue;
+        }
+        throw err;
+      }
+    }
 
-    const elapsedMs = performance.now() - t0;
     // Must avoid the old 38-second timeout
     expect(elapsedMs).toBeLessThan(20000);
 

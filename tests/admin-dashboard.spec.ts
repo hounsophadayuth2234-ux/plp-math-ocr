@@ -1,20 +1,18 @@
 import { test, expect } from "@playwright/test";
+import { injectAuthenticatedSession, MOCK_SUPERADMIN, MOCK_NORMALUSER } from "./test-auth-helper.js";
 
 const BASE_URL = (process.env.BASE_URL || "https://math.dytcore.com").replace(/\/+$/, "");
-const SUPERADMIN_USER = process.env.TEST_SUPERADMIN_USERNAME || process.env.PROFILE_TEST_USERNAME;
-const SUPERADMIN_PASS = process.env.TEST_SUPERADMIN_PASSWORD || process.env.PROFILE_TEST_PASSWORD;
-const NORMAL_USER = process.env.TEST_NORMAL_USERNAME;
-const NORMAL_PASS = process.env.TEST_NORMAL_PASSWORD;
 
 test.describe("Super Admin Dashboard — Route Security & Layout Verification", () => {
   // 1. Anonymous access guard
-  test("1. Anonymous visit to /admin/dashboard redirects to login", async ({ page }) => {
+  test("1. Anonymous visit to /admin/dashboard redirects to login", async ({ page, baseURL }) => {
+    const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
     const consoleErrors: string[] = [];
     page.on("console", (msg) => {
       if (msg.type() === "error") consoleErrors.push(msg.text());
     });
 
-    const response = await page.goto(`${BASE_URL}/admin/dashboard`, {
+    const response = await page.goto(`${targetUrl}/admin/dashboard`, {
       waitUntil: "domcontentloaded",
       timeout: 30000,
     });
@@ -28,8 +26,9 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
   });
 
   // 2. Response headers & SEO protection (no-store & noindex)
-  test("2. Unauthenticated admin route returns no-store and login has security headers", async ({ page }) => {
-    const response = await page.goto(`${BASE_URL}/admin/dashboard`, {
+  test("2. Unauthenticated admin route returns no-store and login has security headers", async ({ page, baseURL }) => {
+    const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
+    const response = await page.goto(`${targetUrl}/admin/dashboard`, {
       waitUntil: "domcontentloaded",
       timeout: 30000,
     });
@@ -40,22 +39,13 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
   });
 
   // 3. Authenticated USER access (404 concealment)
-  test("3. Authenticated USER visit returns 404 without admin markup or data leakage", async ({ page }) => {
-    if (!NORMAL_USER || !NORMAL_PASS) {
-      test.skip(true, "SKIPPED — Regular USER credentials not provided in environment");
-      return;
-    }
-
-    // Login as normal user
-    await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.locator('input[type="text"], input[name="username"], input[name="usernameOrEmail"], input#username').first().fill(NORMAL_USER);
-    await page.locator('input[type="password"]').first().fill(NORMAL_PASS);
-    await page.locator('button[type="submit"]').first().click();
-
-    await page.waitForLoadState("networkidle").catch(() => {});
+  test("3. Authenticated USER visit returns 404 without admin markup or data leakage", async ({ page, context, baseURL }) => {
+    const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
+    // Directly inject valid authenticated USER session cookie (bypassing UI login form)
+    await injectAuthenticatedSession(context, targetUrl, MOCK_NORMALUSER);
 
     // Attempt direct navigation to /admin/dashboard
-    const response = await page.goto(`${BASE_URL}/admin/dashboard`, {
+    const response = await page.goto(`${targetUrl}/admin/dashboard`, {
       waitUntil: "domcontentloaded",
       timeout: 30000,
     });
@@ -70,22 +60,13 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
   });
 
   // 4. Authenticated SUPER_ADMIN access (Dashboard & Sidebar verification)
-  test("4. Authenticated SUPER_ADMIN visit renders dashboard, sidebar, and overview card", async ({ page }) => {
-    if (!SUPERADMIN_USER || !SUPERADMIN_PASS) {
-      test.skip(true, "SKIPPED — Super Admin credentials not provided in environment");
-      return;
-    }
-
-    // Login as Super Admin
-    await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.locator('input[type="text"], input[name="username"], input[name="usernameOrEmail"], input#username').first().fill(SUPERADMIN_USER);
-    await page.locator('input[type="password"]').first().fill(SUPERADMIN_PASS);
-    await page.locator('button[type="submit"]').first().click();
-
-    await page.waitForLoadState("networkidle").catch(() => {});
+  test("4. Authenticated SUPER_ADMIN visit renders dashboard, sidebar, and overview card", async ({ page, context, baseURL }) => {
+    const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
+    // Directly inject valid authenticated SUPER_ADMIN session cookie (bypassing UI login form)
+    await injectAuthenticatedSession(context, targetUrl, MOCK_SUPERADMIN);
 
     // Navigate to /admin/dashboard
-    const response = await page.goto(`${BASE_URL}/admin/dashboard`, {
+    const response = await page.goto(`${targetUrl}/admin/dashboard`, {
       waitUntil: "domcontentloaded",
       timeout: 30000,
     });
