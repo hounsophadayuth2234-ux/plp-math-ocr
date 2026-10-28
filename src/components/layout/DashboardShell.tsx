@@ -18,10 +18,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  // Standalone external-style bypass: When on /login, bypass DashboardShell completely.
-  // Do NOT render sidebar, top navigation, dashboard content, module cards, logout button,
-  // API Keys button, or any application frames behind the login form.
-  if (pathname === "/login" || pathname?.startsWith("/login/")) {
+  // Standalone external-style bypass: When on /login or /admin, bypass DashboardShell completely.
+  // Do NOT render user sidebar, top navigation, or user dashboard frames.
+  if (
+    pathname === "/login" ||
+    pathname?.startsWith("/login/") ||
+    pathname === "/admin" ||
+    pathname?.startsWith("/admin/")
+  ) {
     return <>{children}</>;
   }
 

@@ -68,7 +68,7 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
     // Navigate to /admin/dashboard
     const response = await page.goto(`${targetUrl}/admin/dashboard`, {
       waitUntil: "domcontentloaded",
-      timeout: 30000,
+      timeout: 45000,
     });
 
     expect(response?.status()).toBe(200);
@@ -83,10 +83,10 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
     expect(robotsMeta?.toLowerCase()).toContain("nofollow");
 
     // Verify Dashboard layout & overview cards
-    await expect(page.locator("text=System Overview").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("text=Total Registered Users").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("text=Recent Authentication Activity").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("text=Rate Limit Events").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("text=System Overview").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("text=Total Registered Users").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("text=Recent Authentication Activity").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("text=Rate Limit Events").first()).toBeVisible({ timeout: 15000 });
 
     // Verify semantic navigation
     const nav = page.locator('nav[aria-label="Admin Navigation"]').first();

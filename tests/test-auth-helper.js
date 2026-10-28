@@ -43,27 +43,19 @@ export function generateTestSessionToken(user = MOCK_SUPERADMIN) {
   return `${payloadB64}.${sigB64}`;
 }
 
-/**
- * Injects authenticated session cookies into the Playwright BrowserContext.
- */
 export async function injectAuthenticatedSession(context, baseUrl, user = MOCK_SUPERADMIN) {
-  const token = generateTestSessionToken(user);
-  let domain = 'localhost';
   try {
-    domain = new URL(baseUrl).hostname;
+    await context.clearCookies();
   } catch {}
 
+  const token = generateTestSessionToken(user);
   const isSecure = baseUrl.startsWith('https://');
 
   const cookies = [
     {
       name: 'dyt_gate_session',
       value: token,
-      domain,
-      path: '/',
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: 'Lax',
+      url: baseUrl,
     },
   ];
 
@@ -71,11 +63,7 @@ export async function injectAuthenticatedSession(context, baseUrl, user = MOCK_S
     cookies.push({
       name: '__Secure-dyt_gate_session',
       value: token,
-      domain,
-      path: '/',
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Lax',
+      url: baseUrl,
     });
   }
 
