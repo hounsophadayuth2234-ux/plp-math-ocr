@@ -57,7 +57,7 @@ interface AuditEvent {
   targetUsername?: string;
   timestamp: number;
   ipHash: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 export default function AdminPage() {
@@ -74,7 +74,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [csrfToken, setCsrfToken] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"users" | "audit" | "mfa" | "telegram" | "drive">("users");
-  const [currentTimestamp, setCurrentTimestamp] = useState<number>(0);
+  const [currentTimestamp, setCurrentTimestamp] = useState<number>(() => Date.now());
   const [sessionUser, setSessionUser] = useState<SafeUser | null>(null);
 
   // Telegram Linking State
@@ -217,8 +217,8 @@ export default function AdminPage() {
       }
       setUsers(data.users || []);
       setCurrentTimestamp(Date.now());
-    } catch (err: any) {
-      setError(err.message || "Failed to load user accounts");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load user accounts");
     } finally {
       setLoading(false);
     }
@@ -253,7 +253,7 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    setCurrentTimestamp(Date.now());
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     initSession();
     fetchUsers();
     fetchAuditLog();
@@ -323,8 +323,8 @@ export default function AdminPage() {
       setMfaAccount(data.account || sessionUser?.username || "Admin");
       setMfaVerificationCode("");
       setMfaManualKeyCopied(false);
-    } catch (err: any) {
-      setMfaErrorMessage(err.message || "Failed to initiate MFA");
+    } catch (err: unknown) {
+      setMfaErrorMessage(err instanceof Error ? err.message : "Failed to initiate MFA");
     } finally {
       setMfaLoading(false);
     }
@@ -406,8 +406,8 @@ export default function AdminPage() {
       setMfaStatusMessage("បានបើកដំណើរការ MFA ដោយជោគជ័យ! (MFA activated successfully)");
       await fetchMfaStatus();
       await fetchAuditLog();
-    } catch (err: any) {
-      setMfaErrorMessage(err.message || "Failed to verify MFA code");
+    } catch (err: unknown) {
+      setMfaErrorMessage(err instanceof Error ? err.message : "Failed to verify MFA code");
     } finally {
       setMfaLoading(false);
     }
@@ -438,8 +438,8 @@ export default function AdminPage() {
       setMfaStatusMessage("បានបិទដំណើរការ MFA រួចរាល់ (MFA disabled)");
       await fetchMfaStatus();
       await fetchAuditLog();
-    } catch (err: any) {
-      setMfaErrorMessage(err.message || "Failed to disable MFA");
+    } catch (err: unknown) {
+      setMfaErrorMessage(err instanceof Error ? err.message : "Failed to disable MFA");
     } finally {
       setMfaLoading(false);
     }
@@ -447,7 +447,7 @@ export default function AdminPage() {
 
   // Telegram Linking Handlers
   const handleCompleteTelegramLink = useCallback(
-    async (challengeToken: string, tgUser: any) => {
+    async (challengeToken: string, tgUser: Record<string, unknown>) => {
       setTelegramLoading(true);
       setTelegramErrorMessage(null);
       setTelegramStatusMessage(null);
@@ -505,8 +505,8 @@ export default function AdminPage() {
         await initSession();
         await fetchUsers();
         await fetchAuditLog();
-      } catch (err: any) {
-        setTelegramErrorMessage(err.message || "Complete endpoint failure: បញ្ហាក្នុងការភ្ជាប់ Telegram");
+      } catch (err: unknown) {
+        setTelegramErrorMessage(err instanceof Error ? err.message : "Complete endpoint failure: បញ្ហាក្នុងការភ្ជាប់ Telegram");
       } finally {
         setTelegramLoading(false);
       }
@@ -515,9 +515,9 @@ export default function AdminPage() {
   );
 
   useEffect(() => {
-    const win = typeof window !== "undefined" ? (window as any) : null;
+    const win = typeof window !== "undefined" ? (window as unknown as Record<string, unknown>) : null;
     if (win) {
-      win.onTelegramLinkAuth = (tgUser: any) => {
+      win.onTelegramLinkAuth = (tgUser: Record<string, unknown>) => {
         if (challengeTokenRef.current && tgUser) {
           handleCompleteTelegramLink(challengeTokenRef.current, tgUser);
         }
@@ -538,8 +538,9 @@ export default function AdminPage() {
     // 1. Immediately & synchronously open the popup window on user click to prevent browser popup block
     const width = 550;
     const height = 470;
-    const left = Math.max(0, (window.screen.width - width) / 2) + ((window.screen as any).availLeft | 0);
-    const top = Math.max(0, (window.screen.height - height) / 2) + ((window.screen as any).availTop | 0);
+    const screenObj = window.screen as unknown as Record<string, number>;
+    const left = Math.max(0, (window.screen.width - width) / 2) + ((screenObj.availLeft || 0) | 0);
+    const top = Math.max(0, (window.screen.height - height) / 2) + ((screenObj.availTop || 0) | 0);
 
     const targetBotId = telegramConfig?.botId || "8770636147";
     const popupName = `telegram_oauth_bot${targetBotId}`;
@@ -633,7 +634,7 @@ export default function AdminPage() {
       let isFinished = false;
       let checkTimer: NodeJS.Timeout | null = null;
 
-      const triggerComplete = async (tgUser: any) => {
+      const triggerComplete = async (tgUser: Record<string, unknown>) => {
         if (isFinished) return;
         isFinished = true;
         if (checkTimer) clearInterval(checkTimer);
@@ -666,9 +667,14 @@ export default function AdminPage() {
           if (!isFinished) {
             setTimeout(() => {
               if (isFinished) return;
-              const win = window as any;
-              if (win.Telegram?.Login?.getAuthData) {
-                win.Telegram.Login.getAuthData({ bot_id: botId }, (originDomain: string, authUser: any) => {
+              const win = window as unknown as Record<string, unknown>;
+              const tgLogin = (win.Telegram as Record<string, unknown> | undefined)?.Login as Record<string, unknown> | undefined;
+              if (tgLogin && typeof tgLogin.getAuthData === "function") {
+                const getAuthData = tgLogin.getAuthData as (
+                  options: { bot_id: string },
+                  callback: (originDomain: string, authUser: Record<string, unknown>) => void
+                ) => void;
+                getAuthData({ bot_id: botId }, (originDomain: string, authUser: Record<string, unknown>) => {
                   if (authUser && authUser.hash) {
                     triggerComplete(authUser);
                     return;
@@ -684,9 +690,9 @@ export default function AdminPage() {
           }
         }
       }, 500);
-    } catch (err: any) {
+    } catch (err: unknown) {
       popup?.close();
-      setTelegramErrorMessage(err.message || "Challenge start failed");
+      setTelegramErrorMessage(err instanceof Error ? err.message : "Challenge start failed");
       setTelegramLoading(false);
     }
   };
@@ -722,8 +728,8 @@ export default function AdminPage() {
       await initSession();
       await fetchUsers();
       await fetchAuditLog();
-    } catch (err: any) {
-      setTelegramErrorMessage(err.message || "Error unlinking Telegram");
+    } catch (err: unknown) {
+      setTelegramErrorMessage(err instanceof Error ? err.message : "Error unlinking Telegram");
     } finally {
       setTelegramLoading(false);
     }
@@ -826,8 +832,8 @@ export default function AdminPage() {
 
       await fetchUsers();
       await fetchAuditLog();
-    } catch (err: any) {
-      setFormError(err.message);
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : "Failed to create account");
     } finally {
       setFormSubmitting(false);
     }
@@ -859,8 +865,8 @@ export default function AdminPage() {
       setEditModalUser(null);
       await fetchUsers();
       await fetchAuditLog();
-    } catch (err: any) {
-      setFormError(err.message);
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : "Failed to update account");
     } finally {
       setFormSubmitting(false);
     }
@@ -947,8 +953,8 @@ export default function AdminPage() {
       setConfirmDialog(null);
       await fetchUsers();
       await fetchAuditLog();
-    } catch (err: any) {
-      alert(err.message || "Operation failed");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Operation failed");
     } finally {
       setFormSubmitting(false);
     }
@@ -956,6 +962,19 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6 font-mono text-slate-100">
+      {error && (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-950/60 p-4 text-xs text-rose-200 shadow-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-rose-400 hover:text-white ml-2 text-sm"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* 1. Header Banner */}
       <div className="relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-slate-900/80 p-6 shadow-[0_0_30px_rgba(0,240,255,0.1)] backdrop-blur-md">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
