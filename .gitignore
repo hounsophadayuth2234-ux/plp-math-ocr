@@ -34,6 +34,7 @@ yarn-error.log*
 .env*
 !.env.example
 .gate-credentials-handoff.json
+.test-credentials.json
 
 # vercel & puppeteer
 .vercel
@@ -41,6 +42,7 @@ yarn-error.log*
 
 # test artifacts & generated evidence
 test-results/
+playwright-results.json
 evidence-downloads/
 evidence-screenshots/
 test-portrait-downloads/

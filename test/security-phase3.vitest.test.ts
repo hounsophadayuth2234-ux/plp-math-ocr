@@ -39,11 +39,13 @@ describe("Phase 3: Security Hardening", () => {
   // 1. Defense-in-Depth Authentication Tests
   // =========================================================================
   describe("Defense-in-Depth API Route Authentication", () => {
+    beforeEach(() => {
+      process.env.ENABLE_ROUTE_AUTH_TESTS = "1";
+    });
+
     it("rejects unauthenticated direct requests with HTTP 401 UNAUTHORIZED", async () => {
-      // Create request with x-test-enforce-auth header to trigger auth in test runner
       const req = new NextRequest("http://localhost:3000/api/math-ocr", {
         method: "POST",
-        headers: { "x-test-enforce-auth": "1" },
       });
 
       const res = await enforceRouteAuth(req);
@@ -64,7 +66,6 @@ describe("Phase 3: Security Hardening", () => {
       const req = new NextRequest("http://localhost:3000/api/math-ocr", {
         method: "POST",
         headers: {
-          "x-test-enforce-auth": "1",
           cookie: `${SESSION_COOKIE_NAME}=${tamperedToken}`,
         },
       });
@@ -101,7 +102,6 @@ describe("Phase 3: Security Hardening", () => {
       const req = new NextRequest("http://localhost:3000/api/math-ocr", {
         method: "POST",
         headers: {
-          "x-test-enforce-auth": "1",
           cookie: `${SESSION_COOKIE_NAME}=${expiredToken}`,
         },
       });
@@ -118,7 +118,6 @@ describe("Phase 3: Security Hardening", () => {
       const req = new NextRequest("http://localhost:3000/api/math-ocr", {
         method: "POST",
         headers: {
-          "x-test-enforce-auth": "1",
           cookie: `${SESSION_COOKIE_NAME}=${validToken}`,
         },
       });
@@ -132,7 +131,6 @@ describe("Phase 3: Security Hardening", () => {
       const req = new NextRequest("http://localhost:3000/api/math-ocr", {
         method: "POST",
         headers: {
-          "x-test-enforce-auth": "1",
           authorization: `Bearer ${validToken}`,
         },
       });

@@ -334,16 +334,22 @@ describe("Telegram Login & Production Security Hardening Suite", () => {
   // =========================================================================
   describe("D. Link / Unlink Security", () => {
     it("rejects unauthenticated link requests", async () => {
-      const req = new NextRequest("https://ai-toolkit-hub-nu.vercel.app/api/auth/telegram/link/start", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-test-enforce-auth": "1",
-        },
-      });
+      const prev = process.env.ENABLE_ROUTE_AUTH_TESTS;
+      process.env.ENABLE_ROUTE_AUTH_TESTS = "1";
+      try {
+        const req = new NextRequest("https://ai-toolkit-hub-nu.vercel.app/api/auth/telegram/link/start", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
 
-      const res = await telegramLinkStartHandler(req);
-      expect(res.status).toBe(401);
+        const res = await telegramLinkStartHandler(req);
+        expect(res.status).toBe(401);
+      } finally {
+        if (prev !== undefined) process.env.ENABLE_ROUTE_AUTH_TESTS = prev;
+        else delete process.env.ENABLE_ROUTE_AUTH_TESTS;
+      }
     });
 
     it("rejects linking when CSRF token is missing", async () => {

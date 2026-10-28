@@ -3,10 +3,12 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { injectAuthenticatedSession } from './test-auth-helper.js';
 
-const getBaseUrl = (baseURL) =>
-  (process.env.BASE_URL || process.env.PREVIEW_URL || baseURL || 'https://math.dytcore.com').replace(/\/+$/, '');
+const SCREENSHOTS_DIR = path.resolve('evidence-screenshots/mechanical-redesign');
 const FIXTURES_DIR = path.resolve('tests/fixtures');
-const SCREENSHOTS_DIR = path.resolve('test-results/redesign-screenshots');
+
+function getBaseUrl(baseURL) {
+  return (process.env.BASE_URL || baseURL || 'http://localhost:3005').replace(/\/+$/, '');
+}
 
 test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verification', () => {
   test.beforeAll(() => {
@@ -16,12 +18,13 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
   });
 
   test.beforeEach(async ({ context, baseURL }) => {
-    const target = getBaseUrl(baseURL);
-    await injectAuthenticatedSession(context, target);
+    const targetBase = getBaseUrl(baseURL);
+    await injectAuthenticatedSession(context, targetBase);
   });
 
   test('Page 1: Dashboard (/) Command Center - 1440px and 375px', async ({ page, baseURL }) => {
     const targetBase = getBaseUrl(baseURL);
+
     // 1. Desktop 1440px
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${targetBase}/`, { waitUntil: 'load', timeout: 60000 });
@@ -30,20 +33,20 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     // Verify Untouched Sidebar Elements
     await expect(page.locator('text=PLP Math Content').first()).toBeVisible();
     await expect(page.locator('text=DYT ECOSYSTEM').first()).toBeVisible();
-    await expect(page.locator('text=Workspace').or(page.locator('text=ផ្ទាំងគ្រប់គ្រង')).first()).toBeVisible();
-    await expect(page.locator('text=Active Modules').or(page.locator('text=ម៉ូឌុលការងារ')).or(page.locator('text=Module 01–05 Active')).first()).toBeVisible();
-    await expect(page.locator('aside a[href="/bg-remover"]').or(page.locator('a[href="/bg-remover"]')).first()).toBeVisible();
-    await expect(page.locator('text=Modules 03–04').or(page.locator('text=03')).first()).toBeVisible();
+    await expect(page.locator('text=Workspace').first()).toBeVisible();
+    await expect(page.locator('text=Active Modules').first()).toBeVisible();
+    await expect(page.locator('aside a[href="/bg-remover"]').first()).toBeVisible();
+    await expect(page.locator('text=Modules 03–04').first()).toBeVisible();
 
     // Verify Global Mechanical Cyber Background
     await expect(page.locator('[data-testid="cyber-bg-canvas"]')).toBeVisible();
 
     // Verify Dashboard Operational Command Center Elements
-    await expect(page.locator('text=DYT AI WORKSPACE').or(page.locator('text=DYT ECOSYSTEM // WORKSPACE')).or(page.locator('text=WORKSPACE')).first()).toBeVisible();
-    await expect(page.locator('text=COMMAND CENTER').or(page.locator('text=AI Productivity Suite')).or(page.locator('text=ប្រព័ន្ធបញ្ជាការ AI')).first()).toBeVisible();
-    await expect(page.locator('text=Math OCR').or(page.locator('text=Math Content')).or(page.locator('text=PLP Math Content')).first()).toBeVisible();
-    await expect(page.locator('text=Background Remover').or(page.locator('text=កាត់ផ្ទៃខាងក្រោយ')).first()).toBeVisible();
-    await expect(page.locator('text=NEURAL TEAM NODES').or(page.locator('text=Primary Workspace Modules')).or(page.locator('text=ម៉ូឌុលការងារចម្បង')).first()).toBeVisible();
+    await expect(page.locator('text=DYT AI WORKSPACE').first()).toBeVisible();
+    await expect(page.locator('text=COMMAND CENTER').first()).toBeVisible();
+    await expect(page.locator('h2:has-text("PLP Math Content")').first()).toBeVisible();
+    await expect(page.locator('h2:has-text("Background Remover")').first()).toBeVisible();
+    await expect(page.locator('text=NEURAL TEAM NODES').first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, '01-dashboard-desktop-1440px.png'),
@@ -61,6 +64,7 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
 
   test('Page 2: PLP Math Content (/plp-math-content) - 1440px and 375px', async ({ page, baseURL }) => {
     const targetBase = getBaseUrl(baseURL);
+
     // 1. Desktop 1440px
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${targetBase}/plp-math-content`, { waitUntil: 'load', timeout: 60000 });
@@ -119,13 +123,13 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     await expect(page.locator('[data-testid="cyber-bg-canvas"]')).toBeVisible();
 
     // Verify 3-Step Process Elements & Prominent Primary Modes
-    await expect(page.locator('[data-testid="content-mode-preserve-all"], [data-testid="content-mode-auto-general"], [data-testid-alias="content-mode-all"]').first()).toBeAttached();
-    await expect(page.locator('[data-testid="content-mode-person-text-only"], [data-testid="content-mode-auto-portrait"]').first()).toBeAttached();
-    await expect(page.locator('[data-testid="fast-preview-start-btn"], button:has-text("ដកចេញ (REMOVE)"), button:has-text("ដកចេញ")').first()).toBeAttached();
+    await expect(page.locator('[data-testid="content-mode-preserve-all"]')).toBeVisible();
+    await expect(page.locator('[data-testid="content-mode-person-text-only"]')).toBeVisible();
+    await expect(page.locator('[data-testid="fast-preview-start-btn"]')).toBeVisible();
 
     // Verify Inspection Chamber Standby with Checkerboard Hint
-    await expect(page.locator('text=PRECISION INSPECTION CHAMBER // STANDBY').or(page.locator('text=AI Background Studio')).first()).toBeVisible();
-    await expect(page.locator('text=CANVAS: ALPHA MATRIX READY').or(page.locator('text=1. Upload Image')).or(page.locator('text=Upload image')).first()).toBeVisible();
+    await expect(page.locator('text=PRECISION INSPECTION CHAMBER // STANDBY').first()).toBeVisible();
+    await expect(page.locator('text=CANVAS: ALPHA MATRIX READY').first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, '03-bg-remover-desktop-1440px-standby.png'),
@@ -149,22 +153,19 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     const fileInput = page.locator('[data-testid="image-upload-input"]');
     await fileInput.setInputFiles(fixturePath);
 
-    const removeBtn = page.locator('button:has-text("ដកចេញ (REMOVE)"), button:has-text("ដកចេញ")');
-    await expect(removeBtn.first()).toBeVisible({ timeout: 15000 });
+    const removeBtn = page.locator('button:has-text("ដកចេញ (REMOVE)")');
+    await expect(removeBtn).toBeVisible({ timeout: 15000 });
 
     // 4. Select Person + Text Only mode
-    const personTextBtn = page.locator('[data-testid="content-mode-person-text-only"], [data-testid="content-mode-auto-portrait"]').first();
-    await personTextBtn.click({ force: true });
-    const personSub = page.locator('[data-testid="sub-option-person"]').first();
-    if (await personSub.isVisible()) {
-      await expect(personSub).toBeVisible();
-      await expect(page.locator('[data-testid="sub-option-text"]').first()).toBeVisible();
-      await expect(page.locator('[data-testid="sub-option-keep-graphics"]').first()).toBeVisible();
-    }
+    const personTextBtn = page.locator('[data-testid="content-mode-person-text-only"]');
+    await personTextBtn.click();
+    await expect(page.locator('[data-testid="sub-option-person"]')).toBeVisible();
+    await expect(page.locator('[data-testid="sub-option-text"]')).toBeVisible();
+    await expect(page.locator('[data-testid="sub-option-keep-graphics"]')).toBeVisible();
 
     // 5. Run Fast Preview
-    const fastPreviewBtn = page.locator('[data-testid="fast-preview-start-btn"], button:has-text("Remove Background")').first();
-    await fastPreviewBtn.click({ force: true });
+    const fastPreviewBtn = page.locator('[data-testid="fast-preview-start-btn"]');
+    await fastPreviewBtn.click();
 
     // Capture scanning state
     await page.waitForTimeout(1000);
@@ -173,14 +174,21 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
       fullPage: false,
     });
 
-    // Wait for completed result, recovery card, or active processing scanner in headless environment
-    const exportBtn = page.locator('[data-testid="export-transparent-png-btn"], [data-testid="download-transparent-png-btn"], button:has-text("ទាញយក")').first();
-    const recoveryCard = page.locator('[data-testid="recovery-card"]').first();
-    const processingScanner = page.locator('[data-testid="processing-scanner"]').first();
-    const activeResultIndicator = exportBtn.or(recoveryCard).or(processingScanner);
-    await expect(activeResultIndicator).toBeVisible({ timeout: 15000 });
+    // Wait for completed result (up to 120s for inference)
+    const statusBadge = page.locator('[data-testid="mask-status-badge"]');
+    const retryBtn = page.locator('button:has-text("ព្យាយាមម្តងទៀត (RETRY)")');
+    try {
+      await expect(statusBadge).toBeVisible({ timeout: 90000 });
+    } catch {
+      if (await retryBtn.isVisible()) {
+        await retryBtn.click();
+        await expect(statusBadge).toBeVisible({ timeout: 90000 });
+      } else {
+        throw new Error('Mask status badge not visible and retry button not found');
+      }
+    }
 
-    // 6. Cutout / Progress Preview
+    // 6. Cutout Preview
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, '05-bg-remover-cutout-preview.png'),
       fullPage: false,
@@ -188,41 +196,36 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
 
     // 7. Person Mask Tab
     const personMaskTab = page.locator('[data-testid="preview-tab-person-mask"]');
-    if (await personMaskTab.isVisible()) {
-      await personMaskTab.click();
-      await page.waitForTimeout(500);
-      await page.screenshot({
-        path: path.join(SCREENSHOTS_DIR, '06-bg-remover-person-mask.png'),
-        fullPage: false,
-      });
-    }
+    await personMaskTab.click();
+    await page.waitForTimeout(500);
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, '06-bg-remover-person-mask.png'),
+      fullPage: false,
+    });
 
     // 8. Text Mask Tab
     const textMaskTab = page.locator('[data-testid="preview-tab-text-mask"]');
-    if (await textMaskTab.isVisible()) {
-      await textMaskTab.click();
-      await page.waitForTimeout(500);
-      await page.screenshot({
-        path: path.join(SCREENSHOTS_DIR, '07-bg-remover-text-mask.png'),
-        fullPage: false,
-      });
-    }
+    await textMaskTab.click();
+    await page.waitForTimeout(500);
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, '07-bg-remover-text-mask.png'),
+      fullPage: false,
+    });
 
     // 9. Combined Keep Mask Tab
     const combinedMaskTab = page.locator('[data-testid="preview-tab-combined-mask"]');
-    if (await combinedMaskTab.isVisible()) {
-      await combinedMaskTab.click();
-      await page.waitForTimeout(500);
-      await page.screenshot({
-        path: path.join(SCREENSHOTS_DIR, '08-bg-remover-combined-mask.png'),
-        fullPage: false,
-      });
-    }
+    await combinedMaskTab.click();
+    await page.waitForTimeout(500);
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, '08-bg-remover-combined-mask.png'),
+      fullPage: false,
+    });
 
-    // 10. UI State Verification Check (Export button, recovery card, or active scanner)
-    await expect(activeResultIndicator).toBeVisible({ timeout: 10000 });
+    // 10. Transparent PNG Export Check
+    const exportBtn = page.locator('[data-testid="export-transparent-png-btn"]');
+    await expect(exportBtn).toBeVisible({ timeout: 15000 });
 
-    // Mobile completed / active view
+    // Mobile completed view
     await page.setViewportSize({ width: 375, height: 812 });
     await page.waitForTimeout(600);
     await page.screenshot({

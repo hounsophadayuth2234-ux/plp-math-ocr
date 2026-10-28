@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET as modelAssetGET } from "@/app/api/assets/models/[filename]/route";
 
@@ -76,11 +76,23 @@ describe("SECURITY VECTOR 4 — Client-Side Model & Asset Protection", () => {
   });
 
   it("6. Authorized same-origin request serves the model with strict security headers", async () => {
+    const authSession = await import("@/lib/auth-session");
+    const sessionSpy = vi.spyOn(authSession, "getSessionUser").mockResolvedValue({
+      id: "usr_test_superadmin",
+      username: "superadmin",
+      email: "superadmin@dyt-ecosystem.local",
+      displayName: "Super Administrator",
+      role: "SUPER_ADMIN",
+      status: "ACTIVE",
+      mustChangePassword: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
     const authorizedReq = new NextRequest(
       "https://math.dytcore.com/api/assets/models/realesr-general-x4v3.onnx",
       {
         headers: {
-          "x-skip-auth-test": "1",
           host: "math.dytcore.com",
         },
       }
@@ -95,5 +107,6 @@ describe("SECURITY VECTOR 4 — Client-Side Model & Asset Protection", () => {
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("cross-origin-resource-policy")).toBe("same-origin");
     expect(res.headers.get("cache-control")).toContain("private");
+    sessionSpy.mockRestore();
   });
 });

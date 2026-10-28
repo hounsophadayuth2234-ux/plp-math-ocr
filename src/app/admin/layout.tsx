@@ -15,7 +15,6 @@ export const metadata: Metadata = {
 };
 
 async function AdminShell({ children }: { children: React.ReactNode }) {
-  // Authoritative server-side guard in layout
   const adminUser = await requireSuperAdmin();
 
   return (

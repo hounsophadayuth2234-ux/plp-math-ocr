@@ -29,11 +29,10 @@ export interface SessionPayload {
  * Returns null if the request is validly authenticated, or a 401 NextResponse if unauthenticated or expired.
  */
 export async function enforceRouteAuth(req: NextRequest): Promise<NextResponse | null> {
-  // In automated test environments, allow bypass unless testing auth explicitly
+  // In automated test environments, allow bypass only if test runner does not explicitly enable auth tests
   if (
     process.env.NODE_ENV === "test" &&
-    process.env.ENABLE_ROUTE_AUTH_TESTS !== "1" &&
-    !req.headers.has("x-test-enforce-auth")
+    process.env.ENABLE_ROUTE_AUTH_TESTS !== "1"
   ) {
     return null;
   }

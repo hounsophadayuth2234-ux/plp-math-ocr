@@ -1,8 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { injectAuthenticatedSession, MOCK_SUPERADMIN, MOCK_NORMALUSER } from "./test-auth-helper.js";
-import { setupAdminPlaywrightFixture } from "./fixtures/playwright-auth-fixture";
 
-const BASE_URL = (process.env.BASE_URL || "https://math.dytcore.com").replace(/\/+$/, "");
+const BASE_URL = (process.env.BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+
+const SUSPENDED_SUPERADMIN = {
+  id: "usr_susp_superadmin",
+  username: "suspended_superadmin",
+  role: "SUPER_ADMIN",
+  displayName: "Suspended Super Admin",
+  status: "DISABLED",
+};
 
 test.describe("Super Admin Dashboard — Route Security & Layout Verification", () => {
   // 1. Anonymous access guard
@@ -26,7 +33,7 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
     expect(consoleErrors.filter((e) => !e.includes("eval()") && !e.includes("favicon"))).toHaveLength(0);
   });
 
-  // 2. Response headers & SEO protection (no-store & noindex)
+  // 2. Response headers & SEO protection (no-store & nosniff)
   test("2. Unauthenticated admin route returns no-store and login has security headers", async ({ page, baseURL }) => {
     const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
     const response = await page.goto(`${targetUrl}/admin/dashboard`, {
@@ -34,43 +41,45 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
       timeout: 30000,
     });
 
-    // Check redirect headers or initial response headers
     const headers = response?.headers() || {};
     expect(headers["x-content-type-options"]).toBe("nosniff");
   });
 
-  // 3. Authenticated USER access (404 concealment)
+  // 3. Authenticated USER access (404 concealment via authoritative requireSuperAdmin())
   test("3. Authenticated USER visit returns 404 without admin markup or data leakage", async ({ page, context, baseURL }) => {
     const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
-    // Install Playwright-only fixture layer for role-based responses
-    await setupAdminPlaywrightFixture(page, "USER");
-    // Directly inject valid authenticated USER session cookie (bypassing UI login form)
+
+    // Inject valid authenticated USER session cookie (real user seeded in UserStore fallback)
     await injectAuthenticatedSession(context, targetUrl, MOCK_NORMALUSER);
 
-    // Attempt direct navigation to /admin/dashboard
+    // Navigate to /admin/dashboard without any route interception / mocking
     const response = await page.goto(`${targetUrl}/admin/dashboard`, {
       waitUntil: "domcontentloaded",
       timeout: 30000,
     });
 
-    // Must return 404 to conceal route existence
+    // Authoritative requireSuperAdmin() throws notFound() for regular USER
     expect(response?.status()).toBe(404);
 
+    // Verify Cache-Control header
+    const cacheControl = response?.headers()["cache-control"] || "";
+    expect(cacheControl.toLowerCase()).toMatch(/no-store|private|no-cache/);
+
+    // Verify zero admin markup or data leakage
     const bodyText = await page.content();
     expect(bodyText).not.toContain("Total Registered Users");
     expect(bodyText).not.toContain("Recent Authentication Activity");
-    expect(bodyText).not.toContain("SUPER_ADMIN");
+    expect(bodyText).not.toContain("System Overview");
   });
 
   // 4. Authenticated SUPER_ADMIN access (Dashboard & Sidebar verification)
   test("4. Authenticated SUPER_ADMIN visit renders dashboard, sidebar, and overview card", async ({ page, context, baseURL }) => {
     const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
-    // Install Playwright-only fixture layer for super admin layout
-    await setupAdminPlaywrightFixture(page, "SUPER_ADMIN");
-    // Directly inject valid authenticated SUPER_ADMIN session cookie (bypassing UI login form)
+
+    // Inject valid authenticated SUPER_ADMIN session cookie (real user seeded in UserStore fallback)
     await injectAuthenticatedSession(context, targetUrl, MOCK_SUPERADMIN);
 
-    // Navigate to /admin/dashboard
+    // Navigate to /admin/dashboard without any route interception / mocking
     const response = await page.goto(`${targetUrl}/admin/dashboard`, {
       waitUntil: "domcontentloaded",
       timeout: 45000,
@@ -87,7 +96,7 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
     expect(robotsMeta?.toLowerCase()).toContain("noindex");
     expect(robotsMeta?.toLowerCase()).toContain("nofollow");
 
-    // Verify Dashboard layout & overview cards
+    // Verify Dashboard layout & overview cards rendered by the real server component
     await expect(page.locator("text=System Overview").first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator("text=Total Registered Users").first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator("text=Recent Authentication Activity").first()).toBeVisible({ timeout: 15000 });
@@ -102,15 +111,37 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
     await expect(activeLink).toBeVisible();
     await expect(activeLink).toContainText("Dashboard");
 
-    // 5. Verify 'Coming soon' items do not navigate
+    // Verify 'Coming soon' items are aria-disabled
     const disabledItems = page.locator('[aria-disabled="true"]');
     const disabledCount = await disabledItems.count();
     expect(disabledCount).toBeGreaterThanOrEqual(3);
 
     const initialUrl = page.url();
-    // Click the first disabled coming soon item
+    // Clicking a disabled item should not navigate
     await disabledItems.first().click({ force: true });
-    // URL must not change
     expect(page.url()).toBe(initialUrl);
+  });
+
+  // 5. Negative Test: Suspended SUPER_ADMIN or revoked user is denied
+  test("5. Suspended SUPER_ADMIN is denied access and cannot view admin dashboard", async ({ page, context, baseURL }) => {
+    const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
+
+    // Inject session for suspended superadmin (status === 'DISABLED')
+    await injectAuthenticatedSession(context, targetUrl, SUSPENDED_SUPERADMIN);
+
+    const response = await page.goto(`${targetUrl}/admin/dashboard`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+
+    // A suspended superadmin has their session invalidated server-side,
+    // triggering redirect away from /admin/dashboard
+    await page.waitForURL((url) => !url.pathname.includes("/admin/dashboard"), { timeout: 10000 });
+    expect(page.url()).not.toContain("/admin/dashboard");
+
+    const bodyText = await page.content();
+    expect(bodyText).not.toContain("Total Registered Users");
+    expect(bodyText).not.toContain("Recent Authentication Activity");
+    expect(bodyText).not.toContain("System Overview");
   });
 });

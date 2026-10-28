@@ -31,16 +31,19 @@ function resolveSessionSecret() {
 
 export const DEFAULT_SESSION_SECRET = resolveSessionSecret();
 
+import { resolveE2ECredentials } from './test-credentials-resolver.js';
+const dynamicCreds = resolveE2ECredentials();
+
 export const MOCK_SUPERADMIN = {
   id: 'usr_t33rx0x6mvs5qy0a',
-  username: 'superboss',
+  username: dynamicCreds.superadmin.username,
   role: 'SUPER_ADMIN',
   displayName: 'System Owner Super Admin',
 };
 
 export const MOCK_NORMALUSER = {
   id: 'usr_c6gqttx7mvs5qy6q',
-  username: 'normaluser',
+  username: dynamicCreds.user.username,
   role: 'USER',
   displayName: 'Normal User',
 };
@@ -76,23 +79,30 @@ export async function injectAuthenticatedSession(context, baseUrl, user = MOCK_S
   } catch {}
 
   const token = generateTestSessionToken(user);
+  const parsed = new URL(baseUrl);
+  const domain = parsed.hostname;
   const isSecure = baseUrl.startsWith('https://');
 
   const cookies = [
     {
       name: 'dyt_gate_session',
       value: token,
-      url: baseUrl,
+      domain,
+      path: '/',
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: 'Lax',
     },
-  ];
-
-  if (isSecure) {
-    cookies.push({
+    {
       name: '__Secure-dyt_gate_session',
       value: token,
-      url: baseUrl,
-    });
-  }
+      domain,
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ];
 
   await context.addCookies(cookies);
   return token;

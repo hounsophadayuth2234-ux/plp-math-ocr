@@ -71,11 +71,6 @@ export function validateCsrfToken(req: NextRequest, bodyCsrfToken?: string): { v
     };
   }
 
-  // During automated unit testing where headers might be mocked
-  if (process.env.NODE_ENV === "test" && req.headers.get("x-skip-csrf-test") === "1") {
-    return { valid: true };
-  }
-
   const cookieToken = req.cookies.get(CSRF_COOKIE_NAME)?.value?.trim();
   const headerToken = req.headers.get(CSRF_HEADER_NAME)?.trim() || bodyCsrfToken?.trim();
 

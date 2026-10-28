@@ -74,15 +74,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   }
 
   // 4. Authentication Check: Ensure user has valid active session
-  // (In test mode, allow if x-skip-auth-test header is passed)
-  if (!(process.env.NODE_ENV === "test" && req.headers.get("x-skip-auth-test") === "1")) {
-    const user = await getSessionUser(req);
-    if (!user) {
-      return NextResponse.json(
-        { error: "Unauthorized: Accessing model assets requires active authentication." },
-        { status: 401 }
-      );
-    }
+  const user = await getSessionUser(req);
+  if (!user) {
+    return NextResponse.json(
+      { error: "Unauthorized: Accessing model assets requires active authentication." },
+      { status: 401 }
+    );
   }
 
   // 5. Resolve and verify physical file on disk

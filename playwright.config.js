@@ -11,6 +11,14 @@ export default defineConfig({
   use: {
     baseURL: (process.env.BASE_URL || 'https://math.dytcore.com').replace(/\/+$/, ''),
     channel: 'chrome',
+    launchOptions: {
+      args: [
+        '--enable-unsafe-webgpu',
+        '--use-gl=angle',
+        '--use-angle=swiftshader',
+        '--ignore-gpu-blocklist',
+      ],
+    },
     headless: true,
     viewport: { width: 1280, height: 800 },
     ignoreHTTPSErrors: true,

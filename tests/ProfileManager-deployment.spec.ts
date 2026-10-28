@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { injectAuthenticatedSession, MOCK_SUPERADMIN } from './test-auth-helper.js';
+import { resolveE2ECredentials } from './test-credentials-resolver.js';
 
 const BASE_URL = (process.env.BASE_URL || 'https://math.dytcore.com').replace(/\/+$/, '');
-const TEST_USERNAME = process.env.PROFILE_TEST_USERNAME;
-const TEST_PASSWORD = process.env.PROFILE_TEST_PASSWORD;
+const creds = resolveE2ECredentials();
+const TEST_USERNAME = process.env.PROFILE_TEST_USERNAME || creds.superadmin.username;
+const TEST_PASSWORD = process.env.PROFILE_TEST_PASSWORD || creds.superadmin.password;
 
 test.describe('ProfileManager Deployment & Route Security Verification', () => {
   test('1. Unauthenticated root "/" redirects to "/login"', async ({ page }) => {
@@ -90,44 +92,23 @@ test.describe('ProfileManager Deployment & Route Security Verification', () => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    if (TEST_USERNAME && TEST_PASSWORD) {
-      // 1. Perform login via UI
-      await page.goto(`${targetUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    const loginUsername = TEST_USERNAME;
+    const loginPassword = TEST_PASSWORD;
 
-      const usernameInput = page.locator('input[data-testid="login-username-input"], input[name="usernameOrEmail"], input#login-name, input[type="text"]').first();
-      const passwordInput = page.locator('input[data-testid="login-password-input"], input[name="password"], input#login-password, input[type="password"]').first();
-      const submitBtn = page.locator('button[data-testid="login-submit-btn"], button[type="submit"]').first();
+    // 1. Perform login via real UI form
+    await page.goto(`${targetUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-      await usernameInput.fill(TEST_USERNAME);
-      await passwordInput.fill(TEST_PASSWORD);
-      await submitBtn.click();
+    const usernameInput = page.locator('input[data-testid="login-username-input"], input[name="usernameOrEmail"], input#login-name, input[type="text"]').first();
+    const passwordInput = page.locator('input[data-testid="login-password-input"], input[name="password"], input#login-password, input[type="password"]').first();
+    const submitBtn = page.locator('button[data-testid="login-submit-btn"], button[type="submit"]').first();
 
-      // 2. Navigate to /profile if not redirected automatically
-      await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 }).catch(() => {});
-      if (!page.url().includes('/profile')) {
-        await page.goto(`${targetUrl}/profile`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      }
-    } else {
-      // Direct mock session bypass with session route fulfillment
-      await page.route('**/api/auth/session*', async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            authenticated: true,
-            user: {
-              id: MOCK_SUPERADMIN.id,
-              username: MOCK_SUPERADMIN.username,
-              role: MOCK_SUPERADMIN.role,
-              displayName: MOCK_SUPERADMIN.displayName,
-              email: 'superadmin@dyt-ecosystem.local',
-              status: 'ACTIVE',
-            },
-            csrfToken: 'test-csrf-token',
-          }),
-        });
-      });
-      await injectAuthenticatedSession(context, targetUrl, MOCK_SUPERADMIN);
+    await usernameInput.fill(loginUsername);
+    await passwordInput.fill(loginPassword);
+    await submitBtn.click();
+
+    // 2. Navigate to /profile if not redirected automatically
+    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 }).catch(() => {});
+    if (!page.url().includes('/profile')) {
       await page.goto(`${targetUrl}/profile`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     }
 
