@@ -13,14 +13,28 @@ export interface GoogleDriveOAuthTokens {
  * Derives a consistent 32-byte AES-256 key for Google Drive token encryption at rest.
  * Uses GOOGLE_TOKEN_ENCRYPTION_KEY or derives from APP_GATE_SESSION_SECRET.
  */
+let ephemeralDriveKey: Buffer | null = null;
+
 function getDriveEncryptionKey(): Buffer {
   const secretCandidate =
     process.env.GOOGLE_TOKEN_ENCRYPTION_KEY?.trim() ||
     process.env.APP_GATE_SESSION_SECRET?.trim() ||
-    process.env.APP_MANAGED_VAULT_SECRET?.trim() ||
-    "dyt-plp-google-drive-oauth-token-vault-key-2026";
+    process.env.APP_MANAGED_VAULT_SECRET?.trim();
 
-  return crypto.createHash("sha256").update(secretCandidate).digest();
+  if (secretCandidate && secretCandidate.length >= 16) {
+    return crypto.createHash("sha256").update(secretCandidate).digest();
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "CRITICAL SECURITY CONFIGURATION: GOOGLE_TOKEN_ENCRYPTION_KEY or APP_GATE_SESSION_SECRET must be configured in production."
+    );
+  }
+
+  if (!ephemeralDriveKey) {
+    ephemeralDriveKey = crypto.randomBytes(32);
+  }
+  return ephemeralDriveKey;
 }
 
 /**

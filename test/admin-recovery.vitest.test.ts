@@ -116,29 +116,27 @@ describe("Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)", () => {
     expect(data.targetUsername).toBe("dayuth");
   });
 
-  it("7. stageOneTimePasswordReset updates dayuth and delivers via GET with burn-on-read single-use semantics", async () => {
+  it("7. stageOneTimePasswordReset updates dayuth and delivers securely to caller without GET leakage", async () => {
+    vi.stubEnv("ADMIN_RECOVERY_KEY", "RecoverySecret2026!Active");
     const stageRes = await stageOneTimePasswordReset("dayuth");
     expect(stageRes.success).toBe(true);
+    expect(typeof stageRes.temporaryPassword).toBe("string");
+    expect(stageRes.temporaryPassword!.length).toBeGreaterThanOrEqual(10);
 
     // Verify account state in store
     const user = await UserStore.getUserByUsernameOrEmail("dayuth");
     expect(user?.role).toBe("ADMIN");
     expect(user?.status).toBe("ACTIVE");
     expect(user?.mustChangePassword).toBe(true);
+    expect(bcrypt.compareSync(stageRes.temporaryPassword!, user!.passwordHash)).toBe(true);
 
-    // First GET retrieves the temporary password for UI display
-    const firstGet = await recoveryGet();
-    const firstData = await firstGet.json();
-    expect(firstGet.status).toBe(200);
-    expect(firstData.enabled).toBe(true);
-    expect(typeof firstData.oneTimeTemporaryPassword).toBe("string");
-    expect(firstData.oneTimeTemporaryPassword.length).toBeGreaterThanOrEqual(10);
-    expect(bcrypt.compareSync(firstData.oneTimeTemporaryPassword, user!.passwordHash)).toBe(true);
-
-    // Second GET has burned the credential and never returns it again
-    const secondGet = await recoveryGet();
-    const secondData = await secondGet.json();
-    expect(secondData.oneTimeTemporaryPassword).toBeUndefined();
+    // Public GET strictly never leaks the temporary password
+    const getRes = await recoveryGet();
+    const getData = await getRes.json();
+    expect(getRes.status).toBe(200);
+    expect(getData.enabled).toBe(true);
+    expect(getData.oneTimeTemporaryPassword).toBeUndefined();
+    expect(getData.temporaryPassword).toBeUndefined();
 
     // Verify audit log
     const events = await AuditLogger.getRecentEvents(10);

@@ -87,13 +87,13 @@ export function __resetEphemeralRecovery(): void {
   ephemeralOneTimeCredential = null;
 }
 
-export async function stageOneTimePasswordReset(targetUsername = "dayuth"): Promise<{ success: boolean; error?: string }> {
+export async function stageOneTimePasswordReset(targetUsername = "dayuth"): Promise<{ success: boolean; error?: string; temporaryPassword?: string }> {
   const targetUser = await UserStore.getUserByUsernameOrEmail(targetUsername);
   if (!targetUser) {
     return { success: false, error: `Account ${targetUsername} not found` };
   }
-  if (targetUser.role !== "ADMIN") {
-    return { success: false, error: `Account ${targetUsername} is not an ADMIN` };
+  if (targetUser.role !== "ADMIN" && targetUser.role !== "SUPER_ADMIN") {
+    return { success: false, error: `Account ${targetUsername} is not an Administrator` };
   }
 
   // Generate compliant strong temporary password
@@ -122,26 +122,7 @@ export async function stageOneTimePasswordReset(targetUsername = "dayuth"): Prom
     },
   });
 
-  // Store in ephemeral memory (burn on read)
-  ephemeralOneTimeCredential = {
-    username: targetUser.username,
-    temporaryPassword,
-    createdAt: Date.now(),
-  };
-
-  const redis = getRedisConfig();
-  if (redis) {
-    try {
-      await fetch(`${redis.url}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${redis.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(["SETEX", `dyt:recovery:pending:${targetUser.username}`, "900", temporaryPassword]),
-        cache: "no-store",
-      });
-    } catch {}
-  }
-
-  return { success: true };
+  return { success: true, temporaryPassword };
 }
 
 export async function GET() {
@@ -151,66 +132,25 @@ export async function GET() {
     process.env.DYT_ADMIN_RECOVERY_SECRET?.trim() ||
     "";
 
-  // Check if single-use ephemeral credential is ready for one-time delivery
-  let oneTimeTemporaryPassword: string | null = null;
-  const redis = getRedisConfig();
-  if (redis) {
-    try {
-      const res = await fetch(`${redis.url}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${redis.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(["GETDEL", "dyt:recovery:pending:dayuth"]),
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.result && typeof data.result === "string") {
-          oneTimeTemporaryPassword = data.result;
-        }
-      }
-    } catch {}
-  }
-
-  // Check local scratch single-use delivery file if present
-  if (!oneTimeTemporaryPassword) {
-    try {
-      const fs = await import("fs");
-      const path = await import("path");
-      const filePath = path.join(process.cwd(), "scratch", ".pending-recovery-delivery.json");
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, "utf-8");
-        fs.unlinkSync(filePath); // Burn on read immediately
-        const parsed = JSON.parse(raw);
-        if (parsed.username === "dayuth" && parsed.temporaryPassword) {
-          const ageMs = Date.now() - (parsed.createdAt || 0);
-          if (ageMs < 900000) {
-            oneTimeTemporaryPassword = parsed.temporaryPassword;
-          }
-        }
-      }
-    } catch {}
-  }
-
-  if (!oneTimeTemporaryPassword && ephemeralOneTimeCredential) {
-    const ageMs = Date.now() - ephemeralOneTimeCredential.createdAt;
-    if (ageMs < 900000) {
-      oneTimeTemporaryPassword = ephemeralOneTimeCredential.temporaryPassword;
-    }
-    ephemeralOneTimeCredential = null; // Burn on read
-  }
-
   const isConsumed = await isRecoveryConsumed();
   const enabled = !!recoverySecret && !isConsumed;
 
   return NextResponse.json({
-    enabled: enabled || !!oneTimeTemporaryPassword,
+    enabled,
     consumed: isConsumed,
     targetUsername: "dayuth",
-    ...(oneTimeTemporaryPassword ? { oneTimeTemporaryPassword } : {}),
   });
 }
 
+import { enforceRateLimit } from "@/lib/rate-limiter";
+
 export async function POST(req: NextRequest) {
+  // Enforce sliding-window rate limit (5 attempts/hour)
+  const rateLimitBlock = await enforceRateLimit(req, "admin_recovery");
+  if (rateLimitBlock) {
+    return rateLimitBlock;
+  }
+
   const rawIp = getClientIp(req);
   const anonymizedIp = await anonymizeIdentifier(rawIp);
 
@@ -305,9 +245,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (targetUser.role !== "ADMIN") {
+  if (targetUser.role !== "ADMIN" && targetUser.role !== "SUPER_ADMIN") {
     return NextResponse.json(
-      { error: "គណនីនេះមិនមែនជា ADMIN ទេ (Target account is not an ADMIN)" },
+      { error: "គណនីនេះមិនមែនជា Administrator ទេ (Target account is not an Administrator)" },
       { status: 400 }
     );
   }

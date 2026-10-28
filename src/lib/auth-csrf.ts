@@ -28,6 +28,31 @@ export function setCsrfCookie(res: NextResponse, token: string): void {
 }
 
 /**
+ * Validates Origin for state-changing requests.
+ */
+export function isAllowedStateChangingOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return true;
+
+  try {
+    const originUrl = new URL(origin);
+    const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+    const cleanHost = host.split(":")[0].toLowerCase();
+
+    if (originUrl.hostname.toLowerCase() === cleanHost) return true;
+    if (originUrl.hostname === "math.dytcore.com" || originUrl.hostname.endsWith(".vercel.app")) {
+      return true;
+    }
+    if (process.env.NODE_ENV !== "production" && (originUrl.hostname === "localhost" || originUrl.hostname === "127.0.0.1")) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Validates the CSRF token on state-changing requests (POST, PATCH, DELETE, PUT).
  * Compares the token sent in header (or body) with the token in the cookie.
  */
@@ -36,6 +61,14 @@ export function validateCsrfToken(req: NextRequest, bodyCsrfToken?: string): { v
   const method = req.method.toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
     return { valid: true };
+  }
+
+  // Enforce origin verification on browser state-changing requests
+  if (!isAllowedStateChangingOrigin(req)) {
+    return {
+      valid: false,
+      error: "Cross-origin request rejected (ការស្នើសុំឆ្លងកាត់ប្រភពមិនត្រូវបានអនុញ្ញាត).",
+    };
   }
 
   // During automated unit testing where headers might be mocked

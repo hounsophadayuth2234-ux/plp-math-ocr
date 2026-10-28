@@ -13,14 +13,17 @@ import {
   getClientIp,
 } from "@/lib/auth-gate";
 
+import { enforceRateLimit } from "@/lib/rate-limiter";
+
 export async function POST(req: NextRequest) {
   const rawIp = getClientIp(req);
   const userAgent = req.headers.get("user-agent") || undefined;
   const anonymizedIp = await anonymizeIdentifier(rawIp);
 
-  // 1. Check Rate Limit & Lockout
-  if (req.nextUrl.searchParams.get("unlock") === "1") {
-    await clearFailedAttempts(anonymizedIp);
+  // 1. Enforce strict sliding-window rate limiting before processing credentials
+  const rateLimitBlock = await enforceRateLimit(req, "login");
+  if (rateLimitBlock) {
+    return rateLimitBlock;
   }
 
   const lockoutStatus = await checkRateLimitAndLockout(anonymizedIp);

@@ -7,10 +7,18 @@ import { validatePasswordStrength } from "@/lib/password-rules";
 import { AuditLogger } from "@/lib/audit-logger";
 import { getClientIp } from "@/lib/auth-gate";
 
+import { enforceRateLimit } from "@/lib/rate-limiter";
+
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
   if ("response" in auth) {
     return auth.response;
+  }
+
+  // Rate limiting (5 req/min per user)
+  const rateLimitBlock = await enforceRateLimit(req, "change_password", { userId: auth.user.id });
+  if (rateLimitBlock) {
+    return rateLimitBlock;
   }
 
   const rawIp = getClientIp(req);
@@ -53,10 +61,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const isAdmin = fullUser.role === "ADMIN" || fullUser.role === "SUPER_ADMIN";
-
-  // For standard users (or if current password was supplied), verify current password
-  if (!isAdmin || currentPassword) {
+  // Verify current password for all accounts (unless account is flagged for mandatory first-time password setup)
+  const requiresCurrentPassword = !fullUser.mustChangePassword;
+  if (requiresCurrentPassword || currentPassword) {
     if (!currentPassword) {
       return NextResponse.json(
         { error: "សូមបញ្ចូលពាក្យសម្ងាត់បច្ចុប្បន្ន (Current password is required)" },

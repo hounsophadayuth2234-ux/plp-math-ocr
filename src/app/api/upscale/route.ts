@@ -30,7 +30,7 @@ export async function GET() {
   const runpodEndpoint = (process.env.RUNPOD_UPSCALE_ENDPOINT || "").trim();
   const hasRunPod = Boolean(runpodKey && runpodEndpoint && !runpodEndpoint.includes("your_"));
   const hasWorker = Boolean(
-    (process.env.UPSCALER_WORKER_URL || process.env.LOCAL_UPSCALER_URL || process.env.NEXT_PUBLIC_HF_UPSCALE_URL || process.env.HF_UPSCALE_SPACE_URL) &&
+    (process.env.UPSCALER_WORKER_URL || process.env.LOCAL_UPSCALER_URL || process.env.HF_UPSCALE_URL || process.env.HF_UPSCALE_SPACE_URL) &&
     !process.env.UPSCALER_WORKER_URL?.includes("your_worker_url")
   );
   const hasReplicate = Boolean(
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     const explicitWorkerUrl = (
       process.env.UPSCALER_WORKER_URL ||
       process.env.LOCAL_UPSCALER_URL ||
-      process.env.NEXT_PUBLIC_HF_UPSCALE_URL ||
+      process.env.HF_UPSCALE_URL ||
       process.env.HF_UPSCALE_SPACE_URL ||
       ""
     )

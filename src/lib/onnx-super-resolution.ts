@@ -12,7 +12,7 @@
 
 export const ONNX_UPSCALE_CONFIG = {
   modelName: "realesr-general-x4v3.onnx",
-  modelUrl: "/models/realesr-general-x4v3.onnx",
+  modelUrl: "/api/assets/models/realesr-general-x4v3.onnx",
   modelRemoteSource: "https://huggingface.co/Heliosoph/realesrgan-onnx/resolve/main/realesr-general-x4v3.onnx",
   modelSha256: "09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4",
   nativeScale: 4 as const,

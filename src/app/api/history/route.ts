@@ -33,8 +33,9 @@ export async function GET(req: NextRequest) {
   const moduleFilter = searchParams.get("module") || undefined;
 
   try {
+    const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const records =
-      user.role === "ADMIN"
+      isAdmin
         ? await PersistentCacheStore.listAllRecords(moduleFilter)
         : await PersistentCacheStore.listUserRecords(user.id, moduleFilter);
 
@@ -90,6 +91,8 @@ export async function GET(req: NextRequest) {
  * - action === "retry_storage": Retries uploading artifacts to Google Drive without re-calling Gemini
  * - action === "delete": Deletes a cached record
  */
+import { enforceRateLimit } from "@/lib/rate-limiter";
+
 export async function POST(req: NextRequest) {
   const user = await getSessionUser(req);
   if (!user) {
@@ -97,6 +100,12 @@ export async function POST(req: NextRequest) {
       { error: "Unauthorized: សូមចូលគណនីជាមុនសិន (Please log in first)." },
       { status: 401 }
     );
+  }
+
+  // Rate limiting (20 req/min per user)
+  const rateLimitBlock = await enforceRateLimit(req, "history_mutation", { userId: user.id });
+  if (rateLimitBlock) {
+    return rateLimitBlock;
   }
 
   let body: any;
@@ -111,8 +120,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "cacheKey is required" }, { status: 400 });
   }
 
+  const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
   const record = await PersistentCacheStore.get(cacheKey, user.id);
-  if (!record && user.role !== "ADMIN") {
+  if (!record && !isAdmin) {
     return NextResponse.json(
       { error: "Record not found or access denied." },
       { status: 404 }
@@ -122,6 +132,14 @@ export async function POST(req: NextRequest) {
   const targetRecord = record || (await PersistentCacheStore.get(cacheKey, user.id));
   if (!targetRecord) {
     return NextResponse.json({ error: "Record not found." }, { status: 404 });
+  }
+
+  // Object-level authorization: Standard users can only mutate their own records
+  if (!isAdmin && targetRecord.userId !== user.id) {
+    return NextResponse.json(
+      { error: "Forbidden: Cannot mutate another user's history record." },
+      { status: 403 }
+    );
   }
 
   // 1. Delete Action

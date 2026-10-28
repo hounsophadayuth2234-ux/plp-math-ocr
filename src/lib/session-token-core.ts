@@ -18,12 +18,26 @@ export interface SessionTokenPayload {
   mustChangePassword?: boolean;
 }
 
+let ephemeralDevSessionSecret: string | null = null;
+
 function getSessionSecret(): string {
   const secret = process.env.APP_GATE_SESSION_SECRET?.trim();
   if (secret && secret.length >= 16) {
     return secret;
   }
-  return "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "CRITICAL SECURITY CONFIGURATION: APP_GATE_SESSION_SECRET must be configured with at least 16 characters in production."
+    );
+  }
+  if (!ephemeralDevSessionSecret) {
+    const arr = new Uint8Array(32);
+    crypto.getRandomValues(arr);
+    ephemeralDevSessionSecret = Array.from(arr)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+  return ephemeralDevSessionSecret;
 }
 
 async function getHmacKey(secret: string): Promise<CryptoKey> {

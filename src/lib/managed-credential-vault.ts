@@ -3,16 +3,30 @@ import crypto from "crypto";
 /**
  * Derives a consistent 32-byte AES-256-GCM key from available system secrets.
  */
+let ephemeralVaultKey: Buffer | null = null;
+
 function getVaultEncryptionKey(): Buffer {
   const secretCandidate =
     process.env.APP_MANAGED_VAULT_SECRET?.trim() ||
     process.env.APP_GATE_SESSION_SECRET?.trim() ||
     process.env.AUTH_SECRET?.trim() ||
     process.env.NEXTAUTH_SECRET?.trim() ||
-    process.env.JWT_SECRET?.trim() ||
-    "dyt-plp-managed-credentials-vault-2026-safe-key";
+    process.env.JWT_SECRET?.trim();
 
-  return crypto.createHash("sha256").update(secretCandidate).digest();
+  if (secretCandidate && secretCandidate.length >= 16) {
+    return crypto.createHash("sha256").update(secretCandidate).digest();
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "CRITICAL SECURITY CONFIGURATION: APP_MANAGED_VAULT_SECRET or APP_GATE_SESSION_SECRET must be configured in production."
+    );
+  }
+
+  if (!ephemeralVaultKey) {
+    ephemeralVaultKey = crypto.randomBytes(32);
+  }
+  return ephemeralVaultKey;
 }
 
 /**

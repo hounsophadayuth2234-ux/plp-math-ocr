@@ -30,6 +30,9 @@ import {
 } from "@/lib/lesson-studio";
 import { normalizeKhmerEducationalText } from "@/lib/khmer-text-normalizer";
 
+import { enforceRouteAuth } from "@/lib/auth-gate";
+import { enforceRateLimit } from "@/lib/rate-limiter";
+
 export const maxDuration = 60; // 60 seconds budget
 
 function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
@@ -41,6 +44,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
 }
 
 export async function POST(req: NextRequest) {
+  // 1. Enforce Server-Side Session Auth
+  const authBlock = await enforceRouteAuth(req);
+  if (authBlock) {
+    return authBlock;
+  }
+
+  // 2. Enforce Rate Limiting (8 req/min)
+  const rateLimitBlock = await enforceRateLimit(req, "lesson_studio");
+  if (rateLimitBlock) {
+    return rateLimitBlock;
+  }
+
   const startTime = Date.now();
   const requestId = `lsreq_${Math.random().toString(36).slice(2, 9)}`;
 

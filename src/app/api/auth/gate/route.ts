@@ -117,16 +117,17 @@ export async function POST(req: NextRequest) {
 
   // Safe administrative recovery path (unlocks locked IP with recovery token)
   const envRecoveryKey = process.env.APP_GATE_ADMIN_RECOVERY_KEY?.trim();
-  if (
-    adminRecoveryKey &&
-    envRecoveryKey &&
-    adminRecoveryKey.trim() === envRecoveryKey
-  ) {
-    await clearFailedAttempts(hashedId);
-    return NextResponse.json(
-      { success: true, message: "Administrative recovery: Rate limits reset." },
-      { status: 200, headers: { "Cache-Control": "no-store, private" } }
-    );
+  if (adminRecoveryKey && envRecoveryKey) {
+    const crypto = await import("crypto");
+    const hProvided = crypto.createHash("sha256").update(adminRecoveryKey.trim()).digest();
+    const hExpected = crypto.createHash("sha256").update(envRecoveryKey).digest();
+    if (crypto.timingSafeEqual(hProvided, hExpected)) {
+      await clearFailedAttempts(hashedId);
+      return NextResponse.json(
+        { success: true, message: "Administrative recovery: Rate limits reset." },
+        { status: 200, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
   }
 
   if (!password || typeof password !== "string") {

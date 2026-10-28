@@ -127,10 +127,8 @@ export async function upscaleImageStudio(
   }
   formData.append("scale", String(reqScale));
 
-  // Determine backend endpoint
-  const endpoint =
-    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HF_UPSCALE_URL) ||
-    "/api/upscale";
+  // Backend upscale endpoint (always route via authenticated server API)
+  const endpoint = "/api/upscale";
 
   // Stage 3: Enhancement Inference
   options.onProgress?.({

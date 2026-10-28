@@ -11,6 +11,8 @@ import { AuditLogger } from "@/lib/audit-logger";
 import { ActivityTracker } from "@/lib/activity-tracker";
 import { getClientIp } from "@/lib/auth-gate";
 
+import { enforceRateLimit } from "@/lib/rate-limiter";
+
 /**
  * GET /api/auth/profile
  * Returns the currently authenticated user's profile.
@@ -34,12 +36,18 @@ export async function GET(req: NextRequest) {
 
 /**
  * PUT /api/auth/profile
- * Updates the user's personal profile (Display Name, Username, Email).
+ * Updates the user's personal profile (Display Name, Username, Email, Avatar).
  */
 export async function PUT(req: NextRequest) {
   const auth = await requireAuth(req);
   if ("response" in auth) {
     return auth.response;
+  }
+
+  // Rate limiting (15 req/min per user)
+  const rateLimitBlock = await enforceRateLimit(req, "profile_update", { userId: auth.user.id });
+  if (rateLimitBlock) {
+    return rateLimitBlock;
   }
 
   const rawIp = getClientIp(req);
@@ -97,7 +105,30 @@ export async function PUT(req: NextRequest) {
   }
 
   if (body?.avatar !== undefined) {
-    updates.avatar = typeof body.avatar === "string" ? body.avatar : undefined;
+    if (body.avatar === null || body.avatar === "") {
+      updates.avatar = undefined;
+    } else if (typeof body.avatar === "string") {
+      const trimmed = body.avatar.trim();
+      // Enforce 5MB limit on data URI
+      if (trimmed.length > 7 * 1024 * 1024) {
+        return NextResponse.json(
+          { error: "ទំហំរូបភាព Profile ធំពេក (Profile image exceeds 5MB size limit)" },
+          { status: 400 }
+        );
+      }
+      const isBase64Image = /^data:image\/(png|jpeg|jpg|webp);base64,/i.test(trimmed) &&
+        !trimmed.toLowerCase().includes("<svg") &&
+        !trimmed.toLowerCase().includes("<script") &&
+        !trimmed.toLowerCase().includes("javascript:");
+      const isInternalPath = trimmed.startsWith("/brand/") || trimmed.startsWith("https://images.unsplash.com");
+      if (!isBase64Image && !isInternalPath) {
+        return NextResponse.json(
+          { error: "ទម្រង់រូបភាពមិនត្រឹមត្រូវ។ អនុញ្ញាតតែ PNG, JPG, JPEG ឬ WEBP (Invalid image format)" },
+          { status: 400 }
+        );
+      }
+      updates.avatar = trimmed;
+    }
   }
 
   if (Object.keys(updates).length === 0) {

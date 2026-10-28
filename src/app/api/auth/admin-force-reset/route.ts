@@ -11,10 +11,18 @@ import { getClientIp } from "@/lib/auth-gate";
  * Direct password reset endpoint for authenticated administrators without requiring the old password.
  * Hashes the incoming password securely using bcrypt and updates the Upstash Redis database.
  */
+import { enforceRateLimit } from "@/lib/rate-limiter";
+
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
   if ("response" in auth) {
     return auth.response;
+  }
+
+  // Rate limiting (5 req/min per admin)
+  const rateLimitBlock = await enforceRateLimit(req, "admin_force_reset", { userId: auth.user.id });
+  if (rateLimitBlock) {
+    return rateLimitBlock;
   }
 
   const rawIp = getClientIp(req);
@@ -26,12 +34,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  // Validate CSRF token if sent
-  if (body?.csrfToken) {
-    const csrf = validateCsrfToken(req, body.csrfToken);
-    if (!csrf.valid) {
-      return NextResponse.json({ error: csrf.error }, { status: 403 });
-    }
+  // Mandatory CSRF validation on state-changing administrative action
+  const csrf = validateCsrfToken(req, body?.csrfToken);
+  if (!csrf.valid) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
   }
 
   const { newPassword } = body || {};
