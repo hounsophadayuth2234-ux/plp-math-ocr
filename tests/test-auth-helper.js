@@ -1,8 +1,35 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const DEFAULT_SESSION_SECRET =
-  process.env.APP_GATE_SESSION_SECRET ||
-  'adb35b7f1db66b2ba6f0a71ddd28113307a1d935a809e47c21b861b612b2b1b301c64208f228ac1fb2e32108dfee01594d55efc66af15e7382b04c4b96b1abc1';
+function resolveSessionSecret() {
+  if (process.env.APP_GATE_SESSION_SECRET?.trim()) {
+    return process.env.APP_GATE_SESSION_SECRET.trim();
+  }
+  try {
+    const envLocalPath = path.resolve(process.cwd(), '.env.local');
+    if (fs.existsSync(envLocalPath)) {
+      const content = fs.readFileSync(envLocalPath, 'utf8');
+      const match = content.match(/^APP_GATE_SESSION_SECRET=(.+)$/m);
+      if (match && match[1]) {
+        return match[1].trim().replace(/^["']|["']$/g, '');
+      }
+    }
+  } catch {}
+  try {
+    const handoffPath = path.resolve(process.cwd(), '.gate-credentials-handoff.json');
+    if (fs.existsSync(handoffPath)) {
+      const content = fs.readFileSync(handoffPath, 'utf8');
+      const parsed = JSON.parse(content);
+      if (parsed.sessionSecret) {
+        return parsed.sessionSecret.trim();
+      }
+    }
+  } catch {}
+  return 'test-isolated-session-secret-for-e2e-fixtures-only';
+}
+
+export const DEFAULT_SESSION_SECRET = resolveSessionSecret();
 
 export const MOCK_SUPERADMIN = {
   id: 'usr_t33rx0x6mvs5qy0a',

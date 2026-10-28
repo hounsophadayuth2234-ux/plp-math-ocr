@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { injectAuthenticatedSession, MOCK_SUPERADMIN, MOCK_NORMALUSER } from "./test-auth-helper.js";
+import { setupAdminPlaywrightFixture } from "./fixtures/playwright-auth-fixture";
 
 const BASE_URL = (process.env.BASE_URL || "https://math.dytcore.com").replace(/\/+$/, "");
 
@@ -41,6 +42,8 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
   // 3. Authenticated USER access (404 concealment)
   test("3. Authenticated USER visit returns 404 without admin markup or data leakage", async ({ page, context, baseURL }) => {
     const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
+    // Install Playwright-only fixture layer for role-based responses
+    await setupAdminPlaywrightFixture(page, "USER");
     // Directly inject valid authenticated USER session cookie (bypassing UI login form)
     await injectAuthenticatedSession(context, targetUrl, MOCK_NORMALUSER);
 
@@ -62,6 +65,8 @@ test.describe("Super Admin Dashboard — Route Security & Layout Verification", 
   // 4. Authenticated SUPER_ADMIN access (Dashboard & Sidebar verification)
   test("4. Authenticated SUPER_ADMIN visit renders dashboard, sidebar, and overview card", async ({ page, context, baseURL }) => {
     const targetUrl = (baseURL || BASE_URL).replace(/\/+$/, "");
+    // Install Playwright-only fixture layer for super admin layout
+    await setupAdminPlaywrightFixture(page, "SUPER_ADMIN");
     // Directly inject valid authenticated SUPER_ADMIN session cookie (bypassing UI login form)
     await injectAuthenticatedSession(context, targetUrl, MOCK_SUPERADMIN);
 
