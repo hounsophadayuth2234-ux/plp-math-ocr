@@ -33,9 +33,9 @@ export async function POST(req: NextRequest) {
 
   const { currentPassword, newPassword, confirmPassword } = body || {};
 
-  if (!currentPassword || !newPassword) {
+  if (!newPassword || typeof newPassword !== "string" || !newPassword.trim()) {
     return NextResponse.json(
-      { error: "សូមបញ្ចូលពាក្យសម្ងាត់ (Password is required)" },
+      { error: "សូមបញ្ចូលពាក្យសម្ងាត់ថ្មី (New password is required)" },
       { status: 400 }
     );
   }
@@ -53,13 +53,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Verify current password
-  const isMatch = await bcrypt.compare(currentPassword, fullUser.passwordHash);
-  if (!isMatch) {
-    return NextResponse.json(
-      { error: "ពាក្យសម្ងាត់បច្ចុប្បន្នមិនត្រឹមត្រូវទេ (Current password does not match)" },
-      { status: 400 }
-    );
+  const isAdmin = fullUser.role === "ADMIN" || fullUser.role === "SUPER_ADMIN";
+
+  // For standard users (or if current password was supplied), verify current password
+  if (!isAdmin || currentPassword) {
+    if (!currentPassword) {
+      return NextResponse.json(
+        { error: "សូមបញ្ចូលពាក្យសម្ងាត់បច្ចុប្បន្ន (Current password is required)" },
+        { status: 400 }
+      );
+    }
+    const isMatch = await bcrypt.compare(currentPassword, fullUser.passwordHash);
+    if (!isMatch) {
+      return NextResponse.json(
+        { error: "ពាក្យសម្ងាត់បច្ចុប្បន្នមិនត្រឹមត្រូវទេ (Current password does not match)" },
+        { status: 400 }
+      );
+    }
   }
 
   // Validate new password strength

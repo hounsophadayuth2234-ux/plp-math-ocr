@@ -1,5 +1,5 @@
 {
-  "auditTimestamp": "2026-10-25T17:51:17.136Z",
+  "auditTimestamp": "2026-10-27T18:04:45.619Z",
   "evaluationScope": "Module 02 Real Test Images (7 user-provided fixtures)",
   "truthfulDiagnostics": {
     "actualModel": "ISNet-FP16 (@imgly/isnet_fp16)",

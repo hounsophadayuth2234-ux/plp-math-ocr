@@ -94,6 +94,8 @@ class HdEnhancerWorkerManager {
           });
         } else if (msg.type === "COMPLETE") {
           cleanup();
+          // Explicitly terminate worker to free WASM heap and tensor memory
+          this.terminateActiveWorker();
           resolve({
             data: msg.data,
             width: msg.width,

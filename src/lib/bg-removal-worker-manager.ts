@@ -194,6 +194,8 @@ class BgWorkerManager {
         } else if (data.type === "COMPLETE") {
           cleanup();
           const mainThreadBlockingMs = Math.max(0, Math.round(maxFrameDelay - 16.7));
+          // Explicitly terminate worker to free WASM linear memory and GPU textures on low-RAM devices
+          this.terminateActiveWorker();
           resolve({
             resultBlob: data.resultBlob,
             backend: data.backend || "WASM",

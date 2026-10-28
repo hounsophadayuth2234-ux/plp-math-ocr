@@ -96,6 +96,10 @@ export async function PUT(req: NextRequest) {
     updates.email = val.value;
   }
 
+  if (body?.avatar !== undefined) {
+    updates.avatar = typeof body.avatar === "string" ? body.avatar : undefined;
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({
       success: true,

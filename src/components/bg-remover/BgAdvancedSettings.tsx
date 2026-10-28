@@ -105,15 +105,12 @@ export function BgAdvancedSettings({
     >
       <summary className="cursor-pointer text-xs font-bold text-slate-300 hover:text-cyan-300 select-none flex items-center justify-between min-h-[44px]">
         <div className="flex items-center gap-2">
-          <Sliders className="h-4 w-4 text-cyan-400" />
+          <span className="text-sm">⚙️</span>
           <span className="text-xs uppercase tracking-wider font-bold">
             {t("advanced.title")}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-slate-500 font-normal hidden sm:inline">
-            Processing · Edge · Output · Diagnostics
-          </span>
           <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">
             ▼
           </span>

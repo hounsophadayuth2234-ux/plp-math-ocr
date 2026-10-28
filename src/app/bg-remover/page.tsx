@@ -1189,33 +1189,13 @@ export default function BgRemoverPage() {
           isModelCached={isModelCached}
         />
 
-        {/* Unified Status Area (Requirement 4) */}
-        <div className="flex items-center justify-between border border-slate-800 bg-slate-900/90 px-4 py-2 font-mono text-xs shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400">STUDIO STATUS:</span>
-            <span
-              data-testid="bg-unified-status"
-              className={`font-bold ${
-                error
-                  ? "text-rose-400"
-                  : isProcessing
-                  ? "text-cyan-400"
-                  : cachedResult
-                  ? "text-emerald-400"
-                  : imageFile
-                  ? "text-amber-400"
-                  : "text-slate-300"
-              }`}
-            >
-              ● {error ? "ERROR" : isProcessing ? "PROCESSING" : cachedResult ? "COMPLETE" : imageFile ? "IMAGE LOADED" : "READY"}
-            </span>
-          </div>
-          <span className="text-[10px] text-slate-500 hidden sm:inline">
-            Ready → Uploading → Processing → Complete → Error
+        {/* Screen Reader Unified Status for a11y & automated testing */}
+        <div role="status" className="sr-only">
+          <span data-testid="bg-unified-status">
+            ● {error ? "ERROR" : isProcessing ? "PROCESSING" : cachedResult ? "COMPLETE" : imageFile ? "IMAGE LOADED" : "READY"}
           </span>
         </div>
       </div>
-
 
       {/* ── Main Control Console ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -1247,9 +1227,6 @@ export default function BgRemoverPage() {
                   AI Background Studio
                 </h2>
               </div>
-              <span className="text-[10px] bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 px-2 py-0.5 font-bold font-mono">
-                Workstation Mode
-              </span>
             </div>
 
             {/* ── 1. UPLOAD IMAGE ── */}
@@ -1290,116 +1267,7 @@ export default function BgRemoverPage() {
               />
             </div>
 
-            {/* ── 2. MODE: Auto Portrait vs Auto General ── */}
-            <div className="space-y-2 pt-2 border-t border-slate-800/80 font-mono">
-              <div className="flex flex-wrap items-center justify-between gap-1 text-xs uppercase text-slate-300 tracking-wider">
-                <span className="font-bold">2. Mode</span>
-                <span className="text-cyan-400 font-bold text-[11px] truncate">
-                  {activeSelectionMode === "auto_portrait" ? "មនុស្ស (Portrait)" : "ទូទៅ (General)"}
-                </span>
-              </div>
-              <div role="radiogroup" aria-label="Mode" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={activeSelectionMode === "auto_portrait"}
-                  data-testid="content-mode-auto-portrait"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("auto_portrait");
-                  }}
-                  className={`min-h-[48px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all cursor-pointer ${
-                    activeSelectionMode === "auto_portrait"
-                      ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]"
-                      : "border-slate-850 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs">
-                    <span className="h-2 w-2 bg-cyan-400 shrink-0" />
-                    <span>មនុស្ស (Portrait)</span>
-                  </div>
-                  <span className="text-[10px] text-cyan-200/70 mt-0.5 truncate max-w-full">Person, suit, hair</span>
-                </button>
-
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={activeSelectionMode === "auto_general" || activeSelectionMode === "preserve_all_foreground"}
-                  data-testid="content-mode-auto-general"
-                  data-testid-alias="content-mode-all"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setActiveSelectionMode("auto_general");
-                  }}
-                  className={`min-h-[48px] flex flex-col items-start justify-center p-2.5 rounded-none border text-left transition-all cursor-pointer ${
-                    activeSelectionMode === "auto_general" || activeSelectionMode === "preserve_all_foreground"
-                      ? "border-emerald-400 bg-emerald-950/70 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
-                      : "border-slate-850 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs">
-                    <span className="h-2 w-2 bg-emerald-400 shrink-0" />
-                    <span>ទូទៅ (General)</span>
-                  </div>
-                  <span className="text-[10px] text-emerald-200/70 mt-0.5 truncate max-w-full">Products, pets, scenes</span>
-                </button>
-              </div>
-            </div>
-
-            {/* ── 3. QUALITY: Fast vs High Quality ── */}
-            <div className="space-y-2 pt-2 border-t border-slate-800/80 font-mono">
-              <div className="flex items-center justify-between text-xs uppercase text-slate-300 tracking-wider">
-                <span className="font-bold">3. Quality</span>
-                <span className="text-cyan-400 font-bold text-[11px]">
-                  {simplifiedQuality === "fast" ? "Fast (10–20s)" : "High Quality (<25s)"}
-                </span>
-              </div>
-              <div role="radiogroup" aria-label="Quality" className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={simplifiedQuality === "fast"}
-                  data-testid="edge-quality-fast"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setSimplifiedQuality("fast");
-                    setEdgeQuality("fast");
-                  }}
-                  className={`min-h-[44px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
-                    simplifiedQuality === "fast"
-                      ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-sm"
-                      : "border-slate-850 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <Zap className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                  <span className="font-semibold text-xs leading-tight">
-                    ជាធម្មតា ១០–២០ វិនាទី (Usually 10–20s • On-Device AI)
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={simplifiedQuality === "quality"}
-                  data-testid="edge-quality-quality"
-                  onClick={() => {
-                    cyberAudio.playClick();
-                    setSimplifiedQuality("quality");
-                    setEdgeQuality("fine_details");
-                  }}
-                  className={`min-h-[44px] flex items-center justify-center gap-2 p-2 rounded-none border text-center transition-all cursor-pointer ${
-                    simplifiedQuality === "quality"
-                      ? "border-emerald-400 bg-emerald-950/70 text-white font-bold ring-1 ring-emerald-400/40 shadow-sm"
-                      : "border-slate-850 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span className="font-semibold text-xs leading-tight">High Quality (Usually under 25s)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* ── 4. PRIMARY BUTTON: Remove Background ── */}
+            {/* ── PRIMARY ACTION BUTTON: Visible by default with clean Processing... state ── */}
             <div className="space-y-2 pt-2 border-t border-slate-800/80 font-mono">
               <div className="flex gap-2 items-center">
                 <button
@@ -1433,7 +1301,7 @@ export default function BgRemoverPage() {
                       <Zap className="h-5 w-5 text-white" />
                     )}
                     <span className="text-sm font-black uppercase tracking-wider text-white">
-                      {isProcessing ? "Processing Cutout..." : "Remove Background"}
+                      {isProcessing ? "Processing..." : "Remove Background"}
                     </span>
                   </div>
                 </button>
@@ -1451,6 +1319,168 @@ export default function BgRemoverPage() {
                   </button>
                 )}
               </div>
+
+              {/* ── TOGGLEABLE ADVANCED SETTINGS MENU (Apple/Vercel Minimalist Standard) ── */}
+              <details
+                data-testid="minimalist-advanced-menu"
+                className="group border border-slate-800 bg-slate-950/60 p-3 font-mono transition-all"
+              >
+                <summary className="cursor-pointer text-xs font-bold text-slate-300 hover:text-cyan-300 select-none flex items-center justify-between min-h-[36px]">
+                  <span className="uppercase tracking-wider flex items-center gap-1.5">
+                    ⚙️ Advanced Settings (ការកំណត់កម្រិតខ្ពស់)
+                  </span>
+                  <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">
+                    ▼
+                  </span>
+                </summary>
+
+                <div className="mt-3 pt-3 border-t border-slate-800 space-y-4">
+                  {/* Mode: Auto Portrait vs Auto General */}
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] uppercase text-slate-300 tracking-wider">
+                      <span className="font-bold">Mode</span>
+                      <span className="text-cyan-400 font-bold text-[10px] truncate">
+                        {activeSelectionMode === "auto_portrait" ? "មនុស្ស (Portrait)" : "ទូទៅ (General)"}
+                      </span>
+                    </div>
+                    <div role="radiogroup" aria-label="Mode" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={activeSelectionMode === "auto_portrait"}
+                        data-testid="content-mode-auto-portrait"
+                        onClick={() => {
+                          cyberAudio.playClick();
+                          setActiveSelectionMode("auto_portrait");
+                        }}
+                        className={`min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all cursor-pointer ${
+                          activeSelectionMode === "auto_portrait"
+                            ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]"
+                            : "border-slate-850 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                          <span className="h-2 w-2 bg-cyan-400 shrink-0" />
+                          <span>មនុស្ស (Portrait)</span>
+                        </div>
+                        <span className="text-[10px] text-cyan-200/70 mt-0.5 truncate max-w-full">Person, suit, hair</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={activeSelectionMode === "auto_general" || activeSelectionMode === "preserve_all_foreground"}
+                        data-testid="content-mode-auto-general"
+                        data-testid-alias="content-mode-all"
+                        onClick={() => {
+                          cyberAudio.playClick();
+                          setActiveSelectionMode("auto_general");
+                        }}
+                        className={`min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all cursor-pointer ${
+                          activeSelectionMode === "auto_general" || activeSelectionMode === "preserve_all_foreground"
+                            ? "border-emerald-400 bg-emerald-950/70 text-white font-bold ring-1 ring-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                            : "border-slate-850 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                          <span className="h-2 w-2 bg-emerald-400 shrink-0" />
+                          <span>ទូទៅ (General)</span>
+                        </div>
+                        <span className="text-[10px] text-emerald-200/70 mt-0.5 truncate max-w-full">Products, pets, scenes</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Quality: Fast vs High Quality */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] uppercase text-slate-300 tracking-wider">
+                      <span className="font-bold">Quality</span>
+                      <span className="text-cyan-400 font-bold text-[10px]">
+                        {simplifiedQuality === "fast" ? "Fast (10–20s)" : "High Quality (<25s)"}
+                      </span>
+                    </div>
+                    <div role="radiogroup" aria-label="Quality" className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={simplifiedQuality === "fast"}
+                        data-testid="edge-quality-fast"
+                        onClick={() => {
+                          cyberAudio.playClick();
+                          setSimplifiedQuality("fast");
+                          setEdgeQuality("fast");
+                        }}
+                        className={`min-h-[40px] flex items-center justify-center gap-1.5 p-2 rounded-none border text-center transition-all cursor-pointer ${
+                          simplifiedQuality === "fast"
+                            ? "border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-sm"
+                            : "border-slate-850 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                        }`}
+                      >
+                        <Zap className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                        <span className="font-semibold text-xs leading-tight">
+                          Fast (10–20s)
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={simplifiedQuality === "quality"}
+                        data-testid="edge-quality-quality"
+                        onClick={() => {
+                          cyberAudio.playClick();
+                          setSimplifiedQuality("quality");
+                          setEdgeQuality("fine_details");
+                        }}
+                        className={`min-h-[40px] flex items-center justify-center gap-1.5 p-2 rounded-none border text-center transition-all cursor-pointer ${
+                          simplifiedQuality === "quality"
+                            ? "border-emerald-400 bg-emerald-950/70 text-white font-bold ring-1 ring-emerald-400/40 shadow-sm"
+                            : "border-slate-850 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white"
+                        }`}
+                      >
+                        <Sparkles className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                        <span className="font-semibold text-xs leading-tight">High Quality</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Fine-Tuning Edge & Sliders (Strictly inside closed Advanced Settings menu) */}
+                  <div className="pt-2 border-t border-slate-800/80">
+                    <BgAdvancedSettings
+                      locale={locale}
+                      activeSelectionMode={activeSelectionMode}
+                      onSelectSelectionMode={(m) => {
+                        cyberAudio.playClick();
+                        setActiveSelectionMode(m);
+                      }}
+                      selectedEngine={selectedEngine}
+                      onSelectEngine={handleSwitchEngine}
+                      isWorkerConfigured={isWorkerConfigured}
+                      workerStatus={workerStatus}
+                      edgeQuality={edgeQuality === "quality" ? "fine_details" : edgeQuality}
+                      onChangeEdgeQuality={(q) => setEdgeQuality(q)}
+                      dehaloRadius={dehaloRadius}
+                      onChangeDehaloRadius={setDehaloRadius}
+                      alphaChoke={alphaChoke}
+                      onChangeAlphaChoke={setAlphaChoke}
+                      featherRadius={featherRadius}
+                      onChangeFeatherRadius={setFeatherRadius}
+                      selectedPurpose={selectedPurpose}
+                      onSelectPurpose={setSelectedPurpose}
+                      customColor={customColor}
+                      onChangeCustomColor={setCustomColor}
+                      onOpenManualMask={handleOpenManualMode}
+                      hasImage={Boolean(imageFile)}
+                      isProcessing={isProcessing}
+                      isModelCached={isModelCached}
+                      metrics={cachedResult?.metrics || liveStageMetrics || failedMetrics || undefined}
+                      diagnostics={cachedResult?.diagnostics}
+                      visualDebug={cachedResult?.visualDebug}
+                      onResetAdvanced={handleResetAdvanced}
+                    />
+                  </div>
+                </div>
+              </details>
 
               {/* Actionable recovery option when High Quality is unavailable */}
               {error && error.includes("High Quality engine unavailable") && (
@@ -1560,41 +1590,7 @@ export default function BgRemoverPage() {
               )}
             </div>
 
-            {/* ── 5. COLLAPSED ADVANCED PANEL ── */}
-            <div className="pt-2 border-t border-slate-800/80">
-              <BgAdvancedSettings
-                locale={locale}
-                activeSelectionMode={activeSelectionMode}
-                onSelectSelectionMode={(m) => {
-                  cyberAudio.playClick();
-                  setActiveSelectionMode(m);
-                }}
-                selectedEngine={selectedEngine}
-                onSelectEngine={handleSwitchEngine}
-                isWorkerConfigured={isWorkerConfigured}
-                workerStatus={workerStatus}
-                edgeQuality={edgeQuality === "quality" ? "fine_details" : edgeQuality}
-                onChangeEdgeQuality={(q) => setEdgeQuality(q)}
-                dehaloRadius={dehaloRadius}
-                onChangeDehaloRadius={setDehaloRadius}
-                alphaChoke={alphaChoke}
-                onChangeAlphaChoke={setAlphaChoke}
-                featherRadius={featherRadius}
-                onChangeFeatherRadius={setFeatherRadius}
-                selectedPurpose={selectedPurpose}
-                onSelectPurpose={setSelectedPurpose}
-                customColor={customColor}
-                onChangeCustomColor={setCustomColor}
-                onOpenManualMask={handleOpenManualMode}
-                hasImage={Boolean(imageFile)}
-                isProcessing={isProcessing}
-                isModelCached={isModelCached}
-                metrics={cachedResult?.metrics || liveStageMetrics || failedMetrics || undefined}
-                diagnostics={cachedResult?.diagnostics}
-                visualDebug={cachedResult?.visualDebug}
-                onResetAdvanced={handleResetAdvanced}
-              />
-            </div>
+
           </div>
         </div>
 

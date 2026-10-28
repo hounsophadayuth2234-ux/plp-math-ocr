@@ -602,81 +602,20 @@ export default function ImageUpscalerPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="rounded bg-cyan-500/15 px-2 py-0.5 font-mono text-xs font-bold text-cyan-400 border border-cyan-500/30">
-                  MODULE 03
-                </span>
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                  HD Resize &amp; Sharpen (ធ្វើរូបឱ្យច្បាស់)
-                </h1>
-              </div>
-              <p className="mt-0.5 text-xs text-slate-400">
-                High-Fidelity Resampling &amp; Adaptive Edge Sharpening · Web Worker Processing
-              </p>
-            </div>
-          </div>
-
-          {/* Unified Mode Badge & Status Area */}
-          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-            {/* Mode Indicator Badge */}
-            <div
-              data-testid="engine-mode-badge"
-              className={`rounded-xl px-3 py-1.5 flex items-center gap-1.5 shadow-sm font-sans text-xs border font-bold transition-all ${
-                engineMode === "runpod"
-                  ? "border-purple-500/40 bg-purple-950/50 text-purple-300"
-                  : "border-cyan-500/40 bg-cyan-950/50 text-cyan-300"
-              }`}
-              title={
-                engineMode === "runpod"
-                  ? "ដំណើរការលើ RunPod Cloud GPU"
-                  : "ដំណើរការលើម៉ាស៊ីនផ្ទាល់ដោយឥតគិតថ្លៃ"
-              }
-            >
-              <span>
-                {engineMode === "runpod"
-                  ? "☁️ RunPod Cloud GPU"
-                  : "⚡ Local Engine (ដំណើរការលើម៉ាស៊ីនផ្ទាល់ - ឥតគិតថ្លៃ)"}
-              </span>
-            </div>
-
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 flex items-center gap-2 shadow-sm">
-              <span className="text-slate-400">STATUS:</span>
-              <span
-                data-testid="upscale-unified-status"
-                className={`font-bold ${
-                  currentStatus === "Complete"
-                    ? "text-emerald-400"
-                    : currentStatus === "Processing"
-                    ? "text-cyan-400"
-                    : currentStatus === "Uploading"
-                    ? "text-amber-400"
-                    : currentStatus === "Error"
-                    ? "text-rose-400"
-                    : "text-slate-300"
-                }`}
-              >
-                ● {currentStatus.toUpperCase()}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Engine Notice: HD Resize & Sharpen */}
-        <div className="flex items-start gap-3 rounded-xl border border-cyan-500/30 bg-cyan-950/30 p-3.5 font-mono text-xs text-cyan-200">
-          <Sparkles className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="font-bold uppercase text-cyan-300">
-                Engine: {engineMode === "runpod" ? "RunPod Cloud GPU · Real-ESRGAN" : "HD Resize & Sharpen / Smart Enhance"}
+              <span className="rounded bg-cyan-500/15 px-2 py-0.5 font-mono text-xs font-bold text-cyan-400 border border-cyan-500/30">
+                MODULE 03
               </span>
-              <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
-                {engineMode === "runpod" ? "Cloud GPU" : "On-Device Web Worker & Local Sharp"}
-              </span>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                HD Resize &amp; Sharpen (ធ្វើរូបឱ្យច្បាស់)
+              </h1>
             </div>
-            <p className="text-[11px] text-cyan-100/80 leading-relaxed">
-              Provides deterministic high-order Lanczos-3 resampling, Kuwahara noise smoothing, and Khmer text stroke protection. Large images are processed smoothly in a dedicated background worker to prevent UI lag.
-            </p>
+          </div>
+
+          {/* Accessible programmatic status/badge elements without UI clutter */}
+          <div className="sr-only">
+            <span data-testid="engine-mode-badge">{engineMode}</span>
+            <span data-testid="upscale-unified-status">{currentStatus}</span>
           </div>
         </div>
 
@@ -723,23 +662,24 @@ export default function ImageUpscalerPage() {
                 className="mt-3"
               />
 
-              <div className="mt-2 flex items-center justify-between px-1 text-[11px] font-mono text-slate-500">
-                <span>គាំទ្រ: PNG, JPG, WEBP (រហូតដល់ 4096px)</span>
-                <span className="flex items-center gap-1">
-                  <Clipboard className="h-3 w-3" />
-                  ចុច Ctrl+V ដើម្បី Paste
-                </span>
-              </div>
             </div>
 
-            {/* Smart Image Diagnostics (Stage 1) */}
+            {/* Smart Image Diagnostics (Stage 1) - Inside closed details */}
             {inputDiagnostics && (
-              <ImageDiagnosticsCard
-                diagnostics={inputDiagnostics}
-                fileSize={imageFile?.size}
-                selectedPreset={config.preset as UpscalePreset}
-                onApplyPreset={handlePresetSelect}
-              />
+              <details className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 text-xs font-mono">
+                <summary className="cursor-pointer text-slate-400 hover:text-cyan-300 select-none flex items-center justify-between">
+                  <span>📊 Image Diagnostics</span>
+                  <span className="text-[10px]">▼</span>
+                </summary>
+                <div className="mt-2 pt-2 border-t border-slate-800">
+                  <ImageDiagnosticsCard
+                    diagnostics={inputDiagnostics}
+                    fileSize={imageFile?.size}
+                    selectedPreset={config.preset as UpscalePreset}
+                    onApplyPreset={handlePresetSelect}
+                  />
+                </div>
+              </details>
             )}
 
             {/* Enhancement Controls */}

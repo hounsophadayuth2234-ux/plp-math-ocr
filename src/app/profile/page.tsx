@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { GoogleDriveOAuthSettings } from "@/components/drive/GoogleDriveOAuthSettings";
 import { SystemSettingsTab } from "@/components/profile/SystemSettingsTab";
+import { ProfileManager } from "@/components/profile/ProfileManager";
 import { DualToneThemeToggle } from "@/components/ui/DualToneThemeToggle";
 import { getOrRefreshCsrfToken, fetchFreshCsrfToken, CSRF_HEADER_NAME } from "@/lib/csrf-client";
 
@@ -59,6 +60,7 @@ interface SafeUser {
   telegramLinkedAt?: number;
   googleDriveConnected?: boolean;
   googleDriveEmail?: string;
+  avatar?: string;
 }
 
 interface UserActivitySummary {
@@ -457,7 +459,10 @@ function ProfileHubInner() {
           [CSRF_HEADER_NAME]: activeCsrf,
         },
         body: JSON.stringify({
-          currentPassword,
+          currentPassword:
+            currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN"
+              ? currentPassword || undefined
+              : currentPassword,
           newPassword,
           confirmPassword,
           csrfToken: activeCsrf,
@@ -782,9 +787,17 @@ function ProfileHubInner() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90 backdrop-blur-xl shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="flex items-center gap-4 relative z-10">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-cyan-500 via-indigo-600 to-violet-600 text-white shadow-lg shadow-cyan-500/20 font-bold text-xl">
-              {currentUser.displayName ? currentUser.displayName.slice(0, 2).toUpperCase() : currentUser.username.slice(0, 2).toUpperCase()}
-            </div>
+            {currentUser.avatar ? (
+              <img
+                src={currentUser.avatar}
+                alt="User Avatar"
+                className="h-16 w-16 rounded-2xl object-cover border-2 border-cyan-400 shadow-lg shadow-cyan-500/20"
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-cyan-500 via-indigo-600 to-violet-600 text-white shadow-lg shadow-cyan-500/20 font-bold text-xl">
+                {currentUser.displayName ? currentUser.displayName.slice(0, 2).toUpperCase() : currentUser.username.slice(0, 2).toUpperCase()}
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
@@ -946,90 +959,82 @@ function ProfileHubInner() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
-            TAB 1: Personal Profile (All Roles)
+            TAB 1: Personal Profile (All Roles) - Canonical ProfileManager
             ══════════════════════════════════════════════════════════════ */}
         {activeTab === "profile" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl space-y-5">
+          <div className="space-y-6">
+            <ProfileManager
+              initialUser={{
+                id: currentUser.id,
+                username: currentUser.username,
+                email: currentUser.email,
+                role: currentUser.role,
+                displayName: currentUser.displayName,
+                status: currentUser.status,
+                createdAt: currentUser.createdAt,
+                lastLoginAt: currentUser.lastLoginAt,
+                avatar: currentUser.avatar,
+              }}
+              onUserUpdated={(updatedUser) => {
+                setCurrentUser((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        ...updatedUser,
+                        status: (updatedUser.status as "ACTIVE" | "DISABLED") || prev.status,
+                        role: (updatedUser.role as any) || prev.role,
+                      }
+                    : null
+                );
+                if (updatedUser.displayName) setEditDisplayName(updatedUser.displayName);
+                if (updatedUser.username) setEditUsername(updatedUser.username);
+                if (updatedUser.email) setEditEmail(updatedUser.email);
+              }}
+            />
+
+            {/* Display Name Edit Card */}
+            <div className="max-w-2xl mx-auto p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl space-y-4">
               <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <User className="h-4 w-4 text-cyan-400" />
-                  <span>កែប្រែព័ត៌មានផ្ទាល់ខ្លួន (Edit Personal Information)</span>
-                </h2>
+                  <span>ឈ្មោះបង្ហាញ (Display Name)</span>
+                </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  អ្នកអាចផ្លាស់ប្តូរឈ្មោះបង្ហាញ (Display Name), ឈ្មោះអ្នកប្រើប្រាស់ (Username) និងអ៊ីមែលបាននៅទីនេះ។
+                  អ្នកអាចផ្លាស់ប្តូរឈ្មោះបង្ហាញ (Display Name) សម្រាប់ប្រព័ន្ធទាំងមូលនៅទីនេះ។
                 </p>
               </div>
 
-              <form onSubmit={handleSaveProfile} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-sans">
-                    ឈ្មោះបង្ហាញ (Display Name)
-                  </label>
-                  <input
-                    type="text"
-                    value={editDisplayName}
-                    onChange={(e) => setEditDisplayName(e.target.value)}
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    placeholder="ឈ្មោះរបស់អ្នក"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-sans">
-                      ឈ្មោះគណនី (Username)
-                    </label>
-                    <input
-                      type="text"
-                      value={editUsername}
-                      onChange={(e) => setEditUsername(e.target.value)}
-                      required
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm font-mono text-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      placeholder="username"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-sans">
-                      អ៊ីមែល (Email)
-                    </label>
-                    <input
-                      type="email"
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
-                      required
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      placeholder="user@dyt-ecosystem.local"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={profileSaving}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs sm:text-sm transition-all shadow-md shadow-cyan-500/20 disabled:opacity-50"
-                  >
-                    {profileSaving ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>កំពុងរក្សាទុក...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="h-4 w-4" />
-                        <span>រក្សាទុកព័ត៌មាន (Save Changes)</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+              <form onSubmit={handleSaveProfile} className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  required
+                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  placeholder="ឈ្មោះបង្ហាញរបស់អ្នក"
+                />
+                <button
+                  type="submit"
+                  disabled={profileSaving}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs sm:text-sm transition-all shadow-md shadow-cyan-500/20 disabled:opacity-50 shrink-0"
+                >
+                  {profileSaving ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>កំពុងរក្សាទុក...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4" />
+                      <span>រក្សាទុក (Save)</span>
+                    </>
+                  )}
+                </button>
               </form>
             </div>
 
             {/* Account Metadata Card */}
-            <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl space-y-4">
+            <div className="max-w-2xl mx-auto p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl space-y-4">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Shield className="h-4 w-4 text-indigo-400" />
                 <span>ព័ត៌មានសន្តិសុខគណនី (Account Meta)</span>
@@ -1058,7 +1063,7 @@ function ProfileHubInner() {
             </div>
 
             {/* Dual-Tone Theme Customizer Card */}
-            <div className="lg:col-span-3 p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl space-y-4">
+            <div className="max-w-2xl mx-auto p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-4">
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -1099,28 +1104,35 @@ function ProfileHubInner() {
             </div>
 
             <form onSubmit={handleChangePassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-sans">
-                  លេខសម្ងាត់បច្ចុប្បន្ន (Current Password)
-                </label>
-                <div className="relative">
-                  <input
-                    type={showCurrentPassword ? "text" : "password"}
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-white pr-10 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-200"
-                  >
-                    {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+              {currentUser?.role !== "ADMIN" && currentUser?.role !== "SUPER_ADMIN" ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-sans">
+                    លេខសម្ងាត់បច្ចុប្បន្ន (Current Password)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showCurrentPassword ? "text" : "password"}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-white pr-10 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      className="absolute right-3 top-3 text-slate-400 hover:text-slate-200"
+                    >
+                      {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300 flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-indigo-400 shrink-0" />
+                  <span>សិទ្ធិ Administrator៖ មិនចាំបាច់បញ្ចូលពាក្យសម្ងាត់ចាស់ទេ (Admin authenticated: Current password not required).</span>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-sans">

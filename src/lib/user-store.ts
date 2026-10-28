@@ -35,6 +35,7 @@ export interface UserRecord {
   googleDriveEmail?: string;
   googleDriveConnectedAt?: number;
   googleDriveScope?: string;
+  avatar?: string;
 }
 
 export type SafeUser = Omit<
@@ -49,6 +50,7 @@ export type SafeUser = Omit<
   | "googleDriveTokenEncrypted"
 > & {
   visiblePassword?: string | null;
+  avatar?: string;
   mfaEnabled?: boolean;
   telegramLinked?: boolean;
   telegramUsername?: string;
@@ -78,14 +80,35 @@ export function toAdminSafeUser(user: UserRecord): SafeUser {
   return toSafeUser(user);
 }
 
-import { getValidRedisConfig } from "./redis-config";
+import { getValidRedisConfig, isValidHttpUrl } from "./redis-config";
 
 // ============================================================================
 // Upstash Redis / Vercel KV REST Client
 // ============================================================================
 
 function getRedisConfig(): { url: string; token: string } | null {
-  return getValidRedisConfig();
+  const cfg = getValidRedisConfig();
+  if (cfg && isValidHttpUrl(cfg.url)) {
+    return cfg;
+  }
+
+  // Explicit fallback check using isValidHttpUrl
+  const kvUrl = process.env.KV_REST_API_URL?.trim();
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+
+  if (isValidHttpUrl(kvUrl) && kvToken) {
+    return { url: kvUrl!, token: kvToken };
+  }
+  if (isValidHttpUrl(upstashUrl) && upstashToken) {
+    return { url: upstashUrl!, token: upstashToken };
+  }
+  if (isValidHttpUrl(upstashUrl) && kvToken) {
+    return { url: upstashUrl!, token: kvToken };
+  }
+
+  return null;
 }
 
 async function redisCommand<T = any>(command: any[]): Promise<T | null> {

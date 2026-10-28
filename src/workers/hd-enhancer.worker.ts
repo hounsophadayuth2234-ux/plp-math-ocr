@@ -241,6 +241,16 @@ self.onmessage = async (e: MessageEvent<EnhancerWorkerStartRequest>) => {
         finalRgba[i * 4 + 3] = 255;
       }
 
+      // Memory Cleanup: Explicitly release ONNX session memory to prevent Out-Of-Memory crashes on low-RAM devices
+      if (session) {
+        try {
+          await session.release();
+        } catch (relErr) {
+          console.warn("[hd-enhancer.worker] Session release error:", relErr);
+        }
+        cachedOnnxSession = null;
+      }
+
       reportProgress(5, "Complete", "រួចរាល់ 100%", 100);
 
       const diagnostics = calculateImageDiagnostics({ data, width, height });

@@ -1,5 +1,5 @@
 {
-  "auditTimestamp": "2026-10-25T17:51:13.272Z",
+  "auditTimestamp": "2026-10-27T18:04:42.421Z",
   "activeModel": "ISNet-FP16 (@imgly/isnet_fp16) - BiRefNet is not currently active",
   "activeRuntime": "@imgly/background-removal v1.7.0 (onnxruntime-web)",
   "activeExecutionProvider": "WASM / WebGPU",

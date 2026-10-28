@@ -57,104 +57,15 @@ export function UpscaleControls({
 }: UpscaleControlsProps) {
   return (
     <div className="flex flex-col gap-5 rounded-2xl border border-cyan-500/25 bg-slate-950/80 p-5 shadow-[0_0_20px_rgba(0,240,255,0.06)] backdrop-blur-md">
-      {/* 1. Enhancement Mode: Fast, Balanced, Quality */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <label className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
-            1. Enhancement Mode / របៀបកែសម្រួល
-          </label>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            {
-              id: "general" as UpscalePreset,
-              titleKh: "ល្បឿនលឿន",
-              titleEn: "Fast",
-              desc: "Instant (<1s)",
-              icon: Zap,
-            },
-            {
-              id: "text" as UpscalePreset,
-              titleKh: "តុល្យភាព",
-              titleEn: "Balanced",
-              desc: "Khmer text crisp",
-              icon: FileText,
-            },
-            {
-              id: "ultra" as UpscalePreset,
-              titleKh: "គុណភាពខ្ពស់",
-              titleEn: "Quality",
-              desc: "Multi-pass restore",
-              icon: Sparkles,
-            },
-          ].map((mode) => {
-            const Icon = mode.icon;
-            const isSelected = preset === mode.id || (mode.id === "general" && preset === "custom");
-            return (
-              <button
-                key={mode.id}
-                type="button"
-                data-testid={`mode-btn-${mode.id}`}
-                onClick={() => onChangePreset(mode.id)}
-                disabled={isLoading || disabled}
-                className={`min-h-[58px] flex flex-col items-center justify-center rounded-xl border p-2 text-center transition-all cursor-pointer ${
-                  isSelected
-                    ? "border-cyan-400 bg-cyan-950/60 text-cyan-300 font-bold ring-1 ring-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
-                    : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <Icon className="h-3.5 w-3.5 text-cyan-400" />
-                  <span className="font-mono text-xs font-bold text-slate-100">{mode.titleKh}</span>
-                </div>
-                <span className="text-[10px] text-cyan-400/80 font-mono mt-0.5">{mode.titleEn}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 2. Output Size Option: 1x, 2x, 4x (Honest output-size choice) */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <label className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
-            2. Output Size / ទំហំរូបភាពលទ្ធផល
-          </label>
-          <span className="text-[10px] font-mono text-slate-400">
-            {scale === 1 ? "100% original px" : scale === 2 ? "200% HD dimensions" : "400% Ultra HD dimensions"}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { val: 1 as UpscaleScale, labelKh: "1x ដើម", labelEn: "1x Sharpen" },
-            { val: 2 as UpscaleScale, labelKh: "2x HD", labelEn: "2x HD (Balanced)" },
-            { val: 4 as UpscaleScale, labelKh: "4x HD", labelEn: "4x HD (Ultra Size)" },
-          ].map((opt) => (
-            <button
-              key={opt.val}
-              type="button"
-              data-testid={`scale-btn-${opt.val}x`}
-              onClick={() => onChangeScale(opt.val)}
-              disabled={isLoading || disabled}
-              className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all cursor-pointer ${
-                scale === opt.val
-                  ? "border-amber-400 bg-amber-950/50 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)] font-bold ring-1 ring-amber-400/50"
-                  : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-              } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              <span className="font-mono text-sm font-bold">{opt.val}X</span>
-              <span className="font-mono text-[10px] opacity-75">{opt.labelEn}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 3. Streamlined Fine Tuning Panel */}
-      <details className="group rounded-xl border border-slate-800 bg-slate-900/40 p-3.5 transition-all">
+      {/* 1. Streamlined Advanced Settings (Fine Tuning Panel - Closed by default) */}
+      <details
+        data-testid="upscale-advanced-settings-accordion"
+        className="group rounded-xl border border-slate-800 bg-slate-900/40 p-3.5 transition-all"
+      >
         <summary className="cursor-pointer text-xs font-mono font-bold text-slate-300 hover:text-cyan-300 select-none flex items-center justify-between min-h-[36px]">
           <div className="flex items-center gap-2">
-            <SlidersHorizontal className="h-4 w-4 text-cyan-400" />
-            <span className="uppercase tracking-wider">Fine-Tuning Controls (ការកំណត់លម្អិត)</span>
+            <span className="text-sm">⚙️</span>
+            <span className="uppercase tracking-wider">Advanced Settings (ការកំណត់កម្រិតខ្ពស់)</span>
           </div>
           <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">
             ▼
@@ -162,6 +73,98 @@ export function UpscaleControls({
         </summary>
 
         <div className="mt-3.5 pt-3.5 border-t border-slate-800 space-y-4">
+          {/* Enhancement Mode: Fast, Balanced, Quality */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+                Enhancement Mode / របៀបកែសម្រួល
+              </label>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                {
+                  id: "general" as UpscalePreset,
+                  titleKh: "ល្បឿនលឿន",
+                  titleEn: "Fast",
+                  desc: "Instant (<1s)",
+                  icon: Zap,
+                },
+                {
+                  id: "text" as UpscalePreset,
+                  titleKh: "តុល្យភាព",
+                  titleEn: "Balanced",
+                  desc: "Khmer text crisp",
+                  icon: FileText,
+                },
+                {
+                  id: "ultra" as UpscalePreset,
+                  titleKh: "គុណភាពខ្ពស់",
+                  titleEn: "Quality",
+                  desc: "Multi-pass restore",
+                  icon: Sparkles,
+                },
+              ].map((mode) => {
+                const Icon = mode.icon;
+                const isSelected = preset === mode.id || (mode.id === "general" && preset === "custom");
+                return (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    data-testid={`mode-btn-${mode.id}`}
+                    onClick={() => onChangePreset(mode.id)}
+                    disabled={isLoading || disabled}
+                    className={`min-h-[58px] flex flex-col items-center justify-center rounded-xl border p-2 text-center transition-all cursor-pointer ${
+                      isSelected
+                        ? "border-cyan-400 bg-cyan-950/60 text-cyan-300 font-bold ring-1 ring-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
+                        : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                    } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Icon className="h-3.5 w-3.5 text-cyan-400" />
+                      <span className="font-mono text-xs font-bold text-slate-100">{mode.titleKh}</span>
+                    </div>
+                    <span className="text-[10px] text-cyan-400/80 font-mono mt-0.5">{mode.titleEn}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Output Size Option: 1x, 2x, 4x */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+                Output Size / ទំហំរូបភាពលទ្ធផល
+              </label>
+              <span className="text-[10px] font-mono text-slate-400">
+                {scale === 1 ? "100% original px" : scale === 2 ? "200% HD dimensions" : "400% Ultra HD dimensions"}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { val: 1 as UpscaleScale, labelKh: "1x ដើម", labelEn: "1x Sharpen" },
+                { val: 2 as UpscaleScale, labelKh: "2x HD", labelEn: "2x HD (Balanced)" },
+                { val: 4 as UpscaleScale, labelKh: "4x HD", labelEn: "4x HD (Ultra Size)" },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  data-testid={`scale-btn-${opt.val}x`}
+                  onClick={() => onChangeScale(opt.val)}
+                  disabled={isLoading || disabled}
+                  className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all cursor-pointer ${
+                    scale === opt.val
+                      ? "border-amber-400 bg-amber-950/50 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)] font-bold ring-1 ring-amber-400/50"
+                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                  } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <span className="font-mono text-sm font-bold">{opt.val}X</span>
+                  <span className="font-mono text-[10px] opacity-75">{opt.labelEn}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Face Enhancement Mode Toggle */}
           <div>
             <button
@@ -314,8 +317,17 @@ export function UpscaleControls({
             disabled={disabled || isLoading}
             className="min-h-[50px] w-full flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 px-6 py-4 font-mono text-sm font-bold text-white shadow-[0_0_25px_rgba(245,158,11,0.35)] hover:shadow-[0_0_35px_rgba(245,158,11,0.5)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Sparkles className="h-5 w-5" />
-            <span>HD Resize &amp; Sharpen ({scale}x)</span>
+            {isLoading ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin text-white" />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-5 w-5" />
+                <span>HD Resize &amp; Sharpen ({scale}x)</span>
+              </>
+            )}
           </button>
         )}
       </div>
