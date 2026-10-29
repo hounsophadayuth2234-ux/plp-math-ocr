@@ -26,13 +26,18 @@ import { POST as postWebScraper } from "@/app/api/web-scraper/route";
 
 describe("Phase 3: Security Hardening", () => {
   const TEST_SECRET = "super-secret-key-at-least-32-chars-long!";
+  const originalEnableRouteAuth = process.env.ENABLE_ROUTE_AUTH_TESTS;
 
   beforeEach(() => {
     process.env.APP_GATE_SESSION_SECRET = TEST_SECRET;
   });
 
   afterEach(() => {
-    delete process.env.ENABLE_ROUTE_AUTH_TESTS;
+    if (originalEnableRouteAuth !== undefined) {
+      process.env.ENABLE_ROUTE_AUTH_TESTS = originalEnableRouteAuth;
+    } else {
+      delete process.env.ENABLE_ROUTE_AUTH_TESTS;
+    }
   });
 
   // =========================================================================
@@ -41,6 +46,14 @@ describe("Phase 3: Security Hardening", () => {
   describe("Defense-in-Depth API Route Authentication", () => {
     beforeEach(() => {
       process.env.ENABLE_ROUTE_AUTH_TESTS = "1";
+    });
+
+    afterEach(() => {
+      if (originalEnableRouteAuth !== undefined) {
+        process.env.ENABLE_ROUTE_AUTH_TESTS = originalEnableRouteAuth;
+      } else {
+        delete process.env.ENABLE_ROUTE_AUTH_TESTS;
+      }
     });
 
     it("rejects unauthenticated direct requests with HTTP 401 UNAUTHORIZED", async () => {

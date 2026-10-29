@@ -47,7 +47,7 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
       const fileInput = page.locator('[data-testid="image-upload-input"]');
       await expect(fileInput).toBeAttached({ timeout: 15000 });
 
-      const removeBtn = page.locator('button:has-text("ដកចេញ (REMOVE)")');
+      const removeBtn = page.locator('button[data-testid="fast-preview-start-btn"]');
       for (let attempt = 0; attempt < 4; attempt++) {
         await fileInput.setInputFiles(fixturePath);
         const isReady = await removeBtn.isVisible({ timeout: 2000 }).catch(() => false);
@@ -57,7 +57,7 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
       await expect(removeBtn).toBeVisible({ timeout: 15000 });
 
       // 3. Select Person + Text Only
-      const personTextBtn = page.locator('[data-testid="content-mode-person-text-only"]');
+      const personTextBtn = page.locator('[data-testid="content-mode-auto-portrait"]');
       await expect(personTextBtn).toBeVisible({ timeout: 15000 });
       await personTextBtn.click();
 

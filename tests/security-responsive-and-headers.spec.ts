@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = (process.env.BASE_URL || 'https://math.dytcore.com').replace(/\/+$/, '');
+const BASE_URL = (process.env.BASE_URL || 'http://localhost:3005').replace(/\/+$/, '');
 
 const VIEWPORTS = [
   { name: 'desktop', width: 1440, height: 900 },

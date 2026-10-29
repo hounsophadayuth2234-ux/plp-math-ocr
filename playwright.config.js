@@ -8,6 +8,10 @@ export default defineConfig({
   expect: {
     timeout: 30000,
   },
+  reporter: [
+    ['list'],
+    ['json', { outputFile: 'playwright-results.json' }],
+  ],
   use: {
     baseURL: (process.env.BASE_URL || 'https://math.dytcore.com').replace(/\/+$/, ''),
     channel: 'chrome',

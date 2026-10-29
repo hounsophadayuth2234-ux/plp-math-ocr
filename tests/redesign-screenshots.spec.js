@@ -33,20 +33,20 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     // Verify Untouched Sidebar Elements
     await expect(page.locator('text=PLP Math Content').first()).toBeVisible();
     await expect(page.locator('text=DYT ECOSYSTEM').first()).toBeVisible();
-    await expect(page.locator('text=Workspace').first()).toBeVisible();
-    await expect(page.locator('text=Active Modules').first()).toBeVisible();
+    await expect(page.locator('text=ផ្ទាំងគ្រប់គ្រង (Dashboard)').first()).toBeVisible();
+    await expect(page.locator('text=ម៉ូឌុលការងារ (Modules 01–05)').first()).toBeVisible();
     await expect(page.locator('aside a[href="/bg-remover"]').first()).toBeVisible();
-    await expect(page.locator('text=Modules 03–04').first()).toBeVisible();
+    await expect(page.locator('text=4x HD Upscale').first()).toBeVisible();
 
     // Verify Global Mechanical Cyber Background
     await expect(page.locator('[data-testid="cyber-bg-canvas"]')).toBeVisible();
 
     // Verify Dashboard Operational Command Center Elements
-    await expect(page.locator('text=DYT AI WORKSPACE').first()).toBeVisible();
-    await expect(page.locator('text=COMMAND CENTER').first()).toBeVisible();
-    await expect(page.locator('h2:has-text("PLP Math Content")').first()).toBeVisible();
-    await expect(page.locator('h2:has-text("Background Remover")').first()).toBeVisible();
-    await expect(page.locator('text=NEURAL TEAM NODES').first()).toBeVisible();
+    await expect(page.locator('text=DYT ECOSYSTEM // WORKSPACE').first()).toBeVisible();
+    await expect(page.locator('text=ប្រព័ន្ធបញ្ជាការ AI & ផលិតភាពការងារ (AI Productivity Suite)').first()).toBeVisible();
+    await expect(page.locator('h2:has-text("បំប្លែងរូបមន្តគណិតវិទ្យា (Math OCR)")').first()).toBeVisible();
+    await expect(page.locator('h2:has-text("កាត់ផ្ទៃខាងក្រោយ (Background Remover)")').first()).toBeVisible();
+    await expect(page.locator('text=ម៉ូឌុលការងារចម្បង (Primary Workspace Modules)').first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, '01-dashboard-desktop-1440px.png'),
@@ -123,13 +123,13 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     await expect(page.locator('[data-testid="cyber-bg-canvas"]')).toBeVisible();
 
     // Verify 3-Step Process Elements & Prominent Primary Modes
-    await expect(page.locator('[data-testid="content-mode-preserve-all"]')).toBeVisible();
-    await expect(page.locator('[data-testid="content-mode-person-text-only"]')).toBeVisible();
+    await expect(page.locator('[data-testid="content-mode-auto-general"]')).toBeVisible();
+    await expect(page.locator('[data-testid="content-mode-auto-portrait"]')).toBeVisible();
     await expect(page.locator('[data-testid="fast-preview-start-btn"]')).toBeVisible();
 
     // Verify Inspection Chamber Standby with Checkerboard Hint
-    await expect(page.locator('text=PRECISION INSPECTION CHAMBER // STANDBY').first()).toBeVisible();
-    await expect(page.locator('text=CANVAS: ALPHA MATRIX READY').first()).toBeVisible();
+    await expect(page.locator('text=AI Background Studio').first()).toBeVisible();
+    await expect(page.locator('text=1. Upload Image').first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, '03-bg-remover-desktop-1440px-standby.png'),
@@ -153,11 +153,11 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     const fileInput = page.locator('[data-testid="image-upload-input"]');
     await fileInput.setInputFiles(fixturePath);
 
-    const removeBtn = page.locator('button:has-text("ដកចេញ (REMOVE)")');
+    const removeBtn = page.locator('button[data-testid="fast-preview-start-btn"]');
     await expect(removeBtn).toBeVisible({ timeout: 15000 });
 
     // 4. Select Person + Text Only mode
-    const personTextBtn = page.locator('[data-testid="content-mode-person-text-only"]');
+    const personTextBtn = page.locator('[data-testid="content-mode-auto-portrait"]');
     await personTextBtn.click();
     await expect(page.locator('[data-testid="sub-option-person"]')).toBeVisible();
     await expect(page.locator('[data-testid="sub-option-text"]')).toBeVisible();

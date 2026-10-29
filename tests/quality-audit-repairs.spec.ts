@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { resolveE2ECredentials } from './test-credentials-resolver.js';
 
-const BASE_URL = (process.env.BASE_URL || 'https://math.dytcore.com').replace(/\/+$/, '');
+const creds = resolveE2ECredentials();
+const BASE_URL = (process.env.BASE_URL || 'http://localhost:3005').replace(/\/+$/, '');
+const TEST_USERNAME = process.env.PROFILE_TEST_USERNAME || creds?.superadmin?.username;
+const TEST_PASSWORD = process.env.PROFILE_TEST_PASSWORD || creds?.superadmin?.password;
 
 test.describe('Live Corrective Quality Audit Repairs & Production Pass', () => {
   // Test 1: Module 02 sample processing completes or recovers cleanly
@@ -66,10 +70,10 @@ test.describe('Live Corrective Quality Audit Repairs & Production Pass', () => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    if (process.env.PROFILE_TEST_USERNAME && process.env.PROFILE_TEST_PASSWORD) {
+    if (TEST_USERNAME && TEST_PASSWORD) {
       await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', process.env.PROFILE_TEST_USERNAME);
-      await page.fill('input[type="password"], input#password, input[name="password"]', process.env.PROFILE_TEST_PASSWORD);
+      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', TEST_USERNAME);
+      await page.fill('input[type="password"], input#password, input[name="password"]', TEST_PASSWORD);
       await page.click('button[type="submit"]');
       await page.waitForURL(/\/|\/profile/, { timeout: 15000 });
       await page.goto(`${BASE_URL}/image-upscaler`, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -112,9 +116,9 @@ test.describe('Live Corrective Quality Audit Repairs & Production Pass', () => {
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     // Log in if credentials are provided
-    if (process.env.PROFILE_TEST_USERNAME && process.env.PROFILE_TEST_PASSWORD) {
-      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', process.env.PROFILE_TEST_USERNAME);
-      await page.fill('input[type="password"], input#password, input[name="password"]', process.env.PROFILE_TEST_PASSWORD);
+    if (TEST_USERNAME && TEST_PASSWORD) {
+      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', TEST_USERNAME);
+      await page.fill('input[type="password"], input#password, input[name="password"]', TEST_PASSWORD);
       await page.click('button[type="submit"]');
       await page.waitForURL(/\/|\/profile/, { timeout: 15000 });
 
@@ -138,9 +142,9 @@ test.describe('Live Corrective Quality Audit Repairs & Production Pass', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    if (process.env.PROFILE_TEST_USERNAME && process.env.PROFILE_TEST_PASSWORD) {
-      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', process.env.PROFILE_TEST_USERNAME);
-      await page.fill('input[type="password"], input#password, input[name="password"]', process.env.PROFILE_TEST_PASSWORD);
+    if (TEST_USERNAME && TEST_PASSWORD) {
+      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', TEST_USERNAME);
+      await page.fill('input[type="password"], input#password, input[name="password"]', TEST_PASSWORD);
       await page.click('button[type="submit"]');
       await page.waitForURL(/\/|\/profile/, { timeout: 15000 });
 
