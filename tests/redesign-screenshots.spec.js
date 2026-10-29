@@ -44,8 +44,8 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     // Verify Dashboard Operational Command Center Elements
     await expect(page.locator('text=DYT ECOSYSTEM // WORKSPACE').first()).toBeVisible();
     await expect(page.locator('text=ប្រព័ន្ធបញ្ជាការ AI & ផលិតភាពការងារ (AI Productivity Suite)').first()).toBeVisible();
-    await expect(page.locator('h2:has-text("បំប្លែងរូបមន្តគណិតវិទ្យា (Math OCR)")').first()).toBeVisible();
-    await expect(page.locator('h2:has-text("កាត់ផ្ទៃខាងក្រោយ (Background Remover)")').first()).toBeVisible();
+    await expect(page.locator('h3:has-text("បំប្លែងរូបមន្តគណិតវិទ្យា (Math OCR)")').first()).toBeVisible();
+    await expect(page.locator('h3:has-text("កាត់ផ្ទៃខាងក្រោយ (Background Remover)")').first()).toBeVisible();
     await expect(page.locator('text=ម៉ូឌុលការងារចម្បង (Primary Workspace Modules)').first()).toBeVisible();
 
     await page.screenshot({
@@ -121,6 +121,11 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
 
     // Verify Global Mechanical Cyber Background
     await expect(page.locator('[data-testid="cyber-bg-canvas"]')).toBeVisible();
+
+    // Open Advanced Settings details to expose mode radio buttons
+    const advancedMenuSummary = page.locator('[data-testid="minimalist-advanced-menu"] summary').first();
+    await expect(advancedMenuSummary).toBeVisible();
+    await advancedMenuSummary.click();
 
     // Verify 3-Step Process Elements & Prominent Primary Modes
     await expect(page.locator('[data-testid="content-mode-auto-general"]')).toBeVisible();

@@ -1,0 +1,264 @@
+
+Running 34 tests using 1 worker
+
+  ok  1 tests\admin-dashboard.spec.ts:16:7 › Super Admin Dashboard — Route Security & Layout Verification › 1. Anonymous visit to /admin/dashboard redirects to login (721ms)
+  ok  2 tests\admin-dashboard.spec.ts:37:7 › Super Admin Dashboard — Route Security & Layout Verification › 2. Unauthenticated admin route returns no-store and login has security headers (924ms)
+  ok  3 tests\admin-dashboard.spec.ts:49:7 › Super Admin Dashboard — Route Security & Layout Verification › 3. Authenticated USER visit returns 404 without admin markup or data leakage (436ms)
+  ok  4 tests\admin-dashboard.spec.ts:76:7 › Super Admin Dashboard — Route Security & Layout Verification › 4. Authenticated SUPER_ADMIN visit renders dashboard, sidebar, and overview card (1.2s)
+  ok  5 tests\admin-dashboard.spec.ts:126:7 › Super Admin Dashboard — Route Security & Layout Verification › 5. Suspended SUPER_ADMIN is denied access and cannot view admin dashboard (2.5s)
+  ok  6 tests\auth-real-login-e2e.spec.ts:11:7 › Real Authentication E2E Flow — Dedicated Non-Production Account › Real UI login flow via credentials without cookie mocking (6.8s)
+  x   7 tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: A. Khmer small text (12-18px) with diacritics & subscripts (khmer-small-text.png) (18.7s)
+  x   8 tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: C. Person with long dark hair and flyaway strands (long-dark-hair.png) (17.8s)
+  x   9 tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: D. Person with white clothing on light background (white-clothing.png) (19.3s)
+  x  10 tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: E. Hair overlapping printed Khmer text (hair-over-khmer-text.png) (17.9s)
+  ok 11 tests\ProfileManager-deployment.spec.ts:11:7 › ProfileManager Deployment & Route Security Verification › 1. Unauthenticated root "/" redirects to "/login" (4.6s)
+  ok 12 tests\ProfileManager-deployment.spec.ts:27:7 › ProfileManager Deployment & Route Security Verification › 2. Unauthenticated "/profile" redirects to "/login?from=%2Fprofile" (2.9s)
+  ok 13 tests\ProfileManager-deployment.spec.ts:44:7 › ProfileManager Deployment & Route Security Verification › 3. Login page renders without server errors and displays PLP Math Content logo (desktop & mobile) (1.3s)
+  ok 14 tests\ProfileManager-deployment.spec.ts:88:7 › ProfileManager Deployment & Route Security Verification › 4. Authenticated ProfileManager verification (Avatar upload & Username editing) (5.4s)
+  ok 15 tests\quality-audit-repairs.spec.ts:11:7 › Live Corrective Quality Audit Repairs & Production Pass › 1. Module 02 sample processing completes or fails with clear recoverable state (3.7s)
+  ok 16 tests\quality-audit-repairs.spec.ts:47:7 › Live Corrective Quality Audit Repairs & Production Pass › 2. Module 02 export preserves transparent alpha channel (1.0s)
+  ok 17 tests\quality-audit-repairs.spec.ts:56:7 › Live Corrective Quality Audit Repairs & Production Pass › 3. Module 02 supplied PLP logo branding is intact (1.2s)
+  x  18 tests\quality-audit-repairs.spec.ts:67:7 › Live Corrective Quality Audit Repairs & Production Pass › 4. Module 03 1x/2x/4x controls and truthful engine reporting (12.3s)
+  x  19 tests\quality-audit-repairs.spec.ts:114:7 › Live Corrective Quality Audit Repairs & Production Pass › 5. Profile avatar upload control is visible without hover on desktop (1440x900) (19.7s)
+  x  20 tests\quality-audit-repairs.spec.ts:141:7 › Live Corrective Quality Audit Repairs & Production Pass › 6. Profile avatar upload is visible on mobile viewport (390x844) (16.3s)
+  ok 21 tests\quality-audit-repairs.spec.ts:165:7 › Live Corrective Quality Audit Repairs & Production Pass › 7. No horizontal overflow at 1440x900, 768x1024, and 390x844 (5.5s)
+  ok 22 tests\quality-audit-repairs.spec.ts:187:7 › Live Corrective Quality Audit Repairs & Production Pass › 8. Technical diagnostics are hidden behind Advanced Diagnostics details (579ms)
+  ok 23 tests\quality-audit-repairs.spec.ts:199:7 › Live Corrective Quality Audit Repairs & Production Pass › 9. No critical browser console errors on audited routes (3.9s)
+  ok 24 tests\redesign-screenshots.spec.js:25:7 › Mechanical Cyber Technology — 3-Page Visual & Layout Verification › Page 1: Dashboard (/) Command Center - 1440px and 375px (7.8s)
+  ok 25 tests\redesign-screenshots.spec.js:65:7 › Mechanical Cyber Technology — 3-Page Visual & Layout Verification › Page 2: PLP Math Content (/plp-math-content) - 1440px and 375px (5.7s)
+[BROWSER LOG] [bg-remover] handleFileSelect called for file=khmer-poster-eval.png
+[BROWSER LOG] [bg-remover] Starting segmentation for khmer-poster-eval.png, mode=preview
+[BROWSER WARNING] The powerPreference option is currently ignored when calling requestAdapter() on Windows. See https://crbug.com/369219127
+[BROWSER WARNING] No available adapters.
+[BROWSER WARNING] Application Web Worker execution unavailable; falling back to package client execution: Error: Worker execution failed: Unknown error
+    at l.onerror (http://localhost:3005/_next/static/chunks/3oo2a_p42knds.js:1:3315)
+[BROWSER WARNING] [bg-remover] Hard timeout triggered after 20s
+  x  26 tests\redesign-screenshots.spec.js:99:7 › Mechanical Cyber Technology — 3-Page Visual & Layout Verification › Page 3: Background Remover (/bg-remover) - 1440px, 375px, 3-Step Process & Mask Verification (38.3s)
+  ok 27 tests\security-responsive-and-headers.spec.ts:13:9 › Security Hardening & Responsive Viewport Verification › Responsive check on desktop (1440x900): login page without horizontal overflow (848ms)
+  ok 28 tests\security-responsive-and-headers.spec.ts:29:9 › Security Hardening & Responsive Viewport Verification › Responsive check on desktop (1440x900): public routes render cleanly (910ms)
+  ok 29 tests\security-responsive-and-headers.spec.ts:13:9 › Security Hardening & Responsive Viewport Verification › Responsive check on tablet (768x1024): login page without horizontal overflow (1.1s)
+  ok 30 tests\security-responsive-and-headers.spec.ts:29:9 › Security Hardening & Responsive Viewport Verification › Responsive check on tablet (768x1024): public routes render cleanly (845ms)
+  ok 31 tests\security-responsive-and-headers.spec.ts:13:9 › Security Hardening & Responsive Viewport Verification › Responsive check on mobile (390x844): login page without horizontal overflow (730ms)
+  ok 32 tests\security-responsive-and-headers.spec.ts:29:9 › Security Hardening & Responsive Viewport Verification › Responsive check on mobile (390x844): public routes render cleanly (1.2s)
+  ok 33 tests\security-responsive-and-headers.spec.ts:39:7 › Security Hardening & Responsive Viewport Verification › Security response headers validation (626ms)
+  ok 34 tests\security-responsive-and-headers.spec.ts:50:7 › Security Hardening & Responsive Viewport Verification › Secret scanning against page HTML and client resources (1.8s)
+
+
+  1) tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: A. Khmer small text (12-18px) with diacritics & subscripts (khmer-small-text.png) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('[data-testid="content-mode-auto-portrait"]')
+    Expected: visible
+    Received: hidden
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toBeVisible" locator('[data-testid="content-mode-auto-portrait"]') with timeout 15000ms
+      - waiting for locator('[data-testid="content-mode-auto-portrait"]')
+        28 × locator resolved to <button role="radio" type="button" aria-checked="true" data-testid="content-mode-auto-portrait" class="min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all cursor-pointer border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]">…</button>
+           - unexpected value "hidden"
+
+
+      59 |       // 3. Select Person + Text Only
+      60 |       const personTextBtn = page.locator('[data-testid="content-mode-auto-portrait"]');
+    > 61 |       await expect(personTextBtn).toBeVisible({ timeout: 15000 });
+         |                                   ^
+      62 |       await personTextBtn.click();
+      63 |
+      64 |       // 4. Verify Person is checked
+        at C:\Users\User\.gemini\antigravity\scratch\plp math content\tests\preview-bg-remover.spec.js:61:35
+
+    Error Context: test-results\preview-bg-remover-Backgro-d7ba9-ripts-khmer-small-text-png-\error-context.md
+
+  2) tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: C. Person with long dark hair and flyaway strands (long-dark-hair.png) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('[data-testid="content-mode-auto-portrait"]')
+    Expected: visible
+    Received: hidden
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toBeVisible" locator('[data-testid="content-mode-auto-portrait"]') with timeout 15000ms
+      - waiting for locator('[data-testid="content-mode-auto-portrait"]')
+        24 × locator resolved to <button role="radio" type="button" aria-checked="true" data-testid="content-mode-auto-portrait" class="min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all cursor-pointer border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]">…</button>
+           - unexpected value "hidden"
+
+
+      59 |       // 3. Select Person + Text Only
+      60 |       const personTextBtn = page.locator('[data-testid="content-mode-auto-portrait"]');
+    > 61 |       await expect(personTextBtn).toBeVisible({ timeout: 15000 });
+         |                                   ^
+      62 |       await personTextBtn.click();
+      63 |
+      64 |       // 4. Verify Person is checked
+        at C:\Users\User\.gemini\antigravity\scratch\plp math content\tests\preview-bg-remover.spec.js:61:35
+
+    Error Context: test-results\preview-bg-remover-Backgro-d3461-strands-long-dark-hair-png-\error-context.md
+
+  3) tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: D. Person with white clothing on light background (white-clothing.png) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('[data-testid="content-mode-auto-portrait"]')
+    Expected: visible
+    Received: hidden
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toBeVisible" locator('[data-testid="content-mode-auto-portrait"]') with timeout 15000ms
+      - waiting for locator('[data-testid="content-mode-auto-portrait"]')
+        29 × locator resolved to <button role="radio" type="button" aria-checked="true" data-testid="content-mode-auto-portrait" class="min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all cursor-pointer border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]">…</button>
+           - unexpected value "hidden"
+
+
+      59 |       // 3. Select Person + Text Only
+      60 |       const personTextBtn = page.locator('[data-testid="content-mode-auto-portrait"]');
+    > 61 |       await expect(personTextBtn).toBeVisible({ timeout: 15000 });
+         |                                   ^
+      62 |       await personTextBtn.click();
+      63 |
+      64 |       // 4. Verify Person is checked
+        at C:\Users\User\.gemini\antigravity\scratch\plp math content\tests\preview-bg-remover.spec.js:61:35
+
+    Error Context: test-results\preview-bg-remover-Backgro-0912d-kground-white-clothing-png-\error-context.md
+
+  4) tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: E. Hair overlapping printed Khmer text (hair-over-khmer-text.png) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('[data-testid="content-mode-auto-portrait"]')
+    Expected: visible
+    Received: hidden
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toBeVisible" locator('[data-testid="content-mode-auto-portrait"]') with timeout 15000ms
+      - waiting for locator('[data-testid="content-mode-auto-portrait"]')
+        26 × locator resolved to <button role="radio" type="button" aria-checked="true" data-testid="content-mode-auto-portrait" class="min-h-[44px] flex flex-col items-start justify-center p-2 rounded-none border text-left transition-all cursor-pointer border-cyan-400 bg-cyan-950/70 text-white font-bold ring-1 ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]">…</button>
+           - unexpected value "hidden"
+
+
+      59 |       // 3. Select Person + Text Only
+      60 |       const personTextBtn = page.locator('[data-testid="content-mode-auto-portrait"]');
+    > 61 |       await expect(personTextBtn).toBeVisible({ timeout: 15000 });
+         |                                   ^
+      62 |       await personTextBtn.click();
+      63 |
+      64 |       // 4. Verify Person is checked
+        at C:\Users\User\.gemini\antigravity\scratch\plp math content\tests\preview-bg-remover.spec.js:61:35
+
+    Error Context: test-results\preview-bg-remover-Backgro-d8262-t-hair-over-khmer-text-png-\error-context.md
+
+  5) tests\quality-audit-repairs.spec.ts:67:7 › Live Corrective Quality Audit Repairs & Production Pass › 4. Module 03 1x/2x/4x controls and truthful engine reporting 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('details[data-testid="upscale-advanced-settings-accordion"] summary, summary:has-text("Advanced Settings")').first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('details[data-testid="upscale-advanced-settings-accordion"] summary, summary:has-text("Advanced Settings")').first() with timeout 10000ms
+      - waiting for locator('details[data-testid="upscale-advanced-settings-accordion"] summary, summary:has-text("Advanced Settings")').first()
+
+
+      81 |       // Open Advanced Settings accordion to see scale options
+      82 |       const advSummary = page.locator('details[data-testid="upscale-advanced-settings-accordion"] summary, summary:has-text("Advanced Settings")').first();
+    > 83 |       await expect(advSummary).toBeVisible({ timeout: 10000 });
+         |                                ^
+      84 |       await advSummary.click();
+      85 |       await page.waitForTimeout(500);
+      86 |
+        at C:\Users\User\.gemini\antigravity\scratch\plp math content\tests\quality-audit-repairs.spec.ts:83:32
+
+    Error Context: test-results\quality-audit-repairs-Live-80f03-d-truthful-engine-reporting\error-context.md
+
+  6) tests\quality-audit-repairs.spec.ts:114:7 › Live Corrective Quality Audit Repairs & Production Pass › 5. Profile avatar upload control is visible without hover on desktop (1440x900) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('button[data-testid="change-avatar-btn"]')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('button[data-testid="change-avatar-btn"]') with timeout 15000ms
+      - waiting for locator('button[data-testid="change-avatar-btn"]')
+
+
+      127 |       // Verify "Change Profile Picture" button is visible WITHOUT hovering
+      128 |       const changeAvatarBtn = page.locator('button[data-testid="change-avatar-btn"]');
+    > 129 |       await expect(changeAvatarBtn).toBeVisible({ timeout: 15000 });
+          |                                     ^
+      130 |
+      131 |       // Verify touch target >= 44x44
+      132 |       const bbox = await changeAvatarBtn.boundingBox();
+        at C:\Users\User\.gemini\antigravity\scratch\plp math content\tests\quality-audit-repairs.spec.ts:129:37
+
+    Error Context: test-results\quality-audit-repairs-Live-4a116--hover-on-desktop-1440x900-\error-context.md
+
+  7) tests\quality-audit-repairs.spec.ts:141:7 › Live Corrective Quality Audit Repairs & Production Pass › 6. Profile avatar upload is visible on mobile viewport (390x844) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('button[data-testid="change-avatar-btn"]')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('button[data-testid="change-avatar-btn"]') with timeout 15000ms
+      - waiting for locator('button[data-testid="change-avatar-btn"]')
+
+
+      152 |
+      153 |       const changeAvatarBtn = page.locator('button[data-testid="change-avatar-btn"]');
+    > 154 |       await expect(changeAvatarBtn).toBeVisible({ timeout: 15000 });
+          |                                     ^
+      155 |
+      156 |       const bbox = await changeAvatarBtn.boundingBox();
+      157 |       expect(bbox).not.toBeNull();
+        at C:\Users\User\.gemini\antigravity\scratch\plp math content\tests\quality-audit-repairs.spec.ts:154:37
+
+    Error Context: test-results\quality-audit-repairs-Live-b61b9-on-mobile-viewport-390x844-\error-context.md
+
+  8) tests\redesign-screenshots.spec.js:99:7 › Mechanical Cyber Technology — 3-Page Visual & Layout Verification › Page 3: Background Remover (/bg-remover) - 1440px, 375px, 3-Step Process & Mask Verification 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('[data-testid="sub-option-person"]')
+    Expected: visible
+    Timeout: 30000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('[data-testid="sub-option-person"]') with timeout 30000ms
+      - waiting for locator('[data-testid="sub-option-person"]')
+
+
+      165 |     const personTextBtn = page.locator('[data-testid="content-mode-auto-portrait"]');
+      166 |     await personTextBtn.click();
+    > 167 |     await expect(page.locator('[data-testid="sub-option-person"]')).toBeVisible();
+          |                                                                     ^
+      168 |     await expect(page.locator('[data-testid="sub-option-text"]')).toBeVisible();
+      169 |     await expect(page.locator('[data-testid="sub-option-keep-graphics"]')).toBeVisible();
+      170 |
+        at C:\Users\User\.gemini\antigravity\scratch\plp math content\tests\redesign-screenshots.spec.js:167:69
+
+    Error Context: test-results\redesign-screenshots-Mecha-fff92-p-Process-Mask-Verification\error-context.md
+
+  8 failed
+    tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: A. Khmer small text (12-18px) with diacritics & subscripts (khmer-small-text.png) 
+    tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: C. Person with long dark hair and flyaway strands (long-dark-hair.png) 
+    tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: D. Person with white clothing on light background (white-clothing.png) 
+    tests\preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: E. Hair overlapping printed Khmer text (hair-over-khmer-text.png) 
+    tests\quality-audit-repairs.spec.ts:67:7 › Live Corrective Quality Audit Repairs & Production Pass › 4. Module 03 1x/2x/4x controls and truthful engine reporting 
+    tests\quality-audit-repairs.spec.ts:114:7 › Live Corrective Quality Audit Repairs & Production Pass › 5. Profile avatar upload control is visible without hover on desktop (1440x900) 
+    tests\quality-audit-repairs.spec.ts:141:7 › Live Corrective Quality Audit Repairs & Production Pass › 6. Profile avatar upload is visible on mobile viewport (390x844) 
+    tests\redesign-screenshots.spec.js:99:7 › Mechanical Cyber Technology — 3-Page Visual & Layout Verification › Page 3: Background Remover (/bg-remover) - 1440px, 375px, 3-Step Process & Mask Verification 
+  26 passed (4.1m)

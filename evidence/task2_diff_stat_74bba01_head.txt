@@ -1,0 +1,7 @@
+ playwright.config.js                          |  4 ++++
+ test/security-phase3.vitest.test.ts           | 15 +++++++++++++-
+ tests/preview-bg-remover.spec.js              |  4 ++--
+ tests/quality-audit-repairs.spec.ts           | 24 +++++++++++++----------
+ tests/redesign-screenshots.spec.js            | 28 +++++++++++++--------------
+ tests/security-responsive-and-headers.spec.ts |  2 +-
+ 6 files changed, 49 insertions(+), 28 deletions(-)

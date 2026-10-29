@@ -1,0 +1,2 @@
+Preparing worktree (detached HEAD 1d97dbf)
+HEAD is now at 1d97dbf feat(security): complete 4-vector security hardening, sliding-window rate limiter, and ML asset protection

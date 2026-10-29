@@ -1,0 +1,98 @@
+
+> ai-toolkit-hub@0.1.0 build
+> next build
+
+▲ Next.js 16.4.1 (Turbopack)
+- Environments: .env.local
+⚠ Warning: Next.js ignored package-lock.json in C:\Users\User because it is outside the current Git repository (C:\Users\User\.gemini\antigravity\scratch\plp math content).
+ To use this directory, set `turbopack.root` in your Next.js config.
+
+✓ Running next.config.ts took 108ms
+- Cache Components enabled
+- Partial Prefetching enabled
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+
+  To migrate automatically, run:
+  npx @next/codemod@canary middleware-to-proxy .
+
+  Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 8.4s
+  Running TypeScript ...
+  Finished TypeScript in 44s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/55) ...
+  Generating static pages using 7 workers (13/55) 
+  Generating static pages using 7 workers (27/55) 
+  Generating static pages using 7 workers (41/55) 
+✓ Generating static pages using 7 workers (55/55) in 3.0s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ◐ /admin
+├ ◐ /admin/dashboard
+├ ◐ /admin/recovery
+├ ƒ /api/admin/activity-tracking
+├ ƒ /api/admin/audit-log
+├ ƒ /api/admin/mfa
+├ ƒ /api/admin/users
+├ ƒ /api/admin/users/[id]
+├ ƒ /api/admin/users/[id]/disable
+├ ƒ /api/admin/users/[id]/enable
+├ ƒ /api/admin/users/[id]/reset-password
+├ ƒ /api/assets/models/[filename]
+├ ƒ /api/auth/admin-force-reset
+├ ƒ /api/auth/admin-recovery
+├ ƒ /api/auth/change-password
+├ ƒ /api/auth/csrf
+├ ƒ /api/auth/gate
+├ ƒ /api/auth/google-drive/callback
+├ ƒ /api/auth/google-drive/connect
+├ ƒ /api/auth/google-drive/disconnect
+├ ƒ /api/auth/google-drive/status
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/profile
+├ ƒ /api/auth/session
+├ ○ /api/auth/telegram/config
+├ ƒ /api/auth/telegram/link/complete
+├ ƒ /api/auth/telegram/link/start
+├ ƒ /api/auth/telegram/login
+├ ƒ /api/auth/telegram/unlink
+├ ƒ /api/bg-remove
+├ ƒ /api/drive-history
+├ ƒ /api/generate-image
+├ ƒ /api/history
+├ ƒ /api/image-upscale
+├ ƒ /api/lesson-studio
+├ ƒ /api/math-ocr
+├ ƒ /api/math-solver
+├ ƒ /api/remove-bg
+├ ƒ /api/settings
+├ ƒ /api/upload-to-drive
+├ ƒ /api/upscale
+├ ƒ /api/user/activity
+├ ƒ /api/web-scraper
+├ ○ /bg-remover
+├ ○ /history
+├ ○ /image-generator
+├ ○ /image-upscaler
+├ ○ /lesson-studio
+├ ○ /login
+├ ○ /math-ocr
+├ ○ /math-solver
+├ ○ /math-upload
+├ ○ /plp-math-content
+├ ○ /profile
+└ ○ /web-cloner
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)             prerendered as static content
+◐  (Partial Prerender)  prerendered as static HTML with dynamic server-streamed content
+ƒ  (Dynamic)            server-rendered on demand
+

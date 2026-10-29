@@ -1,0 +1,75 @@
+commit 84b3eb313b3c9b820f5db9533035e37f0dfbd5d5
+Author: Developer <developer@example.com>
+Date:   Thu Oct 29 20:58:51 2026 +0700
+
+    fix(test): closeout round 4 test inventory reconciliation and strict 1:1 selector repairs
+
+ playwright.config.js                          |  4 ++++
+ test/security-phase3.vitest.test.ts           | 15 +++++++++++++-
+ tests/preview-bg-remover.spec.js              |  4 ++--
+ tests/quality-audit-repairs.spec.ts           | 24 +++++++++++++----------
+ tests/redesign-screenshots.spec.js            | 28 +++++++++++++--------------
+ tests/security-responsive-and-headers.spec.ts |  2 +-
+ 6 files changed, 49 insertions(+), 28 deletions(-)
+
+commit 74bba01a79957f549f19214281b1133cd55f3e79
+Author: Developer <developer@example.com>
+Date:   Thu Oct 29 03:35:05 2026 +0700
+
+    feat(security): closeout round 3 - test bypass removal, admin hardening, dynamic credentials
+
+ .env.example                                     |  10 +
+ .gitignore                                       |   2 +
+ playwright.config.js                             |   8 +
+ src/app/admin/layout.tsx                         |   1 -
+ src/app/api/assets/models/[filename]/route.ts    |  15 +-
+ src/lib/auth-csrf.ts                             |   5 -
+ src/lib/auth-gate.ts                             |   5 +-
+ src/lib/bootstrap-admin.ts                       | 143 ++++++++-------
+ test/bootstrap-admin-hardening.vitest.test.ts    | 160 ++++++++++++++++
+ test/security-phase3.vitest.test.ts              |  10 +-
+ test/seed-test-users-safety.vitest.test.ts       |  83 +++++++++
+ test/telegram-auth-production.vitest.test.ts     |  26 ++-
+ tests/ProfileManager-deployment.spec.ts          |  61 +++----
+ tests/admin-dashboard.spec.ts                    |  69 +++++--
+ tests/auth-real-login-e2e.spec.ts                |  23 +--
+ tests/preview-bg-remover.spec.js                 | 222 ++++++++++-------------
+ tests/redesign-screenshots.spec.js               | 133 +++++++-------
+ tests/security-vector-4-asset-protection.test.ts |  17 +-
+ tests/seed-test-users.js                         |  86 +++++++++
+ tests/test-auth-helper.js                        |  30 ++-
+ tests/test-credentials-resolver.js               |  55 ++++++
+ 21 files changed, 782 insertions(+), 382 deletions(-)
+
+commit 4f7e6a07c81232210b11e0b2c10d3a0b849a651b
+Author: Developer <developer@example.com>
+Date:   Thu Oct 29 01:46:12 2026 +0700
+
+    test: restore and repair legacy Playwright suites with resilient selectors and session fixtures
+
+ tests/ProfileManager-deployment.spec.ts | 148 ++++++++++++++++++
+ tests/preview-bg-remover.spec.js        | 260 ++++++++++++++++++++++++++++++++
+ tests/redesign-screenshots.spec.js      | 233 ++++++++++++++++++++++++++++
+ 3 files changed, 641 insertions(+)
+
+commit 8471d9429122a9c3fc61598dcc87a082fe4caeb1
+Author: Developer <developer@example.com>
+Date:   Thu Oct 29 01:15:23 2026 +0700
+
+    fix(ci): resolve lint warnings in admin page, remove obsolete legacy tests, and update e2e auth test locators
+
+ src/app/admin/page.tsx                  |  83 ++++++----
+ tests/ProfileManager-deployment.spec.ts | 129 ----------------
+ tests/auth-real-login-e2e.spec.ts       |  16 +-
+ tests/preview-bg-remover.spec.js        | 260 --------------------------------
+ tests/redesign-screenshots.spec.js      | 233 ----------------------------
+ 5 files changed, 59 insertions(+), 662 deletions(-)
+
+commit ecad22a0e0ccd6b7d11675e212e31911006f883c
+Author: Developer <developer@example.com>
+Date:   Thu Oct 29 00:33:09 2026 +0700
+
+    ci: add GitHub Actions workflow for lint, typecheck, vitest, and playwright
+
+ .github/workflows/ci.yml | 47 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 47 insertions(+)

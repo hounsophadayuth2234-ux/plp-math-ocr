@@ -1,0 +1,9 @@
+src/app/api/lesson-studio/route.ts:109:    const userId = sessionUser?.id || (process.env.NODE_ENV === "test" ? "usr_test_default" : "usr_anonymous");
+src/app/api/math-ocr/route.ts:339:    const userId = sessionUser?.id || (process.env.NODE_ENV === "test" ? "usr_test_default" : "usr_anonymous");
+src/app/api/math-solver/route.ts:351:    const userId = sessionUser?.id || (process.env.NODE_ENV === "test" ? "usr_test_default" : "usr_anonymous");
+src/app/api/upload-to-drive/route.ts:367:    else if (process.env.NODE_ENV === "test" && process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+src/lib/auth-gate.ts:34:    process.env.NODE_ENV === "test" &&
+src/lib/auth-gate.ts:35:    process.env.ENABLE_ROUTE_AUTH_TESTS !== "1"
+src/lib/gemini-cache-artifacts.ts:301:      } else if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.NODE_ENV === "test") {
+src/lib/rate-limiter.ts:273:    process.env.NODE_ENV === "test" &&
+src/lib/rate-limiter.ts:274:    process.env.ENABLE_RATE_LIMIT_TESTS !== "1"

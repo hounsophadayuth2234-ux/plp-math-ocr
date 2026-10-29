@@ -1,0 +1,665 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mC:/Users/User/.gemini/antigravity/scratch/plp math content[39m
+
+ [32m✓[39m test/visual-audit-module02.vitest.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 2609[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Hard Visual Verification Audit (8 Mandatory Categories)[2m > [22mVisual Test 1: Person with loose hair [33m371[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Hard Visual Verification Audit (8 Mandatory Categories)[2m > [22mVisual Test 4: Plant with thin branches [33m429[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Hard Visual Verification Audit (8 Mandatory Categories)[2m > [22mVisual Test 5: Text on a background [33m323[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Hard Visual Verification Audit (8 Mandatory Categories)[2m > [22mVisual Test 8: Complex photographic background [33m501[2mms[22m[39m
+ [32m✓[39m test/object-segmentation.vitest.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 1958[2mms[22m[39m
+   [33m[2m✓[22m[39m Object Segmentation & Donut-Box Acceptance Suite[2m > [22m12. Invalid coordinates and oversized masks are rejected by POST /api/remove-bg [33m982[2mms[22m[39m
+ [32m✓[39m test/preview-acceptance-suite.vitest.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 3886[2mms[22m[39m
+   [33m[2m✓[22m[39m PREVIEW DEPLOYMENT ACCEPTANCE SUITE — 6 REQUIRED FIXTURES[2m > [22mFixture 1: Khmer text at 12–18px with superscripts, subscripts, diacritics & punctuation[2m > [22mpreserves thin strokes, diacritics, subscripts, and punctuation without rectangular halo [33m429[2mms[22m[39m
+   [33m[2m✓[22m[39m PREVIEW DEPLOYMENT ACCEPTANCE SUITE — 6 REQUIRED FIXTURES[2m > [22mFixture 3: A person with long dark hair and flyaway strands[2m > [22mpreserves person hair interior and fine flyaway strands within narrow boundary band [33m1082[2mms[22m[39m
+   [33m[2m✓[22m[39m PREVIEW DEPLOYMENT ACCEPTANCE SUITE — 6 REQUIRED FIXTURES[2m > [22mFixture 6: Poster with small text, blue graphics, borders & person[2m > [22mpreserves complete person and text while stripping graphics and poster borders [33m1106[2mms[22m[39m
+   [33m[2m✓[22m[39m PREVIEW DEPLOYMENT ACCEPTANCE SUITE — 6 REQUIRED FIXTURES[2m > [22mPerformance, Caching & Resource Constraints[2m > [22mmeasures cold-start vs cached-run speedup [33m475[2mms[22m[39m
+   [33m[2m✓[22m[39m PREVIEW DEPLOYMENT ACCEPTANCE SUITE — 6 REQUIRED FIXTURES[2m > [22mPerformance, Caching & Resource Constraints[2m > [22mskips expensive edge matting in Fast mode and preserves original mask [33m326[2mms[22m[39m
+ [32m✓[39m test/poster-document-segmentation.vitest.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 4452[2mms[22m[39m
+   [33m[2m✓[22m[39m AGY Acceptance Suite — Poster Text Preservation & Processing Speed[2m > [22m1. Whole poster mode preserves every Khmer text line, logo, graphic, and the person [33m519[2mms[22m[39m
+   [33m[2m✓[22m[39m AGY Acceptance Suite — Poster Text Preservation & Processing Speed[2m > [22m3. Person-only mode does not keep random poster text [33m905[2mms[22m[39m
+   [33m[2m✓[22m[39m AGY Acceptance Suite — Poster Text Preservation & Processing Speed[2m > [22m4. Person plus selected text mode keeps only text explicitly painted by the user [33m529[2mms[22m[39m
+   [33m[2m✓[22m[39m AGY Acceptance Suite — Poster Text Preservation & Processing Speed[2m > [22m5. Fine edges cannot erase positive selections [33m345[2mms[22m[39m
+   [33m[2m✓[22m[39m AGY Acceptance Suite — Poster Text Preservation & Processing Speed[2m > [22m11. Four-corner page polygon: only outside pixels become transparent [33m851[2mms[22m[39m
+ [32m✓[39m test/manual-assisted-bg-remover.vitest.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 336[2mms[22m[39m
+ [32m✓[39m test/real-image-audit-module02.vitest.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 3884[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Real-Image Hard Evaluation & Scoring Audit[2m > [22mReal Image 1: portrait-blue-1024.png (Portrait, Hair strands, Blue spill) [33m1194[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Real-Image Hard Evaluation & Scoring Audit[2m > [22mReal Image 2: long-dark-hair.png (Hair refinement & edge continuity) [33m444[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Real-Image Hard Evaluation & Scoring Audit[2m > [22mReal Image 3: hair-over-khmer-text.png (Hair touching & overlapping text) [33m487[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Real-Image Hard Evaluation & Scoring Audit[2m > [22mReal Image 4: khmer-poster-eval.png (Poster layout, title banner, graphics) [33m457[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Real-Image Hard Evaluation & Scoring Audit[2m > [22mReal Image 5: khmer-benchmark-640x480.png (Standard benchmark image with diacritics) [33m769[2mms[22m[39m
+ [32m✓[39m test/telegram-auth-production.vitest.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 1643[2mms[22m[39m
+   [33m[2m✓[22m[39m Telegram Login & Production Security Hardening Suite[2m > [22mA. Existing Login Compatibility[2m > [22mexisting valid username/password continues working without modification [33m873[2mms[22m[39m
+ [32m✓[39m test/preserve-all-foreground-acceptance.vitest.test.ts [2m([22m[2m12 tests[22m[2m)[22m[90m 197[2mms[22m[39m
+ [32m✓[39m test/remove-bg.vitest.test.ts [2m([22m[2m19 tests[22m[2m)[22m[90m 259[2mms[22m[39m
+[90mstdout[2m | test/production-optimization-16tests.vitest.test.ts[2m > [22m[2m16 Required Production Verification Tests Before Deployment[2m > [22m[2mTest 16: Original-resolution export test (preserves 100% pristine input dimensions)
+[22m[39mSaved 16 required test results to: C:\Users\User\.gemini\antigravity\scratch\plp math content\benchmark-16-tests-results.json
+
+ [32m✓[39m test/production-optimization-16tests.vitest.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 5413[2mms[22m[39m
+   [33m[2m✓[22m[39m 16 Required Production Verification Tests Before Deployment[2m > [22mTest 8: Balanced Mode (with moderate dehalo and alpha choke) [33m640[2mms[22m[39m
+   [33m[2m✓[22m[39m 16 Required Production Verification Tests Before Deployment[2m > [22mTest 9: Fine Details Mode (high-precision subpixel feathering & full defringe) [33m1378[2mms[22m[39m
+   [33m[2m✓[22m[39m 16 Required Production Verification Tests Before Deployment[2m > [22mTest 10: Person + Text with Khmer and English text (100% stroke preservation) [33m525[2mms[22m[39m
+   [33m[2m✓[22m[39m 16 Required Production Verification Tests Before Deployment[2m > [22mTest 11: Person-only mode (isolates silhouette and skips text detection) [33m703[2mms[22m[39m
+   [33m[2m✓[22m[39m 16 Required Production Verification Tests Before Deployment[2m > [22mTest 12: Product-only mode (preserves foreground subject and skips text detection) [33m465[2mms[22m[39m
+   [33m[2m✓[22m[39m 16 Required Production Verification Tests Before Deployment[2m > [22mTest 16: Original-resolution export test (preserves 100% pristine input dimensions) [33m1429[2mms[22m[39m
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 1: Grade 1 object counting without text correctly infers count from visual structure
+[22m[39m{"requestId":"msreq_mvtnhea1_4n4k16","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"solve","gradeLevel":"grade_1","inferredGrade":"grade_1","totalProblems":1,"durationMs":14}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 1: Grade 1 object counting without text correctly infers count from visual structure
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824489_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824489_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824489_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 2: Grade 1 visual addition combines two groups of objects with visual explanation
+[22m[39m{"requestId":"msreq_mvtnheff_1zz6j4","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"solve","gradeLevel":"grade_1","inferredGrade":"grade_1","totalProblems":1,"durationMs":21}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 2: Grade 1 visual addition combines two groups of objects with visual explanation
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824678_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824678_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824678_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 3: Grade 2 subtraction with crossed-out objects interprets remaining items
+[22m[39m{"requestId":"msreq_mvtnhegx_g5pl06","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"solve","gradeLevel":"grade_2","inferredGrade":"grade_2","totalProblems":1,"durationMs":12}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 3: Grade 2 subtraction with crossed-out objects interprets remaining items
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824739_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824739_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824739_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 4: Grade 2 rows and columns multiplication interprets arrays as rows × columns
+[22m[39m{"requestId":"msreq_mvtnheiy_0b2l20","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"solve","gradeLevel":"grade_2","inferredGrade":"grade_2","totalProblems":1,"durationMs":10}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 4: Grade 2 rows and columns multiplication interprets arrays as rows × columns
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824789_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824789_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824789_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 10: Grade 5 word problem preserves units and provides educational breakdown
+[22m[39m{"requestId":"msreq_mvtnhel7_hihfem","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"verify","gradeLevel":"grade_5","inferredGrade":"grade_5","totalProblems":1,"durationMs":13}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 10: Grade 5 word problem preserves units and provides educational breakdown
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824879_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824879_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824879_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 14: Ambiguous visual grouping refuses to guess and shows possible interpretations
+[22m[39m{"requestId":"msreq_mvtnhemr_tkvuwo","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"solve","gradeLevel":"auto","inferredGrade":"grade_3","totalProblems":1,"durationMs":13}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 14: Ambiguous visual grouping refuses to guess and shows possible interpretations
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824929_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824929_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824929_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 15: Ambiguous handwritten number sets low confidence and marks ambiguous parts
+[22m[39m{"requestId":"msreq_mvtnheod_hh1kge","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"solve","gradeLevel":"auto","inferredGrade":"grade_3","totalProblems":1,"durationMs":8}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 15: Ambiguous handwritten number sets low confidence and marks ambiguous parts
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824986_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824986_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284824986_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 16: Incorrect student answer pinpoints exact error step and provides correction
+[22m[39m{"requestId":"msreq_mvtnhep9_mk399m","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"verify","gradeLevel":"auto","inferredGrade":"grade_3","totalProblems":1,"durationMs":4}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 16: Incorrect student answer pinpoints exact error step and provides correction
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284825015_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284825015_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284825015_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 17: Correct student answer verifies accurately without false negative
+[22m[39m{"requestId":"msreq_mvtnheq0_x08txn","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"verify","gradeLevel":"auto","inferredGrade":"grade_3","totalProblems":1,"durationMs":15}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 17: Correct student answer verifies accurately without false negative
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284825057_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284825057_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284825057_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 21: Cancel via AbortController and timeout return structured 503/504 error
+[22m[39m{"requestId":"msreq_mvtnhesl_gl2a6z","event":"math_solver_attempt_failed","model":"gemini-flash-lite-latest","attempt":0,"error":"upstream timeout after 15000ms"}
+
+ [32m✓[39m test/persistent-cache-reuse.vitest.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 354[2mms[22m[39m
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 21: Cancel via AbortController and timeout return structured 503/504 error
+[22m[39m{"requestId":"msreq_mvtnhesl_gl2a6z","event":"math_solver_attempt_failed","model":"gemini-flash-lite-latest","attempt":1,"error":"upstream timeout after 15000ms"}
+
+ [32m✓[39m test/person-text-only-segmentation.vitest.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 19375[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22mextracts person independently without erasing text strokes [33m1020[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22mextracts text strokes with diacritics and subscripts without keeping white poster background [33m1111[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22mcombines person and text into final keep mask on exact 758x1077 poster [33m2671[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22mpreserves original RGB bytes byte-identical without premultiplication [33m4413[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22msupports sub-options: disable person, disable text, and enable graphics [33m2919[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22mallows user Keep strokes to restore removed areas and Erase strokes to remove kept areas [33m1154[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22mdetectContainerAndContents handles person_text_only mode integration seamlessly [33m686[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22mguarantees edge matting does not erase text strokes or drop foreground by > 10% [33m1220[2mms[22m[39m
+   [33m[2m✓[22m[39m Person + Text Only Segmentation (PERSON + TEXT ONLY / រក្សាមនុស្ស + អក្សរតែប៉ុណ្ណោះ)[2m > [22mensures background color changes do not alter or re-run the mask [33m4013[2mms[22m[39m
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 21: Cancel via AbortController and timeout return structured 503/504 error
+[22m[39m{"requestId":"msreq_mvtnhesl_gl2a6z","event":"math_solver_attempt_failed","model":"gemini-flash-latest","attempt":0,"error":"upstream timeout after 15000ms"}
+
+ [32m✓[39m test/math-solution-export.vitest.test.ts [2m([22m[2m25 tests[22m[2m)[22m[90m 172[2mms[22m[39m
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 21: Cancel via AbortController and timeout return structured 503/504 error
+[22m[39m{"requestId":"msreq_mvtnhesl_gl2a6z","event":"math_solver_attempt_failed","model":"gemini-flash-latest","attempt":1,"error":"upstream timeout after 15000ms"}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 21: Cancel via AbortController and timeout return structured 503/504 error
+[22m[39m{"requestId":"msreq_mvtnhesl_gl2a6z","event":"math_solver_attempt_failed","model":"gemini-3.8-flash","attempt":0,"error":"upstream timeout after 15000ms"}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 21: Cancel via AbortController and timeout return structured 503/504 error
+[22m[39m{"requestId":"msreq_mvtnhesl_gl2a6z","event":"math_solver_attempt_failed","model":"gemini-3.8-flash","attempt":1,"error":"upstream timeout after 15000ms"}
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 22: Duplicate submission protection generates unique request IDs and executes safely in parallel
+[22m[39m{"requestId":"msreq_mvtnhfrd_9uz2r8","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"solve","gradeLevel":"auto","inferredGrade":"grade_3","totalProblems":1,"durationMs":1}
+{"requestId":"msreq_mvtnhfrd_33z4rc","event":"math_solver_cache_hit","cacheKey":"dyt:cache:module04_math_solver:7bd073797b0a0fad433f0c1443b7bd8fc7a73870dee1f55f45ad348903b26c41","durationMs":12}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 22: Duplicate submission protection generates unique request IDs and executes safely in parallel
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826380_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826380_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826380_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 28: End-to-End API test with ៧៩៥ − ៥៤ overrides collapsed string and returns 741 with vertical lines in verify mode
+[22m[39m{"requestId":"msreq_mvtnhfz2_8yecx4","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"verify","gradeLevel":"grade_3","inferredGrade":"grade_3","totalProblems":1,"durationMs":7}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 28: End-to-End API test with ៧៩៥ − ៥៤ overrides collapsed string and returns 741 with vertical lines in verify mode
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826674_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826674_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826674_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 30: Strict Three-Mode Contract[2m > [22m[2mMode 1 (solve): Contains answer but NO detailed solution or vertical working
+[22m[39m{"requestId":"msreq_mvtnhg0f_kwj3as","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"solve","gradeLevel":"auto","inferredGrade":"grade_3","totalProblems":1,"durationMs":2}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 30: Strict Three-Mode Contract[2m > [22m[2mMode 1 (solve): Contains answer but NO detailed solution or vertical working
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826708_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826708_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826708_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 30: Strict Three-Mode Contract[2m > [22m[2mMode 2 (generate): Contains detailed solution and vertical working but NO separate final answer
+[22m[39m{"requestId":"msreq_mvtnhg27_apt0f5","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"generate","gradeLevel":"auto","inferredGrade":"grade_3","totalProblems":1,"durationMs":2}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 30: Strict Three-Mode Contract[2m > [22m[2mMode 2 (generate): Contains detailed solution and vertical working but NO separate final answer
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826776_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826776_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826776_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+ [32m✓[39m test/khmer-text-quality-and-simd.vitest.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 815[2mms[22m[39m
+   [33m[2m✓[22m[39m Khmer Typographical Analysis, Auto-Quality Fallback & WASM SIMD Suite[2m > [22mTest 7: preserves text near hair boundary without choking or eroding text strokes [33m396[2mms[22m[39m
+[90mstdout[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 30: Strict Three-Mode Contract[2m > [22m[2mMode 3 (verify): Contains both solution steps, vertical working, AND final answer
+[22m[39m{"requestId":"msreq_mvtnhg4a_b6kh5k","event":"math_solver_success","selectedModel":"gemini-flash-lite-latest","action":"full","solverMode":"verify","gradeLevel":"auto","inferredGrade":"grade_3","totalProblems":1,"durationMs":2}
+
+[90mstderr[2m | test/math-solver.vitest.test.ts[2m > [22m[2mModule 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22m[2mTest 30: Strict Three-Mode Contract[2m > [22m[2mMode 3 (verify): Contains both solution steps, vertical working, AND final answer
+[22m[39m[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826845_problem_image.png: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826845_solution.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module04_math_solver_user_1793284826845_solution_card.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+ [32m✓[39m test/math-solver.vitest.test.ts [2m([22m[2m55 tests[22m[2m)[22m[33m 17986[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22mTest 1: Grade 1 object counting without text correctly infers count from visual structure [33m15023[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 04 — Khmer Math Solver (Grades 1–6) 23 Quality Tests[2m > [22mTest 21: Cancel via AbortController and timeout return structured 503/504 error [33m1271[2mms[22m[39m
+ [32m✓[39m test/security-phase3.vitest.test.ts [2m([22m[2m26 tests[22m[2m)[22m[90m 231[2mms[22m[39m
+ [32m✓[39m test/khmer-ocr-and-runtime.vitest.test.ts [2m([22m[2m33 tests[22m[2m)[22m[33m 1139[2mms[22m[39m
+   [33m[2m✓[22m[39m Khmer OCR Quality, Mathematical Syntax & Browser Runtime Suite[2m > [22m8. Image Quality Assessment & Preprocessing[2m > [22menforces memory budget for images exceeding 16 megapixels [33m1017[2mms[22m[39m
+ [32m✓[39m test/production-hardening.vitest.test.ts [2m([22m[2m21 tests[22m[2m)[22m[33m 475[2mms[22m[39m
+[90mstdout[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m2. Successful raw-text OCR with mocked Gemini response
+[22m[39m{"requestId":"req_mvtnhk7m_4rgjr4","event":"math_ocr_success","selectedModel":"gemini-flash-lite-latest","totalAttempts":1,"durationMs":12}
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m2. Successful raw-text OCR with mocked Gemini response
+[22m[39m[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284832209_latex.tex: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284832209_preview.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284832209_mathml.xml: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284832209_ocr_text.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m3. Model 503 fallback to the next model in priority order
+[22m[39m{"requestId":"req_mvtnhka8_plijyd","event":"model_attempt_failed","model":"model-a","attempt":0,"isTransient":true,"error":"[503 Service Unavailable] High demand on model-a","elapsedMs":2}
+
+[90mstdout[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m3. Model 503 fallback to the next model in priority order
+[22m[39m{"requestId":"req_mvtnhka8_plijyd","event":"math_ocr_success","selectedModel":"model-b","totalAttempts":3,"durationMs":657}
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m3. Model 503 fallback to the next model in priority order
+[22m[39m{"requestId":"req_mvtnhka8_plijyd","event":"model_attempt_failed","model":"model-a","attempt":1,"isTransient":true,"error":"[503 Service Unavailable] High demand on model-a","elapsedMs":656}
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284832899_latex.tex: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284832899_preview.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284832899_mathml.xml: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284832899_ocr_text.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m4. 429 retry and bounded retry count (max 1 retry per model)
+[22m[39m{"requestId":"req_mvtnhktl_rmvu9y","event":"model_attempt_failed","model":"model-only-one","attempt":0,"isTransient":true,"error":"[429 Too Many Requests] Rate limit reached","elapsedMs":1}
+
+ [32m✓[39m test/alpha-matting.vitest.test.ts [2m([22m[2m10 tests[22m[2m)[22m[90m 167[2mms[22m[39m
+[90mstdout[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m4. 429 retry and bounded retry count (max 1 retry per model)
+[22m[39m{"requestId":"req_mvtnhktl_rmvu9y","event":"math_ocr_success","selectedModel":"model-only-one","totalAttempts":2,"durationMs":476}
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m4. 429 retry and bounded retry count (max 1 retry per model)
+[22m[39m[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284833415_latex.tex: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284833415_preview.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284833415_mathml.xml: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284833415_ocr_text.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m5. All models unavailable returns structured 503 error contract
+[22m[39m{"requestId":"req_mvtnhl7b_cwchqc","event":"model_attempt_failed","model":"model-a","attempt":0,"isTransient":true,"error":"[503 Service Unavailable] Model experiencing high demand","elapsedMs":3}
+
+[90mstdout[2m | test/feature1-math-ocr-production.vitest.test.ts[2m > [22m[2mFeature 1 — Math OCR Production Polish & Resilience Vitest Suite[2m > [22m[2mGemini Transient Retry & Error Classification[2m > [22m[2m9. Retries transient 429 and succeeds on attempt 2 without failing
+[22m[39m{"requestId":"req_mvtnhl88_7en33a","event":"math_ocr_success","selectedModel":"single-model-429","totalAttempts":2,"durationMs":38}
+
+[90mstderr[2m | test/feature1-math-ocr-production.vitest.test.ts[2m > [22m[2mFeature 1 — Math OCR Production Polish & Resilience Vitest Suite[2m > [22m[2mGemini Transient Retry & Error Classification[2m > [22m[2m9. Retries transient 429 and succeeds on attempt 2 without failing
+[22m[39m{"requestId":"req_mvtnhl88_7en33a","event":"model_attempt_failed","model":"single-model-429","attempt":0,"isTransient":true,"error":"[429] Quota exceeded temporarily","elapsedMs":36}
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284833528_latex.tex: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284833528_preview.html: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284833528_mathml.xml: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+[DriveArtifacts] Failed to upload module01_math_ocr_user_1793284833528_ocr_text.txt: Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable. Please configure it in .env.local.
+
+[90mstderr[2m | test/feature1-math-ocr-production.vitest.test.ts[2m > [22m[2mFeature 1 — Math OCR Production Polish & Resilience Vitest Suite[2m > [22m[2mGemini Transient Retry & Error Classification[2m > [22m[2m10. Retries transient 503 and respects maximum 3 total attempts
+[22m[39m{"requestId":"req_mvtnhlan_sadu6f","event":"model_attempt_failed","model":"single-model-503","attempt":0,"isTransient":true,"error":"[503] Overloaded","elapsedMs":1}
+{"requestId":"req_mvtnhlan_sadu6f","event":"model_attempt_failed","model":"single-model-503","attempt":1,"isTransient":true,"error":"[503] Overloaded","elapsedMs":1}
+{"requestId":"req_mvtnhlan_sadu6f","event":"model_attempt_failed","model":"single-model-503","attempt":2,"isTransient":true,"error":"[503] Overloaded","elapsedMs":1}
+{"requestId":"req_mvtnhlan_sadu6f","event":"math_ocr_failed_all_models","totalElapsedMs":1,"totalAttempts":3,"attemptedModels":["single-model-503"],"isTimeout":false,"isLastRateLimited":false}
+
+[90mstderr[2m | test/feature1-math-ocr-production.vitest.test.ts[2m > [22m[2mFeature 1 — Math OCR Production Polish & Resilience Vitest Suite[2m > [22m[2mGemini Transient Retry & Error Classification[2m > [22m[2m11. Fails immediately on 400 Bad Request with ZERO retries
+[22m[39m{"requestId":"req_mvtnhlbf_j8a99w","event":"model_attempt_failed","model":"model-fatal","attempt":0,"isTransient":false,"error":"[400] Bad Request: Invalid arguments","elapsedMs":4}
+{"requestId":"req_mvtnhlbf_j8a99w","event":"math_ocr_failed_all_models","totalElapsedMs":4,"totalAttempts":1,"attemptedModels":["model-fatal"],"isTimeout":false,"isLastRateLimited":false}
+
+ [32m✓[39m test/feature1-math-ocr-production.vitest.test.ts [2m([22m[2m22 tests[22m[2m)[22m[90m 196[2mms[22m[39m
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m5. All models unavailable returns structured 503 error contract
+[22m[39m{"requestId":"req_mvtnhl7b_cwchqc","event":"model_attempt_failed","model":"model-a","attempt":1,"isTransient":true,"error":"[503 Service Unavailable] Model experiencing high demand","elapsedMs":568}
+{"requestId":"req_mvtnhl7b_cwchqc","event":"model_attempt_failed","model":"model-b","attempt":0,"isTransient":true,"error":"[503 Service Unavailable] Model experiencing high demand","elapsedMs":569}
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m5. All models unavailable returns structured 503 error contract
+[22m[39m{"requestId":"req_mvtnhl7b_cwchqc","event":"model_attempt_failed","model":"model-b","attempt":1,"isTransient":true,"error":"[503 Service Unavailable] Model experiencing high demand","elapsedMs":1353}
+{"requestId":"req_mvtnhl7b_cwchqc","event":"math_ocr_failed_all_models","totalElapsedMs":1353,"totalAttempts":4,"attemptedModels":["model-a","model-b"],"isTimeout":false,"isLastRateLimited":false}
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m6. Timeout returns structured 504 error contract
+[22m[39m{"requestId":"req_mvtnih4g_2icg2i","event":"math_ocr_failed_all_models","totalElapsedMs":40000,"totalAttempts":0,"attemptedModels":[],"isTimeout":true,"isLastRateLimited":false}
+
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m11. Never leaks GEMINI_API_KEY in error response body
+[22m[39m{"requestId":"req_mvtnhmae_g06qjj","event":"model_attempt_failed","model":"model-x","attempt":0,"isTransient":true,"error":"[500 Internal Error] Failed with key=[REDACTED]","elapsedMs":1}
+
+ [32m✓[39m test/module02-module03-functional.vitest.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 424[2mms[22m[39m
+ [32m✓[39m test/image-upscale.vitest.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 8542[2mms[22m[39m
+   [33m[2m✓[22m[39m Studio Super-Resolution Engine & Diagnostics[2m > [22mresamples images using Lanczos-3 with exact 2x and 4x dimension scaling [33m3939[2mms[22m[39m
+   [33m[2m✓[22m[39m Studio Super-Resolution Engine & Diagnostics[2m > [22mapplies Pass A Kuwahara edge-preserving denoiser to remove artifacts while preserving boundaries [33m599[2mms[22m[39m
+   [33m[2m✓[22m[39m Studio Super-Resolution Engine & Diagnostics[2m > [22mapplies adaptive luminance USM to increase edge sharpness without halos [33m1099[2mms[22m[39m
+   [33m[2m✓[22m[39m Studio Super-Resolution Engine & Diagnostics[2m > [22mexecutes the full stepped 2x pyramid pipeline (4x scale), updates progress, and produces high-resolution output [33m339[2mms[22m[39m
+   [33m[2m✓[22m[39m Studio Super-Resolution Engine & Diagnostics[2m > [22mapplies Coherence Curvature Flow (tangent isophote diffusion) to smooth contours without corrupting pixels [33m957[2mms[22m[39m
+   [33m[2m✓[22m[39m Studio Super-Resolution Engine & Diagnostics[2m > [22mapplies Sub-pixel Contour Anti-Aliasing (Contour FXAA) across high contrast stepped boundaries [33m430[2mms[22m[39m
+   [33m[2m✓[22m[39m Studio Super-Resolution Engine & Diagnostics[2m > [22mapplies Anti-Banding TPDF Dithering without altering dynamic range [33m553[2mms[22m[39m
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m11. Never leaks GEMINI_API_KEY in error response body
+[22m[39m{"requestId":"req_mvtnhmae_g06qjj","event":"model_attempt_failed","model":"model-x","attempt":1,"isTransient":true,"error":"[500 Internal Error] Failed with key=[REDACTED]","elapsedMs":707}
+
+ [32m✓[39m test/account-auth-rbac.vitest.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 15965[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mAuthentication Engine & Personal Profile[2m > [22m1. Successful login creates session with correct 3-tier role [33m1816[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mAuthentication Engine & Personal Profile[2m > [22m2. Any authenticated user (including SUPER_ADMIN) can edit their own profile [33m2028[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22m3-Tier Role-Based Access Control (RBAC)[2m > [22m1. Regular USER receives 403 Forbidden when accessing User Management [33m1189[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22m3-Tier Role-Based Access Control (RBAC)[2m > [22m2. ADMIN is strictly forbidden from User Management (Demoted from user mutations) [33m822[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22m3-Tier Role-Based Access Control (RBAC)[2m > [22m3. SUPER_ADMIN has full User Management authority [33m2900[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22m3-Tier Role-Based Access Control (RBAC)[2m > [22m4. Final active SUPER_ADMIN cannot be deleted or demoted [33m1092[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mSilent Activity Tracking System[2m > [22m1. Automatically logs user activity in background without user input [33m1067[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mSilent Activity Tracking System[2m > [22m2. ADMIN can access Activity Tracking Dashboard [33m929[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mSilent Activity Tracking System[2m > [22m3. SUPER_ADMIN can access Activity Tracking Dashboard [33m791[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mSilent Activity Tracking System[2m > [22m4. Regular USER cannot access Activity Tracking Dashboard (403) [33m942[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mSilent Activity Tracking System[2m > [22m5. Drill-Down endpoint returns specific user activity details [33m801[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mSecurity Hardening & Validation[2m > [22m1. validateRole strictly allows SUPER_ADMIN, ADMIN, and USER [33m767[2mms[22m[39m
+   [33m[2m✓[22m[39m 3-Tier RBAC & Account Management Security Suite[2m > [22mSecurity Hardening & Validation[2m > [22m2. Mutating requests reject invalid CSRF tokens [33m764[2mms[22m[39m
+[90mstderr[2m | test/math-ocr-resilience.vitest.test.ts[2m > [22m[2mMath OCR Resilient Provider, Fallback & Security Suite[2m > [22m[2m11. Never leaks GEMINI_API_KEY in error response body
+[22m[39m{"requestId":"req_mvtnhmae_g06qjj","event":"model_attempt_failed","model":"model-x","attempt":2,"isTransient":true,"error":"[500 Internal Error] Failed with key=[REDACTED]","elapsedMs":2292}
+{"requestId":"req_mvtnhmae_g06qjj","event":"math_ocr_failed_all_models","totalElapsedMs":2292,"totalAttempts":3,"attemptedModels":["model-x"],"isTimeout":false,"isLastRateLimited":false}
+
+ [32m✓[39m test/math-ocr-resilience.vitest.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 5061[2mms[22m[39m
+   [33m[2m✓[22m[39m Math OCR Resilient Provider, Fallback & Security Suite[2m > [22m3. Model 503 fallback to the next model in priority order [33m695[2mms[22m[39m
+   [33m[2m✓[22m[39m Math OCR Resilient Provider, Fallback & Security Suite[2m > [22m4. 429 retry and bounded retry count (max 1 retry per model) [33m493[2mms[22m[39m
+   [33m[2m✓[22m[39m Math OCR Resilient Provider, Fallback & Security Suite[2m > [22m5. All models unavailable returns structured 503 error contract [33m1374[2mms[22m[39m
+   [33m[2m✓[22m[39m Math OCR Resilient Provider, Fallback & Security Suite[2m > [22m11. Never leaks GEMINI_API_KEY in error response body [33m2295[2mms[22m[39m
+ [32m✓[39m test/text-retention-regression.vitest.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 974[2mms[22m[39m
+   [33m[2m✓[22m[39m Text Retention Regression Test Suite (Khmer & English Protection)[2m > [22m4. Person with text outside body: preserves text outside silhouette and isolates person [33m392[2mms[22m[39m
+ [32m✓[39m test/image-upload-validator.vitest.test.ts [2m([22m[2m21 tests[22m[2m)[22m[90m 25[2mms[22m[39m
+[90mstderr[2m | test/google-drive-oauth.vitest.test.ts[2m > [22m[2mGoogle Drive OAuth 2.0 Integration Suite[2m > [22m[2mGoogle Drive Token Vault (AES-256-GCM)[2m > [22m[2mreturns null or throws gracefully on tampered ciphertext
+[22m[39m[GoogleDriveVault] Token decryption failed (invalid tag or tampered): Unsupported state or unable to authenticate data
+
+ [32m✓[39m test/google-drive-oauth.vitest.test.ts [2m([22m[2m10 tests[22m[2m)[22m[90m 177[2mms[22m[39m
+[90mstdout[2m | test/benchmark-speed-matrix.vitest.test.ts[2m > [22m[2mComprehensive Speed Matrix Benchmark across 6 Real Fixtures and 4 Modes[2m > [22m[2mrecords exact performance.now() across all 8 processing stages without invented numbers
+[22m[39m
+==========================================================================================================
+REAL PROCESSING SPEED MATRIX (6 REAL FIXTURES · 4 MODES · performance.now())
+==========================================================================================================
+┌─────────┬─────────────────────────────────────────┬────────────────┬─────────────┬────────────┬───────────┬───────────┬──────────────┬─────────────┬────────────┬────────────┬─────────────┐
+│ (index) │ Fixture                                 │ Mode           │ Size        │ Decode     │ Resize    │ ModelLoad │ AI_Inference │ TextProtect │ EdgeRefine │ Composite  │ Total       │
+├─────────┼─────────────────────────────────────────┼────────────────┼─────────────┼────────────┼───────────┼───────────┼──────────────┼─────────────┼────────────┼────────────┼─────────────┤
+│ 0       │ [32m'Simple portrait with solid background'[39m │ [32m'Fast (Cold)'[39m  │ [32m'768x768'[39m   │ [32m'75.91ms'[39m  │ [32m'34.12ms'[39m │ [32m'20.32ms'[39m │ [32m'338.49ms'[39m   │ [32m'Skipped'[39m   │ [32m'14.03ms'[39m  │ [32m'151.91ms'[39m │ [32m'634.78ms'[39m  │
+│ 1       │ [32m'Simple portrait with solid background'[39m │ [32m'Fast (Warm)'[39m  │ [32m'768x768'[39m   │ [32m'78.09ms'[39m  │ [32m'15.35ms'[39m │ [32m'0ms'[39m     │ [32m'278.77ms'[39m   │ [32m'Skipped'[39m   │ [32m'7.28ms'[39m   │ [32m'134.16ms'[39m │ [32m'513.65ms'[39m  │
+│ 2       │ [32m'Simple portrait with solid background'[39m │ [32m'Balanced'[39m     │ [32m'1024x1024'[39m │ [32m'61.98ms'[39m  │ [32m'0.02ms'[39m  │ [32m'0ms'[39m     │ [32m'376.44ms'[39m   │ [32m'Skipped'[39m   │ [32m'249.99ms'[39m │ [32m'240.81ms'[39m │ [32m'929.24ms'[39m  │
+│ 3       │ [32m'Simple portrait with solid background'[39m │ [32m'Fine details'[39m │ [32m'1024x1024'[39m │ [32m'69.35ms'[39m  │ [32m'0.02ms'[39m  │ [32m'0ms'[39m     │ [32m'285.82ms'[39m   │ [32m'Skipped'[39m   │ [32m'226.85ms'[39m │ [32m'255.23ms'[39m │ [32m'837.27ms'[39m  │
+│ 4       │ [32m'Portrait with dark hair'[39m               │ [32m'Fast (Cold)'[39m  │ [32m'400x400'[39m   │ [32m'9.9ms'[39m    │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'56.64ms'[39m    │ [32m'Skipped'[39m   │ [32m'1.87ms'[39m   │ [32m'86.07ms'[39m  │ [32m'154.49ms'[39m  │
+│ 5       │ [32m'Portrait with dark hair'[39m               │ [32m'Fast (Warm)'[39m  │ [32m'400x400'[39m   │ [32m'22.87ms'[39m  │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'84.46ms'[39m    │ [32m'Skipped'[39m   │ [32m'2.78ms'[39m   │ [32m'70.3ms'[39m   │ [32m'180.42ms'[39m  │
+│ 6       │ [32m'Portrait with dark hair'[39m               │ [32m'Balanced'[39m     │ [32m'400x400'[39m   │ [32m'25.78ms'[39m  │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'193.25ms'[39m   │ [32m'Skipped'[39m   │ [32m'98.72ms'[39m  │ [32m'36.94ms'[39m  │ [32m'354.7ms'[39m   │
+│ 7       │ [32m'Portrait with dark hair'[39m               │ [32m'Fine details'[39m │ [32m'400x400'[39m   │ [32m'11.38ms'[39m  │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'45.55ms'[39m    │ [32m'Skipped'[39m   │ [32m'57.66ms'[39m  │ [32m'32.89ms'[39m  │ [32m'147.49ms'[39m  │
+│ 8       │ [32m'Portrait with white clothes'[39m           │ [32m'Fast (Cold)'[39m  │ [32m'400x400'[39m   │ [32m'9.17ms'[39m   │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'95.47ms'[39m    │ [32m'Skipped'[39m   │ [32m'2.37ms'[39m   │ [32m'47.64ms'[39m  │ [32m'154.66ms'[39m  │
+│ 9       │ [32m'Portrait with white clothes'[39m           │ [32m'Fast (Warm)'[39m  │ [32m'400x400'[39m   │ [32m'13.58ms'[39m  │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'135.32ms'[39m   │ [32m'Skipped'[39m   │ [32m'1.89ms'[39m   │ [32m'38.54ms'[39m  │ [32m'189.34ms'[39m  │
+│ 10      │ [32m'Portrait with white clothes'[39m           │ [32m'Balanced'[39m     │ [32m'400x400'[39m   │ [32m'18.81ms'[39m  │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'56.32ms'[39m    │ [32m'Skipped'[39m   │ [32m'204.16ms'[39m │ [32m'80.05ms'[39m  │ [32m'359.35ms'[39m  │
+│ 11      │ [32m'Portrait with white clothes'[39m           │ [32m'Fine details'[39m │ [32m'400x400'[39m   │ [32m'28.21ms'[39m  │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'29.43ms'[39m    │ [32m'Skipped'[39m   │ [32m'30.67ms'[39m  │ [32m'34.78ms'[39m  │ [32m'123.1ms'[39m   │
+│ 12      │ [32m'Image with English text'[39m               │ [32m'Fast (Cold)'[39m  │ [32m'400x200'[39m   │ [32m'5.49ms'[39m   │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'56.86ms'[39m    │ [32m'196.99ms'[39m  │ [32m'21.31ms'[39m  │ [32m'46.07ms'[39m  │ [32m'326.73ms'[39m  │
+│ 13      │ [32m'Image with English text'[39m               │ [32m'Fast (Warm)'[39m  │ [32m'400x200'[39m   │ [32m'15.34ms'[39m  │ [32m'0.35ms'[39m  │ [32m'0ms'[39m     │ [32m'68.75ms'[39m    │ [32m'54.87ms'[39m   │ [32m'1.41ms'[39m   │ [32m'17.79ms'[39m  │ [32m'158.51ms'[39m  │
+│ 14      │ [32m'Image with English text'[39m               │ [32m'Balanced'[39m     │ [32m'400x200'[39m   │ [32m'7.74ms'[39m   │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'13.33ms'[39m    │ [32m'36.66ms'[39m   │ [32m'31.25ms'[39m  │ [32m'29.59ms'[39m  │ [32m'118.58ms'[39m  │
+│ 15      │ [32m'Image with English text'[39m               │ [32m'Fine details'[39m │ [32m'400x200'[39m   │ [32m'5.4ms'[39m    │ [32m'0ms'[39m     │ [32m'0ms'[39m     │ [32m'15.66ms'[39m    │ [32m'44.67ms'[39m   │ [32m'27.4ms'[39m   │ [32m'27.99ms'[39m  │ [32m'121.12ms'[39m  │
+│ 16      │ [32m'Image with Khmer text'[39m                 │ [32m'Fast (Cold)'[39m  │ [32m'400x300'[39m   │ [32m'9.93ms'[39m   │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'9.91ms'[39m     │ [32m'153.9ms'[39m   │ [32m'4.36ms'[39m   │ [32m'32.23ms'[39m  │ [32m'210.34ms'[39m  │
+│ 17      │ [32m'Image with Khmer text'[39m                 │ [32m'Fast (Warm)'[39m  │ [32m'400x300'[39m   │ [32m'7.58ms'[39m   │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'12.31ms'[39m    │ [32m'140.6ms'[39m   │ [32m'3.85ms'[39m   │ [32m'44.21ms'[39m  │ [32m'208.56ms'[39m  │
+│ 18      │ [32m'Image with Khmer text'[39m                 │ [32m'Balanced'[39m     │ [32m'400x300'[39m   │ [32m'9.44ms'[39m   │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'7.99ms'[39m     │ [32m'105.21ms'[39m  │ [32m'46.96ms'[39m  │ [32m'60.96ms'[39m  │ [32m'230.57ms'[39m  │
+│ 19      │ [32m'Image with Khmer text'[39m                 │ [32m'Fine details'[39m │ [32m'400x300'[39m   │ [32m'16.16ms'[39m  │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'24.8ms'[39m     │ [32m'93.59ms'[39m   │ [32m'11.18ms'[39m  │ [32m'38.33ms'[39m  │ [32m'184.07ms'[39m  │
+│ 20      │ [32m'Large image'[39m                           │ [32m'Fast (Cold)'[39m  │ [32m'542x768'[39m   │ [32m'141.51ms'[39m │ [32m'18.28ms'[39m │ [32m'0ms'[39m     │ [32m'618.65ms'[39m   │ [32m'619.95ms'[39m  │ [32m'23.88ms'[39m  │ [32m'196.84ms'[39m │ [32m'1619.11ms'[39m │
+│ 21      │ [32m'Large image'[39m                           │ [32m'Fast (Warm)'[39m  │ [32m'542x768'[39m   │ [32m'115.62ms'[39m │ [32m'50.55ms'[39m │ [32m'0ms'[39m     │ [32m'205.63ms'[39m   │ [32m'540.78ms'[39m  │ [32m'22.32ms'[39m  │ [32m'223.26ms'[39m │ [32m'1158.16ms'[39m │
+│ 22      │ [32m'Large image'[39m                           │ [32m'Balanced'[39m     │ [32m'723x1024'[39m  │ [32m'154.87ms'[39m │ [32m'45.06ms'[39m │ [32m'0ms'[39m     │ [32m'289.73ms'[39m   │ [32m'1157.18ms'[39m │ [32m'421.98ms'[39m │ [32m'207.53ms'[39m │ [32m'2276.35ms'[39m │
+│ 23      │ [32m'Large image'[39m                           │ [32m'Fine details'[39m │ [32m'762x1079'[39m  │ [32m'154.94ms'[39m │ [32m'0.01ms'[39m  │ [32m'0ms'[39m     │ [32m'348.86ms'[39m   │ [32m'822.08ms'[39m  │ [32m'264.39ms'[39m │ [32m'295.86ms'[39m │ [32m'1886.14ms'[39m │
+└─────────┴─────────────────────────────────────────┴────────────────┴─────────────┴────────────┴───────────┴───────────┴──────────────┴─────────────┴────────────┴────────────┴─────────────┘
+
+Saved speed matrix results to: C:\Users\User\.gemini\antigravity\scratch\plp math content\benchmark-speed-matrix.json
+
+ [32m✓[39m test/benchmark-speed-matrix.vitest.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 13158[2mms[22m[39m
+   [33m[2m✓[22m[39m Comprehensive Speed Matrix Benchmark across 6 Real Fixtures and 4 Modes[2m > [22mrecords exact performance.now() across all 8 processing stages without invented numbers [33m13155[2mms[22m[39m
+ [32m✓[39m test/lesson-studio.vitest.test.ts [2m([22m[2m13 tests[22m[2m)[22m[90m 141[2mms[22m[39m
+ [32m✓[39m test/simplified-credentials-security.vitest.test.ts [2m([22m[2m32 tests[22m[2m)[22m[33m 30761[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m1. Username with exactly 4 characters is accepted [33m627[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m2. Username with fewer than 4 characters is rejected [33m1397[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m3. Password with exactly 4 characters is accepted [33m1018[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m4. Password with fewer than 4 characters is rejected [33m1059[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m5. Letters-only password is accepted [33m748[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m6. Numbers-only password is accepted [33m498[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m7. Mixed letters/numbers password is accepted [33m767[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m8. No symbol is required [33m660[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m9. No uppercase letter is required [33m1739[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m10. Confirm password mismatch is rejected [33m952[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m11. Password is stored only as a secure hash [33m862[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m12. Password hash is never returned to the client [33m512[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m13. Existing accounts still log in [33m936[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m14. Admin can create a user with 4-character credentials [33m2935[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m15. Admin can reset a user password with simplified 4-char password [33m2425[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m16. USER receives HTTP 403 from Admin endpoints [33m502[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m17. Unauthenticated requests receive HTTP 401 [33m752[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m18. Rate limiting remains active [33m565[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m19. 30-minute lockout remains active after repeated failures [33m623[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m20. CSRF validation remains active on modifying endpoints [33m707[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m21. Session revocation after reset remains active [33m1708[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m22. Final active-Admin protection remains active [33m683[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22m23. Modules 01–04 are unchanged [33m640[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22musername: user1, password: abcd, confirm: abcd -> must pass validation [33m536[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22musername: dayuth, password: 1234, confirm: 1234 -> must pass validation [33m663[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22mpassword: abc -> must fail (< 4 characters) [33m893[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22mpassword: abcd, confirm: abce -> must fail (confirmation mismatch) [33m511[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22mpassword: plp2026 -> must pass [33m652[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22mAPI: Admin creates account with minimal fields (no email or displayName blocking) [33m1845[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22mPreset A: admin1 / admin1 / admin1 is valid [33m615[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22mPreset B: user1 / user1 / user1 is valid [33m742[2mms[22m[39m
+   [33m[2m✓[22m[39m Simplified Account Credential Policy & Security Verification (23 Items)[2m > [22mExact Admin Account Creation Test Cases[2m > [22mForm Preset & Clear behavior simulation: selecting presets fills form without triggering API; clear empties state [33m982[2mms[22m[39m
+[90mstdout[2m | test/benchmark-9phases.vitest.test.ts[2m > [22m[2mBenchmark Real Processing Speed Across 9 Phases on 5 Image Fixtures[2m > [22m[2mexecutes cold and warm runs on all 5 fixtures and logs exact performance.now() measurements
+[22m[39m
+==========================================================================================
+REAL PROCESSING SPEED BENCHMARK (9 PHASES · 5 FIXTURES · COLD & WARM RUNS · performance.now())
+==========================================================================================
+[COLD] 1. Portrait Blue 1024          (1024x1024): Total 1620.27ms
+      P1(Decode): 86.22ms | P2(Scale): 0.01ms | P3(Cache): 0.01ms
+      P4(Inference): 372.72ms | P5(Extract): 13.29ms | P6(Dehalo): 63.18ms
+      P7(Choke/Feather): 172.42ms | P8(TextProtect): 635.62ms | P9(Composite): 276.8ms
+[WARM] 1. Portrait Blue 1024          (1024x1024): Total 1656.41ms
+      P1(Decode): 62.67ms | P2(Scale): 0.01ms | P3(Cache): 0.01ms
+      P4(Inference): 385.03ms | P5(Extract): 22.04ms | P6(Dehalo): 30.79ms
+      P7(Choke/Feather): 181.17ms | P8(TextProtect): 666.7ms | P9(Composite): 307.99ms
+[COLD] 2. Long Dark Hair              (400x400): Total 404.14ms
+      P1(Decode): 18.26ms | P2(Scale): 0ms | P3(Cache): 0.02ms
+      P4(Inference): 148.95ms | P5(Extract): 19.94ms | P6(Dehalo): 16.8ms
+      P7(Choke/Feather): 65.53ms | P8(TextProtect): 50.82ms | P9(Composite): 83.82ms
+[WARM] 2. Long Dark Hair              (400x400): Total 1169.58ms
+      P1(Decode): 27.93ms | P2(Scale): 0ms | P3(Cache): 0.01ms
+      P4(Inference): 360.8ms | P5(Extract): 4.6ms | P6(Dehalo): 5.48ms
+      P7(Choke/Feather): 174.46ms | P8(TextProtect): 351.06ms | P9(Composite): 245.24ms
+[COLD] 3. White Clothing              (400x400): Total 508.15ms
+      P1(Decode): 48.23ms | P2(Scale): 0ms | P3(Cache): 0.02ms
+      P4(Inference): 186.56ms | P5(Extract): 0.93ms | P6(Dehalo): 17.6ms
+      P7(Choke/Feather): 31.14ms | P8(TextProtect): 170.12ms | P9(Composite): 53.55ms
+[WARM] 3. White Clothing              (400x400): Total 232.48ms
+      P1(Decode): 16.36ms | P2(Scale): 0ms | P3(Cache): 0.01ms
+      P4(Inference): 66.34ms | P5(Extract): 0.94ms | P6(Dehalo): 5.35ms
+      P7(Choke/Feather): 28.01ms | P8(TextProtect): 67.4ms | P9(Composite): 48.07ms
+[COLD] 4. Khmer Small Text            (400x300): Total 302.38ms
+      P1(Decode): 18.35ms | P2(Scale): 0ms | P3(Cache): 0.01ms
+      P4(Inference): 92.82ms | P5(Extract): 0.34ms | P6(Dehalo): 2.34ms
+      P7(Choke/Feather): 66.74ms | P8(TextProtect): 92.47ms | P9(Composite): 29.31ms
+[WARM] 4. Khmer Small Text            (400x300): Total 420.71ms
+      P1(Decode): 16.19ms | P2(Scale): 0ms | P3(Cache): 0.01ms
+      P4(Inference): 81.78ms | P5(Extract): 5.69ms | P6(Dehalo): 3.76ms
+      P7(Choke/Feather): 17.84ms | P8(TextProtect): 220.01ms | P9(Composite): 75.43ms
+[COLD] 5. Khmer Poster (758x1077)     (762x1079): Total 3463.66ms
+      P1(Decode): 234.95ms | P2(Scale): 0ms | P3(Cache): 0.01ms
+      P4(Inference): 815.32ms | P5(Extract): 3.02ms | P6(Dehalo): 37.42ms
+      P7(Choke/Feather): 203.43ms | P8(TextProtect): 1817.44ms | P9(Composite): 352.07ms
+[WARM] 5. Khmer Poster (758x1077)     (762x1079): Total 2523.37ms
+      P1(Decode): 107.07ms | P2(Scale): 0ms | P3(Cache): 0.01ms
+      P4(Inference): 644.76ms | P5(Extract): 3.15ms | P6(Dehalo): 24.11ms
+      P7(Choke/Feather): 226.64ms | P8(TextProtect): 1110.66ms | P9(Composite): 406.97ms
+
+Saved benchmark results to: C:\Users\User\.gemini\antigravity\scratch\plp math content\benchmark-results.json
+
+ [32m✓[39m test/benchmark-9phases.vitest.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 12348[2mms[22m[39m
+   [33m[2m✓[22m[39m Benchmark Real Processing Speed Across 9 Phases on 5 Image Fixtures[2m > [22mexecutes cold and warm runs on all 5 fixtures and logs exact performance.now() measurements [33m12339[2mms[22m[39m
+[90mstdout[2m | test/hybrid-engine-module02-module03.vitest.test.ts[2m > [22m[2mHybrid Architecture: Local On-Device + RunPod Ready (Module 02 & Module 03)[2m > [22m[2mModule 03: 4x HD Upscaler (GET /api/upscale & POST /api/upscale)[2m > [22m[2m3. POST /api/upscale executes Local High-Precision Upscaler (4x) with sharp when cloud is unconfigured
+[22m[39m[ServerOnnxUpscaler] Real-ESRGAN ONNX session initialized successfully with model: realesr-general-x4v3.onnx
+
+ [32m✓[39m test/admin-mfa-totp-qr.vitest.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 883[2mms[22m[39m
+   [33m[2m✓[22m[39m Admin MFA/TOTP & QR Code Acceptance Suite[2m > [22m1. Decodes generated QR code and verifies it contains a valid otpauth URI [33m314[2mms[22m[39m
+ [32m✓[39m test/hybrid-engine-module02-module03.vitest.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 1339[2mms[22m[39m
+   [33m[2m✓[22m[39m Hybrid Architecture: Local On-Device + RunPod Ready (Module 02 & Module 03)[2m > [22mModule 03: 4x HD Upscaler (GET /api/upscale & POST /api/upscale)[2m > [22m3. POST /api/upscale executes Local High-Precision Upscaler (4x) with sharp when cloud is unconfigured [33m1250[2mms[22m[39m
+ [32m✓[39m test/mechanical-cyber-background.vitest.test.ts [2m([22m[2m11 tests[22m[2m)[22m[90m 23[2mms[22m[39m
+ [32m✓[39m test/module-drive-sync.vitest.test.ts [2m([22m[2m9 tests[22m[2m)[22m[90m 126[2mms[22m[39m
+[90mstderr[2m | test/plp-math-content.vitest.test.ts[2m > [22m[2mPLP Math Content - Clean URL, Redirects, and Safety Suite[2m > [22m[2m4. preserves POST /api/math-ocr contract without accidental renaming
+[22m[39m{"requestId":"req_mvtnhybz_kbwe1e","event":"model_attempt_failed","model":"gemini-flash-lite-latest","attempt":0,"isTransient":false,"error":"[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent: [400 Bad Request] API key not valid. Please pass a val","elapsedMs":903}
+
+[90mstderr[2m | test/plp-math-content.vitest.test.ts[2m > [22m[2mPLP Math Content - Clean URL, Redirects, and Safety Suite[2m > [22m[2m4. preserves POST /api/math-ocr contract without accidental renaming
+[22m[39m{"requestId":"req_mvtnhybz_kbwe1e","event":"model_attempt_failed","model":"gemini-flash-latest","attempt":0,"isTransient":false,"error":"[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent: [400 Bad Request] API key not valid. Please pass a valid AP","elapsedMs":1023}
+
+[90mstderr[2m | test/plp-math-content.vitest.test.ts[2m > [22m[2mPLP Math Content - Clean URL, Redirects, and Safety Suite[2m > [22m[2m4. preserves POST /api/math-ocr contract without accidental renaming
+[22m[39m{"requestId":"req_mvtnhybz_kbwe1e","event":"model_attempt_failed","model":"gemini-3.8-flash","attempt":0,"isTransient":false,"error":"[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent: [400 Bad Request] API key not valid. Please pass a valid API k","elapsedMs":1183}
+
+[90mstderr[2m | test/plp-math-content.vitest.test.ts[2m > [22m[2mPLP Math Content - Clean URL, Redirects, and Safety Suite[2m > [22m[2m4. preserves POST /api/math-ocr contract without accidental renaming
+[22m[39m{"requestId":"req_mvtnhybz_kbwe1e","event":"model_attempt_failed","model":"gemini-3.5-flash","attempt":0,"isTransient":false,"error":"[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent: [400 Bad Request] API key not valid. Please pass a valid API k","elapsedMs":1282}
+{"requestId":"req_mvtnhybz_kbwe1e","event":"math_ocr_failed_all_models","totalElapsedMs":1282,"totalAttempts":4,"attemptedModels":["gemini-flash-lite-latest","gemini-flash-latest","gemini-3.8-flash","gemini-3.5-flash"],"isTimeout":false,"isLastRateLimited":false}
+
+ [32m✓[39m test/plp-math-content.vitest.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 1583[2mms[22m[39m
+   [33m[2m✓[22m[39m PLP Math Content - Clean URL, Redirects, and Safety Suite[2m > [22m4. preserves POST /api/math-ocr contract without accidental renaming [33m1354[2mms[22m[39m
+ [32m✓[39m test/auth-gate.vitest.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 512[2mms[22m[39m
+ [32m✓[39m test/feature3-ai-upscaler.vitest.test.ts [2m([22m[2m23 tests[22m[2m)[22m[90m 22[2mms[22m[39m
+ [32m✓[39m test/person-text-detection-mandatory.vitest.test.ts [2m([22m[2m7 tests[22m[2m)[22m[90m 32[2mms[22m[39m
+[90mstdout[2m | test/benchmark-models.vitest.test.ts[2m > [22m[2mModel Comparison Experiment: isnet_fp16 vs isnet_quint8 vs isnet (FP32)[2m > [22m[2mbenchmarks model size, cold/warm load, inference, edge quality, text retention, and halo score
+[22m[39m
+==========================================================================================================
+MODEL ARCHITECTURE & QUANTIZATION COMPARISON EXPERIMENT
+==========================================================================================================
+┌─────────┬───────────────────────────────────┬─────────────────────────┬───────────┬────────────────┬─────────────────┬─────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────┬───────────────────────────────────────┬───────────────────────────────────────────────┬──────────────────────────────────────┬─────────────────────────────────────────────┐
+│ (index) │ model                             │ variant                 │ modelSize │ coldLoadTimeMs │ warmInferenceMs │ totalTimeMs │ edgeQuality                                  │ khmerTextPreservation                    │ englishTextPreservation               │ hairQuality                                   │ haloScore                            │ recommendation                              │
+├─────────┼───────────────────────────────────┼─────────────────────────┼───────────┼────────────────┼─────────────────┼─────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────┼───────────────────────────────────────┼───────────────────────────────────────────────┼──────────────────────────────────────┼─────────────────────────────────────────────┤
+│ 0       │ [32m'isnet_fp16 (Current Production)'[39m │ [32m'FP16 Half-Precision'[39m   │ [32m'44.5 MB'[39m │ [33m734.25[39m         │ [33m135.48[39m          │ [33m877.42[39m      │ [32m'High (Clean separation)'[39m                    │ [32m'100% (Isolated text strokes protected)'[39m │ [32m'100% (High-contrast edges retained)'[39m │ [32m'Excellent (Fine strands preserved)'[39m          │ [32m'0.02 (Neutralized / No blue spill)'[39m │ [32m'Maintain as primary production model'[39m      │
+│ 1       │ [32m'isnet_quint8 (INT8 Quantized)'[39m   │ [32m'INT8 Quantized Mobile'[39m │ [32m'22.3 MB'[39m │ [33m367.95[39m         │ [33m155.54[39m          │ [33m531.56[39m      │ [32m'Good (Minor quantization roughness at 1px)'[39m │ [32m'100% (Isolated text strokes protected)'[39m │ [32m'100% (High-contrast edges retained)'[39m │ [32m'Good (Slight loss of translucent tip alpha)'[39m │ [32m'0.05 (Good defringe)'[39m               │ [32m'Best for low-bandwidth mobile connections'[39m │
+│ 2       │ [32m'isnet (FP32 Full Precision)'[39m     │ [32m'FP32 Full Precision'[39m   │ [32m'89.1 MB'[39m │ [33m1470.15[39m        │ [33m84.45[39m           │ [33m1559.27[39m     │ [32m'High (Clean separation)'[39m                    │ [32m'100% (Isolated text strokes protected)'[39m │ [32m'100% (High-contrast edges retained)'[39m │ [32m'Excellent (Fine strands preserved)'[39m          │ [32m'0.02 (Neutralized / No blue spill)'[39m │ [32m'Maintain as primary production model'[39m      │
+└─────────┴───────────────────────────────────┴─────────────────────────┴───────────┴────────────────┴─────────────────┴─────────────┴──────────────────────────────────────────────┴──────────────────────────────────────────┴───────────────────────────────────────┴───────────────────────────────────────────────┴──────────────────────────────────────┴─────────────────────────────────────────────┘
+
+Saved model benchmark results to: C:\Users\User\.gemini\antigravity\scratch\plp math content\benchmark-models.json
+
+ [32m✓[39m test/benchmark-models.vitest.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 2704[2mms[22m[39m
+   [33m[2m✓[22m[39m Model Comparison Experiment: isnet_fp16 vs isnet_quint8 vs isnet (FP32)[2m > [22mbenchmarks model size, cold/warm load, inference, edge quality, text retention, and halo score [33m2702[2mms[22m[39m
+ [32m✓[39m test/portrait-blue-dot-acceptance.vitest.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 15525[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 02 Acceptance Test — Portrait Cutout Quality & Blue-Dot Elimination[2m > [22mTest Case 1: Person in suit & tie with isolated blue dot -> Removes blue dot, keeps subject, outputs clean alpha [33m357[2mms[22m[39m
+   [33m[2m✓[22m[39m Module 03 Acceptance Test — 4x Upscale Dimensions & Real Quality[2m > [22mTest Case 5: 4x mode on 640x480 produces exactly 2560x1920 with factor 4 and zero silent fallback [33m14987[2mms[22m[39m
+[90mstdout[2m | test/stabilization-benchmarks.vitest.test.ts[2m > [22m[2mStabilization Benchmarks Suite (Requirements Verification)[2m > [22m[2mBenchmark 1: Background removal time (Color Dehalo + Choke/Feather + Auto-Portrait Pipeline)
+[22m[39m
+[BENCHMARK 1] Background Removal (640x480):
+  - Cold Run: 362 ms
+  - Warm Run: 184 ms
+  - Memory Delta: 8.60 MB
+
+[90mstdout[2m | test/stabilization-benchmarks.vitest.test.ts[2m > [22m[2mStabilization Benchmarks Suite (Requirements Verification)[2m > [22m[2mBenchmark 2: 2x and 4x processing time using high-order Lanczos-3 & enhancement pipeline
+[22m[39m
+[BENCHMARK 2] Processing Time:
+  - 2x Scale (640x480 -> 1280x960):   3217 ms
+  - 4x Scale (640x480 -> 2560x1920):  10847 ms
+
+[90mstdout[2m | test/stabilization-benchmarks.vitest.test.ts[2m > [22m[2mStabilization Benchmarks Suite (Requirements Verification)[2m > [22m[2mBenchmark 3: Memory usage during multi-stage scaling and typed-array allocations
+[22m[39m
+[BENCHMARK 3] Memory Usage:
+  - Initial Heap:   13.00 MB
+  - Output Buffer:  1.83 MB
+  - Post-Run Heap:  13.52 MB
+  - Net Heap Delta: 0.52 MB
+
+[90mstdout[2m | test/stabilization-benchmarks.vitest.test.ts[2m > [22m[2mStabilization Benchmarks Suite (Requirements Verification)[2m > [22m[2mBenchmark 4: Khmer-text preservation (Grapheme recall, diacritics, and coeng scripts)
+[22m[39m
+[BENCHMARK 4] Khmer Text Preservation Metrics:
+  - Grapheme Recall:     100.0%
+  - Diacritic Recall:    100.0%
+  - Coeng (ជើង) Recall:   100.0%
+  - Character Precision: 100.0%
+  - Character Error Rate:0.0%
+
+[90mstdout[2m | test/stabilization-benchmarks.vitest.test.ts[2m > [22m[2mStabilization Benchmarks Suite (Requirements Verification)[2m > [22m[2mBenchmark 5: Four-user concurrency queue limits active jobs to 4 and safely queues extra jobs
+[22m[39m
+[BENCHMARK 5] 4-User Concurrency Queue Behavior:
+  - Max Concurrency Enforced: 4 active users
+  - 5th user queued at position: #1
+  - 6th user queued at position: #2
+  - 6th user cancelled cleanly while in queue: verified
+  - Execution order verified: user_1_START -> user_2_START -> user_3_START -> user_4_START -> user_1_DONE -> user_5_START -> user_2_DONE -> user_3_DONE...
+
+ [32m✓[39m test/stabilization-benchmarks.vitest.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 16350[2mms[22m[39m
+   [33m[2m✓[22m[39m Stabilization Benchmarks Suite (Requirements Verification)[2m > [22mBenchmark 1: Background removal time (Color Dehalo + Choke/Feather + Auto-Portrait Pipeline) [33m569[2mms[22m[39m
+   [33m[2m✓[22m[39m Stabilization Benchmarks Suite (Requirements Verification)[2m > [22mBenchmark 2: 2x and 4x processing time using high-order Lanczos-3 & enhancement pipeline [33m14077[2mms[22m[39m
+   [33m[2m✓[22m[39m Stabilization Benchmarks Suite (Requirements Verification)[2m > [22mBenchmark 3: Memory usage during multi-stage scaling and typed-array allocations [33m1411[2mms[22m[39m
+[90mstdout[2m | test/benchmark-fast-resolutions.vitest.test.ts[2m > [22m[2mFast Mode Resolution Benchmark (512px vs 640px vs 768px vs 1024px)[2m > [22m[2mevaluates latency, text preservation, and hair silhouette across resolutions
+[22m[39m
+==========================================================================================================
+FAST MODE RESOLUTION BENCHMARK MATRIX (512px vs 640px vs 768px vs 1024px)
+==========================================================================================================
+┌─────────┬──────────┬────────────────────┬─────────────┬───────────┬────────────┬─────────────┬────────────┬────────────┬───────────────┬─────────────────────────────────────┐
+│ (index) │ Res      │ Fixture            │ Size        │ Resize    │ Inference  │ TextProtect │ EdgeDehalo │ Total      │ TextRetention │ HairQuality                         │
+├─────────┼──────────┼────────────────────┼─────────────┼───────────┼────────────┼─────────────┼────────────┼────────────┼───────────────┼─────────────────────────────────────┤
+│ 0       │ [32m'512px'[39m  │ [32m'Portrait Blue'[39m    │ [32m'512x512'[39m   │ [32m'28.3ms'[39m  │ [32m'256.04ms'[39m │ [32m'N/A'[39m       │ [32m'12.87ms'[39m  │ [32m'297.21ms'[39m │ [32m'N/A'[39m         │ [32m'Acceptable'[39m                        │
+│ 1       │ [32m'512px'[39m  │ [32m'Long Dark Hair'[39m   │ [32m'400x400'[39m   │ [32m'0.02ms'[39m  │ [32m'162.53ms'[39m │ [32m'N/A'[39m       │ [32m'4.39ms'[39m   │ [32m'166.94ms'[39m │ [32m'N/A'[39m         │ [32m'Acceptable'[39m                        │
+│ 2       │ [32m'512px'[39m  │ [32m'White Clothing'[39m   │ [32m'400x400'[39m   │ [32m'0.06ms'[39m  │ [32m'253.05ms'[39m │ [32m'N/A'[39m       │ [32m'1.94ms'[39m   │ [32m'255.05ms'[39m │ [32m'N/A'[39m         │ [32m'Acceptable'[39m                        │
+│ 3       │ [32m'512px'[39m  │ [32m'English Text'[39m     │ [32m'400x200'[39m   │ [32m'0.01ms'[39m  │ [32m'36.46ms'[39m  │ [32m'162.19ms'[39m  │ [32m'5.25ms'[39m   │ [32m'203.91ms'[39m │ [32m'100%'[39m        │ [32m'Acceptable'[39m                        │
+│ 4       │ [32m'512px'[39m  │ [32m'Khmer Small Text'[39m │ [32m'400x300'[39m   │ [32m'0.01ms'[39m  │ [32m'53.04ms'[39m  │ [32m'158.27ms'[39m  │ [32m'6.2ms'[39m    │ [32m'217.52ms'[39m │ [32m'100%'[39m        │ [32m'Acceptable'[39m                        │
+│ 5       │ [32m'512px'[39m  │ [32m'Large Poster'[39m     │ [32m'362x512'[39m   │ [32m'6.8ms'[39m   │ [32m'204.57ms'[39m │ [32m'223.14ms'[39m  │ [32m'4.93ms'[39m   │ [32m'439.44ms'[39m │ [32m'100%'[39m        │ [32m'Acceptable'[39m                        │
+│ 6       │ [32m'640px'[39m  │ [32m'Portrait Blue'[39m    │ [32m'640x640'[39m   │ [32m'10.77ms'[39m │ [32m'308.9ms'[39m  │ [32m'N/A'[39m       │ [32m'18.98ms'[39m  │ [32m'338.65ms'[39m │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 7       │ [32m'640px'[39m  │ [32m'Long Dark Hair'[39m   │ [32m'400x400'[39m   │ [32m'0.02ms'[39m  │ [32m'51.93ms'[39m  │ [32m'N/A'[39m       │ [32m'5.54ms'[39m   │ [32m'57.49ms'[39m  │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 8       │ [32m'640px'[39m  │ [32m'White Clothing'[39m   │ [32m'400x400'[39m   │ [32m'0.01ms'[39m  │ [32m'66.34ms'[39m  │ [32m'N/A'[39m       │ [32m'1.67ms'[39m   │ [32m'68.02ms'[39m  │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 9       │ [32m'640px'[39m  │ [32m'English Text'[39m     │ [32m'400x200'[39m   │ [32m'0.01ms'[39m  │ [32m'6.43ms'[39m   │ [32m'55.55ms'[39m   │ [32m'1.21ms'[39m   │ [32m'63.2ms'[39m   │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 10      │ [32m'640px'[39m  │ [32m'Khmer Small Text'[39m │ [32m'400x300'[39m   │ [32m'0.01ms'[39m  │ [32m'7.54ms'[39m   │ [32m'94.67ms'[39m   │ [32m'3.51ms'[39m   │ [32m'105.73ms'[39m │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 11      │ [32m'640px'[39m  │ [32m'Large Poster'[39m     │ [32m'452x640'[39m   │ [32m'9.43ms'[39m  │ [32m'103.4ms'[39m  │ [32m'93.14ms'[39m   │ [32m'3.56ms'[39m   │ [32m'209.53ms'[39m │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 12      │ [32m'768px'[39m  │ [32m'Portrait Blue'[39m    │ [32m'768x768'[39m   │ [32m'34.94ms'[39m │ [32m'200.15ms'[39m │ [32m'N/A'[39m       │ [32m'10.84ms'[39m  │ [32m'245.93ms'[39m │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 13      │ [32m'768px'[39m  │ [32m'Long Dark Hair'[39m   │ [32m'400x400'[39m   │ [32m'0.01ms'[39m  │ [32m'42.34ms'[39m  │ [32m'N/A'[39m       │ [32m'1.77ms'[39m   │ [32m'44.12ms'[39m  │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 14      │ [32m'768px'[39m  │ [32m'White Clothing'[39m   │ [32m'400x400'[39m   │ [32m'0.01ms'[39m  │ [32m'93.73ms'[39m  │ [32m'N/A'[39m       │ [32m'2.77ms'[39m   │ [32m'96.51ms'[39m  │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 15      │ [32m'768px'[39m  │ [32m'English Text'[39m     │ [32m'400x200'[39m   │ [32m'0.01ms'[39m  │ [32m'4.61ms'[39m   │ [32m'64.42ms'[39m   │ [32m'1.05ms'[39m   │ [32m'70.09ms'[39m  │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 16      │ [32m'768px'[39m  │ [32m'Khmer Small Text'[39m │ [32m'400x300'[39m   │ [32m'0.01ms'[39m  │ [32m'9.63ms'[39m   │ [32m'47.28ms'[39m   │ [32m'1.66ms'[39m   │ [32m'58.58ms'[39m  │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 17      │ [32m'768px'[39m  │ [32m'Large Poster'[39m     │ [32m'542x768'[39m   │ [32m'42.27ms'[39m │ [32m'88.61ms'[39m  │ [32m'406.01ms'[39m  │ [32m'6.55ms'[39m   │ [32m'543.44ms'[39m │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 18      │ [32m'1024px'[39m │ [32m'Portrait Blue'[39m    │ [32m'1024x1024'[39m │ [32m'0.01ms'[39m  │ [32m'258.52ms'[39m │ [32m'N/A'[39m       │ [32m'10.6ms'[39m   │ [32m'269.13ms'[39m │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 19      │ [32m'1024px'[39m │ [32m'Long Dark Hair'[39m   │ [32m'400x400'[39m   │ [32m'0.01ms'[39m  │ [32m'42.49ms'[39m  │ [32m'N/A'[39m       │ [32m'1.53ms'[39m   │ [32m'44.03ms'[39m  │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 20      │ [32m'1024px'[39m │ [32m'White Clothing'[39m   │ [32m'400x400'[39m   │ [32m'0.02ms'[39m  │ [32m'28.69ms'[39m  │ [32m'N/A'[39m       │ [32m'1.63ms'[39m   │ [32m'30.34ms'[39m  │ [32m'N/A'[39m         │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 21      │ [32m'1024px'[39m │ [32m'English Text'[39m     │ [32m'400x200'[39m   │ [32m'0.01ms'[39m  │ [32m'4.54ms'[39m   │ [32m'156.9ms'[39m   │ [32m'1.42ms'[39m   │ [32m'162.87ms'[39m │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 22      │ [32m'1024px'[39m │ [32m'Khmer Small Text'[39m │ [32m'400x300'[39m   │ [32m'0.01ms'[39m  │ [32m'7.75ms'[39m   │ [32m'137.71ms'[39m  │ [32m'1.52ms'[39m   │ [32m'146.99ms'[39m │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+│ 23      │ [32m'1024px'[39m │ [32m'Large Poster'[39m     │ [32m'723x1024'[39m  │ [32m'18.64ms'[39m │ [32m'114.46ms'[39m │ [32m'682.51ms'[39m  │ [32m'10.98ms'[39m  │ [32m'826.59ms'[39m │ [32m'100%'[39m        │ [32m'Excellent (Sharp edges preserved)'[39m │
+└─────────┴──────────┴────────────────────┴─────────────┴───────────┴────────────┴─────────────┴────────────┴────────────┴───────────────┴─────────────────────────────────────┘
+
+Saved resolution benchmark results to: C:\Users\User\.gemini\antigravity\scratch\plp math content\benchmark-fast-resolutions.json
+
+ [32m✓[39m test/benchmark-fast-resolutions.vitest.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 6070[2mms[22m[39m
+   [33m[2m✓[22m[39m Fast Mode Resolution Benchmark (512px vs 640px vs 768px vs 1024px)[2m > [22mevaluates latency, text preservation, and hair silhouette across resolutions [33m6060[2mms[22m[39m
+ [32m✓[39m test/security-mock-user-rejection.vitest.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 680[2mms[22m[39m
+   [33m[2m✓[22m[39m Security Audit & Regression: Production Mock User Elimination[2m > [22m6. Authoritative USER role is concealed with notFound() (404), never reaches dashboard [33m362[2mms[22m[39m
+ [32m✓[39m test/admin-dashboard-auth.vitest.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 17439[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mrequireSuperAdmin() Guard Validation[2m > [22m1. Unauthenticated visit redirects to /login [33m1037[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mrequireSuperAdmin() Guard Validation[2m > [22m2. Regular USER visit returns notFound() (404 concealment) [33m1419[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mrequireSuperAdmin() Guard Validation[2m > [22m3. Delegated ADMIN (manager) visit returns notFound() (404 concealment) [33m1534[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mrequireSuperAdmin() Guard Validation[2m > [22m4. Authenticated SUPER_ADMIN visit returns verified SafeUser [33m1859[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mrequireSuperAdmin() Guard Validation[2m > [22m5. Tampered or malformed session token redirects to /login [33m1105[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mrequireSuperAdmin() Guard Validation[2m > [22m6. Disabled account with valid token is denied with notFound() [33m1635[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mrequireSuperAdmin() Guard Validation[2m > [22m7. Fails closed with notFound() if internal helper throws unhandled error [33m1495[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mDashboard Data Loaders & Sanitization[2m > [22m1. getDashboardStats rejects when unauthenticated without verified context [33m1403[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mDashboard Data Loaders & Sanitization[2m > [22m2. getDashboardStats returns accurate user counts when verified [33m1360[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mDashboard Data Loaders & Sanitization[2m > [22m3. getRecentLogins rejects when unauthorized [33m1506[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mDashboard Data Loaders & Sanitization[2m > [22m4. getRecentLogins returns correctly shaped and masked login events [33m1083[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mDashboard Data Loaders & Sanitization[2m > [22m5. getRateLimitEvents returns explicit placeholder metadata [33m898[2mms[22m[39m
+   [33m[2m✓[22m[39m Super Admin Dashboard — Auth Guard & Data Loaders Suite[2m > [22mDashboard Data Loaders & Sanitization[2m > [22m6. Masking utilities produce expected output [33m1102[2mms[22m[39m
+[90mstdout[2m | test/local-ai-super-resolution.vitest.test.ts[2m > [22m[2mLocal AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)[2m > [22m[2m2. Verifies ONNX runtime session initializes with correct input/output tensor contract
+[22m[39m[ServerOnnxUpscaler] Real-ESRGAN ONNX session initialized successfully with model: realesr-general-x4v3.onnx
+
+ [32m✓[39m test/csrf-change-password-flow.vitest.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 3460[2mms[22m[39m
+   [33m[2m✓[22m[39m CSRF & Mandatory Password Change Flow[2m > [22m1. Temporary password login sets session and readable CSRF cookie [33m605[2mms[22m[39m
+   [33m[2m✓[22m[39m CSRF & Mandatory Password Change Flow[2m > [22m4. Password change rejects request if CSRF token is missing [33m353[2mms[22m[39m
+   [33m[2m✓[22m[39m CSRF & Mandatory Password Change Flow[2m > [22m5. Password change rejects request if CSRF tokens mismatch [33m317[2mms[22m[39m
+   [33m[2m✓[22m[39m CSRF & Mandatory Password Change Flow[2m > [22m6. Password change succeeds with matching CSRF header and cookie, updating mustChangePassword to false [33m1654[2mms[22m[39m
+[90mstdout[2m | test/bootstrap-admin-hardening.vitest.test.ts[2m > [22m[2mBootstrap Admin Hardening & Invariants[2m > [22m[2m4. Skips ADMIN creation when INITIAL_ADMIN_PASSWORD is absent and logs warning without secrets
+[22m[39m[bootstrap-admin] Initial SUPER_ADMIN account created: superadmin
+
+ [32m✓[39m test/bootstrap-admin-hardening.vitest.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 2505[2mms[22m[39m
+   [33m[2m✓[22m[39m Bootstrap Admin Hardening & Invariants[2m > [22m4. Skips ADMIN creation when INITIAL_ADMIN_PASSWORD is absent and logs warning without secrets [33m820[2mms[22m[39m
+   [33m[2m✓[22m[39m Bootstrap Admin Hardening & Invariants[2m > [22m5. Sets mustChangePassword: true upon creation and never logs passwords [33m1645[2mms[22m[39m
+ [32m✓[39m test/feature2-bg-remover.vitest.test.ts [2m([22m[2m15 tests[22m[2m)[22m[90m 38[2mms[22m[39m
+ [32m✓[39m test/rate-limiter.vitest.test.ts [2m([22m[2m9 tests[22m[2m)[22m[90m 122[2mms[22m[39m
+ [32m✓[39m test/upload-to-drive.vitest.test.ts [2m([22m[2m11 tests[22m[2m)[22m[90m 111[2mms[22m[39m
+ [32m✓[39m test/admin-recovery.vitest.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 6675[2mms[22m[39m
+   [33m[2m✓[22m[39m Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)[2m > [22m2. GET /api/auth/admin-recovery returns enabled: true when secret is configured [33m336[2mms[22m[39m
+   [33m[2m✓[22m[39m Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)[2m > [22m3. POST returns 403 Forbidden when ADMIN_RECOVERY_KEY is not configured [33m333[2mms[22m[39m
+   [33m[2m✓[22m[39m Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)[2m > [22m4. POST returns 401 Unauthorized when invalid recovery key is entered [33m368[2mms[22m[39m
+   [33m[2m✓[22m[39m Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)[2m > [22m5. POST succeeds with correct recovery key: sets mustChangePassword=true, generates compliant temp password, writes audit event [33m2479[2mms[22m[39m
+   [33m[2m✓[22m[39m Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)[2m > [22m6. APP_GATE_ADMIN_RECOVERY_KEY is recognized as a valid recovery secret [33m328[2mms[22m[39m
+   [33m[2m✓[22m[39m Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)[2m > [22m7. stageOneTimePasswordReset updates dayuth and delivers securely to caller without GET leakage [33m2546[2mms[22m[39m
+[90mstderr[2m | test/dual-tone-and-secondary-api.vitest.test.ts[2m > [22m[2mPhase 3: Dual-Tone UI Theme & Secondary API Failover Suite[2m > [22m[2m3. Dual-API Failover Execution & Background Dispatch[2m > [22m[2mfails over to secondary key when primary encounters 429 quota exhaustion
+[22m[39m{"requestId":"req-test-failover-001","module":"test-module","event":"dual_api_attempt_failed","model":"gemini-flash-lite-latest","isSecondary":false,"isTransient":true,"isQuota":true,"error":"429 Resource has been exhausted (quota limit reached)","elapsedMs":2}
+
+ [32m✓[39m test/dual-tone-and-secondary-api.vitest.test.ts [2m([22m[2m13 tests[22m[2m)[22m[90m 201[2mms[22m[39m
+ [32m✓[39m tests/security-vector-1-leakage.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 544[2mms[22m[39m
+ [32m✓[39m tests/security-vector-4-asset-protection.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 50[2mms[22m[39m
+ [32m✓[39m test/profile-manager-component.vitest.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 3399[2mms[22m[39m
+   [33m[2m✓[22m[39m ProfileManager Integration & Route Verification Suite[2m > [22m1. Verifies ProfileManager public wrapper correctly re-exports canonical auth implementation [33m305[2mms[22m[39m
+   [33m[2m✓[22m[39m ProfileManager Integration & Route Verification Suite[2m > [22m2. Updates user avatar via PUT /api/auth/profile and persists Base64 image [33m301[2mms[22m[39m
+   [33m[2m✓[22m[39m ProfileManager Integration & Route Verification Suite[2m > [22m3. Updates username via PUT /api/auth/profile with duplicate protection [33m354[2mms[22m[39m
+   [33m[2m✓[22m[39m ProfileManager Integration & Route Verification Suite[2m > [22m4. Allows direct admin password override via POST /api/auth/admin-force-reset [33m2222[2mms[22m[39m
+ [32m✓[39m tests/security-vector-2-authorization.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 52[2mms[22m[39m
+ [32m✓[39m tests/security-vector-3-ratelimit.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 49[2mms[22m[39m
+ [32m✓[39m test/smart-naming.vitest.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 16[2mms[22m[39m
+ [32m✓[39m test/math-ocr.vitest.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 167[2mms[22m[39m
+ [32m✓[39m test/drive-uploader-component.vitest.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 54[2mms[22m[39m
+ [32m✓[39m test/seed-test-users-safety.vitest.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2196[2mms[22m[39m
+   [33m[2m✓[22m[39m Safety Invariant: seed-test-users Production Refusal[2m > [22m1. Refuses to run and exits with code 1 if UPSTASH_REDIS_REST_URL is set [33m492[2mms[22m[39m
+   [33m[2m✓[22m[39m Safety Invariant: seed-test-users Production Refusal[2m > [22m2. Refuses to run and exits with code 1 if KV_REST_API_URL is set [33m363[2mms[22m[39m
+   [33m[2m✓[22m[39m Safety Invariant: seed-test-users Production Refusal[2m > [22m3. Refuses to run and exits with code 1 if NODE_ENV is production without explicit override [33m355[2mms[22m[39m
+   [33m[2m✓[22m[39m Safety Invariant: seed-test-users Production Refusal[2m > [22m4. Succeeds when in test/dev environment without production Redis URLs [33m982[2mms[22m[39m
+ [32m✓[39m test/khmer-image-only-ocr.vitest.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 24977[2mms[22m[39m
+   [33m[2m✓[22m[39m Image-Only Khmer + Math OCR Regression (Requirements 1, 7, 13, 16)[2m > [22mtranscribes image-only Khmer math fixture with gemini-flash-lite-latest in < 8 seconds [33m24902[2mms[22m[39m
+[90mstdout[2m | test/local-ai-super-resolution.vitest.test.ts[2m > [22m[2mLocal AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)[2m > [22m[2m7. Quantitatively compares AI output against classical Sharp Lanczos-3
+[22m[39m=== QUANTITATIVE UPSCALE COMPARISON ===
+Resolution:    480x320
+PSNR:          24.85 dB
+SSIM:          0.9641
+AI Edge Energy:    474
+Sharp Edge Energy: 24
+Verdict:       Real-ESRGAN achieves +1875% sharper edge energy with crisp neural stroke reconstruction (PSNR: 24.85 dB, SSIM: 0.9641)
+
+ [32m✓[39m test/local-ai-super-resolution.vitest.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 50365[2mms[22m[39m
+   [33m[2m✓[22m[39m Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)[2m > [22m2. Verifies ONNX runtime session initializes with correct input/output tensor contract [33m383[2mms[22m[39m
+   [33m[2m✓[22m[39m Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)[2m > [22m5. Executes real neural inference on low-resolution Khmer text fixture producing exact 4x output [33m20027[2mms[22m[39m
+   [33m[2m✓[22m[39m Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)[2m > [22m6. Executes real neural inference on low-resolution Khmer text fixture with 2x scale [33m16324[2mms[22m[39m
+   [33m[2m✓[22m[39m Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)[2m > [22m7. Quantitatively compares AI output against classical Sharp Lanczos-3 [33m588[2mms[22m[39m
+   [33m[2m✓[22m[39m Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)[2m > [22m8. Route POST /api/upscale runs Real-ESRGAN ONNX and returns truthful neural headers [33m12961[2mms[22m[39m
+[90mstdout[2m | test/khmer-4x-ocr-benchmark.vitest.test.ts[2m > [22m[2m4x Khmer Text & Document Super-Resolution & OCR Benchmark[2m > [22m[2m5. Executes full 4x Khmer OCR Benchmark (1 cold + 3 warm runs), reporting real numbers
+[22m[39mSaved benchmark report to: C:\Users\User\.gemini\antigravity\scratch\plp math content\benchmark-4x-khmer-ocr.json
+=== 4x KHMER OCR BENCHMARK (REAL MEASURED RESULTS) ===
+Grapheme Recall:       96.3%
+Character Recall:      96.1%
+Character Precision:   95.8%
+Character F1:          96.0%
+Diacritic Recall:      90.9%
+Coeng Recall:          100.0%
+Character Error Rate:  4.5%
+False Insertion Rate:  0.6%
+Cold Run:              6880 ms
+Warm p50 (median):     5945 ms
+Warm p95:              7619 ms
+Quality Gates Passed:  true
+======================================================
+
+ [32m✓[39m test/khmer-4x-ocr-benchmark.vitest.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 66130[2mms[22m[39m
+   [33m[2m✓[22m[39m 4x Khmer Text & Document Super-Resolution & OCR Benchmark[2m > [22m2. Super-Resolution Engine produces output with exact dimensions of 2560x1920px (4x Ultra) [33m10585[2mms[22m[39m
+   [33m[2m✓[22m[39m 4x Khmer Text & Document Super-Resolution & OCR Benchmark[2m > [22m5. Executes full 4x Khmer OCR Benchmark (1 cold + 3 warm runs), reporting real numbers [33m55484[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m64 passed[39m[22m[90m (64)[39m
+[2m      Tests [22m [1m[32m787 passed[39m[22m[90m (787)[39m
+[2m   Start at [22m 21:40:03
+[2m   Duration [22m 124.87s[2m (transform 18.81s, setup 0ms, collect 123.40s, tests 377.52s, environment 36ms, prepare 20.83s)[22m
+

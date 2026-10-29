@@ -1,0 +1,18 @@
+commit 4feb92822d36ab5741f8e9ff91e0da8b64b02a69
+Author: Developer <developer@example.com>
+Date:   Tue Oct 20 15:19:03 2026 +0700
+
+    fix(module-02-03): auto-portrait pipeline, blue-dot elimination, simplified UI and upscaler disclosure
+
+ benchmark-16-tests-results.json                  |  42 +-
+ benchmark-fast-resolutions.json                  | 204 +++---
+ benchmark-models.json                            |  12 +-
+ benchmark-results.json                           | 184 ++---
+ benchmark-speed-matrix.json                      | 290 ++++----
+ src/app/bg-remover/page.tsx                      | 845 +++++++++--------------
+ src/app/image-upscaler/page.tsx                  |  29 +
+ src/components/bg-remover/BgAdvancedSettings.tsx | 144 +++-
+ src/lib/bg-compositor.ts                         | 374 +++++++++-
+ src/lib/bg-removal-client.ts                     |  83 ++-
+ test/portrait-blue-dot-acceptance.vitest.test.ts | 284 ++++++++
+ 11 files changed, 1600 insertions(+), 891 deletions(-)

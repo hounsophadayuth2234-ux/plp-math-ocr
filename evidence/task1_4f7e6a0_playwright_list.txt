@@ -1,0 +1,35 @@
+Listing tests:
+  admin-dashboard.spec.ts:9:7 › Super Admin Dashboard — Route Security & Layout Verification › 1. Anonymous visit to /admin/dashboard redirects to login
+  admin-dashboard.spec.ts:30:7 › Super Admin Dashboard — Route Security & Layout Verification › 2. Unauthenticated admin route returns no-store and login has security headers
+  admin-dashboard.spec.ts:43:7 › Super Admin Dashboard — Route Security & Layout Verification › 3. Authenticated USER visit returns 404 without admin markup or data leakage
+  admin-dashboard.spec.ts:66:7 › Super Admin Dashboard — Route Security & Layout Verification › 4. Authenticated SUPER_ADMIN visit renders dashboard, sidebar, and overview card
+  auth-real-login-e2e.spec.ts:9:7 › Real Authentication E2E Flow — Dedicated Non-Production Account › Real UI login flow via credentials without cookie mocking
+  preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: A. Khmer small text (12-18px) with diacritics & subscripts (khmer-small-text.png)
+  preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: C. Person with long dark hair and flyaway strands (long-dark-hair.png)
+  preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: D. Person with white clothing on light background (white-clothing.png)
+  preview-bg-remover.spec.js:24:9 › Background Remover — Person + Text Only Automated Acceptance Tests › Acceptance: E. Hair overlapping printed Khmer text (hair-over-khmer-text.png)
+  ProfileManager-deployment.spec.ts:9:7 › ProfileManager Deployment & Route Security Verification › 1. Unauthenticated root "/" redirects to "/login"
+  ProfileManager-deployment.spec.ts:25:7 › ProfileManager Deployment & Route Security Verification › 2. Unauthenticated "/profile" redirects to "/login?from=%2Fprofile"
+  ProfileManager-deployment.spec.ts:42:7 › ProfileManager Deployment & Route Security Verification › 3. Login page renders without server errors and displays PLP Math Content logo (desktop & mobile)
+  ProfileManager-deployment.spec.ts:86:7 › ProfileManager Deployment & Route Security Verification › 4. Authenticated ProfileManager verification (Avatar upload & Username editing)
+  quality-audit-repairs.spec.ts:7:7 › Live Corrective Quality Audit Repairs & Production Pass › 1. Module 02 sample processing completes or fails with clear recoverable state
+  quality-audit-repairs.spec.ts:43:7 › Live Corrective Quality Audit Repairs & Production Pass › 2. Module 02 export preserves transparent alpha channel
+  quality-audit-repairs.spec.ts:52:7 › Live Corrective Quality Audit Repairs & Production Pass › 3. Module 02 supplied PLP logo branding is intact
+  quality-audit-repairs.spec.ts:63:7 › Live Corrective Quality Audit Repairs & Production Pass › 4. Module 03 1x/2x/4x controls and truthful engine reporting
+  quality-audit-repairs.spec.ts:110:7 › Live Corrective Quality Audit Repairs & Production Pass › 5. Profile avatar upload control is visible without hover on desktop (1440x900)
+  quality-audit-repairs.spec.ts:137:7 › Live Corrective Quality Audit Repairs & Production Pass › 6. Profile avatar upload is visible on mobile viewport (390x844)
+  quality-audit-repairs.spec.ts:161:7 › Live Corrective Quality Audit Repairs & Production Pass › 7. No horizontal overflow at 1440x900, 768x1024, and 390x844
+  quality-audit-repairs.spec.ts:183:7 › Live Corrective Quality Audit Repairs & Production Pass › 8. Technical diagnostics are hidden behind Advanced Diagnostics details
+  quality-audit-repairs.spec.ts:195:7 › Live Corrective Quality Audit Repairs & Production Pass › 9. No critical browser console errors on audited routes
+  redesign-screenshots.spec.js:23:7 › Mechanical Cyber Technology — 3-Page Visual & Layout Verification › Page 1: Dashboard (/) Command Center - 1440px and 375px
+  redesign-screenshots.spec.js:62:7 › Mechanical Cyber Technology — 3-Page Visual & Layout Verification › Page 2: PLP Math Content (/plp-math-content) - 1440px and 375px
+  redesign-screenshots.spec.js:95:7 › Mechanical Cyber Technology — 3-Page Visual & Layout Verification › Page 3: Background Remover (/bg-remover) - 1440px, 375px, 3-Step Process & Mask Verification
+  security-responsive-and-headers.spec.ts:13:9 › Security Hardening & Responsive Viewport Verification › Responsive check on desktop (1440x900): login page without horizontal overflow
+  security-responsive-and-headers.spec.ts:29:9 › Security Hardening & Responsive Viewport Verification › Responsive check on desktop (1440x900): public routes render cleanly
+  security-responsive-and-headers.spec.ts:13:9 › Security Hardening & Responsive Viewport Verification › Responsive check on tablet (768x1024): login page without horizontal overflow
+  security-responsive-and-headers.spec.ts:29:9 › Security Hardening & Responsive Viewport Verification › Responsive check on tablet (768x1024): public routes render cleanly
+  security-responsive-and-headers.spec.ts:13:9 › Security Hardening & Responsive Viewport Verification › Responsive check on mobile (390x844): login page without horizontal overflow
+  security-responsive-and-headers.spec.ts:29:9 › Security Hardening & Responsive Viewport Verification › Responsive check on mobile (390x844): public routes render cleanly
+  security-responsive-and-headers.spec.ts:39:7 › Security Hardening & Responsive Viewport Verification › Security response headers validation
+  security-responsive-and-headers.spec.ts:50:7 › Security Hardening & Responsive Viewport Verification › Secret scanning against page HTML and client resources
+Total: 33 tests in 7 files

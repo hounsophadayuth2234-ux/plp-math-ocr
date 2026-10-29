@@ -1,0 +1,10 @@
+commit 4f7e6a07c81232210b11e0b2c10d3a0b849a651b
+Author: Developer <developer@example.com>
+Date:   Thu Oct 29 01:46:12 2026 +0700
+
+    test: restore and repair legacy Playwright suites with resilient selectors and session fixtures
+
+ tests/ProfileManager-deployment.spec.ts | 148 ++++++++++++++++++
+ tests/preview-bg-remover.spec.js        | 260 ++++++++++++++++++++++++++++++++
+ tests/redesign-screenshots.spec.js      | 233 ++++++++++++++++++++++++++++
+ 3 files changed, 641 insertions(+)

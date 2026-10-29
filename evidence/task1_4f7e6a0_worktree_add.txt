@@ -1,0 +1,2 @@
+Preparing worktree (detached HEAD 4f7e6a0)
+HEAD is now at 4f7e6a0 test: restore and repair legacy Playwright suites with resilient selectors and session fixtures

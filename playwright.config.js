@@ -13,7 +13,7 @@ export default defineConfig({
     ['json', { outputFile: 'playwright-results.json' }],
   ],
   use: {
-    baseURL: (process.env.BASE_URL || 'https://math.dytcore.com').replace(/\/+$/, ''),
+    baseURL: (process.env.BASE_URL || 'http://localhost:3005').replace(/\/+$/, ''),
     channel: 'chrome',
     launchOptions: {
       args: [
