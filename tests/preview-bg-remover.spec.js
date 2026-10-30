@@ -22,6 +22,7 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
 
   for (const fixture of fixtures) {
     test(`Acceptance: ${fixture.desc} (${fixture.name})`, async ({ page, context, baseURL }, testInfo) => {
+      test.setTimeout(300000);
       const targetBase = (process.env.BASE_URL || baseURL || 'http://localhost:3005').replace(/\/+$/, '');
       const previewUrl = process.env.PREVIEW_URL || `${targetBase}/bg-remover`;
       await injectAuthenticatedSession(context, targetBase);
@@ -86,7 +87,7 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
 
       // 8. Wait for "Mask is ready" badge
       const statusBadge = page.locator('[data-testid="mask-status-badge"]');
-      await expect(statusBadge).toBeVisible({ timeout: 90000 });
+      await expect(statusBadge).toBeVisible({ timeout: 240000 });
       await expect(statusBadge).toContainText('Mask is ready');
       const coldRunDuration = Date.now() - tStart;
 

@@ -63,7 +63,7 @@ class BgWorkerManager {
   /**
    * Preloads AI model weights and WASM runtime into idle worker
    */
-  public preloadModel(model: "rmbg_1_4" | "isnet_fp16" | "isnet_quint8" | "isnet" = "rmbg_1_4"): void {
+  public preloadModel(model: "birefnet_fp16" | "rmbg_1_4" | "isnet_fp16" | "isnet_quint8" | "isnet" = "birefnet_fp16"): void {
     if (this.isPreloaded) return;
     try {
       const worker = this.getWorker();
@@ -105,7 +105,7 @@ class BgWorkerManager {
    */
   public async executeJob(
     imageBlob: Blob,
-    model: "rmbg_1_4" | "isnet_fp16" | "isnet_quint8" | "isnet" = "rmbg_1_4",
+    model: "birefnet_fp16" | "rmbg_1_4" | "isnet_fp16" | "isnet_quint8" | "isnet" = "birefnet_fp16",
     onProgress?: (event: WorkerProgressEvent) => void,
     signal?: AbortSignal,
     options?: { preferWebGpu?: boolean; textPolicy?: "keep_text" | "remove_all_text" }
@@ -149,7 +149,8 @@ class BgWorkerManager {
         }, 16);
       }
 
-      const timeoutMs = 18000;
+      // Increased timeout to 120s to safely allow 176MB FP32 model download on initial run
+      const timeoutMs = 120000;
       const timeoutTimer = setTimeout(() => {
         if (settled) return;
         cleanup();
@@ -208,13 +209,13 @@ class BgWorkerManager {
           resolve({
             resultBlob: data.resultBlob,
             backend: data.backend || "WASM",
-            modelName: data.modelName || "ISNet-FP16",
+            modelName: data.modelName || "BiRefNet-lite (FP16)",
             modelResolution: data.modelResolution || "1024 x 1024",
             textPolicy: data.textPolicy || "keep_text",
             textDetectionRan: Boolean(data.textDetectionRan),
-            actualModel: data.actualModel || "@imgly/isnet_fp16 (On-Device ISNet-FP16)",
-            actualModelFile: data.actualModelFile || "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
-            actualRuntime: data.actualRuntime || "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+            actualModel: data.actualModel || "onnx-community/BiRefNet_lite-ONNX (FP16)",
+            actualModelFile: data.actualModelFile || "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/de15b22ba131738a16dff04aab8bdf8dc32e3ac1/onnx/model_fp16.onnx",
+            actualRuntime: data.actualRuntime || "BiRefNet-lite FP16 + WebGPU (@huggingface/transformers)",
             actualExecutionProvider: data.actualExecutionProvider || data.backend || "WASM",
             actualTextDetector: data.actualTextDetector || "Edge Gradient & Stroke Preservation Engine",
             actualTextPolicy: data.actualTextPolicy || (data.textPolicy === "remove_all_text" ? "Remove All Text" : "Preserve Text & Logos"),

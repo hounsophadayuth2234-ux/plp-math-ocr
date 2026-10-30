@@ -183,11 +183,11 @@ test.describe('Mechanical Cyber Technology — 3-Page Visual & Layout Verificati
     const statusBadge = page.locator('[data-testid="mask-status-badge"]');
     const retryBtn = page.locator('button:has-text("ព្យាយាមម្តងទៀត (RETRY)")');
     try {
-      await expect(statusBadge).toBeVisible({ timeout: 90000 });
+      await expect(statusBadge).toBeVisible({ timeout: 240000 });
     } catch {
       if (await retryBtn.isVisible()) {
         await retryBtn.click();
-        await expect(statusBadge).toBeVisible({ timeout: 90000 });
+        await expect(statusBadge).toBeVisible({ timeout: 240000 });
       } else {
         throw new Error('Mask status badge not visible and retry button not found');
       }

@@ -311,7 +311,7 @@ export default function BgRemoverPage() {
         checkWorkerStatus(true);
         // Preload in-browser Web Worker model session so first run is warm
         try {
-          bgWorkerManager.preloadModel("rmbg_1_4");
+          bgWorkerManager.preloadModel("birefnet_fp16");
         } catch {
           // ignore in environments without worker support
         }
@@ -561,8 +561,8 @@ export default function BgRemoverPage() {
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
 
-    // ── Hard Timeout Enforcement using AbortController (90s Fast, 120s High Quality for CPU WASM Fallback) ──
-    const hardTimeoutMs = mode === "preview" ? 90000 : 120000;
+    // ── Hard Timeout Enforcement using AbortController (240s for Cold Download & WASM fallback) ──
+    const hardTimeoutMs = mode === "preview" ? 240000 : 240000;
     const hardTimeoutTimer = setTimeout(() => {
       if (activeAbortControllerRef.current === abortController) {
         console.warn(`[bg-remover] Hard timeout triggered after ${hardTimeoutMs / 1000}s`);

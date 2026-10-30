@@ -795,7 +795,7 @@ export async function removeBackgroundBrowser(
   const targetCap = options?.targetMaxDimension
     ? Math.min(Math.max(options.targetMaxDimension, MIN_PROCESSING_DIM), MAX_SAFE_PROCESSING_DIM)
     : defaultMaxDim;
-  const modelName = "rmbg_1_4" as const;
+  const modelName = "birefnet_fp16" as const;
 
   const tStart = performance.now();
   let tModelLoad = 0;
@@ -1086,10 +1086,10 @@ export async function removeBackgroundBrowser(
       sourceHeight: origH,
       wasDownscaled: wasScaled,
       label: "Browser AI result",
-      model: workerResult.modelName || "briaai/RMBG-1.4 (FP32)",
-      actualModel: workerResult.actualModel || "briaai/RMBG-1.4 (FP32 Full Precision)",
-      actualModelFile: workerResult.actualModelFile || "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx",
-      actualRuntime: workerResult.actualRuntime || "RMBG-1.4 FP32 + WebGPU",
+      model: workerResult.modelName || "BiRefNet-lite (FP16)",
+      actualModel: workerResult.actualModel || "onnx-community/BiRefNet_lite-ONNX (FP16)",
+      actualModelFile: workerResult.actualModelFile || "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/de15b22ba131738a16dff04aab8bdf8dc32e3ac1/onnx/model_fp16.onnx",
+      actualRuntime: workerResult.actualRuntime || "BiRefNet-lite FP16 + WebGPU (@huggingface/transformers)",
       actualExecutionProvider: (workerResult.backend || "WASM") as "WebGPU" | "WASM",
       actualTextDetector: "Edge Gradient & Stroke Preservation Engine",
       actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text" : "Preserve Text & Logos",
@@ -1104,9 +1104,9 @@ export async function removeBackgroundBrowser(
         edgeRefineMs: tRefine,
         compositingMs: 15,
         totalMs,
-        actualModel: workerResult.actualModel || "briaai/RMBG-1.4 (FP32 Full Precision)",
-        actualModelFile: workerResult.actualModelFile || "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx",
-        actualRuntime: workerResult.actualRuntime || "RMBG-1.4 FP32 + WebGPU",
+        actualModel: workerResult.actualModel || "onnx-community/BiRefNet_lite-ONNX (FP16)",
+        actualModelFile: workerResult.actualModelFile || "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/de15b22ba131738a16dff04aab8bdf8dc32e3ac1/onnx/model_fp16.onnx",
+        actualRuntime: workerResult.actualRuntime || "BiRefNet-lite FP16 + WebGPU (@huggingface/transformers)",
         actualExecutionProvider: (workerResult.backend || "WASM") as "WebGPU" | "WASM",
         actualTextDetector: "Edge Gradient & Stroke Preservation Engine",
         actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text" : "Preserve Text & Logos",

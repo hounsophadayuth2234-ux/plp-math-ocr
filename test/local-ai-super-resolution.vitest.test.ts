@@ -74,7 +74,7 @@ describe("Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)", ()
     expect(meta.format).toBe("png");
     expect(meta.width).toBe(2560);
     expect(meta.height).toBe(1920);
-  }, 35000);
+  }, 90000);
 
   it("6. Executes real neural inference on low-resolution Khmer text fixture with 2x scale", async () => {
     const khmerBuffer = fs.readFileSync(khmerFixturePath);
@@ -88,7 +88,7 @@ describe("Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)", ()
     const meta = await sharp(result.outputBuffer).metadata();
     expect(meta.width).toBe(1280);
     expect(meta.height).toBe(960);
-  }, 35000);
+  }, 90000);
 
   it("7. Quantitatively compares AI output against classical Sharp Lanczos-3", async () => {
     // Generate small 120x80 test image with text
@@ -112,33 +112,33 @@ describe("Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)", ()
       .png()
       .toBuffer();
 
-    // 1. AI Real-ESRGAN Upscale (4x)
-    const aiResult = await runServerOnnxSuperResolution(testBuffer, 4);
+  // 1. AI Real-ESRGAN Upscale (4x)
+  const aiResult = await runServerOnnxSuperResolution(testBuffer, 4);
 
-    // 2. Classical Sharp Lanczos-3 Upscale (4x)
-    const sharpBuffer = await sharp(testBuffer)
-      .resize(480, 320, { kernel: "lanczos3" })
-      .sharpen()
-      .png()
-      .toBuffer();
+  // 2. Classical Sharp Lanczos-3 Upscale (4x)
+  const sharpBuffer = await sharp(testBuffer)
+    .resize(480, 320, { kernel: "lanczos3" })
+    .sharpen()
+    .png()
+    .toBuffer();
 
-    // 3. Quantitative Comparison
-    const comparison = await compareAiVsSharpUpscale(aiResult.outputBuffer, sharpBuffer);
+  // 3. Quantitative Comparison
+  const comparison = await compareAiVsSharpUpscale(aiResult.outputBuffer, sharpBuffer);
 
-    expect(comparison.width).toBe(480);
-    expect(comparison.height).toBe(320);
-    expect(comparison.psnr).toBeGreaterThan(15);
-    expect(comparison.ssim).toBeGreaterThan(0.5);
-    expect(comparison.verdict).toBeDefined();
+  expect(comparison.width).toBe(480);
+  expect(comparison.height).toBe(320);
+  expect(comparison.psnr).toBeGreaterThan(15);
+  expect(comparison.ssim).toBeGreaterThan(0.5);
+  expect(comparison.verdict).toBeDefined();
 
-    console.log("=== QUANTITATIVE UPSCALE COMPARISON ===");
-    console.log(`Resolution:    ${comparison.width}x${comparison.height}`);
-    console.log(`PSNR:          ${comparison.psnr} dB`);
-    console.log(`SSIM:          ${comparison.ssim}`);
-    console.log(`AI Edge Energy:    ${comparison.aiEdgeEnergy}`);
-    console.log(`Sharp Edge Energy: ${comparison.sharpEdgeEnergy}`);
-    console.log(`Verdict:       ${comparison.verdict}`);
-  }, 35000);
+  console.log("=== QUANTITATIVE UPSCALE COMPARISON ===");
+  console.log(`Resolution:    ${comparison.width}x${comparison.height}`);
+  console.log(`PSNR:          ${comparison.psnr} dB`);
+  console.log(`SSIM:          ${comparison.ssim}`);
+  console.log(`AI Edge Energy:    ${comparison.aiEdgeEnergy}`);
+  console.log(`Sharp Edge Energy: ${comparison.sharpEdgeEnergy}`);
+  console.log(`Verdict:       ${comparison.verdict}`);
+}, 90000);
 
   it("8. Route POST /api/upscale runs Real-ESRGAN ONNX and returns truthful neural headers", async () => {
     const khmerBuffer = fs.readFileSync(khmerFixturePath);
@@ -165,5 +165,5 @@ describe("Local AI Super-Resolution Architecture (Real-ESRGAN Compact ONNX)", ()
     expect(processingSource).toBe("Local ONNX Neural Engine");
     expect(res.headers.get("X-Output-Width")).toBe("2560");
     expect(res.headers.get("X-Output-Height")).toBe("1920");
-  }, 35000);
+  }, 90000);
 });

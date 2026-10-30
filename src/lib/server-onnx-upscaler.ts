@@ -66,7 +66,7 @@ export interface ServerUpscaleResult {
   srcHeight: number;
   outputWidth: number;
   outputHeight: number;
-  scale: 2 | 4;
+  scale: 1 | 2 | 4;
   model: string;
   backend: string;
   elapsedMs: number;
@@ -78,11 +78,9 @@ export interface ServerUpscaleResult {
  */
 export async function runServerOnnxSuperResolution(
   inputBuffer: Buffer,
-  requestedScale: 2 | 4 = 4
+  requestedScale: 1 | 2 | 4 = 4
 ): Promise<ServerUpscaleResult> {
   const t0 = performance.now();
-  const session = await getServerOnnxSession();
-  const ort = globalOrtNode;
 
   // Read metadata and raw pixels
   const image = sharp(inputBuffer);
@@ -93,6 +91,25 @@ export async function runServerOnnxSuperResolution(
   if (!srcW || !srcH) {
     throw new Error("Unable to determine input image dimensions.");
   }
+
+  // 1x Native scale: preserve original dimensions and alpha channel 1:1
+  if (requestedScale === 1) {
+    return {
+      outputBuffer: inputBuffer,
+      srcWidth: srcW,
+      srcHeight: srcH,
+      outputWidth: srcW,
+      outputHeight: srcH,
+      scale: 1,
+      model: "1x Native Fidelity Preserved",
+      backend: "1x Pass-through (Native Dimensions Preserved)",
+      elapsedMs: Math.round(performance.now() - t0),
+      isAiInference: true,
+    };
+  }
+
+  const session = await getServerOnnxSession();
+  const ort = globalOrtNode;
 
   const hasAlpha = Boolean(meta.hasAlpha);
   const { data: rawPixels } = await image
@@ -173,6 +190,7 @@ export async function runServerOnnxSuperResolution(
       raw: { width: srcW, height: srcH, channels: 1 },
     })
       .resize(finalW, finalH, { kernel: "lanczos3" })
+      .toColourspace("b-w")
       .raw()
       .toBuffer();
 

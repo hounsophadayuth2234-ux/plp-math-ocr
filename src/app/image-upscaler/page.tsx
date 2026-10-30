@@ -82,6 +82,9 @@ export default function ImageUpscalerPage() {
         | Partial<EnhancementConfig>
         | ((prev: EnhancementConfig) => EnhancementConfig)
     ) => {
+      if (typeof updater !== "function") {
+        configRef.current = { ...configRef.current, ...updater };
+      }
       setConfig((prev) => {
         const next = typeof updater === "function" ? updater(prev) : { ...prev, ...updater };
         configRef.current = next;

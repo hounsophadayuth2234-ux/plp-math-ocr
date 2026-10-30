@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
     // Sharp is removed from the default Module 03 AI inference path.
     try {
       const { runServerOnnxSuperResolution } = await import("@/lib/server-onnx-upscaler");
-      const onnxResult = await runServerOnnxSuperResolution(Buffer.from(bytes), scale as 2 | 4);
+      const onnxResult = await runServerOnnxSuperResolution(Buffer.from(bytes), scale as 1 | 2 | 4);
 
       if (sessionUser) {
         ActivityTracker.recordActivity({
