@@ -311,7 +311,7 @@ export default function BgRemoverPage() {
         checkWorkerStatus(true);
         // Preload in-browser Web Worker model session so first run is warm
         try {
-          bgWorkerManager.preloadModel("isnet_fp16");
+          bgWorkerManager.preloadModel("rmbg_1_4");
         } catch {
           // ignore in environments without worker support
         }

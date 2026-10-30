@@ -63,7 +63,7 @@ class BgWorkerManager {
   /**
    * Preloads AI model weights and WASM runtime into idle worker
    */
-  public preloadModel(model: "isnet_fp16" | "isnet_quint8" | "isnet" = "isnet_fp16"): void {
+  public preloadModel(model: "rmbg_1_4" | "isnet_fp16" | "isnet_quint8" | "isnet" = "rmbg_1_4"): void {
     if (this.isPreloaded) return;
     try {
       const worker = this.getWorker();
@@ -105,7 +105,7 @@ class BgWorkerManager {
    */
   public async executeJob(
     imageBlob: Blob,
-    model: "isnet_fp16" | "isnet_quint8" | "isnet" = "isnet_fp16",
+    model: "rmbg_1_4" | "isnet_fp16" | "isnet_quint8" | "isnet" = "rmbg_1_4",
     onProgress?: (event: WorkerProgressEvent) => void,
     signal?: AbortSignal,
     options?: { preferWebGpu?: boolean; textPolicy?: "keep_text" | "remove_all_text" }

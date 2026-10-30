@@ -795,7 +795,7 @@ export async function removeBackgroundBrowser(
   const targetCap = options?.targetMaxDimension
     ? Math.min(Math.max(options.targetMaxDimension, MIN_PROCESSING_DIM), MAX_SAFE_PROCESSING_DIM)
     : defaultMaxDim;
-  const modelName = "isnet_fp16" as const;
+  const modelName = "rmbg_1_4" as const;
 
   const tStart = performance.now();
   let tModelLoad = 0;
@@ -885,6 +885,10 @@ export async function removeBackgroundBrowser(
   let workerResult!: {
     resultBlob: Blob;
     backend: "WebGPU" | "WASM";
+    modelName?: string;
+    actualModel?: string;
+    actualModelFile?: string;
+    actualRuntime?: string;
     webGpuAvailable: boolean;
     webGpuApiAvailable?: boolean;
     gpuAdapterAvailable?: boolean;
@@ -942,7 +946,7 @@ export async function removeBackgroundBrowser(
       if (gpuProbe.available) {
         try {
           rawCutoutBlob = await removeBackground(scaledBlob, {
-            model: modelName,
+            model: "isnet_fp16",
             device: "gpu",
             proxyToWorker: false,
             fetchArgs: { cache: "force-cache" },
@@ -959,7 +963,7 @@ export async function removeBackgroundBrowser(
       if (!rawCutoutBlob || directBackend !== "WebGPU") {
         try {
           rawCutoutBlob = await removeBackground(scaledBlob, {
-            model: modelName,
+            model: "isnet_fp16",
             device: "cpu",
             proxyToWorker: false,
             fetchArgs: {
@@ -1082,14 +1086,14 @@ export async function removeBackgroundBrowser(
       sourceHeight: origH,
       wasDownscaled: wasScaled,
       label: "Browser AI result",
-      model: "ISNet-FP16 (On-Device AI)",
-      actualModel: "ISNet-FP16 (@imgly/isnet_fp16)",
-      actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
-      actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+      model: workerResult.modelName || "briaai/RMBG-1.4 (FP32)",
+      actualModel: workerResult.actualModel || "briaai/RMBG-1.4 (FP32 Full Precision)",
+      actualModelFile: workerResult.actualModelFile || "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx",
+      actualRuntime: workerResult.actualRuntime || "RMBG-1.4 FP32 + WebGPU",
       actualExecutionProvider: (workerResult.backend || "WASM") as "WebGPU" | "WASM",
       actualTextDetector: "Edge Gradient & Stroke Preservation Engine",
       actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text" : "Preserve Text & Logos",
-      actualRefinementPreset: options?.refinementPreset || "standard",
+      actualRefinementPreset: options?.refinementPreset || "fine_hair",
       fallbackReason: workerResult.fallbackReason,
       mode,
       metrics: {
@@ -1100,13 +1104,13 @@ export async function removeBackgroundBrowser(
         edgeRefineMs: tRefine,
         compositingMs: 15,
         totalMs,
-        actualModel: "ISNet-FP16 (@imgly/isnet_fp16)",
-        actualModelFile: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/models/isnet_fp16",
-        actualRuntime: "@imgly/background-removal v1.7.0 (onnxruntime-web)",
+        actualModel: workerResult.actualModel || "briaai/RMBG-1.4 (FP32 Full Precision)",
+        actualModelFile: workerResult.actualModelFile || "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx",
+        actualRuntime: workerResult.actualRuntime || "RMBG-1.4 FP32 + WebGPU",
         actualExecutionProvider: (workerResult.backend || "WASM") as "WebGPU" | "WASM",
         actualTextDetector: "Edge Gradient & Stroke Preservation Engine",
         actualTextPolicy: options?.textPolicy === "remove_all_text" ? "Remove All Text" : "Preserve Text & Logos",
-        actualRefinementPreset: options?.refinementPreset || "standard",
+        actualRefinementPreset: options?.refinementPreset || "fine_hair",
         fallbackReason: workerResult.fallbackReason,
         backend: workerResult.backend,
         webGpuAvailable: workerResult.webGpuAvailable,

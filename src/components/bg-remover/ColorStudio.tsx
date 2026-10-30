@@ -2358,7 +2358,7 @@ export function ColorStudio({
         </div>
         <div className="pointer-events-none absolute bottom-2 left-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
           <span className="text-slate-500">ENGINE:</span>
-          <span className="text-white font-bold">ISNet-FP16 (@imgly/isnet_fp16)</span>
+          <span className="text-white font-bold">{metrics?.actualModel || (provider ? `${provider}` : "briaai/RMBG-1.4 (FP32)")}</span>
         </div>
         <div className="pointer-events-none absolute bottom-2 right-2 z-20 flex items-center gap-1.5 border border-cyan-500/30 bg-slate-950/85 px-2 py-0.5 text-[10px] text-cyan-400 font-mono">
           <span className="text-slate-500">ZOOM:</span>
