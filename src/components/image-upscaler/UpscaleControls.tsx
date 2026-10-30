@@ -112,12 +112,12 @@ export function UpscaleControls({
                     type="button"
                     data-testid={`mode-btn-${mode.id}`}
                     onClick={() => onChangePreset(mode.id)}
-                    disabled={isLoading || disabled}
+                    disabled={isLoading}
                     className={`min-h-[58px] flex flex-col items-center justify-center rounded-xl border p-2 text-center transition-all cursor-pointer ${
                       isSelected
                         ? "border-cyan-400 bg-cyan-950/60 text-cyan-300 font-bold ring-1 ring-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
                         : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                    } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                    } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     <div className="flex items-center gap-1.5">
                       <Icon className="h-3.5 w-3.5 text-cyan-400" />
@@ -151,12 +151,12 @@ export function UpscaleControls({
                   type="button"
                   data-testid={`scale-btn-${opt.val}x`}
                   onClick={() => onChangeScale(opt.val)}
-                  disabled={isLoading || disabled}
+                  disabled={isLoading}
                   className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all cursor-pointer ${
                     scale === opt.val
                       ? "border-amber-400 bg-amber-950/50 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)] font-bold ring-1 ring-amber-400/50"
                       : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                  } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <span className="font-mono text-sm font-bold">{opt.val}X</span>
                   <span className="font-mono text-[10px] opacity-75">{opt.labelEn}</span>
@@ -170,12 +170,12 @@ export function UpscaleControls({
             <button
               type="button"
               onClick={() => onToggleFaceEnhance(!faceEnhance)}
-              disabled={isLoading || disabled}
+              disabled={isLoading}
               className={`min-h-[44px] flex w-full items-center justify-between rounded-xl border p-3 transition-all cursor-pointer ${
                 faceEnhance
                   ? "border-indigo-400 bg-indigo-950/40 text-white shadow-[0_0_15px_rgba(99,102,241,0.25)]"
                   : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-              } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+              } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               <div className="flex items-center gap-2.5">
                 <div
@@ -225,7 +225,7 @@ export function UpscaleControls({
               max={100}
               value={sharpness}
               onChange={(e) => onChangeSharpness(Number(e.target.value))}
-              disabled={isLoading || disabled}
+              disabled={isLoading}
               className="mt-1.5 h-1.5 w-full appearance-none rounded-lg bg-slate-800 accent-cyan-400 cursor-pointer disabled:opacity-50"
             />
           </div>
@@ -244,7 +244,7 @@ export function UpscaleControls({
               max={100}
               value={denoise}
               onChange={(e) => onChangeDenoise(Number(e.target.value))}
-              disabled={isLoading || disabled}
+              disabled={isLoading}
               className="mt-1.5 h-1.5 w-full appearance-none rounded-lg bg-slate-800 accent-emerald-400 cursor-pointer disabled:opacity-50"
             />
           </div>
@@ -263,7 +263,7 @@ export function UpscaleControls({
               max={100}
               value={clarity}
               onChange={(e) => onChangeClarity(Number(e.target.value))}
-              disabled={isLoading || disabled}
+              disabled={isLoading}
               className="mt-1.5 h-1.5 w-full appearance-none rounded-lg bg-slate-800 accent-amber-400 cursor-pointer disabled:opacity-50"
             />
           </div>

@@ -588,7 +588,7 @@ export function BgAdvancedSettings({
 
           {/* ── GROUP D: DIAGNOSTICS & TELEMETRY ── */}
           <div
-            data-testid="mask-diagnostics-panel"
+            data-testid="pre-mask-diagnostics-panel"
             className="border border-slate-850 bg-slate-900/50 p-3.5 space-y-3"
           >
             <div className="flex items-center gap-2 border-b border-slate-800 pb-2">

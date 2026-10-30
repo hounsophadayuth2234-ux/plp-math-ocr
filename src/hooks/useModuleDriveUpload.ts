@@ -15,32 +15,59 @@ export interface UseModuleDriveUploadOptions {
 
 export function useModuleDriveUpload({
   moduleName,
+  defaultSaveToDrive = true,
 }: UseModuleDriveUploadOptions) {
-  // Automatic saving is strictly enabled by default for all Modules 01-05
-  const [saveToDrive, setSaveToDriveState] = useState<boolean>(true);
+  const [saveToDrive, setSaveToDriveState] = useState<boolean>(defaultSaveToDrive);
+  const saveToDriveRef = useRef<boolean>(defaultSaveToDrive);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const isConnectedRef = useRef<boolean>(false);
+
   const [status, setStatus] = useState<DriveSyncStatus>("idle");
   const [uploadedRecords, setUploadedRecords] = useState<DriveUploadFileRecord[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<string>("user");
 
-  // Fetch session username for standardized filenames
   useEffect(() => {
-    let isMounted = true;
-    fetch("/api/auth/session")
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted) return;
+    saveToDriveRef.current = saveToDrive;
+  }, [saveToDrive]);
+
+  // Inspect Drive connection status and session username
+  const checkConnectionAndSession = useCallback(async () => {
+    try {
+      const [sessionRes, driveRes] = await Promise.allSettled([
+        fetch("/api/auth/session"),
+        fetch("/api/upload-to-drive"),
+      ]);
+
+      if (sessionRes.status === "fulfilled" && sessionRes.value.ok) {
+        const data = await sessionRes.value.json();
         if (data?.user?.username) {
           setCurrentUser(data.user.username);
         } else if (data?.user?.id) {
           setCurrentUser(data.user.id);
         }
-      })
-      .catch(() => {});
-    return () => {
-      isMounted = false;
-    };
+      }
+
+      if (driveRes.status === "fulfilled" && driveRes.value.ok) {
+        const data = await driveRes.value.json();
+        const connected = Boolean(data?.connected);
+        setIsConnected(connected);
+        isConnectedRef.current = connected;
+      }
+    } catch {
+      setIsConnected(false);
+      isConnectedRef.current = false;
+    }
   }, []);
+
+  useEffect(() => {
+    checkConnectionAndSession();
+    const handleUpdate = () => checkConnectionAndSession();
+    window.addEventListener("app:settings-updated", handleUpdate);
+    return () => {
+      window.removeEventListener("app:settings-updated", handleUpdate);
+    };
+  }, [checkConnectionAndSession]);
 
   // References to eliminate stale closures across callbacks and async intervals
   const statusRef = useRef<DriveSyncStatus>("idle");
@@ -67,6 +94,11 @@ export function useModuleDriveUpload({
         : [payloadOrPayloads];
 
       if (payloads.length === 0) {
+        return [];
+      }
+
+      // If user disabled saveToDrive or Google Drive is not connected, skip silently without console errors
+      if (!saveToDriveRef.current || !isConnectedRef.current) {
         return [];
       }
 
@@ -162,7 +194,6 @@ export function useModuleDriveUpload({
     failedPayloadsRef.current = [];
   }, []);
 
-  // Backwards-compatible setter (always keeps state true in automatic mode)
   const setSaveToDrive = useCallback(
     (enabled: boolean) => {
       setSaveToDriveState(enabled);
@@ -183,6 +214,7 @@ export function useModuleDriveUpload({
   return {
     saveToDrive,
     setSaveToDrive,
+    isConnected,
     status,
     uploadedRecords,
     uploadedRecord: primaryUploadedRecord,

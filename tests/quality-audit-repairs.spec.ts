@@ -72,10 +72,14 @@ test.describe('Live Corrective Quality Audit Repairs & Production Pass', () => {
 
     if (TEST_USERNAME && TEST_PASSWORD) {
       await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', TEST_USERNAME);
-      await page.fill('input[type="password"], input#password, input[name="password"]', TEST_PASSWORD);
-      await page.click('button[type="submit"]');
-      await page.waitForURL(/\/|\/profile/, { timeout: 15000 });
+      const idInput = page.locator('input[data-testid="login-username-input"], input#login-name, input[name="usernameOrEmail"]').first();
+      const pwInput = page.locator('input[data-testid="login-password-input"], input#login-password, input[name="password"]').first();
+      const subBtn = page.locator('button[data-testid="login-submit-btn"], button[type="submit"]').first();
+      await expect(idInput).toBeVisible({ timeout: 15000 });
+      await idInput.fill(TEST_USERNAME);
+      await pwInput.fill(TEST_PASSWORD);
+      await subBtn.click();
+      await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 });
       await page.goto(`${BASE_URL}/image-upscaler`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
       // Open Advanced Settings accordion to see scale options
@@ -117,10 +121,14 @@ test.describe('Live Corrective Quality Audit Repairs & Production Pass', () => {
 
     // Log in if credentials are provided
     if (TEST_USERNAME && TEST_PASSWORD) {
-      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', TEST_USERNAME);
-      await page.fill('input[type="password"], input#password, input[name="password"]', TEST_PASSWORD);
-      await page.click('button[type="submit"]');
-      await page.waitForURL(/\/|\/profile/, { timeout: 15000 });
+      const idInput = page.locator('input[data-testid="login-username-input"], input#login-name, input[name="usernameOrEmail"]').first();
+      const pwInput = page.locator('input[data-testid="login-password-input"], input#login-password, input[name="password"]').first();
+      const subBtn = page.locator('button[data-testid="login-submit-btn"], button[type="submit"]').first();
+      await expect(idInput).toBeVisible({ timeout: 15000 });
+      await idInput.fill(TEST_USERNAME);
+      await pwInput.fill(TEST_PASSWORD);
+      await subBtn.click();
+      await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 });
 
       await page.goto(`${BASE_URL}/profile`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
@@ -143,10 +151,14 @@ test.describe('Live Corrective Quality Audit Repairs & Production Pass', () => {
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     if (TEST_USERNAME && TEST_PASSWORD) {
-      await page.fill('input[type="text"], input#username, input[name="usernameOrEmail"]', TEST_USERNAME);
-      await page.fill('input[type="password"], input#password, input[name="password"]', TEST_PASSWORD);
-      await page.click('button[type="submit"]');
-      await page.waitForURL(/\/|\/profile/, { timeout: 15000 });
+      const idInput = page.locator('input[data-testid="login-username-input"], input#login-name, input[name="usernameOrEmail"]').first();
+      const pwInput = page.locator('input[data-testid="login-password-input"], input#login-password, input[name="password"]').first();
+      const subBtn = page.locator('button[data-testid="login-submit-btn"], button[type="submit"]').first();
+      await expect(idInput).toBeVisible({ timeout: 15000 });
+      await idInput.fill(TEST_USERNAME);
+      await pwInput.fill(TEST_PASSWORD);
+      await subBtn.click();
+      await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 });
 
       await page.goto(`${BASE_URL}/profile`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 

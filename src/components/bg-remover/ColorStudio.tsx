@@ -1864,6 +1864,7 @@ export function ColorStudio({
       {/* ── Mask Diagnostics & Telemetry HUD Panel (Collapsed by default) ── */}
       <details
         data-testid="mask-diagnostics-panel"
+        open
         className="group rounded-none border border-slate-800 bg-slate-950/90 font-mono"
       >
         <summary className="cursor-pointer p-3 text-xs font-bold text-slate-400 hover:text-cyan-300 select-none flex items-center justify-between">

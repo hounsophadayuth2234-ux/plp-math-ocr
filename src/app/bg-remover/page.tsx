@@ -81,7 +81,11 @@ export default function BgRemoverPage() {
   const [activeSelectionMode, setActiveSelectionMode] = useState<SelectionMode>(
     "auto_portrait"
   );
+  const [subOptionPerson, setSubOptionPerson] = useState(true);
+  const [subOptionText, setSubOptionText] = useState(true);
+  const [subOptionKeepGraphics, setSubOptionKeepGraphics] = useState(false);
   const [simplifiedQuality, setSimplifiedQuality] = useState<"fast" | "quality">("fast");
+  const [isAdvancedMenuOpen, setIsAdvancedMenuOpen] = useState(false);
   const excludedMaskRef = useRef<Uint8ClampedArray | null>(null);
 
   // Processing state
@@ -557,8 +561,8 @@ export default function BgRemoverPage() {
     cyberAudio.playClick();
     cyberAudio.startScanningHum();
 
-    // ── Hard Timeout Enforcement using AbortController (20s Fast, 35s High Quality) ──
-    const hardTimeoutMs = mode === "preview" ? 20000 : 35000;
+    // ── Hard Timeout Enforcement using AbortController (90s Fast, 120s High Quality for CPU WASM Fallback) ──
+    const hardTimeoutMs = mode === "preview" ? 90000 : 120000;
     const hardTimeoutTimer = setTimeout(() => {
       if (activeAbortControllerRef.current === abortController) {
         console.warn(`[bg-remover] Hard timeout triggered after ${hardTimeoutMs / 1000}s`);
@@ -992,11 +996,10 @@ export default function BgRemoverPage() {
 
   const handleFileSelect = (file: File | null) => {
     console.log(`[bg-remover] handleFileSelect called for file=${file?.name}`);
-    ++requestGenerationIdRef.current;
-    bgWorkerManager.terminateActiveWorker();
-    if (activeAbortControllerRef.current) {
+    if (activeAbortControllerRef.current || isProcessingRef.current) {
       console.log(`[bg-remover] ABORT TRIGGER: handleFileSelect aborting active controller for new file=${file?.name}`);
-      activeAbortControllerRef.current.abort();
+      bgWorkerManager.terminateActiveWorker();
+      activeAbortControllerRef.current?.abort();
       activeAbortControllerRef.current = null;
       isProcessingRef.current = false;
       setIsProcessing(false);
@@ -1016,10 +1019,7 @@ export default function BgRemoverPage() {
       cyberAudio.playHydraulicHiss();
       const url = urlRegistryRef.current.create(file);
       setOriginalUrl(url);
-      // Auto-start segmentation on file drop/select so user gets instant transparent PNG
-      setTimeout(() => {
-        handleRunSegmentation("preview", 1024, file);
-      }, 50);
+      setIsAdvancedMenuOpen(true);
     } else {
       setOriginalUrl(null);
     }
@@ -1329,9 +1329,16 @@ export default function BgRemoverPage() {
               {/* ── TOGGLEABLE ADVANCED SETTINGS MENU (Apple/Vercel Minimalist Standard) ── */}
               <details
                 data-testid="minimalist-advanced-menu"
+                open={isAdvancedMenuOpen}
                 className="group border border-slate-800 bg-slate-950/60 p-3 font-mono transition-all"
               >
-                <summary className="cursor-pointer text-xs font-bold text-slate-300 hover:text-cyan-300 select-none flex items-center justify-between min-h-[36px]">
+                <summary
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setIsAdvancedMenuOpen((prev) => !prev);
+                  }}
+                  className="cursor-pointer text-xs font-bold text-slate-300 hover:text-cyan-300 select-none flex items-center justify-between min-h-[36px]"
+                >
                   <span className="uppercase tracking-wider flex items-center gap-1.5">
                     ⚙️ Advanced Settings (ការកំណត់កម្រិតខ្ពស់)
                   </span>
@@ -1395,6 +1402,42 @@ export default function BgRemoverPage() {
                         <span className="text-[10px] text-emerald-200/70 mt-0.5 truncate max-w-full">Products, pets, scenes</span>
                       </button>
                     </div>
+
+                    {/* Person + Text Only Refinement Sub-options */}
+                    {(activeSelectionMode === "auto_portrait" || activeSelectionMode === "person_text_only") && (
+                      <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] font-mono border-t border-slate-800/80">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                          <input
+                            type="checkbox"
+                            data-testid="sub-option-person"
+                            checked={subOptionPerson}
+                            onChange={(e) => setSubOptionPerson(e.target.checked)}
+                            className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                          />
+                          <span>Person: keep detected person</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                          <input
+                            type="checkbox"
+                            data-testid="sub-option-text"
+                            checked={subOptionText}
+                            onChange={(e) => setSubOptionText(e.target.checked)}
+                            className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                          />
+                          <span>Text: keep detected text</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer text-slate-200">
+                          <input
+                            type="checkbox"
+                            data-testid="sub-option-keep-graphics"
+                            checked={subOptionKeepGraphics}
+                            onChange={(e) => setSubOptionKeepGraphics(e.target.checked)}
+                            className="accent-pink-500 rounded-none w-3.5 h-3.5 cursor-pointer"
+                          />
+                          <span>Keep selected graphics: optional</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   {/* Quality: Fast vs High Quality */}
