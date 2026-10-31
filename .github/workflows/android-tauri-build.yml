@@ -93,10 +93,13 @@ jobs:
       - name: Initialize Tauri Android project
         run: |
           echo "Initializing Tauri Android target (CI non-interactive)..."
-          npx tauri android init --ci
+          npx tauri android init --ci --skip-targets-install
 
       - name: Ensure Android Network Permissions
         run: |
+          if [ -f "src-tauri/gen/android/gradlew" ]; then
+            chmod +x src-tauri/gen/android/gradlew
+          fi
           MANIFEST_PATH="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST_PATH" ]; then
             echo "Checking AndroidManifest.xml permissions..."
