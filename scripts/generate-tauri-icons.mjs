@@ -14,34 +14,38 @@ if (!fs.existsSync(iconsDir)) {
 }
 
 async function generateIcons() {
-  console.log("Generating Tauri icons from:", srcLogo);
+  console.log("Generating Tauri icons with RGBA alpha channels from:", srcLogo);
   
   // 512x512 main icon
   await sharp(srcLogo)
     .resize(512, 512, { fit: "cover" })
+    .ensureAlpha()
     .png()
     .toFile(path.join(iconsDir, "icon.png"));
 
   // 128x128@2x (256x256)
   await sharp(srcLogo)
     .resize(256, 256, { fit: "cover" })
+    .ensureAlpha()
     .png()
     .toFile(path.join(iconsDir, "128x128@2x.png"));
 
   // 128x128
   await sharp(srcLogo)
     .resize(128, 128, { fit: "cover" })
+    .ensureAlpha()
     .png()
     .toFile(path.join(iconsDir, "128x128.png"));
 
   // 32x32
   await sharp(srcLogo)
     .resize(32, 32, { fit: "cover" })
+    .ensureAlpha()
     .png()
     .toFile(path.join(iconsDir, "32x32.png"));
 
   // Minimal valid 32x32 ICO header + PNG payload
-  const png32 = await sharp(srcLogo).resize(32, 32, { fit: "cover" }).png().toBuffer();
+  const png32 = await sharp(srcLogo).resize(32, 32, { fit: "cover" }).ensureAlpha().png().toBuffer();
   // Standard ICO header: 6 bytes header + 16 bytes directory entry + png data
   const icoHeader = Buffer.alloc(22);
   icoHeader.writeUInt16LE(0, 0); // reserved
@@ -57,14 +61,20 @@ async function generateIcons() {
   icoHeader.writeUInt32LE(22, 18); // image offset
   fs.writeFileSync(path.join(iconsDir, "icon.ico"), Buffer.concat([icoHeader, png32]));
 
-  // Placeholder ICNS (Tauri v2 requires file present for desktop bundling)
-  fs.writeFileSync(path.join(iconsDir, "icon.icns"), png32);
+  // Valid 128x128 ICNS header + PNG chunk
+  const png128 = await sharp(srcLogo).resize(128, 128, { fit: "cover" }).ensureAlpha().png().toBuffer();
+  const icnsHeader = Buffer.alloc(8);
+  icnsHeader.write("icns", 0);
+  icnsHeader.writeUInt32BE(8 + 8 + png128.length, 4);
+  const chunkHeader = Buffer.alloc(8);
+  chunkHeader.write("ic07", 0); // 128x128 PNG icon type
+  chunkHeader.writeUInt32BE(8 + png128.length, 4);
+  fs.writeFileSync(path.join(iconsDir, "icon.icns"), Buffer.concat([icnsHeader, chunkHeader, png128]));
 
-  console.log("All Tauri icons successfully generated in:", iconsDir);
+  console.log("All Tauri RGBA icons successfully regenerated!");
 }
 
-generateIcons().catch((err) => {
-  console.error("Icon generation failed:", err);
+generateIcons().catch(err => {
+  console.error("Error generating icons:", err);
   process.exit(1);
 });
-

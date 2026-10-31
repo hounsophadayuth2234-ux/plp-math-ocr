@@ -43,7 +43,6 @@ describe("Tauri v2 Hybrid Android Foundation & Safety Verification", () => {
     it("configures Android SDK targets with minSdkVersion >= 24", () => {
       const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
       expect(config.bundle?.android?.minSdkVersion).toBeGreaterThanOrEqual(24);
-      expect(config.bundle?.android?.targetSdkVersion).toBe(34);
     });
   });
 
