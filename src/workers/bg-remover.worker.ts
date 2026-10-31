@@ -6,6 +6,7 @@ import { AutoModel, AutoProcessor, RawImage, env } from "@huggingface/transforme
 import {
   detectIndependentTextMask,
   applyTextPolicyToMask,
+  detectDominantBackgroundColor,
 } from "../lib/bg-compositor";
 
 export interface WorkerJobRequest {
@@ -200,24 +201,11 @@ async function runBiRefNetInference(
   // 5. Extract original RGBA
   const origRgba = new Uint8ClampedArray(rawImage.rgba().data);
 
-  // 6. Dominant background color estimation from corners & border samples
-  const cornerCoords = [
-    [10, 10], [origW - 10, 10], [10, origH - 10], [origW - 10, origH - 10],
-    [5, Math.floor(origH / 2)], [origW - 5, Math.floor(origH / 2)]
-  ];
-  let sumBgR = 0, sumBgG = 0, sumBgB = 0, bgSamples = 0;
-  for (const [cx, cy] of cornerCoords) {
-    if (cx >= 0 && cx < origW && cy >= 0 && cy < origH) {
-      const p = (cy * origW + cx) * 4;
-      sumBgR += origRgba[p];
-      sumBgG += origRgba[p + 1];
-      sumBgB += origRgba[p + 2];
-      bgSamples++;
-    }
-  }
-  const bgR = bgSamples > 0 ? Math.round(sumBgR / bgSamples) : 250;
-  const bgG = bgSamples > 0 ? Math.round(sumBgG / bgSamples) : 218;
-  const bgB = bgSamples > 0 ? Math.round(sumBgB / bgSamples) : 221;
+  // 6. Dominant background color estimation from image borders
+  const domBg = detectDominantBackgroundColor(origRgba, origW, origH, initialAlphaMask);
+  const bgR = domBg.r;
+  const bgG = domBg.g;
+  const bgB = domBg.b;
 
   // 7. Precision boundary refinement on continuous alpha mask
   const refinedAlpha = new Uint8ClampedArray(totalOrigPixels);
