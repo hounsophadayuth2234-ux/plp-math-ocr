@@ -6,7 +6,6 @@ import { AutoModel, AutoProcessor, RawImage, env } from "@huggingface/transforme
 import {
   detectIndependentTextMask,
   applyTextPolicyToMask,
-  edgeAwareHairFurRefinement,
 } from "../lib/bg-compositor";
 
 export interface WorkerJobRequest {
@@ -201,19 +200,143 @@ async function runBiRefNetInference(
   // 5. Extract original RGBA
   const origRgba = new Uint8ClampedArray(rawImage.rgba().data);
 
-  // 6. Apply text policy and hair/fur refinement
-  let finalAlphaMask = initialAlphaMask;
+  // 6. Dominant background color estimation from corners & border samples
+  const cornerCoords = [
+    [10, 10], [origW - 10, 10], [10, origH - 10], [origW - 10, origH - 10],
+    [5, Math.floor(origH / 2)], [origW - 5, Math.floor(origH / 2)]
+  ];
+  let sumBgR = 0, sumBgG = 0, sumBgB = 0, bgSamples = 0;
+  for (const [cx, cy] of cornerCoords) {
+    if (cx >= 0 && cx < origW && cy >= 0 && cy < origH) {
+      const p = (cy * origW + cx) * 4;
+      sumBgR += origRgba[p];
+      sumBgG += origRgba[p + 1];
+      sumBgB += origRgba[p + 2];
+      bgSamples++;
+    }
+  }
+  const bgR = bgSamples > 0 ? Math.round(sumBgR / bgSamples) : 250;
+  const bgG = bgSamples > 0 ? Math.round(sumBgG / bgSamples) : 218;
+  const bgB = bgSamples > 0 ? Math.round(sumBgB / bgSamples) : 221;
+
+  // 7. Precision boundary refinement on continuous alpha mask
+  const refinedAlpha = new Uint8ClampedArray(totalOrigPixels);
+  const decontaminatedRgba = new Uint8ClampedArray(origRgba);
+
+  for (let y = 0; y < origH; y++) {
+    const yOff = y * origW;
+    for (let x = 0; x < origW; x++) {
+      const idx = yOff + x;
+      const p = idx * 4;
+      const r = origRgba[p], g = origRgba[p + 1], b = origRgba[p + 2];
+      const rawA = initialAlphaMask[idx];
+
+      const colorDist = Math.hypot(r - bgR, g - bgG, b - bgB);
+      const isPureBg = (r === bgR && g === bgG && b === bgB);
+      const isNearBg = colorDist <= 10;
+
+      let a = rawA;
+
+      if (rawA < 35 || isPureBg) {
+        a = 0;
+      } else if (isNearBg && rawA < 160) {
+        // Bilinear halo on near-background -> clear
+        a = 0;
+      } else if (rawA >= 240) {
+        // High confidence foreground core
+        a = 255;
+      } else {
+        // Smooth continuous transition for fine hair/fur strands
+        const norm = (rawA - 35) / (240 - 35);
+        a = Math.round(Math.pow(norm, 1.2) * 255);
+      }
+
+      refinedAlpha[idx] = a;
+    }
+  }
+
+  // 8. Torso, Head, and Clothing Core Solidness Enforcement (Fill Pinholes)
+  // Flood fill from outer image borders to locate outer background
+  const isOuterBg = new Uint8Array(totalOrigPixels);
+  const q = new Int32Array(totalOrigPixels);
+  let qHead = 0, qTail = 0;
+
+  for (let x = 0; x < origW; x++) {
+    if (refinedAlpha[x] === 0) { isOuterBg[x] = 1; q[qTail++] = x; }
+    const bottom = (origH - 1) * origW + x;
+    if (refinedAlpha[bottom] === 0 && !isOuterBg[bottom]) { isOuterBg[bottom] = 1; q[qTail++] = bottom; }
+  }
+  for (let y = 0; y < origH; y++) {
+    const left = y * origW;
+    if (refinedAlpha[left] === 0 && !isOuterBg[left]) { isOuterBg[left] = 1; q[qTail++] = left; }
+    const right = y * origW + (origW - 1);
+    if (refinedAlpha[right] === 0 && !isOuterBg[right]) { isOuterBg[right] = 1; q[qTail++] = right; }
+  }
+
+  while (qHead < qTail) {
+    const curr = q[qHead++];
+    const cy = Math.floor(curr / origW);
+    const cx = curr % origW;
+
+    const neighbors = [
+      cx > 0 ? curr - 1 : -1,
+      cx < origW - 1 ? curr + 1 : -1,
+      cy > 0 ? curr - origW : -1,
+      cy < origH - 1 ? curr + origW : -1,
+    ];
+
+    for (const n of neighbors) {
+      if (n >= 0 && isOuterBg[n] === 0 && refinedAlpha[n] < 128) {
+        isOuterBg[n] = 1;
+        q[qTail++] = n;
+      }
+    }
+  }
+
+  for (let i = 0; i < totalOrigPixels; i++) {
+    const p = i * 4;
+    const r = origRgba[p], g = origRgba[p + 1], b = origRgba[p + 2];
+    const isPureBg = (r === bgR && g === bgG && b === bgB);
+    const isNearBg = Math.hypot(r - bgR, g - bgG, b - bgB) <= 10;
+
+    // Fill internal holes in the clothing/torso/head (never fill background pixels!)
+    if (isOuterBg[i] === 0 && !isPureBg && !isNearBg && refinedAlpha[i] < 255) {
+      refinedAlpha[i] = 255;
+    }
+  }
+
+  // 9. Color Decontamination on semi-transparent transition pixels
+  for (let i = 0; i < totalOrigPixels; i++) {
+    const a = refinedAlpha[i];
+    if (a > 0 && a < 255) {
+      const p = i * 4;
+      const alphaNorm = a / 255.0;
+      const invAlpha = 1.0 - alphaNorm;
+
+      const unmixedR = Math.max(0, Math.min(255, Math.round((origRgba[p] - invAlpha * bgR) / alphaNorm)));
+      const unmixedG = Math.max(0, Math.min(255, Math.round((origRgba[p + 1] - invAlpha * bgG) / alphaNorm)));
+      const unmixedB = Math.max(0, Math.min(255, Math.round((origRgba[p + 2] - invAlpha * bgB) / alphaNorm)));
+
+      decontaminatedRgba[p] = unmixedR;
+      decontaminatedRgba[p + 1] = unmixedG;
+      decontaminatedRgba[p + 2] = unmixedB;
+    }
+  }
+
+  // 10. Optional Text Policy (Preserves standalone problem text or annotations outside person core)
+  let finalAlphaMask = refinedAlpha;
   if (textPolicy === "keep_text") {
     try {
       const textDet = detectIndependentTextMask(origRgba, origW, origH);
       if (textDet.hasText && textDet.characterCount >= 2) {
         const filteredTextMask = new Uint8ClampedArray(totalOrigPixels);
         for (let i = 0; i < totalOrigPixels; i++) {
-          if (initialAlphaMask[i] > 15) {
+          // Only preserve text outside the solid subject core
+          if (refinedAlpha[i] < 240 && textDet.textMask[i] > 20) {
             filteredTextMask[i] = textDet.textMask[i];
           }
         }
-        const policyRes = applyTextPolicyToMask(initialAlphaMask, filteredTextMask, origW, origH, "keep_text");
+        const policyRes = applyTextPolicyToMask(refinedAlpha, filteredTextMask, origW, origH, "keep_text");
         const ownedBuffer = new ArrayBuffer(policyRes.finalAlpha.byteLength);
         new Uint8ClampedArray(ownedBuffer).set(policyRes.finalAlpha);
         finalAlphaMask = new Uint8ClampedArray(ownedBuffer);
@@ -223,25 +346,9 @@ async function runBiRefNetInference(
     }
   }
 
-  // Subtle edge refinement and color decontamination for hair strands
-  let decontaminatedRgb: Uint8ClampedArray | null = null;
-  try {
-    const hairRefined = edgeAwareHairFurRefinement(origRgba, finalAlphaMask, origW, origH, {
-      preset: "fine_hair",
-      alphaChoke: 0.0,
-      decontaminateBg: true,
-    });
-    const ownedHairBuffer = new ArrayBuffer(hairRefined.refinedAlpha.byteLength);
-    new Uint8ClampedArray(ownedHairBuffer).set(hairRefined.refinedAlpha);
-    finalAlphaMask = new Uint8ClampedArray(ownedHairBuffer);
-    decontaminatedRgb = hairRefined.decontaminatedRgba;
-  } catch (e) {
-    console.warn("[bg-remover-worker] Hair refinement skipped:", e);
-  }
-
-  // 7. Composite continuous alpha into original RGBA
+  // 11. Composite continuous alpha into decontaminated RGBA
   const finalRgba = new Uint8ClampedArray(totalOrigPixels * 4);
-  const srcRgba = decontaminatedRgb || origRgba;
+  const srcRgba = decontaminatedRgba;
   for (let i = 0; i < totalOrigPixels; i++) {
     const p = i * 4;
     finalRgba[p] = srcRgba[p];
@@ -250,7 +357,7 @@ async function runBiRefNetInference(
     finalRgba[p + 3] = finalAlphaMask[i];
   }
 
-  // 8. Generate transparent PNG blob via OffscreenCanvas
+  // 12. Generate transparent PNG blob via OffscreenCanvas
   const canvas = new OffscreenCanvas(origW, origH);
   const ctx = canvas.getContext("2d")!;
   const imgData = new ImageData(finalRgba, origW, origH);

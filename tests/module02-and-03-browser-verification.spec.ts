@@ -164,8 +164,9 @@ test.describe("Module 02 & Module 03 — Comprehensive In-Browser Verification",
     // ────────────────────────────────────────────────────────────────
 
     // A. Zero Horizontal Banding / Row-Stride Corruption
+    // Internal row variance within subject body (y in 130..H - 100) must be smooth (< 50)
     let maxRowVariance = 0;
-    for (let y = 100; y < H - 100; y += 10) {
+    for (let y = 130; y < H - 100; y += 10) {
       let rowDiff = 0;
       for (let x = 0; x < W; x++) {
         rowDiff += Math.abs(finalAlphaBuf[y * W + x] - finalAlphaBuf[(y - 1) * W + x]);
@@ -173,7 +174,7 @@ test.describe("Module 02 & Module 03 — Comprehensive In-Browser Verification",
       const avgDiff = rowDiff / W;
       if (avgDiff > maxRowVariance) maxRowVariance = avgDiff;
     }
-    expect(maxRowVariance).toBeLessThan(120);
+    expect(maxRowVariance).toBeLessThan(50);
 
     // B. Missing Top Hairline Check: hairline alpha > 128
     let hairForeground = 0;

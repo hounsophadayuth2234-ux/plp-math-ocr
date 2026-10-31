@@ -927,12 +927,20 @@ export function chokeAndFeatherAlphaMask(
   rawAlpha: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
-  chokeRadius: number = 1.2,
-  featherRadius: number = 1.0
+  chokeRadius: number = 0.0,
+  featherRadius: number = 0.0
 ): Uint8ClampedArray {
   const totalPixels = width * height;
   const is4Ch = rawAlpha.length === totalPixels * 4;
   const getAlpha = (i: number) => (is4Ch ? rawAlpha[i * 4 + 3] : rawAlpha[i]);
+
+  if (chokeRadius <= 0 && featherRadius <= 0) {
+    const result = new Uint8ClampedArray(totalPixels);
+    for (let i = 0; i < totalPixels; i++) {
+      result[i] = getAlpha(i);
+    }
+    return result;
+  }
 
   const choked = new Uint8ClampedArray(totalPixels);
   const rChoke = Math.max(1, Math.min(2, Math.round(chokeRadius)));
@@ -1312,8 +1320,8 @@ export function autoPortraitSegmentationPipeline(
     initialMask[i] = isMask4Ch ? rawInitialMask[i * 4 + 3] : rawInitialMask[i];
   }
 
-  const chokeRadius = options?.alphaChokePx ?? 1.2;
-  const featherRadius = options?.featherRadiusPx ?? 1.0;
+  const chokeRadius = options?.alphaChokePx ?? 0.0;
+  const featherRadius = options?.featherRadiusPx ?? 0.0;
   const minRatio = options?.minComponentRatio ?? 0.05;
 
   // 1. Connected-component analysis on foreground mask (threshold > 128)
@@ -1503,9 +1511,24 @@ export function autoPortraitSegmentationPipeline(
     }
   }
 
+  // Sample dominant corner background color to prevent filling real background cavities
+  let bgR = 0, bgG = 0, bgB = 0, bgSamples = 0;
+  for (const cornerIdx of [0, width - 1, (height - 1) * width, height * width - 1]) {
+    bgR += sourceRgba[cornerIdx * 4];
+    bgG += sourceRgba[cornerIdx * 4 + 1];
+    bgB += sourceRgba[cornerIdx * 4 + 2];
+    bgSamples++;
+  }
+  bgR /= bgSamples; bgG /= bgSamples; bgB /= bgSamples;
+
   for (let i = 0; i < totalPixels; i++) {
     if (outerBg[i] === 0 && keptMask[i] < 128) {
-      holeFilledMask[i] = 255;
+      const p = i * 4;
+      const r = sourceRgba[p], g = sourceRgba[p + 1], b = sourceRgba[p + 2];
+      const distBg = Math.hypot(r - bgR, g - bgG, b - bgB);
+      if (distBg > 15) {
+        holeFilledMask[i] = 255;
+      }
     }
   }
 

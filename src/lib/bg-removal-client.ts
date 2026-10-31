@@ -2037,8 +2037,8 @@ export async function segmentObjectSelection(
       width,
       height,
       {
-        alphaChokePx: options?.alphaChoke || 1.2,
-        featherRadiusPx: options?.featherRadius || 1.0,
+        alphaChokePx: options?.alphaChoke ?? 0.0,
+        featherRadiusPx: options?.featherRadius ?? 0.0,
         decontaminateBg: true,
       }
     );
@@ -2066,8 +2066,10 @@ export async function segmentObjectSelection(
   } else if (mode === "person_text_only" || mode === "person_plus_text") {
     // 4-mask decoupled pipeline: personMask, textMask, protectedTextMask, finalKeepMask
     const pRes = extractPersonMask(sourceImageData.data, alphaMaskBuffer, width, height);
-    // Apply conservative 1px inward choke strictly to personMask ONLY
-    const cleanedPersonMask = chokeAndFeatherAlphaMask(pRes.personMask, width, height, 1.0, 0.7);
+    // Apply conservative inward choke strictly when specified
+    const chokeVal = options?.alphaChoke ?? 0.0;
+    const featherVal = options?.featherRadius ?? 0.0;
+    const cleanedPersonMask = chokeAndFeatherAlphaMask(pRes.personMask, width, height, chokeVal, featherVal);
     let tRes: TextStrokeMaskResult;
     if (options?.precomputedTextDetection && options.precomputedTextDetection.durationMs > 0) {
       textDetectionMs = options.precomputedTextDetection.durationMs;
@@ -2171,20 +2173,22 @@ export async function segmentObjectSelection(
   }
 
   // Real edge-aware refinement for hair, fur, thin strokes, and semi-transparent edges
-  const hairEdgeRefined = edgeAwareHairFurRefinement(
-    sourceImageData.data,
-    activeMask,
-    width,
-    height,
-    {
-      preset: options?.quality === "fine_details" ? "fine_hair" : "standard",
-      alphaChoke: options?.alphaChoke || 1.0,
-      featherRadius: options?.featherRadius || 0.8,
-      decontaminateBg: true,
-    }
-  );
-  activeMask.set(hairEdgeRefined.refinedAlpha);
-  sourceImageData.data.set(hairEdgeRefined.decontaminatedRgba);
+  if (mode !== "auto_portrait" && mode !== "person" && mode !== "person_only") {
+    const hairEdgeRefined = edgeAwareHairFurRefinement(
+      sourceImageData.data,
+      activeMask,
+      width,
+      height,
+      {
+        preset: options?.quality === "fine_details" ? "fine_hair" : "standard",
+        alphaChoke: options?.alphaChoke ?? 0.0,
+        featherRadius: options?.featherRadius ?? 0.0,
+        decontaminateBg: true,
+      }
+    );
+    activeMask.set(hairEdgeRefined.refinedAlpha);
+    sourceImageData.data.set(hairEdgeRefined.decontaminatedRgba);
+  }
 
   // If user selected positive regions / painted text to keep (in person_plus_text or custom mode)
   if (options?.manualKeepMask) {
@@ -2346,6 +2350,8 @@ export interface RefineAlphaMattingOptions {
   maxDropRatio?: number;
   textPolicy?: TextPolicy;
   refinementPreset?: RefinementPreset;
+  alphaChoke?: number;
+  featherRadius?: number;
 }
 
 /**
@@ -2527,8 +2533,8 @@ export async function refineAlphaMattingWithMask(
 
   // Apply conservative 1px inward choke strictly to personMask only
   let cleanedPersonMask = personMask;
-  if (isPortraitMode && !diagnostics.rollbackTriggered && options?.edgeQuality !== "fast" && quality !== "fast") {
-    cleanedPersonMask = chokeAndFeatherAlphaMask(personMask, w, h, 1.0, 0.7);
+  if (isPortraitMode && !diagnostics.rollbackTriggered && (options?.alphaChoke ?? 0) > 0) {
+    cleanedPersonMask = chokeAndFeatherAlphaMask(personMask, w, h, options?.alphaChoke ?? 1.0, options?.featherRadius ?? 0.7);
   }
 
   // Combine into finalKeepMask: union(cleanedPersonMask, protectedTextMask)
