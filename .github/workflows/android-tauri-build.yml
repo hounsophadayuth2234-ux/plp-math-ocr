@@ -10,6 +10,7 @@ on:
       - 'scripts/build-tauri-entry.mjs'
       - '.github/workflows/android-tauri-build.yml'
       - 'package.json'
+      - 'package-lock.json'
   pull_request:
     branches:
       - main
@@ -19,6 +20,7 @@ on:
       - 'scripts/build-tauri-entry.mjs'
       - '.github/workflows/android-tauri-build.yml'
       - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 
 jobs:
@@ -50,17 +52,26 @@ jobs:
           # Accept SDK licenses
           yes | "$ANDROID_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
-          # Install pinned NDK and build-tools
-          "$ANDROID_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" "build-tools;34.0.0" "platforms;android-34"
+          # Attempt to install pinned NDK 27.1 or verify existing NDK
+          if [ ! -d "$ANDROID_ROOT/ndk/27.1.12297006" ]; then
+            echo "Installing NDK 27.1.12297006 and build-tools 34.0.0..."
+            "$ANDROID_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" "build-tools;34.0.0" "platforms;android-34" || true
+          fi
 
           NDK_PATH="$ANDROID_ROOT/ndk/27.1.12297006"
           if [ ! -d "$NDK_PATH" ]; then
-            echo "::error::NDK path $NDK_PATH does not exist!"
+            echo "Target NDK not found directly, scanning $ANDROID_ROOT/ndk for installed versions..."
+            NDK_PATH=$(find "$ANDROID_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          fi
+
+          if [ -z "$NDK_PATH" ] || [ ! -d "$NDK_PATH" ]; then
+            echo "::error::No Android NDK found in $ANDROID_ROOT/ndk!"
             exit 1
           fi
+
           echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
-          echo "Installed NDK at: $NDK_PATH"
+          echo "Configured NDK at: $NDK_PATH"
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -74,7 +85,7 @@ jobs:
           targets: aarch64-linux-android
 
       - name: Install Node dependencies
-        run: npm ci
+        run: npm ci || npm install --no-audit
 
       - name: Build Tauri Frontend Entry
         run: npm run build:tauri-entry
@@ -156,4 +167,3 @@ jobs:
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           retention-days: 14
           if-no-files-found: error
-

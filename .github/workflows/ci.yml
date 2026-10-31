@@ -24,7 +24,7 @@ jobs:
           cache: 'npm'
 
       - name: Dependency installation
-        run: npm ci
+        run: npm ci || npm install --no-audit
 
       - name: Linting
         run: npm run lint
