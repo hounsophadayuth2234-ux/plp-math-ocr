@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:tauri-entry": "node scripts/build-tauri-entry.mjs",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "@tailwindcss/turbopack": "^4",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/bcryptjs": "^2.4.6",
     "@types/katex": "^0.16.8",
     "@types/node": "^20",
@@ -41,6 +44,7 @@
     "puppeteer-core": "^25.13.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "@tauri-apps/api": "^2.12.4"
   }
 }

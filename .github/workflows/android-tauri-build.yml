@@ -1,0 +1,159 @@
+name: Android Tauri Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src-tauri/**'
+      - 'src/tauri-shell/**'
+      - 'scripts/build-tauri-entry.mjs'
+      - '.github/workflows/android-tauri-build.yml'
+      - 'package.json'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src-tauri/**'
+      - 'src/tauri-shell/**'
+      - 'scripts/build-tauri-entry.mjs'
+      - '.github/workflows/android-tauri-build.yml'
+      - 'package.json'
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Tauri v2 Android APK (aarch64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android NDK and Build Tools
+        run: |
+          echo "Configuring Android SDK and NDK..."
+          ANDROID_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ -z "$ANDROID_ROOT" ]; then
+            ANDROID_ROOT="/usr/local/lib/android/sdk"
+          fi
+          echo "ANDROID_HOME=$ANDROID_ROOT" >> $GITHUB_ENV
+          echo "Using Android SDK at: $ANDROID_ROOT"
+
+          # Accept SDK licenses
+          yes | "$ANDROID_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+          # Install pinned NDK and build-tools
+          "$ANDROID_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" "build-tools;34.0.0" "platforms;android-34"
+
+          NDK_PATH="$ANDROID_ROOT/ndk/27.1.12297006"
+          if [ ! -d "$NDK_PATH" ]; then
+            echo "::error::NDK path $NDK_PATH does not exist!"
+            exit 1
+          fi
+          echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+          echo "Installed NDK at: $NDK_PATH"
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build Tauri Frontend Entry
+        run: npm run build:tauri-entry
+
+      - name: Initialize Tauri Android project
+        run: |
+          echo "Initializing Tauri Android target (CI non-interactive)..."
+          npx tauri android init --ci
+
+      - name: Ensure Android Network Permissions
+        run: |
+          MANIFEST_PATH="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST_PATH" ]; then
+            echo "Checking AndroidManifest.xml permissions..."
+            if ! grep -q "android.permission.INTERNET" "$MANIFEST_PATH"; then
+              echo "Injecting INTERNET permission..."
+              sed -i 's/<manifest[^>]*>/&\n    <uses-permission android:name="android.permission.INTERNET" \/>/' "$MANIFEST_PATH"
+            fi
+            if ! grep -q "android.permission.ACCESS_NETWORK_STATE" "$MANIFEST_PATH"; then
+              echo "Injecting ACCESS_NETWORK_STATE permission..."
+              sed -i 's/<manifest[^>]*>/&\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" \/>/' "$MANIFEST_PATH"
+            fi
+            echo "Manifest verification complete."
+          else
+            echo "Manifest not generated yet; Tauri build will generate standard manifest."
+          fi
+
+      - name: Build Android Debug APK (aarch64)
+        run: |
+          echo "Starting Tauri Android Build..."
+          npx tauri android build --apk --ci --debug --target aarch64
+        env:
+          CI: true
+
+      - name: Locate and Inspect Generated APK
+        id: apk-info
+        run: |
+          echo "Searching for generated APK files..."
+          APK_FILE=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name "*.apk" | head -n 1)
+
+          if [ -z "$APK_FILE" ]; then
+            echo "::error::No APK file found in build outputs!"
+            ls -la src-tauri/gen/android/app/build/outputs/ || true
+            exit 1
+          fi
+
+          FILE_NAME=$(basename "$APK_FILE")
+          FILE_SIZE=$(stat -c%s "$APK_FILE" 2>/dev/null || stat -f%z "$APK_FILE")
+          FILE_SHA=$(sha256sum "$APK_FILE" | awk '{print $1}')
+
+          echo "apk_path=$APK_FILE" >> $GITHUB_OUTPUT
+          echo "apk_name=$FILE_NAME" >> $GITHUB_OUTPUT
+          echo "apk_size=$FILE_SIZE" >> $GITHUB_OUTPUT
+          echo "apk_sha=$FILE_SHA" >> $GITHUB_OUTPUT
+
+          echo "=================================================="
+          echo "TAURI v2 ANDROID APK BUILD SUCCESSFUL"
+          echo "Artifact: $FILE_NAME"
+          echo "Path:     $APK_FILE"
+          echo "Size:     $FILE_SIZE bytes"
+          echo "SHA-256:  $FILE_SHA"
+          echo "=================================================="
+
+          echo "### 🚀 Tauri v2 Android APK Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Status** | ✅ **SUCCESS** |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Variant** | Debug / Unsigned |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target ABI** | \`aarch64\` (arm64-v8a) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Filename** | \`$FILE_NAME\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Size** | $FILE_SIZE bytes |" >> $GITHUB_STEP_SUMMARY
+          echo "| **SHA-256** | \`$FILE_SHA\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Platform** | Android 7.0+ (API 24 to 34) |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plp-math-hybrid-android-debug-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          retention-days: 14
+          if-no-files-found: error
+

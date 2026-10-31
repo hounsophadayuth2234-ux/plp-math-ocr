@@ -58,6 +58,13 @@ test.describe('Background Remover — Person + Text Only Automated Acceptance Te
       await expect(removeBtn).toBeVisible({ timeout: 15000 });
 
       // 3. Select Person + Text Only
+      const advMenu = page.locator('[data-testid="minimalist-advanced-menu"]');
+      if (await advMenu.isVisible().catch(() => false)) {
+        const isOpen = await advMenu.getAttribute('open');
+        if (isOpen === null) {
+          await advMenu.locator('summary').click().catch(() => {});
+        }
+      }
       const personTextBtn = page.locator('[data-testid="content-mode-auto-portrait"]');
       await expect(personTextBtn).toBeVisible({ timeout: 15000 });
       await personTextBtn.click();

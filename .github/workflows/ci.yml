@@ -1,4 +1,4 @@
-name: CI
+name: Web CI Validation
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   ci:
-    name: Continuous Integration
+    name: Continuous Integration & Web Validation
     runs-on: ubuntu-latest
 
     steps:
@@ -34,6 +34,12 @@ jobs:
 
       - name: Vitest Unit Tests
         run: npm test
+
+      - name: Build Tauri Frontend Entry
+        run: npm run build:tauri-entry
+
+      - name: Production Web Build
+        run: npm run build
 
       - name: Install Playwright browsers and dependencies
         run: npx playwright install --with-deps

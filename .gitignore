@@ -51,6 +51,11 @@ test-portrait-downloads/
 !public/**
 !tests/fixtures/**
 !test/fixtures/**
+!src-tauri/icons/**
+
+# tauri & rust
+src-tauri/target/
+src-tauri/gen/
 
 
 # typescript

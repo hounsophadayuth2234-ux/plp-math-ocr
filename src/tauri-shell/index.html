@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PLP Math Content — Android Hybrid Shell</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .logo-container {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      background: linear-content;
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .logo-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.25rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+    .status-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .dot-checking { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+    .dot-online { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .dot-offline { background: var(--error); box-shadow: 0 0 8px var(--error); }
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s ease;
+      width: 100%;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+    .btn-secondary {
+      background: #1f2937;
+      color: #e5e7eb;
+      border: 1px solid #374151;
+    }
+    .btn-secondary:hover {
+      background: #374151;
+    }
+    .notice {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 12px;
+      padding: 0.85rem;
+      font-size: 0.8rem;
+      color: #fbbf24;
+      line-height: 1.4;
+    }
+    .notice-offline {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #fca5a5;
+    }
+    .diag-panel {
+      font-size: 0.75rem;
+      font-family: monospace;
+      background: #0b0f19;
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      padding: 0.85rem;
+      color: #94a3b8;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .diag-item {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+      padding-bottom: 0.2rem;
+    }
+    .diag-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .diag-val {
+      color: #f1f5f9;
+      font-weight: 500;
+    }
+    .footer {
+      text-align: center;
+      font-size: 0.72rem;
+      color: #6b7280;
+    }
+    .spinner {
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-top: 2px solid var(--primary);
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-container">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+          <polyline points="2 17 12 22 22 17"></polyline>
+          <polyline points="2 12 12 17 22 12"></polyline>
+        </svg>
+      </div>
+      <div class="badge">Phase 1 Hybrid Foundation</div>
+      <h1 class="title">PLP Math Content</h1>
+      <p class="subtitle">Hybrid Native Android Shell</p>
+    </div>
+
+    <div class="card">
+      <div class="status-row">
+        <span class="status-label">Backend Connection</span>
+        <div id="status-pill" class="status-pill">
+          <div id="status-dot" class="dot dot-checking"></div>
+          <span id="status-text">Probing server...</span>
+        </div>
+      </div>
+
+      <div id="network-notice" class="notice" style="display: none;">
+        <strong>Phase 1 Notice:</strong> The mobile shell connects directly to the live production server at <code>https://math.dytcore.com</code>. On-device local models will be integrated in Phase 2/3.
+      </div>
+
+      <div id="offline-alert" class="notice notice-offline" style="display: none; margin-top: 0.75rem;">
+        <strong>Network Unavailable:</strong> Cannot reach <code>https://math.dytcore.com</code>. Please ensure your device has internet access and tap Retry.
+      </div>
+
+      <div class="btn-group">
+        <button id="btn-launch-hub" class="btn btn-primary" onclick="launchLive('/plp-math-content')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+          </svg>
+          Launch PLP Math Hub
+        </button>
+
+        <button id="btn-launch-login" class="btn btn-secondary" onclick="launchLive('/login')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"></path>
+          </svg>
+          Account Login / SSO
+        </button>
+
+        <button id="btn-launch-bg" class="btn btn-secondary" onclick="launchLive('/bg-remover')">
+          Module 02 — Background Remover
+        </button>
+
+        <button id="btn-launch-upscaler" class="btn btn-secondary" onclick="launchLive('/image-upscaler')">
+          Module 03 — Image Upscaler (4x)
+        </button>
+
+        <button id="btn-retry" class="btn btn-secondary" onclick="checkBackendHealth()" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          Retry Backend Probe
+        </button>
+      </div>
+    </div>
+
+    <!-- Diagnostic Panel -->
+    <div class="card">
+      <div class="status-row">
+        <span class="status-label" style="font-weight: 600;">System Diagnostics</span>
+        <span style="font-size: 0.72rem; color: #60a5fa;">Phase 1 Verified</span>
+      </div>
+      <div class="diag-panel">
+        <div class="diag-item">
+          <span>Tauri Shell Detected</span>
+          <span id="diag-tauri" class="diag-val">Checking...</span>
+        </div>
+        <div class="diag-item">
+          <span>Frontend Entry</span>
+          <span class="diag-val">Static Shell v0.1.0</span>
+        </div>
+        <div class="diag-item">
+          <span>Backend Target</span>
+          <span class="diag-val">https://math.dytcore.com</span>
+        </div>
+        <div class="diag-item">
+          <span>Network Reachability</span>
+          <span id="diag-network" class="diag-val">Probing...</span>
+        </div>
+        <div class="diag-item">
+          <span>Round-trip Latency</span>
+          <span id="diag-latency" class="diag-val">--</span>
+        </div>
+        <div class="diag-item">
+          <span>Platform Detected</span>
+          <span id="diag-platform" class="diag-val">--</span>
+        </div>
+        <div class="diag-item">
+          <span>App Identifier</span>
+          <span class="diag-val">com.dytcore.plpmath</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      PLP Math Content &bull; Phase 1 Hybrid Android Shell &bull; Production v0.1.0
+    </div>
+  </div>
+
+  <script>
+    const BACKEND_URL = "https://math.dytcore.com";
+
+    function updateDiagnostics() {
+      // 1. Detect Tauri v2 runtime
+      const isTauri = typeof window.__TAURI__ !== 'undefined' || typeof window.__TAURI_INTERNALS__ !== 'undefined';
+      document.getElementById('diag-tauri').textContent = isTauri ? "Yes (Tauri v2 Mobile Core)" : "Web / Shell Preview";
+
+      // 2. Detect Platform
+      const ua = navigator.userAgent;
+      let platform = "Web Browser";
+      if (/Android/i.test(ua)) {
+        platform = "Android Native WebView";
+      } else if (/iPhone|iPad|iPod/i.test(ua)) {
+        platform = "iOS Native WKWebView";
+      } else if (/Windows/i.test(ua)) {
+        platform = "Windows Desktop";
+      } else if (/Linux/i.test(ua)) {
+        platform = "Linux";
+      }
+      document.getElementById('diag-platform').textContent = platform;
+    }
+
+    async function checkBackendHealth() {
+      const statusPill = document.getElementById('status-pill');
+      const statusDot = document.getElementById('status-dot');
+      const statusText = document.getElementById('status-text');
+      const diagNetwork = document.getElementById('diag-network');
+      const diagLatency = document.getElementById('diag-latency');
+      const networkNotice = document.getElementById('network-notice');
+      const offlineAlert = document.getElementById('offline-alert');
+      const btnRetry = document.getElementById('btn-retry');
+
+      statusDot.className = "dot dot-checking";
+      statusText.textContent = "Probing server...";
+      diagNetwork.textContent = "Probing...";
+      diagLatency.textContent = "--";
+      btnRetry.style.display = "none";
+
+      const startTime = performance.now();
+      try {
+        // Fast probe to server gate / health
+        const res = await fetch(BACKEND_URL + "/api/auth/gate", {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+          cache: "no-store"
+        });
+
+        const elapsed = Math.round(performance.now() - startTime);
+
+        if (res.ok || res.status === 401 || res.status === 403) {
+          // Server responded, whether authenticated or unauthenticated
+          statusDot.className = "dot dot-online";
+          statusText.textContent = "Live & Connected (" + elapsed + "ms)";
+          diagNetwork.textContent = "Reachable (" + res.status + " " + res.statusText + ")";
+          diagLatency.textContent = elapsed + " ms";
+          networkNotice.style.display = "block";
+          offlineAlert.style.display = "none";
+        } else {
+          throw new Error("HTTP " + res.status);
+        }
+      } catch (err) {
+        console.warn("Backend probe error:", err);
+        statusDot.className = "dot dot-offline";
+        statusText.textContent = "Server Unreachable";
+        diagNetwork.textContent = "Offline / Connection Refused";
+        diagLatency.textContent = "Timeout";
+        networkNotice.style.display = "none";
+        offlineAlert.style.display = "block";
+        btnRetry.style.display = "flex";
+      }
+    }
+
+    function launchLive(path) {
+      const target = BACKEND_URL + (path || "");
+      window.location.href = target;
+    }
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      updateDiagnostics();
+      checkBackendHealth();
+    });
+  </script>
+</body>
+</html>
+
