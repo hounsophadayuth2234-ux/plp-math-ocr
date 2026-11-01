@@ -84,3 +84,4 @@ describe("Module 02: Background Remover Native NPU Upgrade", () => {
     expect(serviceContent).toContain("REMOVE_BACKGROUND_NATIVE");
   });
 });
+

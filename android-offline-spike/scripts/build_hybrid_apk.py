@@ -63,8 +63,8 @@ def main():
     brotli_stream = None
 
     log(f"Compressing hybrid shell into exact {target_comp_len}-byte Brotli native slot...")
-    for q in [10, 11, 4, 5, 9, 8]:
-        for pad in range(50, 400):
+    for q in [10, 4, 5, 8, 9]:
+        for pad in range(1, 400):
             for seed in range(50):
                 rng = random.Random(seed)
                 candidate = hybrid_html + b"\n<!-- " + rng.randbytes(pad) + b" -->\n"

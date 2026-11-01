@@ -248,3 +248,4 @@ Java_com_plp_math_service_OnnxCvNativeBridge_freeModel(
 }
 
 } // extern "C"
+

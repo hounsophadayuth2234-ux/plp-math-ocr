@@ -77,3 +77,4 @@ object OnnxCvNativeBridge {
         val modelName: String
     )
 }
+

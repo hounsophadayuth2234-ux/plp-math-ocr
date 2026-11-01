@@ -76,3 +76,4 @@ describe("Tauri WebView Online Features & Security Audit", () => {
     expect(csp).not.toMatch(/script-src\s+[^;]*\s\*\s/);
   });
 });
+
