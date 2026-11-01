@@ -1,3 +1,5 @@
+import { isForceOfflineMode } from "./environment-boundary";
+
 export interface DriveUploadOptions {
   file?: File | Blob;
   dataUrl?: string;
@@ -56,6 +58,9 @@ export function formatDriveFilename(params: {
  * Does not block caller on failure; throws clean descriptive Error if unsuccessful.
  */
 export async function uploadImageToDrive(options: DriveUploadOptions): Promise<DriveUploadFileRecord> {
+  if (isForceOfflineMode()) {
+    throw new Error("Cloud upload blocked: Force Offline Mode is enabled.");
+  }
   const { file, dataUrl, content, text, filename, mimeType, description, makePublic = false } = options;
 
   let response: Response;

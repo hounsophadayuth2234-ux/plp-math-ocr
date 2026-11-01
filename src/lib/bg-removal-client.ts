@@ -1,5 +1,6 @@
 import { ProcessingStatusLabel } from "./types";
 import { isTauriEnvironment, isForceOfflineMode, removeBackgroundWithNativeFallback } from "./tauri-fallback-bridge";
+import { assertCloudCallPermitted } from "./environment-boundary";
 import { downscaleImageIfExceeds, getImageDimensions } from "./processing-utils";
 import { bgWorkerManager, WorkerProgressEvent } from "./bg-removal-worker-manager";
 import { probeWebGpuAndWasm } from "./webgpu-probe";
@@ -868,7 +869,7 @@ export async function removeBackgroundBrowser(
         sourceWidth: origW,
         sourceHeight: origH,
         wasDownscaled: wasScaled,
-        label: "Snapdragon 8 Elite Native NPU" as ProcessingStatusLabel,
+        label: (nativeRes.backendUsed.includes("NPU") ? "Snapdragon 8 Elite Native NPU" : "Algorithmic Chroma/Luma Cutout") as ProcessingStatusLabel,
         model: nativeRes.modelName,
         actualModel: nativeRes.modelName,
         actualModelFile: "models/birefnet-general.onnx",
@@ -916,8 +917,16 @@ export async function removeBackgroundBrowser(
       };
     } catch (nativeErr: any) {
       if (options?.signal?.aborted) throw nativeErr;
+      if (isForceOfflineMode()) {
+        throw new Error(`Offline background remover error: ${nativeErr instanceof Error ? nativeErr.message : String(nativeErr)}`);
+      }
       console.warn("[Module 02] Native NPU inference fallback to browser engine:", nativeErr);
     }
+  }
+
+  // Prevent downloading 114MB HuggingFace models when Force Offline Mode is active
+  if (isForceOfflineMode()) {
+    throw new Error("Force Offline Mode active: remote model download blocked.");
   }
 
   const isAlreadyCached = bgWorkerManager.isModelCached();
@@ -1571,6 +1580,8 @@ export async function removeBackgroundRemote(
 
   let res: Response | null = null;
   let usedDirect = false;
+
+  assertCloudCallPermitted("Module 02: Background Remover", "/api/remove-bg");
 
   // Try direct worker upload if directUrl is configured (avoids Vercel 4.5MB Serverless function limit)
   if (opts.directUrl && opts.directUrl.startsWith("http")) {

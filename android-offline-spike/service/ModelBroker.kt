@@ -279,7 +279,7 @@ class ModelBroker(private val context: Context) {
                 width = width,
                 height = height,
                 refineEdges = refineEdges
-            )
+            ) ?: throw IllegalStateException("Native CV engine returned null result (buffer size or memory allocation failure)")
 
             val base64Output = android.util.Base64.encodeToString(result.outputRgba, android.util.Base64.NO_WRAP)
             val base64Alpha = android.util.Base64.encodeToString(result.alphaMask, android.util.Base64.NO_WRAP)

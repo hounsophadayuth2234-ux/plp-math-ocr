@@ -97,15 +97,25 @@ Java_com_plp_math_service_OnnxCvNativeBridge_removeBackground(
         return nullptr;
     }
 
+    if (width <= 0 || height <= 0 || width > 8192 || height > 8192) {
+        LOGE("Invalid image dimensions (%dx%d)", width, height);
+        return nullptr;
+    }
+
     auto t0 = std::chrono::high_resolution_clock::now();
 
     jsize input_len = env->GetArrayLength(input_rgba_j);
-    if (input_len < width * height * 4) {
-        LOGE("Input RGBA buffer size mismatch (%d < %d)", input_len, width * height * 4);
+    size_t expected_len = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
+    if (static_cast<size_t>(input_len) < expected_len) {
+        LOGE("Input RGBA buffer size mismatch (%d < %zu)", input_len, expected_len);
         return nullptr;
     }
 
     jbyte *rgba_ptr = env->GetByteArrayElements(input_rgba_j, nullptr);
+    if (!rgba_ptr) {
+        LOGE("Failed to acquire JNI byte array elements");
+        return nullptr;
+    }
     const uint8_t *src_rgba = reinterpret_cast<const uint8_t *>(rgba_ptr);
 
     // 1. Preprocess: NEON-accelerated bilinear resize to model input_size x input_size

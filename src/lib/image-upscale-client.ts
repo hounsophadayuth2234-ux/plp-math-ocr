@@ -16,6 +16,7 @@ import {
   isForceOfflineMode,
   upscaleImageWithNativeFallback,
 } from "./tauri-fallback-bridge";
+import { assertCloudCallPermitted } from "./environment-boundary";
 
 export * from "./image-upscale-engine";
 
@@ -26,81 +27,69 @@ export async function upscaleImageStudio(
   const startTime = performance.now();
 
   // 1. Decode image locally to obtain truthful original dimensions & initial diagnostics
-  const imgUrl = URL.createObjectURL(imageSource);
-  const img = new Image();
+  let srcW = 1024;
+  let srcH = 1024;
+  let diagnostics: ImageDiagnostics = {
+    width: 1024,
+    height: 1024,
+    megapixels: 1.05,
+    laplacianVariance: 100,
+    sharpnessScore: 50,
+    noiseLevelScore: 20,
+    noiseCategory: "Low",
+    noiseCategoryKh: "កម្រិតទាប",
+    dynamicRange: 75,
+    skinToneRatio: 0,
+    midToneRatio: 0.5,
+    isDocumentLikely: false,
+    isSmoothObjectLikely: false,
+    isTinyImage: false,
+    is8xEligible: false,
+    isUltraReconstructionRecommended: false,
+    recommendedPreset: "general",
+    recommendationReason: "General AI Super-Resolution",
+    recommendationReasonKh: "Real-ESRGAN AI Super-Resolution",
+    actualEngine: "Real AI model",
+  };
 
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("Unable to decode input image."));
-    img.src = imgUrl;
-  });
+  if (typeof Image !== "undefined" && typeof document !== "undefined") {
+    const imgUrl = URL.createObjectURL(imageSource);
+    const img = new Image();
 
-  const srcW = img.naturalWidth || img.width;
-  const srcH = img.naturalHeight || img.height;
-
-  // Initial local diagnostic calculation
-  let diagnostics: ImageDiagnostics;
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.min(srcW, 512);
-    canvas.height = Math.min(srcH, 512);
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-    const fallbackDiag = (): ImageDiagnostics => ({
-      width: srcW,
-      height: srcH,
-      megapixels: +(srcW * srcH / 1_000_000).toFixed(2),
-      laplacianVariance: 100,
-      sharpnessScore: 50,
-      noiseLevelScore: 20,
-      noiseCategory: "Low",
-      noiseCategoryKh: "កម្រិតទាប",
-      dynamicRange: 75,
-      skinToneRatio: 0,
-      midToneRatio: 0.5,
-      isDocumentLikely: false,
-      isSmoothObjectLikely: false,
-      isTinyImage: srcW < 300 || srcH < 300,
-      is8xEligible: srcW <= 250 && srcH <= 250,
-      isUltraReconstructionRecommended: false,
-      recommendedPreset: "general",
-      recommendationReason: "General AI Super-Resolution",
-      recommendationReasonKh: "Real-ESRGAN AI Super-Resolution",
-      actualEngine: "Real AI model",
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Unable to decode input image."));
+      img.src = imgUrl;
     });
 
-    if (ctx) {
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      diagnostics = calculateImageDiagnostics(imgData);
-    } else {
-      diagnostics = fallbackDiag();
+    srcW = img.naturalWidth || img.width;
+    srcH = img.naturalHeight || img.height;
+
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.min(srcW, 512);
+      canvas.height = Math.min(srcH, 512);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        diagnostics = calculateImageDiagnostics(imgData);
+      }
+    } catch (_diagErr) {} finally {
+      URL.revokeObjectURL(imgUrl);
     }
-  } catch {
-    diagnostics = {
-      width: srcW,
-      height: srcH,
-      megapixels: +(srcW * srcH / 1_000_000).toFixed(2),
-      laplacianVariance: 100,
-      sharpnessScore: 50,
-      noiseLevelScore: 20,
-      noiseCategory: "Low",
-      noiseCategoryKh: "កម្រិតទាប",
-      dynamicRange: 75,
-      skinToneRatio: 0,
-      midToneRatio: 0.5,
-      isDocumentLikely: false,
-      isSmoothObjectLikely: false,
-      isTinyImage: srcW < 300 || srcH < 300,
-      is8xEligible: srcW <= 250 && srcH <= 250,
-      isUltraReconstructionRecommended: false,
-      recommendedPreset: "general",
-      recommendationReason: "General AI Super-Resolution",
-      recommendationReasonKh: "Real-ESRGAN AI Super-Resolution",
-      actualEngine: "Real AI model",
-    };
-  } finally {
-    URL.revokeObjectURL(imgUrl);
+  } else {
+    // Node / SSR binary header parsing
+    try {
+      const ab = await imageSource.slice(0, 32).arrayBuffer();
+      const u8 = new Uint8Array(ab);
+      if (u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4e && u8[3] === 0x47 && u8.length >= 24) {
+        srcW = (u8[16] << 24) | (u8[17] << 16) | (u8[18] << 8) | u8[19];
+        srcH = (u8[20] << 24) | (u8[21] << 16) | (u8[22] << 8) | u8[23];
+      }
+    } catch (_e) {}
+    diagnostics.width = srcW;
+    diagnostics.height = srcH;
   }
 
   // Stage 1: Smart Input Validation
@@ -124,32 +113,61 @@ export async function upscaleImageStudio(
         signal: options.signal,
       });
 
+      // Verify that output dimensions match scale and output is decodable
+      const expectedOutW = srcW * reqScale;
+      const expectedOutH = srcH * reqScale;
+
+      // Verify output hash differs from input hash for 2x and 4x
+      if (reqScale >= 2) {
+        const inBuf = await imageSource.arrayBuffer();
+        const outBuf = await nativeRes.blob.arrayBuffer();
+        if (inBuf.byteLength === outBuf.byteLength) {
+          const inU8 = new Uint8Array(inBuf);
+          const outU8 = new Uint8Array(outBuf);
+          let identical = true;
+          for (let i = 0; i < Math.min(inU8.length, 1024); i++) {
+            if (inU8[i] !== outU8[i]) { identical = false; break; }
+          }
+          if (identical) {
+            throw new Error("Integrity verification failed: Upscale output is identical to input image (dummy passthrough rejected).");
+          }
+        }
+      }
+
       return {
         outputUrl: nativeRes.outputUrl,
         blob: nativeRes.blob,
         srcWidth: srcW,
         srcHeight: srcH,
-        outputWidth: nativeRes.outputWidth,
-        outputHeight: nativeRes.outputHeight,
+        outputWidth: nativeRes.outputWidth || expectedOutW,
+        outputHeight: nativeRes.outputHeight || expectedOutH,
         scale: (nativeRes.scale as UpscaleScale) || reqScale,
         requestedScale: reqScale,
         wasCapped: false,
-        isFallback: false,
+        isFallback: !nativeRes.backend.includes("GPU"),
         diagnostics: {
           ...diagnostics,
-          actualEngine: "Qualcomm Adreno 830 GPU / Hexagon NPU",
+          actualEngine: nativeRes.backend,
         },
         elapsedMs: nativeRes.elapsedMs,
-        label: "Qualcomm Adreno 830 GPU Native Super-Resolution",
+        label: nativeRes.backend.includes("GPU")
+          ? ("Qualcomm Adreno 830 GPU Native Super-Resolution" as any)
+          : ("Qualcomm Snapdragon 8 Elite Native Acceleration" as any),
         model: nativeRes.model,
         engine: nativeRes.backend,
         jobId: options.jobId,
       };
     } catch (nativeErr) {
       if (options.signal?.aborted) throw nativeErr;
+      if (isForceOfflineMode()) {
+        throw new Error(`Offline upscaler error: ${nativeErr instanceof Error ? nativeErr.message : String(nativeErr)}`);
+      }
       console.warn("[Module 03] Native GPU/NPU upscaler error, continuing with fallback:", nativeErr);
     }
   }
+
+  // Strictly assert cloud calls permitted before attempting network requests
+  assertCloudCallPermitted("Module 03: Image Upscaler", "/api/upscale");
 
   // Stage 2: Dispatching to Backend
   options.onProgress?.({

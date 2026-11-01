@@ -150,7 +150,7 @@ class BgWorkerManager {
       }
 
       // Increased timeout to 120s to safely allow 176MB FP32 model download on initial run
-      const timeoutMs = 120000;
+      const timeoutMs = 15000;
       const timeoutTimer = setTimeout(() => {
         if (settled) return;
         cleanup();

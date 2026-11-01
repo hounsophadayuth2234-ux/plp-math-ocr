@@ -158,7 +158,31 @@ class InferenceService : Service() {
                         val modelType = request.optString("model_type", "birefnet_full")
                         val refineEdges = request.optBoolean("refine_edges", true)
 
-                        val rgbaBytes = android.util.Base64.decode(inputBase64, android.util.Base64.DEFAULT)
+                        val rawBytes = android.util.Base64.decode(inputBase64, android.util.Base64.DEFAULT)
+                        val targetLen = width * height * 4
+                        val rgbaBytes = if (rawBytes.size == targetLen) {
+                            rawBytes
+                        } else {
+                            try {
+                                val bmp = android.graphics.BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size)
+                                if (bmp != null) {
+                                    val targetW = if (width > 0) width else bmp.width
+                                    val targetH = if (height > 0) height else bmp.height
+                                    val scaledBmp = if (bmp.width != targetW || bmp.height != targetH) {
+                                        android.graphics.Bitmap.createScaledBitmap(bmp, targetW, targetH, true)
+                                    } else bmp
+                                    val buf = java.nio.ByteBuffer.allocate(targetW * targetH * 4)
+                                    scaledBmp.copyPixelsToBuffer(buf)
+                                    buf.array()
+                                } else {
+                                    rawBytes
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Bitmap decode fallback: ${e.message}")
+                                rawBytes
+                            }
+                        }
+
                         val resp = modelBroker?.removeBackgroundNative(
                             inputRgba = rgbaBytes,
                             width = width,

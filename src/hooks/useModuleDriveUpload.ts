@@ -7,6 +7,7 @@ import {
   DriveUploadFileRecord,
 } from "@/lib/drive-upload-client";
 import type { DriveSyncStatus } from "@/components/drive/ModuleDriveSync";
+import { isForceOfflineMode } from "@/lib/environment-boundary";
 
 export interface UseModuleDriveUploadOptions {
   moduleName: string;
@@ -33,6 +34,11 @@ export function useModuleDriveUpload({
 
   // Inspect Drive connection status and session username
   const checkConnectionAndSession = useCallback(async () => {
+    if (isForceOfflineMode()) {
+      setIsConnected(false);
+      isConnectedRef.current = false;
+      return;
+    }
     try {
       const [sessionRes, driveRes] = await Promise.allSettled([
         fetch("/api/auth/session"),
@@ -98,7 +104,7 @@ export function useModuleDriveUpload({
       }
 
       // If user disabled saveToDrive or Google Drive is not connected, skip silently without console errors
-      if (!saveToDriveRef.current || !isConnectedRef.current) {
+      if (isForceOfflineMode() || !saveToDriveRef.current || !isConnectedRef.current) {
         return [];
       }
 
