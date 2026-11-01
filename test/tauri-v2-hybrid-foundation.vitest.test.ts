@@ -93,28 +93,29 @@ describe("Tauri v2 Hybrid Android Foundation & Safety Verification", () => {
     const shellHtmlPath = path.join(rootDir, "src", "tauri-shell", "index.html");
     const distHtmlPath = path.join(rootDir, "tauri-dist", "index.html");
 
-    it("source shell entry exists and contains required UI and diagnostics elements", () => {
+    it("source shell entry exists and contains responsive overhaul UI with zero debug noise", () => {
       expect(fs.existsSync(shellHtmlPath)).toBe(true);
       const html = fs.readFileSync(shellHtmlPath, "utf-8");
 
-      // Required UI elements
+      // Required UI elements & Safe Area Inset
       expect(html).toContain("PLP Math Content");
-      expect(html).toContain("Backend Connection");
-      expect(html).toContain("System Diagnostics");
-      expect(html).toContain("Launch PLP Math Hub");
-      expect(html).toContain("Account Login / SSO");
-      expect(html).toContain("Network Unavailable");
-      expect(html).toContain("Retry Backend Probe");
-
-      // Required diagnostic attributes
-      expect(html).toContain("Tauri Shell Detected");
-      expect(html).toContain("Frontend Entry");
-      expect(html).toContain("Backend Target");
-      expect(html).toContain("Network Reachability");
-      expect(html).toContain("Round-trip Latency");
-      expect(html).toContain("Platform Detected");
-      expect(html).toContain("App Identifier");
+      expect(html).toContain("viewport-fit=cover");
       expect(html).toContain("https://math.dytcore.com");
+
+      // 5 Core Modules in Responsive Grid
+      expect(html).toContain("MODULE 01");
+      expect(html).toContain("MODULE 02");
+      expect(html).toContain("MODULE 03");
+      expect(html).toContain("MODULE 04");
+      expect(html).toContain("MODULE 05");
+
+      // Super Admin Access Feature
+      expect(html).toContain("Super Admin Access & Offline Override");
+      expect(html).toContain("MONOTONIC TIMEBOX");
+
+      // Messy System Diagnostics Debug Box MUST BE REMOVED
+      expect(html).not.toContain("System Diagnostics");
+      expect(html).not.toContain("Tauri Shell Detected");
     });
 
     it("build:tauri-entry produces valid tauri-dist/index.html", () => {

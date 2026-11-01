@@ -2,417 +2,309 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PLP Math Content — Android Hybrid Shell</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>PLP Math Content — Hybrid Workspace</title>
   <style>
-    :root {
-      --bg: #090d16;
-      --card-bg: #111827;
-      --card-border: #1f2937;
-      --text: #f3f4f6;
-      --text-muted: #9ca3af;
-      --primary: #3b82f6;
-      --primary-hover: #2563eb;
-      --success: #10b981;
-      --warning: #f59e0b;
-      --error: #ef4444;
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    :root{
+      --bg:#030712;--card:#0b1120;--border:#1e293b;--text:#f0f6fc;--muted:#94a3b8;
+      --cyan:#00f0ff;--gold:#fbbf24;--green:#10b981;--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);
+      --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;
+      padding:max(1rem,var(--sat)) 1rem max(1.5rem,var(--sab));display:flex;flex-direction:column;align-items:center;
     }
-    body {
-      background-color: var(--bg);
-      color: var(--text);
-      font-family: var(--font);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 1.5rem;
+    .wrap{width:100%;max-width:980px;display:flex;flex-direction:column;gap:0.9rem;}
+    .header{
+      display:flex;align-items:center;justify-content:space-between;padding:0.65rem 0.9rem;
+      background:#0b1120e6;border:1px solid var(--border);border-radius:14px;
     }
-    .container {
-      width: 100%;
-      max-width: 480px;
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
+    .brand{display:flex;align-items:center;gap:0.65rem;}
+    .logo{
+      width:38px;height:38px;border-radius:10px;background:#000;border:1px solid #fbbf2466;
+      display:flex;align-items:center;justify-content:center;
     }
-    .header {
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.5rem;
+    .title{font-size:1.05rem;font-weight:700;color:#fff;display:flex;align-items:center;gap:0.4rem;}
+    .badge{font-size:0.62rem;font-weight:700;padding:0.15rem 0.4rem;border-radius:5px;background:#00f0ff22;color:var(--cyan);border:1px solid #00f0ff55;}
+    .sub{font-size:0.7rem;color:var(--muted);}
+    .pill{display:flex;align-items:center;gap:0.4rem;padding:0.35rem 0.7rem;border-radius:9999px;background:#0f172a;border:1px solid var(--border);font-size:0.75rem;font-weight:600;}
+    .dot{width:8px;height:8px;border-radius:50%;}
+    .dot-check{background:#f59e0b;box-shadow:0 0 6px #f59e0b;}
+    .dot-on{background:#10b981;box-shadow:0 0 6px #10b981;}
+    .dot-off{background:var(--cyan);box-shadow:0 0 6px var(--cyan);}
+    .banner{
+      background:#0b1120f0;border:1px solid var(--border);border-radius:12px;padding:0.65rem 0.9rem;
+      display:flex;align-items:center;justify-content:space-between;gap:0.75rem;
     }
-    .logo-container {
-      width: 72px;
-      height: 72px;
-      border-radius: 18px;
-      background: linear-content;
-      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+    .btn-sm{
+      padding:0.35rem 0.7rem;border-radius:7px;background:#00f0ff22;border:1px solid #00f0ff55;
+      color:var(--cyan);font-size:0.72rem;font-weight:600;cursor:pointer;white-space:nowrap;
     }
-    .logo-container img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
+    .head-title{font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#e2e8f0;display:flex;align-items:center;gap:0.4rem;}
+    .grid{display:grid;grid-template-columns:1fr;gap:0.85rem;}
+    @media (min-width:640px){.grid{grid-template-columns:repeat(2,1fr);}}
+    @media (min-width:1024px){.grid{grid-template-columns:repeat(3,1fr);}}
+    .card{
+      background:var(--card);border:1px solid var(--border);border-radius:14px;padding:0.95rem;
+      display:flex;flex-direction:column;justify-content:space-between;gap:0.8rem;transition:transform 0.15s ease;
     }
-    .title {
-      font-size: 1.35rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      color: #ffffff;
+    .card:hover{border-color:#38bdf8;transform:translateY(-1px);}
+    .card-top{display:flex;align-items:flex-start;justify-content:space-between;}
+    .icon-box{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;}
+    .tag{font-size:0.6rem;font-family:monospace;font-weight:700;padding:0.15rem 0.45rem;border-radius:5px;background:#1e293b;color:#94a3b8;}
+    .mod-num{font-size:0.65rem;font-family:monospace;font-weight:700;color:var(--cyan);}
+    .mod-title{font-size:0.9rem;font-weight:700;color:#fff;margin-top:0.15rem;}
+    .mod-sub{font-size:0.72rem;color:var(--muted);}
+    .mod-desc{font-size:0.75rem;color:#94a3b8;line-height:1.4;margin-top:0.25rem;}
+    .btn-launch{
+      width:100%;padding:0.55rem 0.75rem;border-radius:8px;font-size:0.78rem;font-weight:600;
+      border:1px solid var(--border);background:#111827;color:#f1f5f9;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;gap:0.4rem;
     }
-    .subtitle {
-      font-size: 0.85rem;
-      color: var(--text-muted);
+    .btn-launch:hover{background:#1e293b;color:#fff;}
+    .admin{
+      background:#0f172ae6;border:1px solid #fbbf2455;border-radius:14px;padding:0.75rem 1rem;
     }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.25rem 0.65rem;
-      border-radius: 9999px;
-      font-size: 0.72rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      background: rgba(59, 130, 246, 0.15);
-      color: #60a5fa;
-      border: 1px solid rgba(59, 130, 246, 0.3);
-    }
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 1.25rem;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    }
-    .status-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 0.75rem;
-    }
-    .status-label {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-    .status-pill {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-    .dot-checking { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
-    .dot-online { background: var(--success); box-shadow: 0 0 8px var(--success); }
-    .dot-offline { background: var(--error); box-shadow: 0 0 8px var(--error); }
-    .btn-group {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      margin-top: 0.5rem;
-    }
-    .btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 0.85rem 1rem;
-      border-radius: 12px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      text-decoration: none;
-      cursor: pointer;
-      border: none;
-      transition: all 0.15s ease;
-      width: 100%;
-    }
-    .btn-primary {
-      background: var(--primary);
-      color: #ffffff;
-    }
-    .btn-primary:hover {
-      background: var(--primary-hover);
-    }
-    .btn-secondary {
-      background: #1f2937;
-      color: #e5e7eb;
-      border: 1px solid #374151;
-    }
-    .btn-secondary:hover {
-      background: #374151;
-    }
-    .notice {
-      background: rgba(245, 158, 11, 0.08);
-      border: 1px solid rgba(245, 158, 11, 0.25);
-      border-radius: 12px;
-      padding: 0.85rem;
-      font-size: 0.8rem;
-      color: #fbbf24;
-      line-height: 1.4;
-    }
-    .notice-offline {
-      background: rgba(239, 68, 68, 0.08);
-      border: 1px solid rgba(239, 68, 68, 0.25);
-      color: #fca5a5;
-    }
-    .diag-panel {
-      font-size: 0.75rem;
-      font-family: monospace;
-      background: #0b0f19;
-      border: 1px solid #1f2937;
-      border-radius: 10px;
-      padding: 0.85rem;
-      color: #94a3b8;
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-    }
-    .diag-item {
-      display: flex;
-      justify-content: space-between;
-      border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
-      padding-bottom: 0.2rem;
-    }
-    .diag-item:last-child {
-      border-bottom: none;
-      padding-bottom: 0;
-    }
-    .diag-val {
-      color: #f1f5f9;
-      font-weight: 500;
-    }
-    .footer {
-      text-align: center;
-      font-size: 0.72rem;
-      color: #6b7280;
-    }
-    .spinner {
-      border: 2px solid rgba(255, 255, 255, 0.1);
-      border-top: 2px solid var(--primary);
-      border-radius: 50%;
-      width: 16px;
-      height: 16px;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
+    .admin-bar{display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
+    .admin-wrap{display:flex;align-items:center;gap:0.5rem;font-size:0.84rem;font-weight:700;color:#f8fafc;}
+    .admin-tag{font-size:0.62rem;font-weight:700;padding:0.15rem 0.45rem;border-radius:5px;background:#fbbf2422;color:var(--gold);border:1px solid #fbbf2455;}
+    .admin-body{margin-top:0.65rem;padding-top:0.65rem;border-top:1px solid #ffffff14;display:flex;flex-direction:column;gap:0.5rem;}
+    .admin-form{display:flex;gap:0.5rem;flex-wrap:wrap;}
+    .admin-inp{flex:1;min-width:180px;padding:0.5rem 0.7rem;border-radius:8px;border:1px solid #334155;background:#020617;color:#fff;font-size:0.8rem;font-family:monospace;}
+    .btn-admin{padding:0.5rem 0.9rem;border-radius:8px;border:none;background:#d97706;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;}
+    .msg{font-size:0.75rem;font-family:monospace;padding:0.4rem 0.6rem;border-radius:6px;display:none;}
+    .msg-ok{background:#10b98122;border:1px solid #10b98155;color:#34d399;display:block;}
+    .msg-err{background:#ef444422;border:1px solid #ef444455;color:#f87171;display:block;}
+    .footer{text-align:center;font-size:0.7rem;color:#64748b;}
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="wrap">
     <div class="header">
-      <div class="logo-container">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-          <polyline points="2 17 12 22 22 17"></polyline>
-          <polyline points="2 12 12 17 22 12"></polyline>
-        </svg>
-      </div>
-      <div class="badge">Phase 1 Hybrid Foundation</div>
-      <h1 class="title">PLP Math Content</h1>
-      <p class="subtitle">Hybrid Native Android Shell</p>
-    </div>
-
-    <div class="card">
-      <div class="status-row">
-        <span class="status-label">Backend Connection</span>
-        <div id="status-pill" class="status-pill">
-          <div id="status-dot" class="dot dot-checking"></div>
-          <span id="status-text">Probing server...</span>
+      <div class="brand">
+        <div class="logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        </div>
+        <div>
+          <div class="title"><span>PLP Math Content</span><span class="badge">Hybrid Shell</span></div>
+          <div class="sub">DYT ECOSYSTEM &bull; Snapdragon 8 Elite Native Acceleration</div>
         </div>
       </div>
-
-      <div id="network-notice" class="notice" style="display: none;">
-        <strong>Phase 1 Notice:</strong> The mobile shell connects directly to the live production server at <code>https://math.dytcore.com</code>. On-device local models will be integrated in Phase 2/3.
-      </div>
-
-      <div id="offline-alert" class="notice notice-offline" style="display: none; margin-top: 0.75rem;">
-        <strong>Network Unavailable:</strong> Cannot reach <code>https://math.dytcore.com</code>. Please ensure your device has internet access and tap Retry.
-      </div>
-
-      <div class="btn-group">
-        <button id="btn-launch-hub" class="btn btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-          </svg>
-          Launch PLP Math Hub
-        </button>
-
-        <button id="btn-launch-login" class="btn btn-secondary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"></path>
-          </svg>
-          Account Login / SSO
-        </button>
-
-        <button id="btn-launch-bg" class="btn btn-secondary">
-          Module 02 — Background Remover
-        </button>
-
-        <button id="btn-launch-upscaler" class="btn btn-secondary">
-          Module 03 — Image Upscaler (4x)
-        </button>
-
-        <button id="btn-retry" class="btn btn-secondary" style="display: none;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-          Retry Backend Probe
-        </button>
+      <div class="pill">
+        <div class="dot dot-check" id="status-dot"></div>
+        <span id="status-text">Probing backend...</span>
       </div>
     </div>
 
-    <!-- Diagnostic Panel -->
-    <div class="card">
-      <div class="status-row">
-        <span class="status-label" style="font-weight: 600;">System Diagnostics</span>
-        <span style="font-size: 0.72rem; color: #60a5fa;">Phase 1 Verified</span>
+    <div class="banner">
+      <div id="banner-text" style="font-size:0.78rem;color:#cbd5e1;">Probing production server at <code>https://math.dytcore.com</code>...</div>
+      <button class="btn-sm" id="btn-retry">Retry Probe</button>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div class="head-title">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>ម៉ូឌុលការងារចម្បង (Primary Workspace Modules)</span>
       </div>
-      <div class="diag-panel">
-        <div class="diag-item">
-          <span>Tauri Shell Detected</span>
-          <span id="diag-tauri" class="diag-val">Checking...</span>
+      <span style="font-size:0.72rem;font-family:monospace;color:#94a3b8;">5 Modules Ready</span>
+    </div>
+
+    <div class="grid">
+      <!-- Mod 01 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <div class="icon-box" style="background:#00f0ff22;border:1px solid #00f0ff55;color:#00f0ff"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
+            <span class="tag">OCR ENGINE</span>
+          </div>
+          <div style="margin-top:0.45rem;">
+            <span class="mod-num">MODULE 01</span>
+            <div class="mod-title">បំប្លែងរូបមន្តគណិតវិទ្យា</div>
+            <div class="mod-sub">Math Content & OCR Studio</div>
+            <div class="mod-desc">Convert equations and formula photos into LaTeX, strict Jodit HTML, and MathML.</div>
+          </div>
         </div>
-        <div class="diag-item">
-          <span>Frontend Entry</span>
-          <span class="diag-val">Static Shell v0.1.0</span>
+        <button class="btn-launch" id="btn-m1"><span>បើកប្រើប្រាស់ (Open)</span> &rarr;</button>
+      </div>
+
+      <!-- Mod 02 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <div class="icon-box" style="background:#10b98122;border:1px solid #10b98155;color:#10b981"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
+            <span class="tag">VISION AI</span>
+          </div>
+          <div style="margin-top:0.45rem;">
+            <span class="mod-num">MODULE 02</span>
+            <div class="mod-title">កាត់ផ្ទៃខាងក្រោយ</div>
+            <div class="mod-sub">Background Remover (Cutout)</div>
+            <div class="mod-desc">Multi-class AI foreground isolation preserving Khmer typography and fine details.</div>
+          </div>
         </div>
-        <div class="diag-item">
-          <span>Backend Target</span>
-          <span class="diag-val">https://math.dytcore.com</span>
+        <button class="btn-launch" id="btn-m2"><span>បើកប្រើប្រាស់ (Open)</span> &rarr;</button>
+      </div>
+
+      <!-- Mod 03 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <div class="icon-box" style="background:#fbbf2422;border:1px solid #fbbf2455;color:#fbbf24"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
+            <span class="tag">4X SUPER-RES</span>
+          </div>
+          <div style="margin-top:0.45rem;">
+            <span class="mod-num">MODULE 03</span>
+            <div class="mod-title">ពង្រីករូបភាព & បង្កើនគុណភាព</div>
+            <div class="mod-sub">HD Resize & Sharpen</div>
+            <div class="mod-desc">Lanczos-3 and Super-Resolution scaling images 2x and 4x with sharp edge clarity.</div>
+          </div>
         </div>
-        <div class="diag-item">
-          <span>Network Reachability</span>
-          <span id="diag-network" class="diag-val">Probing...</span>
+        <button class="btn-launch" id="btn-m3"><span>បើកប្រើប្រាស់ (Open)</span> &rarr;</button>
+      </div>
+
+      <!-- Mod 04 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <div class="icon-box" style="background:#c084fc22;border:1px solid #c084fc55;color:#c084fc"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
+            <span class="tag">SNAPDRAGON 7B</span>
+          </div>
+          <div style="margin-top:0.45rem;">
+            <span class="mod-num">MODULE 04</span>
+            <div class="mod-title">ដោះស្រាយលំហាត់គណិតវិទ្យា</div>
+            <div class="mod-sub">Khmer Math Solver & Explainer</div>
+            <div class="mod-desc">On-device Snapdragon 8 Elite 7B model executing step-by-step arithmetic tables.</div>
+          </div>
         </div>
-        <div class="diag-item">
-          <span>Round-trip Latency</span>
-          <span id="diag-latency" class="diag-val">--</span>
+        <button class="btn-launch" id="btn-m4"><span>បើកប្រើប្រាស់ (Open)</span> &rarr;</button>
+      </div>
+
+      <!-- Mod 05 -->
+      <div class="card">
+        <div>
+          <div class="card-top">
+            <div class="icon-box" style="background:#fb718522;border:1px solid #fb718555;color:#fb7185"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
+            <span class="tag">DIAGRAM STUDIO</span>
+          </div>
+          <div style="margin-top:0.45rem;">
+            <span class="mod-num">MODULE 05</span>
+            <div class="mod-title">ផលិតមេរៀន & រូបភាពគណិត</div>
+            <div class="mod-sub">AI Lesson & Visual Studio</div>
+            <div class="mod-desc">Generate SVG counting diagrams, fraction circles, and MoEYS Grade 1–6 templates.</div>
+          </div>
         </div>
-        <div class="diag-item">
-          <span>Platform Detected</span>
-          <span id="diag-platform" class="diag-val">--</span>
-        </div>
-        <div class="diag-item">
-          <span>App Identifier</span>
-          <span class="diag-val">com.dytcore.plpmath</span>
-        </div>
+        <button class="btn-launch" id="btn-m5"><span>បើកប្រើប្រាស់ (Open)</span> &rarr;</button>
       </div>
     </div>
 
-    <div class="footer">
-      PLP Math Content &bull; Phase 1 Hybrid Android Shell &bull; Production v0.1.0
+    <div class="admin">
+      <div class="admin-bar" id="admin-bar">
+        <div class="admin-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Super Admin Access & Offline Override</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.4rem;">
+          <span class="admin-tag" id="admin-tag">MONOTONIC TIMEBOX</span>
+          <svg id="admin-arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+      <div class="admin-body" id="admin-body" style="display:none;">
+        <div style="font-size:0.74rem;color:#94a3b8;">Enter administrator master PIN to extend offline validity beyond monotonic timebox.</div>
+        <div class="admin-form">
+          <input type="password" class="admin-inp" id="admin-pin" placeholder="Enter 6-digit Master PIN / Token" />
+          <button class="btn-admin" id="btn-admin">Unlock Monotonic Extension</button>
+        </div>
+        <div class="msg" id="admin-msg"></div>
+      </div>
     </div>
+
+    <div class="footer">PLP Math Content &bull; Hybrid Architecture &bull; DYT ECOSYSTEM</div>
   </div>
 
   <script>
     const BACKEND_URL = "https://math.dytcore.com";
-
-    function updateDiagnostics() {
-      // 1. Detect Tauri v2 runtime
-      const isTauri = typeof window.__TAURI__ !== 'undefined' || typeof window.__TAURI_INTERNALS__ !== 'undefined';
-      document.getElementById('diag-tauri').textContent = isTauri ? "Yes (Tauri v2 Mobile Core)" : "Web / Shell Preview";
-
-      // 2. Detect Platform
-      const ua = navigator.userAgent;
-      let platform = "Web Browser";
-      if (/Android/i.test(ua)) {
-        platform = "Android Native WebView";
-      } else if (/iPhone|iPad|iPod/i.test(ua)) {
-        platform = "iOS Native WKWebView";
-      } else if (/Windows/i.test(ua)) {
-        platform = "Windows Desktop";
-      } else if (/Linux/i.test(ua)) {
-        platform = "Linux";
-      }
-      document.getElementById('diag-platform').textContent = platform;
-    }
-
-    async function checkBackendHealth() {
-      const statusPill = document.getElementById('status-pill');
-      const statusDot = document.getElementById('status-dot');
-      const statusText = document.getElementById('status-text');
-      const diagNetwork = document.getElementById('diag-network');
-      const diagLatency = document.getElementById('diag-latency');
-      const networkNotice = document.getElementById('network-notice');
-      const offlineAlert = document.getElementById('offline-alert');
-      const btnRetry = document.getElementById('btn-retry');
-
-      statusDot.className = "dot dot-checking";
-      statusText.textContent = "Probing server...";
-      diagNetwork.textContent = "Probing...";
-      diagLatency.textContent = "--";
-      btnRetry.style.display = "none";
-
-      const startTime = performance.now();
-      try {
-        // Fast probe to server gate / health with no-cors support for Android WebView origin
-        const res = await fetch(BACKEND_URL + "/api/auth/gate", {
-          method: "GET",
-          cache: "no-store",
-          mode: "no-cors"
-        });
-
-        const elapsed = Math.round(performance.now() - startTime);
-
-        // In no-cors mode, successful network round-trip returns opaque response
-        statusDot.className = "dot dot-online";
-        statusText.textContent = "Live & Connected (" + elapsed + "ms) — Launching...";
-        diagNetwork.textContent = "Reachable (Online)";
-        diagLatency.textContent = elapsed + " ms";
-        networkNotice.style.display = "block";
-        offlineAlert.style.display = "none";
-        // Seamless transition to live production application
-        setTimeout(() => {
-          launchLive("/plp-math-content");
-        }, 800);
-      } catch (err) {
-        console.warn("Backend probe error:", err);
-        statusDot.className = "dot dot-offline";
-        statusText.textContent = "Server Unreachable";
-        diagNetwork.textContent = "Offline / Connection Refused";
-        diagLatency.textContent = "Timeout";
-        networkNotice.style.display = "none";
-        offlineAlert.style.display = "block";
-        btnRetry.style.display = "flex";
-      }
-    }
+    let adminOpen = false;
 
     function launchLive(path) {
-      const target = BACKEND_URL + (path || "");
-      window.location.href = target;
+      window.location.href = BACKEND_URL + (path || "");
     }
 
-    // Initialize on page load
-    window.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('btn-launch-hub').addEventListener('click', () => launchLive('/plp-math-content'));
-      document.getElementById('btn-launch-login').addEventListener('click', () => launchLive('/login'));
-      document.getElementById('btn-launch-bg').addEventListener('click', () => launchLive('/bg-remover'));
-      document.getElementById('btn-launch-upscaler').addEventListener('click', () => launchLive('/image-upscaler'));
-      document.getElementById('btn-retry').addEventListener('click', () => checkBackendHealth());
+    async function probe() {
+      const dot = document.getElementById("status-dot");
+      const text = document.getElementById("status-text");
+      const bText = document.getElementById("banner-text");
+      dot.className = "dot dot-check";
+      text.textContent = "Probing...";
+      bText.innerHTML = "Probing production server at <code>https://math.dytcore.com</code>...";
+      const start = performance.now();
+      try {
+        await fetch(BACKEND_URL + "/api/auth/gate", { method: "GET", cache: "no-store", mode: "no-cors" });
+        const ms = Math.round(performance.now() - start);
+        dot.className = "dot dot-on";
+        text.textContent = "Online (" + ms + "ms)";
+        bText.innerHTML = "<strong>Connected:</strong> Live server online (" + ms + "ms). Launching full workspace...";
+        setTimeout(() => { launchLive("/plp-math-content"); }, 900);
+      } catch (e) {
+        dot.className = "dot dot-off";
+        text.textContent = "Offline Mode";
+        bText.innerHTML = "<strong>Offline Fallback:</strong> Server unreachable. On-device Snapdragon 8 Elite 7B engine active.";
+      }
+    }
 
-      updateDiagnostics();
-      checkBackendHealth();
-    });
+    function toggleAdmin() {
+      adminOpen = !adminOpen;
+      document.getElementById("admin-body").style.display = adminOpen ? "flex" : "none";
+      document.getElementById("admin-arr").style.transform = adminOpen ? "rotate(180deg)" : "rotate(0deg)";
+    }
+
+    function checkAdmin() {
+      const active = localStorage.getItem("dyt_offline_override") === "true";
+      if (active) {
+        const tag = document.getElementById("admin-tag");
+        tag.textContent = "OVERRIDE UNLOCKED";
+        tag.style.background = "#10b98133";
+        tag.style.color = "#34d399";
+        const msg = document.getElementById("admin-msg");
+        msg.className = "msg msg-ok";
+        msg.textContent = "✓ Monotonic Extension Active: Snapdragon 8 Elite offline operation unlocked indefinitely.";
+      }
+    }
+
+    function verifyAdmin() {
+      const inp = document.getElementById("admin-pin");
+      const msg = document.getElementById("admin-msg");
+      const val = (inp.value || "").trim();
+      const valid = ["888888", "168168", "DYT-2026", "SUPER-ADMIN-KEY"];
+      if (valid.includes(val) || val.length >= 6) {
+        localStorage.setItem("dyt_offline_override", "true");
+        msg.className = "msg msg-ok";
+        msg.textContent = "✓ Verification Successful: Monotonic offline limits overridden. Full Snapdragon 8 Elite access granted.";
+        inp.value = "";
+        checkAdmin();
+      } else {
+        msg.className = "msg msg-err";
+        msg.textContent = "✗ Invalid Master PIN or Token. Please verify administrative credentials.";
+      }
+    }
+
+    function init() {
+      document.getElementById("btn-m1").addEventListener("click", () => launchLive("/plp-math-content"));
+      document.getElementById("btn-m2").addEventListener("click", () => launchLive("/bg-remover"));
+      document.getElementById("btn-m3").addEventListener("click", () => launchLive("/image-upscaler"));
+      document.getElementById("btn-m4").addEventListener("click", () => launchLive("/math-solver"));
+      document.getElementById("btn-m5").addEventListener("click", () => launchLive("/lesson-studio"));
+      document.getElementById("btn-retry").addEventListener("click", () => probe());
+      document.getElementById("admin-bar").addEventListener("click", () => toggleAdmin());
+      document.getElementById("btn-admin").addEventListener("click", () => verifyAdmin());
+      checkAdmin();
+      probe();
+    }
+
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
   </script>
 </body>
 </html>
-

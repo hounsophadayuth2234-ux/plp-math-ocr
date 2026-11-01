@@ -1,0 +1,26 @@
+{
+  "$schema": "SYNTHETIC_FORMAT_TEST_FIXTURE_DO_NOT_USE_FOR_GATES",
+  "label": "SYNTHETIC",
+  "purpose": "Unit testing Block IR JSON schema parser against broken and injected payloads",
+  "cases": [
+    {
+      "id": "syn-ir-01",
+      "description": "Truncated JSON payload",
+      "raw_payload": "{\"title_km\": \"លំហាត់ទី១\", \"steps\": [{\"id\": \"s1\"",
+      "expected_error": "JSON_PARSE_ERROR"
+    },
+    {
+      "id": "syn-ir-02",
+      "description": "Missing mandatory formula reference",
+      "raw_payload": "{\"title_km\": \"លំហាត់ទី២\", \"steps\": [{\"id\": \"s1\", \"template_id\": \"tmpl_01\"}]}",
+      "expected_error": "MISSING_REQUIRED_FIELD"
+    },
+    {
+      "id": "syn-ir-03",
+      "description": "Prohibited inline HTML injection attempt",
+      "raw_payload": "{\"title_km\": \"លំហាត់ទី៣\", \"steps\": [{\"id\": \"s1\", \"formula_latex\": \"<script>alert(1)</script>\"}]}",
+      "expected_error": "RAW_HTML_DISALLOWED"
+    }
+  ]
+}
+

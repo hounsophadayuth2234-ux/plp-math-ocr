@@ -1,0 +1,171 @@
+<USER_REQUEST>
+PLP Math Offline Factory: Architecture and Execution Rules
+File: docs/ARCHITECTURE.md | Version: 1.0 | Architect: the CEO (human) | Executor: AGY (AI coding agent) | Authorized now: Phase 1B only (Appendix A)
+0. How to read this document
+- Layer A, Section 1: binding execution rules. They apply to every task.
+- Layer B, Sections 2 to 9: design reference describing the target system. It is NOT a work order. Implement nothing from it unless the architect's task message names it.
+- Layer C, Appendix A: the only task currently authorized.
+- Precedence: Section 1 > the architect's task message > Appendix A > Sections 2 to 9. When two statements conflict, follow the higher one and list the conflict in your report. Never resolve a conflict silently.
+- Marker [H] means hypothesis. A figure marked [H] is a design assumption, not a fact. It becomes a fact only through a logged measurement on the real device.
+1. Binding execution rules
+B1 Role. You are AGY, the executor. The architecture in this document is fixed. Do not redesign, rename or substitute components. Any deviation needs the architect's written approval and must be listed under Deviations in your report.
+B2 One task at a time. Execute only the task named in the architect's message. Do not start the next phase. Phase 2 and later need an explicit written GO from the architect.
+B3 Isolation and production safety. Work only inside android-offline-spike/ on branch spike/android-offline-a, created from the BASE commit given in the task message. Do not modify anything outside that folder: not the production web app, its auth, RBAC, session or rate-limit code, its Next.js or Vercel configuration, its tests, or its CI. Never run git push, deploy, alias a deployment, change Vercel settings, or send traffic to production URLs or production Redis. Production web behavior must stay exactly as it is today.
+B4 Proof of isolation. The final report must include the raw output of git status --short, git diff --name-only <BASE>..HEAD and git log --oneline -10. Every changed path must start with android-offline-spike/. Otherwise the status is CRITICAL (B13).
+B5 Evidence discipline. Redirect the raw stdout and stderr of every command to a file, for example <cmd> > android-offline-spike/evidence/<NAME>.txt 2>&1, then print that file in full. The evidence/ folder is gitignored and never committed. Mask secrets (show only the first 4 characters). Every number, table and claim in your report must cite an evidence file and line.
+B6 Truthfulness. Never estimate, extrapolate, round up, reuse output from an earlier session, hand-type or reconstruct terminal output, or edit an evidence file after it was created. Use exactly these words for what you could not establish: UNVERIFIED (could not measure), NOT RUN (did not execute), BLOCKED (missing input or device). A truthful failure or UNVERIFIED is acceptable. An invented number is the worst possible outcome. If an earlier statement of yours was wrong, say so.
+B7 Inputs belong to the architect. Models, DEV and HELD-OUT fixtures, the NONCE and the BASE commit are supplied in the task message or placed by the architect in models/ and fixtures/ (read-only). Do not download models. Do not author, edit or select golden answers. Do not tune on HELD-OUT. You may write only SYNTHETIC format fixtures (for example unbalanced braces, truncated HTML) to unit-test validators; label them SYNTHETIC and exclude them from all gates. If a required input is missing, report BLOCKED for the dependent step and continue with independent steps. Never substitute inputs. A result from a smaller substitute model must be labelled SUBSTITUTE - NOT VALID FOR GATES.
+B8 Real-device proof. Create the nonce file and screenshot described in Appendix A step S1. The architect will check the tablet itself.
+B9 No weakening. Do not delete, skip, rename or loosen any existing test or assertion anywhere. Do not change a gate threshold, a fixture or a metric definition to make a gate pass.
+B10 Unknown references. Names or conventions that are not defined in files you were given (Architecture C, Cha-Ching, the [___] answer placeholder, multiple-choice option-length rules, any CI run number) must be verified from supplied files or logs. If you cannot verify them, write UNVERIFIED and ask. Never invent their content.
+B11 Dependencies and licenses. Before using a new crate, package or model, record name, version and license in DEPS.md or LICENSES.md (for models also whether commercial use is permitted). Prefer well-known, maintained crates.
+B12 Memory measurement method. Report PSS per process (dumpsys meminfo <package> and <package>:inference), /proc/<pid>/smaps_rollup, system context from /proc/meminfo, and kill events from logcat -b all filtered for lmkd, lowmemorykiller and FATAL. State the method and exact command above every memory table. Never compare numbers measured by different methods. /proc/meminfo alone is not an app-memory measurement.
+B13 Exit status. Start the final report with exactly one of these lines (ASCII hyphen, exact text):
+- [BLOCKED - DEVICE OR ADB UNAVAILABLE] : step S1 cannot run.
+- [CRITICAL - PRODUCTION WEB REGRESSION] : any changed path is outside android-offline-spike/, or production behavior changed.
+- [NO-GO - HARDWARE/BACKEND BLOCKER] : a required gate was MEASURED and FAILED, or no backend can run the target-class model acceptably.
+- [INCOMPLETE - UNVERIFIED GATES] : no gate failed, but at least one required gate is UNVERIFIED (including missing models or fixtures).
+- [GO - PHASE 1B VERIFIED] : all required gates measured on the real device and PASS, each with an evidence file reference. This is a recommendation only; the architect decides GO for Phase 2.
+If several apply, the priority is CRITICAL > BLOCKED > NO-GO > INCOMPLETE > GO. Never write SAFE TO APPROVE for the offline factory before all phases are implemented and tested on the real target device.
+B14 Report format. After the status line: (1) summary table of steps S1 to S7 with status; (2) per-step results with evidence references; (3) gate table; (4) isolation proof (B4); (5) deviations; (6) a list of everything not measured and any rule not followed.
+B15 Ask, do not guess. Stop and report instead of continuing when the device is missing (S1), when a step needs an input that was not supplied (mark BLOCKED and continue independent steps), or when an instruction conflicts with this Section 1.
+2. Context and mandate
+- Target device [H until S1]: OnePlus Pad 3, 16 GB RAM, Snapdragon 8 Elite (Hexagon HTP v79 expected), Adreno GPU, Android 15 or 16 (read the real version from the device).
+- Users: 4 to 10 curriculum experts in remote provinces, offline for days, working shifts of about 8 hours.
+- Mandate: replace cloud AI (Google AI Studio / Gemini) for Module 01 OCR, Module 02 background removal, Module 03 HD upscaling, Module 04 Khmer math solver and Module 05 visual asset studio with local inference plus deterministic engines. The production web app at math.dytcore.com is unchanged and keeps its cloud path.
+- Web isolation: the Android build uses its own Next.js configuration with static export, inside the spike folder. The production Vercel configuration is never changed. UI code calls an AiProvider interface (CloudProvider for web, LocalTauriProvider for Android) and an AuthProvider interface (a static export has no server-side session gating; offline authorization is handled in Phase 2).
+- Fixed principles: (P1) the LLM proposes, Rust verifies and renders. (P2) One heavy model at a time. (P3) Models are data, not code, and are never bundled in the APK. (P4) Local-first, event-sourced sync. (P5) Measure, never assume.
+3. System architecture (design reference)
+Tiers
+- Tier 0, deterministic Rust (always on, small): mathcore, formula/LaTeX/HTML validation and canonical rendering, Khmer normalization and segmentation (ICU4X), SQLite outbox, HLC sync. No AI is used for Tier 0 tasks.
+- Tier 1, small resident models (hundreds of MB [H]): OCR detector and recognizer, background-removal segmentation, and the Module 03 upscaler (a small ONNX model run in tiles).
+- Tier 2, one heavy model at a time (about 4 to 6 GB [H]): the Module 04 solver LLM (about 4B to 8B, Q4 GGUF) or the Module 05 diffusion model (distilled, 1 to 4 steps).
+Runtimes. Two engine families sit behind a Rust InferenceBackend abstraction:
+- GGUF LLMs run through llama.cpp. Backend order: Hexagon HTP (experimental), Adreno OpenCL, CPU.
+- ONNX models run through ONNX Runtime (evaluate the QNN execution provider for HTP; XNNPACK or CPU fallback).
+No heavy ONNX or WASM inference runs inside the WebView; all inference runs natively in the inference process. Report which backend actually executed each model.
+Process isolation. Inference runs in a separate Android process :inference hosted by a Kotlin foreground service, so an lmkd kill or crash of inference does not kill the UI or unsaved Jodit drafts. Tauri does not create this process automatically: the Kotlin service, the Binder or local-socket IPC, the lifecycle, crash recovery and the token-streaming path must each be proven separately (Appendix A, S2). The :inference process must skip Tauri and WebView initialization.
+Layout (text diagram)
+- Next.js UI (static export, Jodit editor) talks over Tauri commands and Channels to the Tauri main process (Rust): Tier 0 engines, SQLite WAL with outbox, ThermalGovernor, IPC client.
+- The IPC client talks over Binder or a local socket to the foreground service android:process=:inference: ModelBroker (tokio), llama.cpp engine, ONNX engine, Tier 1 pool, Tier 2 single slot.
+4. Bottleneck 1: Khmer quality and syntax safety (render-safe crate)
+Rule: the LLM never emits HTML, and never emits unvalidated LaTeX into Jodit.
+Pipeline: LLM (grammar-constrained with GBNF or JSON schema, low temperature) produces a block IR as JSON, then Rust validators, then a deterministic Rust HTML renderer, then ammonia sanitization, then Jodit.
+IR fields (the LLM outputs no computed values): title_km, problem_statement_km, and a list of steps. Each step has id, template_id (from the phrase bank), slots_km (name to value for narration), formula_latex (a string to be validated) and result_ref (a reference such as {{result:s3}}). The final answer is also a reference plus a unit. Computed values come only from mathcore and are injected by reference.
+LaTeX validation. Parse into a token tree. Verify balanced braces, matching begin/end environments, well-formed fraction, root and left/right constructs, and math delimiters. Auto-repair only trivial trailing omissions (stack-based). Otherwise retry up to 2 times with the validator's error message in the prompt. After that mark the block NEEDS_EXPERT_REVIEW. Never alter math semantics silently.
+Khmer normalization (Tier 0, Rust). Unicode normalization and canonical cluster order (coeng and robat). ZWSP insertion for line breaking through ICU4X icu_segmenter (Khmer support must be verified in S5). Consistent spacing around operators and units. Numeral mapping (Khmer and Arabic digits) and OCR-confusion repair (for example 0 and ០, 1 and l and ១, S and ៥) may auto-fix only outside math tokens; inside formulas, flag it and ask the expert.
+Reasoning versus narration. Structural reasoning happens in English and LaTeX, where models are strongest. Khmer narration comes from an expert-curated phrase bank (templates with slots), optionally polished by a Khmer-capable model under constraints. The model is chosen by benchmark on the architect's Khmer math set, never by model-card claims.
+Flywheel. Log each expert edit (AI draft to approved final) as JSONL pairs in SQLite for later LoRA training of small Khmer-math adapters.
+Project conventions (answer placeholders, option-length rules) are implemented only after the architect supplies them (B10).
+5. Bottleneck 2: Math correctness (mathcore crate)
+Principle: the LLM is the semantic parser; Rust is the exact calculator and verifier.
+1. The LLM classifies the problem and fills a typed ProblemSpec (JSON through GBNF).
+2. mathcore computes with rust_decimal and num-rational (no binary floating point for money or fractions). Closed-world typed solvers: simple and compound interest, annuity (PV and FV), loan amortization, discount, markup, profit and loss, percent change, tax, installments, currency exchange with explicit riel and cent rounding rules, exact fractions, ratios, proportions, unit conversion and linear equations.
+3. Narration is generated from the engine's trace, never from the LLM's own arithmetic.
+Open-world fallback. Program-of-thought: the LLM emits an expression tree evaluated by Rust over k=3 independent samples. Any disagreement leads to NEEDS_EXPERT.
+Verification. Forward and reverse check against the constraints, plus unit and range checks (probabilities in [0,1], currency precision).
+Badges and their exact meaning.
+- VERIFIED means the arithmetic was verified against the extracted ProblemSpec. It does NOT prove that the problem was understood.
+- DRAFT means a converged symbolic result whose wording is unverified.
+- NEEDS_EXPERT means a mismatch or an unsupported problem.
+Before showing VERIFIED, the UI shows the extracted ProblemSpec as a confirmation card for the expert. ProblemSpec extraction is also run k=3 and compared.
+Workflow. AI proposes, the expert approves, and approvals are logged.
+Honest limit. A local model of about 4B to 8B will not match a cloud model on open-ended multi-step reasoning. The design does not depend on it doing so.
+6. Bottleneck 3: Memory and model-swap latency
+Budget [H]. Android and its system services take a large, device-dependent share of RAM. Do not assume 16 GB is available to the app. S1 measures MemAvailable at idle, and every later threshold is derived from measurement.
+ModelBroker (Rust actor on tokio). States: NotLoaded, Loading, Ready, Running, CoolingDown, Evicting, Failed. Rules: one Tier 2 model at a time; unload before load (including an allocator purge); priority queue (interactive before batch); never load a heavy model on the UI thread.
+Loading. Memory-map weights with mmap; never read whole files into a Vec<u8>. Predictive prefetch: when OCR finishes, a low-priority thread issues madvise(MADV_WILLNEED) or readahead on the solver weights so the page cache is warm when the user taps Solve. Persist a prompt-prefix KV cache (system prompt, grammar, few-shot examples) and reload it to skip prefill.
+Backend routing is decided by S3 measurements. Known constraint: one Hexagon session maps only a limited amount of memory (about 3.5 GB in current llama.cpp documentation), so a 4B to 8B Q4 LLM may not fit one NPU session. Evaluate the GPU (OpenCL) for the LLM and the NPU for small models, and a multi-session split.
+Module 05. Diffusion is a batch job (distilled model, 1 to 4 steps) that runs only when the heavy slot is idle. Evaluate whether one multimodal model can replace separate OCR post-processing and solver stages to reduce swaps.
+UI. Never block. Show a warming-up state with progress. Autosave Jodit drafts to SQLite every few seconds.
+7. Bottleneck 4: Thermal and battery
+ThermalGovernor (Kotlin bridge plus Rust). Subscribe to PowerManager.addThermalStatusListener, read getThermalHeadroom(), battery level and charging state. Use Android's constants: THERMAL_STATUS_NONE, LIGHT, MODERATE, SEVERE, CRITICAL, EMERGENCY, SHUTDOWN. The status-to-action table is derived from S4 measurements. Initial policy [H]: NONE and LIGHT run normally; MODERATE reduces threads and batch size, caps max_tokens, and disables prefetch and batch jobs; SEVERE pauses Module 05 and background work and allows only single-item OCR and solver; CRITICAL and above checkpoint to SQLite, unload the heavy slot and run Tier 0 only. Use hysteresis to avoid flapping.
+Energy-first design. Deterministic engine before any LLM call. A content-addressed result cache in SQLite keyed by blake3(model_id + params + normalized_input). A model cascade (small model first, escalate only when validation fails).
+Charging. Avoid heavy inference while fast charging when the device is warm. Run batch jobs (diffusion, re-indexing) through WorkManager with charging and idle constraints.
+Field operation. A power bank or solar kit per team. An Eco mode (NPU-preferred, shorter outputs) when the battery is low (threshold from measurement). Request a battery-optimization exemption only for the duration of an active job.
+Choose the backend per task by measured energy per token (S4), not by assumption.
+8. Bottleneck 5: OTA updates and the LAN field hub
+Four artifact classes. (A) APK shell, small. (B) Base weights, changed rarely, provisioned by USB-C OTG storage or the LAN. (C) LoRA adapters, tens to hundreds of MB. (D) Data packs: GBNF grammars, prompts, Khmer phrase bank, HTML and CSS templates, mathcore rules (KB to MB). Most improvements ship as C or D.
+Delivery. Content-defined chunking (fastcdc), blake3 chunk hashes, a signed manifest (ed25519), resumable HTTP Range download into a staging directory, verification before commit. Re-quantizing a base model changes nearly every byte, so a delta equals a full download; ship adapters instead.
+Install. Staging directory, then verify chunks and the full-file blake3, then smoke-test with golden vectors, then atomically switch an active-version pointer file by rename() (not a symlink), then keep the previous version for rollback. Every generated document records its model_version.
+LAN hub. One tablet or laptop downloads once; the others discover it (mdns-sd, with a WifiManager MulticastLock or NsdManager on Android) and fetch chunks from an axum server. The hub runs as a foreground service and authenticates peers.
+App updates. Tauri's updater plugin appears to be desktop-only (verify). For Android use Play internal testing, MDM or sideloading through PackageInstaller.
+Hash policy. blake3 everywhere; no sha256 mix.
+9. Bottleneck 6: Offline sync and security
+Local store. SQLite (WAL; synchronous=FULL for the outbox) with tables docs, blocks, ops_outbox, blobs and model_manifests. Every mutation writes state and an op in one transaction (transactional outbox). Op fields: UUIDv7 op_id, device_id, Hybrid Logical Clock, schema version, blake3 checksum. Use an HLC, not wall clocks, because offline tablets drift.
+Revisions. Immutable and content-addressed (rev_id = blake3(canonical_content + parent_rev_ids)), forming a DAG. Never use silent last-write-wins on math content. Metadata: field-level HLC merge. Prose blocks: CRDT merge (yrs or automerge). Equations, tables and solution steps: atomic blocks; concurrent edits are kept as sibling conflict revisions and resolved by an expert in a side-by-side UI (keep local, keep remote, keep both as variants).
+Upload protocol. Blobs first (by hash, resumable, deduplicated), then ops that reference them. The server is idempotent by op_id, assigns a monotonic seq, and clients pull since=seq. The durable server store is Postgres or Blob storage, not Redis. Google Drive is an export and archive target only (idempotent publish using appProperties.rev_id), never a merge source.
+Security (design requirement for Phase 2). The server re-validates authorization for every ingested op and never trusts a client-claimed role. SQLite and model files are encrypted at rest with keys wrapped by Android Keystore (StrongBox when available). Offline sessions use server-signed tokens verified in Rust. Because elapsedRealtime resets on reboot, expiry uses a persisted monotonic counter plus a server-signed last-seen-server-time anchor. Document the residual risk: a disabled account stays usable offline until the next sync.
+Testing. Property-based tests (proptest) for convergence under reordering, duplicate delivery, long offline periods, clock skew and crashes in the middle of a sync. 
+AUTOMATION AND DEVICE-HANDLING ADDENDUM
+
+AGY must perform all host-side setup and diagnostics automatically where technically possible.
+
+1. Detect and record:
+   - Windows version
+   - PowerShell version
+   - Node.js version
+   - npm version
+   - Git version and executable path
+   - Rust and Cargo versions, if installed
+   - Android SDK path
+   - ADB version and executable path
+   - Java version
+   - connected USB devices
+
+2. If ADB is missing but Android SDK platform-tools can be prepared safely without administrator privileges, use the available SDK or prepare only the required platform-tools. Do not install unrelated software. Do not bypass Windows security or UAC.
+
+3. Run and save raw output:
+   adb start-server
+   adb devices -l
+
+4. If exactly one authorized OnePlus Pad 3 is detected:
+   - read Android version
+   - read device model
+   - read CPU ABI
+   - read available RAM
+   - read available storage
+   - collect all required evidence
+   - continue Appendix A S1–S7
+
+5. If the device is listed as unauthorized:
+   - do not bypass authorization
+   - do not inject ADB keys
+   - do not disable Android security
+   - report that the user must unlock the tablet and approve the USB debugging dialog
+   - continue all independent host-side tasks
+
+6. If no device is detected:
+   - do not retry indefinitely
+   - do not claim real-device results
+   - do not fabricate measurements
+   - complete all independent host-side preparation and validation
+   - list only the exact physical action required from the user
+   - mark device-dependent gates as BLOCKED or UNVERIFIED
+
+7. AGY must never claim that it opened Developer Options, enabled USB debugging, pressed the Android Allow button, or authorized the device unless command output and evidence prove it.
+
+8. Do not ask the user to perform host-side setup that AGY can safely perform itself. Ask the user only for unavoidable physical interaction with the tablet.
+
+9. Separate the final report into:
+   A. Host-side results
+   B. Real-device results
+
+10. Host-side PASS must never be reported as real-device GO.
+
+Required final fields:
+- ADB installed: [YES/NO]
+- ADB server started: [YES/NO]
+- Authorized device detected: [YES/NO]
+- Device model:
+- Android version:
+- ABI:
+- Host-side tasks completed:
+- Real-device tasks completed:
+- Device-dependent tasks blocked:
+- Exact human action required:
+- Final status:
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-31T18:18:21+07:00.
+</ADDITIONAL_METADATA>

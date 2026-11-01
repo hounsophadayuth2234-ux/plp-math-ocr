@@ -1,0 +1,32 @@
+{
+  "$schema": "SYNTHETIC_FORMAT_TEST_FIXTURE_DO_NOT_USE_FOR_GATES",
+  "label": "SYNTHETIC",
+  "purpose": "Unit testing LaTeX syntax validator against malformed/truncated expressions",
+  "cases": [
+    {
+      "id": "syn-01",
+      "description": "Unbalanced curly braces",
+      "input": "\\frac{1}{2 + {3}",
+      "expected_error": "UNBALANCED_BRACES"
+    },
+    {
+      "id": "syn-02",
+      "description": "Unclosed begin environment",
+      "input": "\\begin{aligned} x &= 1 \\\\ y &= 2",
+      "expected_error": "UNCLOSED_ENVIRONMENT"
+    },
+    {
+      "id": "syn-03",
+      "description": "Trailing operator omission auto-repairable",
+      "input": "x + 2 =",
+      "expected_repairable": true
+    },
+    {
+      "id": "syn-04",
+      "description": "Mismatched left-right delimiters",
+      "input": "\\left( \\frac{a}{b} \\right]",
+      "expected_error": "MISMATCHED_DELIMITER"
+    }
+  ]
+}
+

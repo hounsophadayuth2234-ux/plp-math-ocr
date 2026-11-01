@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
+import { MobileBottomNav } from "./MobileBottomNav";
 import { SettingsModal } from "./SettingsModal";
 import { HelpGuideModal } from "./HelpGuideModal";
 import { MechanicalCyberBackground } from "@/components/ui/MechanicalCyberBackground";
@@ -44,11 +45,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
         />
 
         <div className="relative flex-1 min-h-0 overflow-hidden">
-          {/* Interactive Content Scroll Layer (z-10) */}
-          <main className="relative z-10 h-full overflow-y-auto overflow-x-hidden min-w-0 max-w-full w-full p-4 sm:p-6 lg:p-8">
+          {/* Interactive Content Scroll Layer (z-10) with responsive bottom padding for MobileBottomNav */}
+          <main className="relative z-10 h-full overflow-y-auto overflow-x-hidden min-w-0 max-w-full w-full p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
             <div className="mx-auto max-w-7xl min-w-0 max-w-full w-full">{children}</div>
           </main>
         </div>
+
+        {/* Mobile-only Bottom Navigation Bar */}
+        <MobileBottomNav onOpenSidebar={() => setSidebarOpen(true)} />
       </div>
 
       <SettingsModal

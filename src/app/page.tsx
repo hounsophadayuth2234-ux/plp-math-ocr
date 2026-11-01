@@ -219,7 +219,7 @@ export default function DashboardOverviewPage() {
           <span className="text-xs text-slate-400 font-mono">5 Modules Active</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {modules.map((m) => {
             const Icon = m.icon;
             return (

@@ -92,7 +92,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Mobile backdrop overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-xs lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-xs xl:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -100,12 +100,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar container */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-800 bg-slate-950/95 text-slate-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shadow-xl ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-800 bg-slate-950/95 text-slate-200 transition-transform duration-200 ease-in-out xl:static xl:translate-x-0 shadow-xl ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-5 bg-slate-950/40 backdrop-blur-sm">
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 bg-slate-950/40 backdrop-blur-sm pt-[env(safe-area-inset-top,0px)] h-[calc(4rem+env(safe-area-inset-top,0px))]">
           <Link href="/" className="flex items-center gap-3" onClick={onClose}>
             <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden border border-amber-500/40 shadow-md bg-black">
               <Image
@@ -134,7 +134,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white xl:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
             aria-label="Close navigation sidebar"
             title="Close navigation sidebar"
           >
@@ -320,7 +320,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </nav>
 
         {/* Collapsed-by-Default Diagnostics Drawer */}
-        <div className="border-t border-slate-800 p-3 bg-slate-950/70">
+        <div className="border-t border-slate-800 p-3 bg-slate-950/70 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
             onClick={() => setDiagnosticsOpen(!diagnosticsOpen)}

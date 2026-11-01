@@ -191,3 +191,4 @@ function extractBasicVariables(text: string): Record<string, number> {
     added_count: numbers[1] || 25,
   };
 }
+

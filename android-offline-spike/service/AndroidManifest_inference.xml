@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.plp.math">
+
+    <!-- Permissions required for Snapdragon 8 Elite high-performance inference -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application>
+        <!--
+          Inference Foreground Service Process Isolation Boundary
+          Invariants:
+          1. Dedicated isolated process: android:process=":inference"
+          2. Zero Tauri / WebView runtime overhead in this process.
+          3. Protected by foreground service notification from low-memory killer.
+        -->
+        <service
+            android:name=".service.InferenceService"
+            android:process=":inference"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Offline on-device AI inference and deterministic Khmer math solver" />
+        </service>
+    </application>
+</manifest>
+

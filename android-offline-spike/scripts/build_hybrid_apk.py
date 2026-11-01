@@ -41,10 +41,9 @@ def main():
         sys.exit(1)
 
     # 1. Compile tauri entry
+    log("Compiling tauri entry via npm run build:tauri-entry...")
+    subprocess.run(["npm", "run", "build:tauri-entry"], cwd=repo_root, shell=True, check=True)
     entry_html_path = os.path.join(repo_root, "tauri-dist", "index.html")
-    if not os.path.exists(entry_html_path):
-        log("Compiling tauri entry via npm run build:tauri-entry...")
-        subprocess.run(["npm", "run", "build:tauri-entry"], cwd=repo_root, shell=True, check=True)
 
     with open(entry_html_path, "rb") as f:
         hybrid_html = f.read()
@@ -61,22 +60,23 @@ def main():
 
     # 3. Compress hybrid HTML directly into EXACTLY 4136 bytes using Brotli + post-HTML padding
     target_comp_len = 4136
-    rng = random.Random(42)
     brotli_stream = None
 
     log(f"Compressing hybrid shell into exact {target_comp_len}-byte Brotli native slot...")
-    rng = random.Random(42)
-    brotli_stream = None
-    for pad in range(0, 2000):
-        pad_bytes = rng.randbytes(pad)
-        candidate = hybrid_html + b"\n<!-- " + pad_bytes + b" -->\n"
-        comp = brotli.compress(candidate, quality=4)
-        if len(comp) == target_comp_len:
-            brotli_stream = comp
-            log(f"Found exact {target_comp_len}-byte Brotli stream (quality=4, padding={pad} bytes)")
+    for q in [10, 11, 4, 5, 9, 8]:
+        for pad in range(50, 400):
+            for seed in range(50):
+                rng = random.Random(seed)
+                candidate = hybrid_html + b"\n<!-- " + rng.randbytes(pad) + b" -->\n"
+                comp = brotli.compress(candidate, quality=q)
+                if len(comp) == target_comp_len:
+                    brotli_stream = comp
+                    log(f"Found exact {target_comp_len}-byte Brotli stream (quality={q}, pad={pad}, seed={seed})")
+                    break
+            if brotli_stream:
+                break
+        if brotli_stream:
             break
-    if not brotli_stream:
-        raise RuntimeError("Could not find exact 4136-byte Brotli stream")
 
     if not brotli_stream or len(brotli_stream) != target_comp_len:
         raise RuntimeError("Failed to compute exact 4136-byte Brotli stream for hybrid shell!")

@@ -1,0 +1,59 @@
+[
+  {
+    "id": "km-math-01",
+    "type": "simple_interest",
+    "question_km": "សុខាបានខ្ចីប្រាក់ពីធនាគារចំនួន ២០០,០០០ រៀល ក្នុងអត្រាការប្រាក់ ៥% ក្នុងមួយឆ្នាំ។ តើសុខាត្រូវបង់ការប្រាក់ចំនួនប៉ុន្មានរៀលបន្ទាប់ពីរយៈពេល ១ ឆ្នាំ?",
+    "expected_variables": {
+      "principal": 200000,
+      "rate": 0.05,
+      "time_years": 1
+    },
+    "expected_answer": 10000,
+    "unit_km": "រៀល"
+  },
+  {
+    "id": "km-math-02",
+    "type": "addition",
+    "question_km": "នៅក្នុងកន្ត្រកមានផ្លែក្រូចចំនួន ៤៥ ផ្លែ។ ម្តាយបានទិញបន្ថែមចំនួន ៣០ ផ្លែទៀត។ តើនៅក្នុងកន្ត្រកមានផ្លែក្រូចសរុបចំនួនប៉ុន្មានផ្លែ?",
+    "expected_variables": {
+      "initial_count": 45,
+      "added_count": 30
+    },
+    "expected_answer": 75,
+    "unit_km": "ផ្លែ"
+  },
+  {
+    "id": "km-math-03",
+    "type": "multiplication",
+    "question_km": "សិស្សម្នាក់ទិញសៀវភៅសរសេរចំនួន ៦ ក្បាល ដែលសៀវភៅមួយក្បាលមានតម្លៃ ១,៥០០ រៀល។ តើសិស្សនោះត្រូវចំណាយប្រាក់សរុបចំនួនប៉ុន្មានរៀល?",
+    "expected_variables": {
+      "quantity": 6,
+      "unit_price": 1500
+    },
+    "expected_answer": 9000,
+    "unit_km": "រៀល"
+  },
+  {
+    "id": "km-math-04",
+    "type": "profit",
+    "question_km": "អាជីវករម្នាក់បានទិញកាតាបមួយក្នុងតម្លៃ ២៥,០០០ រៀល រួចលក់ចេញវិញក្នុងតម្លៃ ៣២,០០០ រៀល។ តើគាត់ទទួលបានប្រាក់ចំណេញចំនួនប៉ុន្មានរៀល?",
+    "expected_variables": {
+      "cost_price": 25000,
+      "selling_price": 32000
+    },
+    "expected_answer": 7000,
+    "unit_km": "រៀល"
+  },
+  {
+    "id": "km-math-05",
+    "type": "division",
+    "question_km": "គ្រូបង្រៀនម្នាក់មានប៊ិចចំនួន ៤៨ ដើម ចែកស្មើគ្នាដល់សិស្សចំនួន ៤ នាក់។ តើសិស្សម្នាក់ៗទទួលបានប៊ិចចំនួនប៉ុន្មានដើម?",
+    "expected_variables": {
+      "total_items": 48,
+      "num_recipients": 4
+    },
+    "expected_answer": 12,
+    "unit_km": "ដើម"
+  }
+]
+

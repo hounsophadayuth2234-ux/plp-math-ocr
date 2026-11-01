@@ -58,13 +58,13 @@ export function Header({ onOpenSidebar, onOpenSettings, onOpenHelp }: HeaderProp
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 backdrop-blur-md sm:px-6 lg:px-8 shadow-md">
-      {/* ── Left: Brand & Mobile Menu ── */}
+    <header className="sticky top-0 z-30 flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 backdrop-blur-md sm:px-6 lg:px-8 shadow-md pt-[env(safe-area-inset-top,0px)] h-[calc(4rem+env(safe-area-inset-top,0px))]">
+      {/* ── Left: Brand & Mobile/Tablet Drawer Menu ── */}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onOpenSidebar}
-          className="rounded-xl border border-slate-800 bg-slate-900/90 p-2 text-slate-300 hover:bg-slate-800 hover:text-white lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+          className="rounded-xl border border-slate-800 bg-slate-900/90 p-2 text-slate-300 hover:bg-slate-800 hover:text-white xl:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
           aria-label="Open navigation menu"
           title="Open navigation menu"
         >

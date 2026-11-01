@@ -4,6 +4,26 @@
 :root {
   --background: #030712;
   --foreground: #f0f6fc;
+  /* Safe Area Insets for notch, status bar, and bottom gesture pill */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+/* Safe area utility classes */
+.safe-area-top {
+  padding-top: max(var(--sat), 0px);
+}
+.safe-area-bottom {
+  padding-bottom: max(var(--sab), 0px);
+}
+.safe-area-header {
+  padding-top: max(var(--sat), 0px);
+  min-height: calc(4rem + var(--sat));
+}
+.safe-area-bottom-bar {
+  padding-bottom: max(var(--sab), 0.5rem);
 }
 
 /* Studio Font Family Utility Classes */

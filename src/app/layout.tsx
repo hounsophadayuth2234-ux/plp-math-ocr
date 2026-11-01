@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -12,6 +12,15 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+export const viewport: Viewport = {
+  themeColor: "#030712",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://math.dytcore.com"),
@@ -31,7 +40,7 @@ export const metadata: Metadata = {
     title: "PLP math content | DYT ECOSYSTEM",
     description:
       "PLP math content & DYT ECOSYSTEM — Futuristic high-tech AI platform uniting LaTeX/Jodit HTML/MathML OCR, background isolation, 4K upscaling, and creative generation.",
-    images: [
+  images: [
       {
         url: "/brand/plp-math-content-logo.jpg",
         width: 1254,
