@@ -70,3 +70,29 @@ pub struct SessionVerificationResult {
     pub residual_risk_note: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BgRemovalRequest {
+    pub image_base64: String,
+    pub width: u32,
+    pub height: u32,
+    pub model_type: Option<String>, // "birefnet_full" | "rmbg_1_4"
+    pub refine_edges: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BgRemovalResponse {
+    pub status: String,
+    pub output_rgba_base64: Option<String>,
+    pub alpha_mask_base64: Option<String>,
+    pub width: u32,
+    pub height: u32,
+    pub preprocess_ms: u64,
+    pub npu_inference_ms: u64,
+    pub postprocess_ms: u64,
+    pub total_ms: u64,
+    pub backend_used: String,
+    pub model_name: String,
+    pub error: Option<String>,
+}
+
+

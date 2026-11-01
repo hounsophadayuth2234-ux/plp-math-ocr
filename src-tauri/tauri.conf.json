@@ -12,7 +12,7 @@
   "app": {
     "withGlobalTauri": true,
     "security": {
-      "csp": "default-src 'self' https://math.dytcore.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://math.dytcore.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://math.dytcore.com; connect-src 'self' https://math.dytcore.com; frame-src 'self' https://math.dytcore.com;"
+      "csp": "default-src 'self' https://math.dytcore.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://math.dytcore.com https://accounts.google.com https://apis.google.com https://telegram.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://math.dytcore.com https://*.googleusercontent.com https://*.githubusercontent.com https://ssl.gstatic.com https://www.gstatic.com https://*.telegram.org https://*.drive.google.com; connect-src 'self' https://math.dytcore.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.googleapis.com https://oauth.telegram.org https://api.telegram.org; frame-src 'self' https://math.dytcore.com https://accounts.google.com https://oauth.telegram.org;"
     },
     "windows": [
       {

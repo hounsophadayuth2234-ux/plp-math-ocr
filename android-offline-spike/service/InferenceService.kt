@@ -151,6 +151,37 @@ class InferenceService : Service() {
                         }
                     }
 
+                    "REMOVE_BACKGROUND_NATIVE" -> {
+                        val inputBase64 = request.getString("image_base64")
+                        val width = request.getInt("width")
+                        val height = request.getInt("height")
+                        val modelType = request.optString("model_type", "birefnet_full")
+                        val refineEdges = request.optBoolean("refine_edges", true)
+
+                        val rgbaBytes = android.util.Base64.decode(inputBase64, android.util.Base64.DEFAULT)
+                        val resp = modelBroker?.removeBackgroundNative(
+                            inputRgba = rgbaBytes,
+                            width = width,
+                            height = height,
+                            modelType = modelType,
+                            refineEdges = refineEdges
+                        ) ?: JSONObject().apply {
+                            put("status", "ERROR")
+                            put("message", "ModelBroker unavailable")
+                        }
+                        writer.println(resp.toString())
+                    }
+
+                    "LOAD_CV_MODEL" -> {
+                        val modelPath = request.getString("model_path")
+                        val backend = request.optString("backend", "HTP_NPU")
+                        val resp = modelBroker?.loadCvModel(modelPath, backend) ?: JSONObject().apply {
+                            put("status", "ERROR")
+                            put("message", "ModelBroker unavailable")
+                        }
+                        writer.println(resp.toString())
+                    }
+
                     "GET_STATUS" -> {
                         val status = modelBroker?.getStatus() ?: JSONObject()
                         status.put("pid", android.os.Process.myPid())

@@ -40,12 +40,20 @@ class ModelBroker(private val context: Context) {
     private var activeBackend: String = "CPU"
     private var nativeContextHandle: Long = 0L
 
+    // Native Computer Vision (Module 02) Context
+    private var nativeCvContextHandle: Long = 0L
+    private var activeCvModelPath: String? = null
+    private var activeCvBackend: String = "HTP_NPU"
+
     fun getStatus(): JSONObject {
         return JSONObject().apply {
             put("state", currentState.name)
             put("active_model", activeModelPath ?: JSONObject.NULL)
             put("active_backend", activeBackend)
             put("is_loaded", currentState == State.Ready || currentState == State.Running)
+            put("active_cv_model", activeCvModelPath ?: JSONObject.NULL)
+            put("active_cv_backend", activeCvBackend)
+            put("is_cv_loaded", nativeCvContextHandle != 0L)
         }
     }
 
@@ -191,6 +199,110 @@ class ModelBroker(private val context: Context) {
         return JSONObject().apply {
             put("status", "UNLOADED")
             put("state", currentState.name)
+        }
+    }
+
+    suspend fun loadCvModel(modelPath: String, backendPreference: String = "HTP_NPU"): JSONObject = mutex.withLock {
+        Log.i(TAG, "Requested loadCvModel: $modelPath (Backend: $backendPreference)")
+        if (nativeCvContextHandle != 0L && activeCvModelPath == modelPath) {
+            return JSONObject().apply {
+                put("status", "ALREADY_LOADED")
+                put("model", modelPath)
+                put("backend", activeCvBackend)
+            }
+        }
+
+        if (nativeCvContextHandle != 0L) {
+            OnnxCvNativeBridge.freeModel(nativeCvContextHandle)
+            nativeCvContextHandle = 0L
+        }
+
+        val chosenBackend = when (backendPreference.uppercase()) {
+            "HTP", "NPU", "HTP_NPU" -> "HTP_NPU"
+            "OPENCL", "GPU" -> "Adreno_OpenCL"
+            else -> "Oryon_CPU"
+        }
+
+        try {
+            nativeCvContextHandle = OnnxCvNativeBridge.loadModel(
+                modelPath = modelPath,
+                backend = chosenBackend,
+                inputSize = 1024,
+                threads = 6
+            )
+            activeCvModelPath = modelPath
+            activeCvBackend = chosenBackend
+
+            return JSONObject().apply {
+                put("status", "READY")
+                put("model", modelPath)
+                put("backend", chosenBackend)
+                put("resolution", "1024x1024")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load native CV model", e)
+            return JSONObject().apply {
+                put("status", "ERROR")
+                put("message", e.message)
+            }
+        }
+    }
+
+    suspend fun removeBackgroundNative(
+        inputRgba: ByteArray,
+        width: Int,
+        height: Int,
+        modelType: String = "birefnet_full",
+        refineEdges: Boolean = true
+    ): JSONObject = mutex.withLock {
+        try {
+            // Lazy load default commercial CV model if not initialized
+            if (nativeCvContextHandle == 0L) {
+                val defaultPath = if (modelType.contains("rmbg")) {
+                    File(context.filesDir, "models/rmbg-1.4.onnx").absolutePath
+                } else {
+                    File(context.filesDir, "models/birefnet-general.onnx").absolutePath
+                }
+                nativeCvContextHandle = OnnxCvNativeBridge.loadModel(
+                    modelPath = defaultPath,
+                    backend = "HTP_NPU",
+                    inputSize = 1024,
+                    threads = 6
+                )
+                activeCvModelPath = defaultPath
+                activeCvBackend = "HTP_NPU"
+            }
+
+            val result = OnnxCvNativeBridge.removeBackground(
+                contextHandle = nativeCvContextHandle,
+                inputRgba = inputRgba,
+                width = width,
+                height = height,
+                refineEdges = refineEdges
+            )
+
+            val base64Output = android.util.Base64.encodeToString(result.outputRgba, android.util.Base64.NO_WRAP)
+            val base64Alpha = android.util.Base64.encodeToString(result.alphaMask, android.util.Base64.NO_WRAP)
+
+            return JSONObject().apply {
+                put("status", "SUCCESS")
+                put("output_rgba_base64", base64Output)
+                put("alpha_mask_base64", base64Alpha)
+                put("width", result.outputWidth)
+                put("height", result.outputHeight)
+                put("preprocess_ms", result.preprocessMs)
+                put("npu_inference_ms", result.npuInferenceMs)
+                put("postprocess_ms", result.postprocessMs)
+                put("total_ms", result.totalMs)
+                put("backend_used", result.backendUsed)
+                put("model_name", result.modelName)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Native CV background removal failed", e)
+            return JSONObject().apply {
+                put("status", "ERROR")
+                put("message", e.message)
+            }
         }
     }
 

@@ -4,7 +4,11 @@
   "description": "Default capabilities for the PLP Math hybrid client",
   "windows": ["main"],
   "remote": {
-    "urls": ["https://math.dytcore.com/*"]
+    "urls": [
+      "https://math.dytcore.com/*",
+      "https://accounts.google.com/*",
+      "https://oauth.telegram.org/*"
+    ]
   },
   "permissions": [
     "core:default",

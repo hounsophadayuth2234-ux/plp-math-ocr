@@ -111,3 +111,4 @@ export function MobileBottomNav({ onOpenSidebar }: MobileBottomNavProps) {
     </nav>
   );
 }
+
