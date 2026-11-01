@@ -353,7 +353,9 @@ function getWorkerConfig(): WorkerConfig {
  * Returns worker configuration state and operating constraints.
  * Supports ?checkHealth=true to probe upstream /health endpoint.
  */
-export async function GET(req?: NextRequest) {
+export async function GET(): Promise<Response>;
+export async function GET(req: NextRequest): Promise<Response>;
+export async function GET(req?: NextRequest): Promise<Response> {
   if (req) {
     const authBlock = await enforceRouteAuth(req);
     if (authBlock) return authBlock;

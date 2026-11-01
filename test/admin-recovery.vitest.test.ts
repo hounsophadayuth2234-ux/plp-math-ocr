@@ -6,9 +6,11 @@ import { AuditLogger } from "@/lib/audit-logger";
 import {
   GET as recoveryGet,
   POST as recoveryPost,
+} from "@/app/api/auth/admin-recovery/route";
+import {
   stageOneTimePasswordReset,
   __resetEphemeralRecovery,
-} from "@/app/api/auth/admin-recovery/route";
+} from "@/lib/admin/admin-recovery";
 
 describe("Admin Account Recovery Flow (ADMIN_RECOVERY_KEY)", () => {
   beforeEach(async () => {

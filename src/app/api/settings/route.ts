@@ -63,7 +63,9 @@ function validateWorkerHost(
 
 // GET /api/settings - Returns current configuration status
 // Reads both process.env (Vercel runtime) and .env.local (local development)
-export async function GET(req?: NextRequest) {
+export async function GET(): Promise<Response>;
+export async function GET(req: NextRequest): Promise<Response>;
+export async function GET(req?: NextRequest): Promise<Response> {
   if (req) {
     const authBlock = await enforceRouteAuth(req);
     if (authBlock) return authBlock;

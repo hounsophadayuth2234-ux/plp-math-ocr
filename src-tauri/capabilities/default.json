@@ -3,6 +3,9 @@
   "identifier": "default",
   "description": "Default capabilities for the PLP Math hybrid client",
   "windows": ["main"],
+  "remote": {
+    "urls": ["https://math.dytcore.com/*"]
+  },
   "permissions": [
     "core:default",
     "opener:default"

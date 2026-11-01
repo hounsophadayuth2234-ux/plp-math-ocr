@@ -249,29 +249,29 @@
       </div>
 
       <div class="btn-group">
-        <button id="btn-launch-hub" class="btn btn-primary" onclick="launchLive('/plp-math-content')">
+        <button id="btn-launch-hub" class="btn btn-primary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
           </svg>
           Launch PLP Math Hub
         </button>
 
-        <button id="btn-launch-login" class="btn btn-secondary" onclick="launchLive('/login')">
+        <button id="btn-launch-login" class="btn btn-secondary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"></path>
           </svg>
           Account Login / SSO
         </button>
 
-        <button id="btn-launch-bg" class="btn btn-secondary" onclick="launchLive('/bg-remover')">
+        <button id="btn-launch-bg" class="btn btn-secondary">
           Module 02 — Background Remover
         </button>
 
-        <button id="btn-launch-upscaler" class="btn btn-secondary" onclick="launchLive('/image-upscaler')">
+        <button id="btn-launch-upscaler" class="btn btn-secondary">
           Module 03 — Image Upscaler (4x)
         </button>
 
-        <button id="btn-retry" class="btn btn-secondary" onclick="checkBackendHealth()" style="display: none;">
+        <button id="btn-retry" class="btn btn-secondary" style="display: none;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
           </svg>
@@ -364,26 +364,26 @@
 
       const startTime = performance.now();
       try {
-        // Fast probe to server gate / health
+        // Fast probe to server gate / health with no-cors support for Android WebView origin
         const res = await fetch(BACKEND_URL + "/api/auth/gate", {
           method: "GET",
-          headers: { "Accept": "application/json" },
-          cache: "no-store"
+          cache: "no-store",
+          mode: "no-cors"
         });
 
         const elapsed = Math.round(performance.now() - startTime);
 
-        if (res.ok || res.status === 401 || res.status === 403) {
-          // Server responded, whether authenticated or unauthenticated
-          statusDot.className = "dot dot-online";
-          statusText.textContent = "Live & Connected (" + elapsed + "ms)";
-          diagNetwork.textContent = "Reachable (" + res.status + " " + res.statusText + ")";
-          diagLatency.textContent = elapsed + " ms";
-          networkNotice.style.display = "block";
-          offlineAlert.style.display = "none";
-        } else {
-          throw new Error("HTTP " + res.status);
-        }
+        // In no-cors mode, successful network round-trip returns opaque response
+        statusDot.className = "dot dot-online";
+        statusText.textContent = "Live & Connected (" + elapsed + "ms) — Launching...";
+        diagNetwork.textContent = "Reachable (Online)";
+        diagLatency.textContent = elapsed + " ms";
+        networkNotice.style.display = "block";
+        offlineAlert.style.display = "none";
+        // Seamless transition to live production application
+        setTimeout(() => {
+          launchLive("/plp-math-content");
+        }, 800);
       } catch (err) {
         console.warn("Backend probe error:", err);
         statusDot.className = "dot dot-offline";
@@ -403,6 +403,12 @@
 
     // Initialize on page load
     window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('btn-launch-hub').addEventListener('click', () => launchLive('/plp-math-content'));
+      document.getElementById('btn-launch-login').addEventListener('click', () => launchLive('/login'));
+      document.getElementById('btn-launch-bg').addEventListener('click', () => launchLive('/bg-remover'));
+      document.getElementById('btn-launch-upscaler').addEventListener('click', () => launchLive('/image-upscaler'));
+      document.getElementById('btn-retry').addEventListener('click', () => checkBackendHealth());
+
       updateDiagnostics();
       checkBackendHealth();
     });
