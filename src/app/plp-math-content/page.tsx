@@ -30,6 +30,11 @@ import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
 import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
 import { ResultHistoryModal, HistoryItem } from "@/components/history/ResultHistoryModal";
+import {
+  ocrMathWithHybridFallback,
+  isNetworkOnline,
+  isForceOfflineMode,
+} from "@/lib/tauri-fallback-bridge";
 
 // -----------------------------------------------------------
 // Canonical Sample Math Result (Instant Test Execution)
@@ -311,11 +316,22 @@ export default function PlpMathContentPage() {
         formData.append("customInstructions", customInstructions.trim());
       }
 
-      const response = await fetch("/api/math-ocr", {
-        method: "POST",
-        body: formData,
-        signal: abortController.signal,
-      });
+      let data: (MathOcrResponse & { code?: string; error?: string; details?: string; requestId?: string; message?: string; ok?: boolean }) | null = null;
+      let usedOfflineEngine = false;
+      let response: Response | null = null;
+
+      if (isNetworkOnline()) {
+        try {
+          response = await fetch("/api/math-ocr", {
+            method: "POST",
+            body: formData,
+            signal: abortController.signal,
+          });
+        } catch (fetchErr: any) {
+          if (fetchErr.name === "AbortError") throw fetchErr;
+          console.warn("[Module 01] Cloud Math OCR failed, switching to Snapdragon 8 Elite Native OCR:", fetchErr);
+        }
+      }
 
       // Discard if superseded by a newer request
       if (activeRequestIdRef.current !== currentRequestId) {
@@ -323,90 +339,47 @@ export default function PlpMathContentPage() {
       }
 
       const measuredDuration = (performance.now() - startTime) / 1000;
-      const contentType = response.headers.get("content-type") || "";
-      let data: (MathOcrResponse & { code?: string; error?: string; details?: string; requestId?: string; message?: string; ok?: boolean }) | null = null;
-      let responseText = "";
 
-      if (contentType.includes("application/json")) {
-        try {
-          data = (await response.json()) as (MathOcrResponse & { code?: string; error?: string; details?: string; requestId?: string; message?: string; ok?: boolean });
-        } catch {
-          responseText = await response.text().catch(() => "");
+      if (!response || !response.ok) {
+        // Automatic failover to Snapdragon 8 Elite Native OCR
+        const hybridRes = await ocrMathWithHybridFallback({
+          imageFile: fileToSend,
+          sourceText: rawText.trim(),
+          signal: abortController.signal,
+        });
+
+        if (activeRequestIdRef.current !== currentRequestId) return;
+
+        if (hybridRes.success && hybridRes.data) {
+          data = hybridRes.data;
+          usedOfflineEngine = true;
+        } else {
+          setResult(null);
+          setIsResultStale(false);
+          setFailedDuration(measuredDuration);
+          setError(hybridRes.error || "ម៉ាស៊ីនមេជួបបញ្ហា (Server Error)៖ មិនអាចបំលែងរូបភាពគណិតវិទ្យាបានទេ។");
+          setIsLoading(false);
+          setIsRefining(false);
+          return;
         }
       } else {
-        responseText = await response.text().catch(() => "");
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          try {
+            data = (await response.json()) as (MathOcrResponse & { code?: string; error?: string; details?: string; requestId?: string; message?: string; ok?: boolean });
+          } catch {
+            data = null;
+          }
+        }
       }
 
-      if (!response.ok) {
-        // Clear result completely so no misleading previous result is displayed as if it belongs to the failed request
+      if (!data) {
         setResult(null);
         setIsResultStale(false);
         setFailedDuration(measuredDuration);
-
-        const is413 =
-          response.status === 413 ||
-          /payload_too_large|request entity too large|FUNCTION_PAYLOAD_TOO_LARGE/i.test(responseText) ||
-          data?.code === "PAYLOAD_TOO_LARGE" ||
-          data?.code === "IMAGE_TOO_LARGE";
-        const is415 = response.status === 415 || data?.code === "UNSUPPORTED_MEDIA_TYPE";
-        const is429 =
-          response.status === 429 ||
-          /rate limit|quota|too many requests/i.test(responseText) ||
-          data?.code === "RATE_LIMIT_EXCEEDED" ||
-          data?.code === "RATE_LIMITED";
-        const isModelUnavailable =
-          data?.code === "MODEL_UNAVAILABLE" ||
-          data?.code === "TEMPORARY_UNAVAILABLE" ||
-          (response.status === 503 && data?.code !== "PROVIDER_NOT_CONFIGURED");
-        const isProviderNotConfigured = data?.code === "PROVIDER_NOT_CONFIGURED";
-        const is504 = response.status === 504 || data?.code === "UPSTREAM_TIMEOUT" || data?.code === "OCR_TIMEOUT";
-
-        let khmerError = "ម៉ាស៊ីនមេជួបបញ្ហា (Server Error)៖ មិនអាចបំលែងរូបភាពគណិតវិទ្យាបានទេ។ សូមចុច 'ព្យាយាមម្តងទៀត'។";
-        let userFriendlyDetails: string | null = null;
-
-        if (is413) {
-          khmerError =
-            "ទំហំឯកសារធំពេក (Payload Too Large)៖ រូបភាព ឬសំណើលើសទំហំកំណត់ 4.5 MB របស់ Vercel Serverless Function។ សូមជ្រើសរើសរូបភាពដែលមានទំហំតូចជាងនេះ (Payload exceeds 4.5 MB limit)។";
-        } else if (is415) {
-          khmerError = "ទម្រង់រូបភាពមិនត្រឹមត្រូវ (Unsupported Media Type)៖ សូមប្រើរូបភាព PNG, JPEG ឬ WEBP។";
-        } else if (is429) {
-          khmerError = "ប្រព័ន្ធកំពុងមានអ្នកប្រើប្រាស់ច្រើន។ សូមរង់ចាំបន្តិច ហើយប្រព័ន្ធនឹងសាកល្បងម្ដងទៀត។";
-        } else if (isModelUnavailable) {
-          khmerError = "សេវាកម្មកំពុងរវល់បន្តិច។ សូមរង់ចាំ ហើយសាកល្បងម្ដងទៀត។";
-          userFriendlyDetails = "Automatic model failover was attempted. Please click 'Retry' to re-process.";
-        } else if (isProviderNotConfigured) {
-          if (fileToProcess && fileToProcess.name === "sample-math-equation.png") {
-            // Graceful instant sample fallback when provider is unconfigured in test/preview
-            setResult(CANONICAL_SAMPLE_MATH_RESULT);
-            setElapsedTime(measuredDuration);
-            setSyntaxValidation(
-              validateMathematicalSyntax(
-                CANONICAL_SAMPLE_MATH_RESULT.latex,
-                CANONICAL_SAMPLE_MATH_RESULT.mathml
-              )
-            );
-            setIsLoading(false);
-            setIsRefining(false);
-            return;
-          }
-          khmerError =
-            "មិនទាន់កំណត់ Gemini API Key (API Key Missing)៖ សូមកំណត់ GEMINI_API_KEY ក្នុង Settings ឬ Environment Variables។";
-        } else if (is504) {
-          khmerError =
-            "ការដំណើរការលើសកំណត់ពេល (Timeout)៖ ម៉ាស៊ីន AI ដំណើរការយឺតជាងធម្មតា។ សូមចុច 'ព្យាយាមម្តងទៀត'។";
-          userFriendlyDetails = "Processing timed out across candidate models. Please retry.";
-        } else if (response.status === 400) {
-          khmerError =
-            data?.error || "ទិន្នន័យមិនត្រឹមត្រូវ (Invalid Input)៖ សូមបញ្ចូលរូបភាពគណិតវិទ្យា ឬអត្ថបទសមីការគណិតវិទ្យា។";
-        } else if (data?.error) {
-          khmerError = data.error;
-        }
-
-        setError(khmerError);
-        setErrorDetails(userFriendlyDetails || data?.details || null);
-        if (data?.requestId) {
-          setErrorRequestId(data.requestId);
-        }
+        setError("មិនអាចស្រង់ទិន្នន័យពីម៉ាស៊ីនបានទេ។");
+        setIsLoading(false);
+        setIsRefining(false);
         return;
       }
 
@@ -549,7 +522,7 @@ export default function PlpMathContentPage() {
         });
       }
 
-      if (drivePayloads.length > 0) {
+      if (drivePayloads.length > 0 && isNetworkOnline() && !usedOfflineEngine) {
         driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
           console.warn("[Module 01] Non-blocking Google Drive upload warning:", driveErr);
         });

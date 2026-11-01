@@ -32,6 +32,11 @@ import { ModuleDriveSync } from "@/components/drive/ModuleDriveSync";
 import { useModuleDriveUpload } from "@/hooks/useModuleDriveUpload";
 import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
 import { ResultHistoryModal, HistoryItem } from "@/components/history/ResultHistoryModal";
+import {
+  generateLessonWithHybridFallback,
+  isNetworkOnline,
+  isForceOfflineMode,
+} from "@/lib/tauri-fallback-bridge";
 
 const PRESETS: Record<LessonStudioMode, Array<{ label: string; prompt: string; grade: GradeLevel }>> = {
   visual_svg: [
@@ -213,46 +218,79 @@ export default function LessonStudioPage() {
     }, 500);
 
     try {
-      let response: Response;
+      let data: LessonStudioResponse;
+      let usedOfflineEngine = false;
 
-      if (selectedImage) {
-        const formData = new FormData();
-        formData.append("mode", mode);
-        formData.append("gradeLevel", gradeLevel);
-        formData.append("prompt", promptText);
-        formData.append("image", selectedImage.file);
-
-        response = await fetch("/api/lesson-studio", {
-          method: "POST",
-          body: formData,
+      if (!isNetworkOnline()) {
+        const hybridRes = await generateLessonWithHybridFallback({
+          mode,
+          prompt: promptText,
+          gradeLevel,
           signal: controller.signal,
         });
+
+        if (timerRef.current) clearInterval(timerRef.current);
+        if (!hybridRes.success || !hybridRes.data) {
+          throw new Error(hybridRes.error || "Snapdragon 8 Elite Visual Engine generation failed");
+        }
+        data = hybridRes.data;
+        usedOfflineEngine = true;
       } else {
-        response = await fetch("/api/lesson-studio", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        let response: Response | null = null;
+        try {
+          if (selectedImage) {
+            const formData = new FormData();
+            formData.append("mode", mode);
+            formData.append("gradeLevel", gradeLevel);
+            formData.append("prompt", promptText);
+            formData.append("image", selectedImage.file);
+
+            response = await fetch("/api/lesson-studio", {
+              method: "POST",
+              body: formData,
+              signal: controller.signal,
+            });
+          } else {
+            response = await fetch("/api/lesson-studio", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mode,
+                gradeLevel,
+                prompt: promptText,
+              }),
+              signal: controller.signal,
+            });
+          }
+        } catch (fetchErr: any) {
+          if (fetchErr.name === "AbortError") throw fetchErr;
+          console.warn("[Module 05] Online lesson generation failed, engaging Snapdragon 8 Elite fallback:", fetchErr);
+        }
+
+        if (timerRef.current) clearInterval(timerRef.current);
+
+        if (!response || !response.ok) {
+          const hybridRes = await generateLessonWithHybridFallback({
             mode,
-            gradeLevel,
             prompt: promptText,
-          }),
-          signal: controller.signal,
-        });
+            gradeLevel,
+            signal: controller.signal,
+          });
+
+          if (!hybridRes.success || !hybridRes.data) {
+            throw new Error(hybridRes.error || "បរាជ័យក្នុងការផលិតខ្លឹមសារ");
+          }
+          data = hybridRes.data;
+          usedOfflineEngine = true;
+        } else {
+          data = await response.json();
+          if (!data.ok) {
+            throw new Error(data.errorKhmer || data.error || "បរាជ័យក្នុងការផលិតខ្លឹមសារ");
+          }
+        }
       }
 
-      if (timerRef.current) clearInterval(timerRef.current);
-
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => null);
-        throw new Error(errJson?.errorKhmer || errJson?.error || `Server Error ${response.status}`);
-      }
-
-      const data: LessonStudioResponse = await response.json();
-      if (!data.ok) {
-        throw new Error(data.errorKhmer || data.error || "បរាជ័យក្នុងការផលិតខ្លឹមសារ");
-      }
-
-      setResult(data);
+            setResult(data);
 
       // Automatic Google Drive upload (Module 05: reference input image + generated lesson/worksheet outputs)
       const drivePayloads: DriveUploadOptions[] = [];
@@ -400,7 +438,7 @@ export default function LessonStudioPage() {
         }
       }
 
-      if (drivePayloads.length > 0) {
+      if (drivePayloads.length > 0 && isNetworkOnline() && !usedOfflineEngine) {
         driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
           console.warn("[Module 05] Non-blocking Google Drive upload warning:", driveErr);
         });

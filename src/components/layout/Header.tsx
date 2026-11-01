@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Settings, HelpCircle, Shield, User, LogOut } from "lucide-react";
 import { CORE_TOOLS } from "@/config/tools";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
+import { ForceOfflineToggle } from "@/components/layout/ForceOfflineToggle";
 import { MotionSpeedControl } from "@/components/layout/MotionSpeedControl";
 import { DualToneThemeToggle } from "@/components/ui/DualToneThemeToggle";
 
@@ -123,6 +124,9 @@ export function Header({ onOpenSidebar, onOpenSettings, onOpenHelp }: HeaderProp
         <div className="hidden xl:flex items-center">
           <MotionSpeedControl compact={true} />
         </div>
+
+        {/* Force Offline Mode Toggle (Snapdragon 8 Elite 7B) */}
+        <ForceOfflineToggle />
 
         {/* 1. Dual-Tone Theme Selector */}
         <DualToneThemeToggle compact={true} />

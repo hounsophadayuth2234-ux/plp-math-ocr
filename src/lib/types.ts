@@ -12,7 +12,9 @@ export type ProcessingStatusLabel =
   | "Enhanced resize — not AI super-resolution"
   | "Document Safe Mode (AI Matte Disabled)"
   | "Studio Super-Resolution Engine"
-  | "HD Resize & Sharpen";
+  | "HD Resize & Sharpen"
+  | "Qualcomm Adreno 830 GPU Native Super-Resolution"
+  | "Snapdragon 8 Elite Native NPU";
 
 export interface AppError {
   code:

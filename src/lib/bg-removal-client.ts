@@ -1,5 +1,5 @@
 import { ProcessingStatusLabel } from "./types";
-import { isTauriEnvironment, removeBackgroundWithNativeFallback } from "./tauri-fallback-bridge";
+import { isTauriEnvironment, isForceOfflineMode, removeBackgroundWithNativeFallback } from "./tauri-fallback-bridge";
 import { downscaleImageIfExceeds, getImageDimensions } from "./processing-utils";
 import { bgWorkerManager, WorkerProgressEvent } from "./bg-removal-worker-manager";
 import { probeWebGpuAndWasm } from "./webgpu-probe";
@@ -834,7 +834,7 @@ export async function removeBackgroundBrowser(
   }
 
   // --- Snapdragon 8 Elite Native NPU Execution (Module 02 Native Upgrade) ---
-  if (isTauriEnvironment()) {
+  if (isTauriEnvironment() || isForceOfflineMode()) {
     try {
       const nativeRes = await removeBackgroundWithNativeFallback(imageSource, {
         modelType: "birefnet_full",

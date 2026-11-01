@@ -11,6 +11,11 @@ import {
   ImageDiagnostics,
   UpscaleScale,
 } from "./image-upscale-engine";
+import {
+  isTauriEnvironment,
+  isForceOfflineMode,
+  upscaleImageWithNativeFallback,
+} from "./tauri-fallback-bridge";
 
 export * from "./image-upscale-engine";
 
@@ -108,6 +113,43 @@ export async function upscaleImageStudio(
   });
 
   const reqScale = options.scale || 2;
+
+  // Qualcomm Adreno 830 GPU & Hexagon NPU Native Pipeline (Module 03 Native Upgrade)
+  // Transfers raw Uint8Array buffers directly to C++/NDK with zero-copy IPC overhead.
+  if (isTauriEnvironment() || isForceOfflineMode()) {
+    try {
+      const nativeRes = await upscaleImageWithNativeFallback(imageSource, {
+        scale: reqScale,
+        onProgress: options.onProgress,
+        signal: options.signal,
+      });
+
+      return {
+        outputUrl: nativeRes.outputUrl,
+        blob: nativeRes.blob,
+        srcWidth: srcW,
+        srcHeight: srcH,
+        outputWidth: nativeRes.outputWidth,
+        outputHeight: nativeRes.outputHeight,
+        scale: (nativeRes.scale as UpscaleScale) || reqScale,
+        requestedScale: reqScale,
+        wasCapped: false,
+        isFallback: false,
+        diagnostics: {
+          ...diagnostics,
+          actualEngine: "Qualcomm Adreno 830 GPU / Hexagon NPU",
+        },
+        elapsedMs: nativeRes.elapsedMs,
+        label: "Qualcomm Adreno 830 GPU Native Super-Resolution",
+        model: nativeRes.model,
+        engine: nativeRes.backend,
+        jobId: options.jobId,
+      };
+    } catch (nativeErr) {
+      if (options.signal?.aborted) throw nativeErr;
+      console.warn("[Module 03] Native GPU/NPU upscaler error, continuing with fallback:", nativeErr);
+    }
+  }
 
   // Stage 2: Dispatching to Backend
   options.onProgress?.({

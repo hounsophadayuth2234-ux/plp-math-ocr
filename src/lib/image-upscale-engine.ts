@@ -29,7 +29,7 @@ export interface EnhancementConfig {
   faceEnhancement: boolean;
 }
 
-export type ProcessingEngineType = "Browser resize/sharpen" | "Real AI model" | "Remote worker";
+export type ProcessingEngineType = "Browser resize/sharpen" | "Real AI model" | "Remote worker" | "Qualcomm Adreno 830 GPU / Hexagon NPU" | string;
 
 export interface UpscaleOptions {
   scale: UpscaleScale;

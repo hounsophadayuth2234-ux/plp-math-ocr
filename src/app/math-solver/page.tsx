@@ -52,6 +52,12 @@ import {
 } from "@/lib/math-solution-html";
 import { formatDriveFilename, DriveUploadOptions } from "@/lib/drive-upload-client";
 import { ResultHistoryModal, HistoryItem } from "@/components/history/ResultHistoryModal";
+import {
+  solveMathWithHybridFallback,
+  ocrMathWithHybridFallback,
+  isNetworkOnline,
+  isForceOfflineMode,
+} from "@/lib/tauri-fallback-bridge";
 
 const GRADE_OPTIONS: { id: GradeLevel; label: string; sublabel: string }[] = [
   { id: "auto", label: "ស្វ័យប្រវត្តិ", sublabel: "Auto Detect" },
@@ -202,8 +208,23 @@ export default function MathSolverPage() {
         formData.append("gradeLevel", gradeLevel);
         formData.append("image", file, file.name);
 
+        // Check offline state first: if offline or Force Offline toggle is active, use native OCR
+        if (!isNetworkOnline()) {
+          const ocrRes = await ocrMathWithHybridFallback({
+            imageFile: file,
+            signal: abortController.signal,
+          });
+          if (activeRequestIdRef.current !== currentRequestId) return;
+          if (ocrRes.success && ocrRes.data) {
+            setExtractedProblemText(ocrRes.data.latex || ocrRes.data.transcription || "គណនាចំណោទគណិតវិទ្យា");
+            setExtractionConfidence("high");
+            setError(null);
+            return;
+          }
+        }
+
         // Register and execute non-blocking Google Drive upload
-        if (file) {
+        if (file && isNetworkOnline()) {
           const ext = (file.name || "problem.png").split(".").pop() || "png";
           const driveFilename = `module04_math_solver_input_${Date.now()}.${ext}`;
           driveSync.triggerUpload({
@@ -215,22 +236,42 @@ export default function MathSolverPage() {
           });
         }
 
-        const response = await fetch("/api/math-solver", {
-          method: "POST",
-          body: formData,
-          signal: abortController.signal,
-        });
+        let response: Response | null = null;
+        try {
+          response = await fetch("/api/math-solver", {
+            method: "POST",
+            body: formData,
+            signal: abortController.signal,
+          });
+        } catch (fetchErr) {
+          console.warn("[Module 04] Online extraction failed, invoking Snapdragon 8 Elite fallback:", fetchErr);
+        }
 
         if (activeRequestIdRef.current !== currentRequestId) return;
 
         let data: (MathSolverResponse & Partial<MathSolverError>) | null = null;
-        try {
-          data = await response.json();
-        } catch {
-          // Non-JSON response
+        if (response && response.ok) {
+          try {
+            data = await response.json();
+          } catch {
+            // Non-JSON response
+          }
         }
 
-        if (!response.ok) {
+        // If online response was not OK, fall back to native Snapdragon 8 Elite OCR
+        if (!data || !data.problems || data.problems.length === 0) {
+          const ocrRes = await ocrMathWithHybridFallback({
+            imageFile: file,
+            signal: abortController.signal,
+          });
+          if (activeRequestIdRef.current !== currentRequestId) return;
+          if (ocrRes.success && ocrRes.data) {
+            setExtractedProblemText(ocrRes.data.latex || ocrRes.data.transcription || "គណនាចំណោទគណិតវិទ្យា");
+            setExtractionConfidence("high");
+            setError(null);
+            return;
+          }
+
           const errData = data as MathSolverError | null;
           setError({
             stage: "extract",
@@ -325,47 +366,21 @@ export default function MathSolverPage() {
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append("action", "solve");
-      formData.append("solverMode", solverMode);
-      formData.append("gradeLevel", gradeLevel);
-      if (solverMode === "generate") {
-        formData.append("detailLevel", detailLevel);
-      }
-      formData.append("problemText", textToSolve);
-
-      if (solverMode === "verify" && existingAnswerText.trim()) {
-        formData.append("existingAnswer", existingAnswerText.trim());
-      }
-      formData.append(
-        "includeVerification",
-        solverMode === "verify" ? "true" : "false"
-      );
-      formData.append("outputLanguage", "khmer");
-
-      if (imageFile) {
-        formData.append("image", imageFile, imageFile.name);
-      }
-
-      const response = await fetch("/api/math-solver", {
-        method: "POST",
-        body: formData,
+      const hybridRes = await solveMathWithHybridFallback({
+        promptText: textToSolve,
+        imageFile: imageFile,
+        gradeLevel: gradeLevel,
+        solverMode: solverMode,
+        detailLevel: detailLevel,
         signal: abortController.signal,
       });
 
       if (activeRequestIdRef.current !== currentRequestId) return;
 
-      let data: (MathSolverResponse & Partial<MathSolverError>) | null = null;
-      try {
-        data = await response.json();
-      } catch {
-        // Non-JSON response
-      }
-
-      if (!response.ok) {
+      if (!hybridRes.success || !hybridRes.data) {
         setError({
           stage: "solve",
-          message: "Generation failed.",
+          message: hybridRes.error || "Generation failed.",
           messageKhmer:
             "ការបង្កើតដំណោះស្រាយមិនបានសម្រេច។ សូមពិនិត្យបញ្ហា ហើយសាកល្បងម្ដងទៀត។",
           retryable: true,
@@ -373,73 +388,75 @@ export default function MathSolverPage() {
         return;
       }
 
-      const successData = data as MathSolverResponse;
+      const successData = hybridRes.data;
       setResult(successData);
       if (successData.inferredGradeKhmer) {
         setInferredGradeDisplay(successData.inferredGradeKhmer);
       }
 
-      // Automatic Google Drive upload (Module 04: original problem image + solution text + solution HTML)
-      const drivePayloads: DriveUploadOptions[] = [];
-      const timestamp = Date.now();
-      const username = driveSync.currentUser;
+      // Automatic Google Drive upload (Online only & non-fallback)
+      if (isNetworkOnline() && !hybridRes.isOfflineFallback) {
+        const drivePayloads: DriveUploadOptions[] = [];
+        const timestamp = Date.now();
+        const username = driveSync.currentUser;
 
-      if (imageFile) {
-        const ext = (imageFile.name || "problem.png").split(".").pop() || "png";
-        drivePayloads.push({
-          file: imageFile,
-          filename: formatDriveFilename({
-            modulePrefix: "module04_math_solver",
-            userIdOrName: username,
-            outputType: "problem",
-            extension: ext,
-            timestamp,
-          }),
-          description: `Module 04 Khmer Math Solver Input Problem: ${(textToSolve || imageFile.name).slice(0, 50)}`,
-        });
-      }
-
-      const firstProb = successData.problems?.[0];
-      if (firstProb) {
-        const canonicalSol = toMathSolution(firstProb);
-
-        const plainText = renderCanonicalSolutionPlainText(canonicalSol);
-        if (plainText) {
+        if (imageFile) {
+          const ext = (imageFile.name || "problem.png").split(".").pop() || "png";
           drivePayloads.push({
-            content: plainText,
+            file: imageFile,
             filename: formatDriveFilename({
               modulePrefix: "module04_math_solver",
               userIdOrName: username,
-              outputType: "solution",
-              extension: "txt",
+              outputType: "problem",
+              extension: ext,
               timestamp,
             }),
-            mimeType: "text/plain; charset=utf-8",
-            description: "Module 04 Khmer Math Solution Plain Text Document",
+            description: `Module 04 Khmer Math Solver Input Problem: ${(textToSolve || imageFile.name).slice(0, 50)}`,
           });
         }
 
-        const htmlDoc = renderCanonicalSolutionHtml(canonicalSol);
-        if (htmlDoc) {
-          drivePayloads.push({
-            content: htmlDoc,
-            filename: formatDriveFilename({
-              modulePrefix: "module04_math_solver",
-              userIdOrName: username,
-              outputType: "solution",
-              extension: "html",
-              timestamp,
-            }),
-            mimeType: "text/html; charset=utf-8",
-            description: "Module 04 Khmer Math Solution Self-Contained HTML Document",
+        const firstProb = successData.problems?.[0];
+        if (firstProb) {
+          const canonicalSol = toMathSolution(firstProb);
+
+          const plainText = renderCanonicalSolutionPlainText(canonicalSol);
+          if (plainText) {
+            drivePayloads.push({
+              content: plainText,
+              filename: formatDriveFilename({
+                modulePrefix: "module04_math_solver",
+                userIdOrName: username,
+                outputType: "solution",
+                extension: "txt",
+                timestamp,
+              }),
+              mimeType: "text/plain; charset=utf-8",
+              description: "Module 04 Khmer Math Solution Plain Text Document",
+            });
+          }
+
+          const htmlDoc = renderCanonicalSolutionHtml(canonicalSol);
+          if (htmlDoc) {
+            drivePayloads.push({
+              content: htmlDoc,
+              filename: formatDriveFilename({
+                modulePrefix: "module04_math_solver",
+                userIdOrName: username,
+                outputType: "solution",
+                extension: "html",
+                timestamp,
+              }),
+              mimeType: "text/html; charset=utf-8",
+              description: "Module 04 Khmer Math Solution Self-Contained HTML Document",
+            });
+          }
+        }
+
+        if (drivePayloads.length > 0) {
+          driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
+            console.warn("[Module 04] Non-blocking Google Drive upload warning:", driveErr);
           });
         }
-      }
-
-      if (drivePayloads.length > 0) {
-        driveSync.triggerUpload(drivePayloads).catch((driveErr) => {
-          console.warn("[Module 04] Non-blocking Google Drive upload warning:", driveErr);
-        });
       }
 
       setError(null);
