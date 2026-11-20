@@ -84,6 +84,7 @@ import mss
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Header, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 from supabase import create_client, Client
@@ -101,7 +102,8 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 DEVICE_ID = int(os.getenv("DEVICE_ID", "1"))
 DEVICE_NAME = os.getenv("DEVICE_NAME", "Dell Latitude 7490")
 SERVER_PORT = int(os.getenv("PORT", "8765"))
-SERVER_HOST = os.getenv("HOST", "127.0.0.1")
+SERVER_HOST = os.getenv("HOST", "0.0.0.0")
+ENABLE_CLOUDFLARE_TUNNEL = os.getenv("ENABLE_CLOUDFLARE_TUNNEL", "false").lower() == "true"
 
 # Global state
 current_tunnel_url: Optional[str] = None
@@ -809,6 +811,63 @@ def api_remote_alert(
 
 
 # =============================================================================
+# SELF-HOSTED STATIC WEB REMOTE UI (SPA)
+# =============================================================================
+
+web_out_dir = os.path.join(BASE_DIR, "web-remote", "out")
+if os.path.exists(web_out_dir):
+    next_static_dir = os.path.join(web_out_dir, "_next")
+    if os.path.exists(next_static_dir):
+        app.mount("/_next", StaticFiles(directory=next_static_dir), name="next_assets")
+
+    @app.get("/", include_in_schema=False)
+    async def serve_root_index():
+        return FileResponse(os.path.join(web_out_dir, "index.html"))
+
+    @app.exception_handler(404)
+    async def spa_404_fallback(request, exc):
+        if request.url.path.startswith("/api/") or request.url.path.startswith("/ws/"):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        index_file = os.path.join(web_out_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+
+def get_network_ips() -> Dict[str, str]:
+    """Detect Tailscale, LAN, and Loopback IP addresses."""
+    ips = {"localhost": "127.0.0.1"}
+
+    # 1. Try tailscale CLI
+    tailscale_exe = r"C:\Program Files\Tailscale\tailscale.exe"
+    if os.path.exists(tailscale_exe):
+        try:
+            res = subprocess.run([tailscale_exe, "ip", "-4"], capture_output=True, text=True, timeout=2)
+            if res.returncode == 0 and res.stdout.strip():
+                ips["tailscale"] = res.stdout.strip()
+        except Exception:
+            pass
+
+    # 2. Inspect psutil network interfaces
+    try:
+        addrs = psutil.net_if_addrs()
+        for iface_name, addr_list in addrs.items():
+            for addr in addr_list:
+                family_val = getattr(addr.family, "name", str(addr.family))
+                if family_val == "AF_INET" or addr.family == 2:
+                    ip = addr.address
+                    if ip.startswith("100.") and "tailscale" not in ips:
+                        ips["tailscale"] = ip
+                    elif ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("172."):
+                        if not ip.startswith("172.30."):
+                            ips["lan"] = ip
+    except Exception:
+        pass
+
+    return ips
+
+
+# =============================================================================
 # 5. BUILT-IN CLOUDFLARE TUNNEL WATCHDOG
 # =============================================================================
 
@@ -918,6 +977,7 @@ def cloudflared_watchdog_loop():
 
 def background_heartbeat_loop():
     """Update device_telemetry in Supabase every 5 seconds so phone knows PC is alive."""
+    last_direct_publish = 0
     while server_running:
         try:
             if supabase_client:
@@ -935,6 +995,34 @@ def background_heartbeat_loop():
                     "is_charging": bat.power_plugged if bat else None,
                     "updated_at": now_iso
                 }).execute()
+
+                # In direct mode (Cloudflare disabled), publish Tailscale / LAN direct URL to Supabase
+                now_t = time.time()
+                if not ENABLE_CLOUDFLARE_TUNNEL and (now_t - last_direct_publish > 60):
+                    last_direct_publish = now_t
+                    ips = get_network_ips()
+                    direct_target = None
+                    if "tailscale" in ips:
+                        direct_target = f"http://{ips['tailscale']}:{SERVER_PORT}"
+                    elif "lan" in ips:
+                        direct_target = f"http://{ips['lan']}:{SERVER_PORT}"
+
+                    if direct_target:
+                        try:
+                            supabase_client.table("device_commands")\
+                                .update({"status": "expired"})\
+                                .eq("command", "TUNNEL_URL")\
+                                .eq("status", "active")\
+                                .execute()
+
+                            supabase_client.table("device_commands").insert({
+                                "command": "TUNNEL_URL",
+                                "payload": direct_target,
+                                "status": "active"
+                            }).execute()
+                            logger.info(f"Direct connection URL published to Supabase: {direct_target}")
+                        except Exception as e:
+                            logger.debug(f"Could not publish direct URL to device_commands: {e}")
         except Exception as e:
             logger.debug(f"Heartbeat loop error: {e}")
 
@@ -946,16 +1034,28 @@ def background_heartbeat_loop():
 # =============================================================================
 
 def main():
+    ips = get_network_ips()
     logger.info("=" * 65)
     logger.info("DELL LATITUDE 7490 - V3.0 PRO LIVE STREAMING SERVER")
     logger.info(f"Base Directory : {BASE_DIR}")
-    logger.info(f"Local Server   : http://{SERVER_HOST}:{SERVER_PORT}")
+    logger.info(f"Bind Host      : {SERVER_HOST}:{SERVER_PORT}")
+    logger.info(f"Localhost URL  : http://127.0.0.1:{SERVER_PORT}")
+    if "lan" in ips:
+        logger.info(f"LAN Direct URL : http://{ips['lan']}:{SERVER_PORT}")
+    if "tailscale" in ips:
+        logger.info(f"Tailscale URL  : http://{ips['tailscale']}:{SERVER_PORT}")
+    else:
+        logger.info("Tailscale URL  : Not connected yet (Run tailscale up)")
     logger.info(f"Security PIN   : {ACCESS_PIN}")
+    logger.info(f"Cloudflare     : {'ENABLED' if ENABLE_CLOUDFLARE_TUNNEL else 'DISABLED (Direct Tailscale / LAN Mode)'}")
     logger.info("=" * 65)
 
-    # 1. Start Cloudflare Watchdog in background thread
-    tunnel_thread = threading.Thread(target=cloudflared_watchdog_loop, daemon=True, name="CloudflaredWatchdog")
-    tunnel_thread.start()
+    # 1. Start Cloudflare Watchdog in background thread ONLY if explicitly enabled
+    if ENABLE_CLOUDFLARE_TUNNEL:
+        tunnel_thread = threading.Thread(target=cloudflared_watchdog_loop, daemon=True, name="CloudflaredWatchdog")
+        tunnel_thread.start()
+    else:
+        logger.info("Cloudflare Quick Tunnel is disabled. Using direct Tailscale/LAN IP for rock-solid zero-disconnect streaming.")
 
     # 2. Start Supabase Heartbeat in background thread
     heartbeat_thread = threading.Thread(target=background_heartbeat_loop, daemon=True, name="HeartbeatLoop")

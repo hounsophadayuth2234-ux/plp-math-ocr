@@ -87,7 +87,29 @@ export function onConnectionStatusChange(cb: (status: ConnectionStatus) => void)
   };
 }
 
+export function getDirectServerUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  const host = window.location.hostname;
+  const port = window.location.port;
+  // If hosted on pc_server.py (port 8765) or accessed via Tailscale (100.x.y.z) or LAN IP
+  if (port === '8765' || host.startsWith('100.') || host.startsWith('10.') || host.startsWith('192.168.')) {
+    return window.location.origin;
+  }
+  // If origin is not a remote vercel deployment or standard next dev
+  if (!window.location.origin.includes('vercel.app') && !window.location.origin.includes('localhost:3000')) {
+    return window.location.origin;
+  }
+  return null;
+}
+
 export async function fetchLiveTunnelUrl(): Promise<string | null> {
+  const direct = getDirectServerUrl();
+  if (direct) {
+    activeTunnelUrl = direct;
+    notifyDiagnosticChange();
+    return direct;
+  }
+
   try {
     const { data, error } = await supabase
       .from('device_commands')
@@ -195,11 +217,11 @@ export function initControlWebSocket(
 
   const ws = new WebSocket(wsUrl);
 
-  // 15-second timeout: accounts for 5G mobile carrier DNS lookup + Cloudflare TLS handshake
+  // 10-second timeout: accounts for mobile carrier DNS lookup + direct connection handshake
   connectTimeoutTimer = setTimeout(() => {
     if (ws.readyState !== WebSocket.OPEN) {
-      console.warn('[Control WS] Connection timed out after 15000ms.');
-      setDiagnosticReason('Connection Timeout (15s exceeded on 5G/Network)');
+      console.warn('[Control WS] Connection timed out after 10000ms.');
+      setDiagnosticReason('Connection Timeout (10s exceeded)');
       try {
         ws.close();
       } catch {
@@ -207,7 +229,7 @@ export function initControlWebSocket(
       }
       handleDisconnect();
     }
-  }, 15000);
+  }, 10000);
 
   ws.onopen = () => {
     if (connectTimeoutTimer) clearTimeout(connectTimeoutTimer);
@@ -263,6 +285,15 @@ function handleDisconnect() {
   console.log(`[Auto-Reconnect] Scheduling retry in ${delay}ms (attempt #${reconnectAttempts})...`);
   reconnectTimer = setTimeout(async () => {
     try {
+      const direct = getDirectServerUrl();
+      if (direct) {
+        console.log('[Auto-Reconnect] Retrying direct Tailscale/Local connection to:', direct);
+        setDiagnosticReason(`Retrying direct connection to ${direct}...`);
+        activeTunnelUrl = direct;
+        initControlWebSocket(direct, currentPin);
+        return;
+      }
+
       console.log('[Auto-Reconnect] Querying Supabase for latest active TUNNEL_URL...');
       const freshUrl = await fetchLiveTunnelUrl();
       await fetchHeartbeatAge();
@@ -275,7 +306,7 @@ function handleDisconnect() {
       }
     } catch (err) {
       console.warn('[Auto-Reconnect] Error during retry:', err);
-      setDiagnosticReason('Supabase Query Error during reconnect');
+      setDiagnosticReason('Query Error during reconnect');
       handleDisconnect();
     }
   }, delay);
