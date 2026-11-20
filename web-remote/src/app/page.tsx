@@ -1,28 +1,31 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Lock, Laptop } from 'lucide-react';
+import { Lock, Laptop, Wifi, RefreshCw } from 'lucide-react';
 import PinLockScreen from '../components/PinLockScreen';
 import PowerConfirmModal from '../components/ShutdownConfirmModal';
-import { ScreenshotModal } from '../components/ScreenshotModal';
 import { NavigationTabBar, TabKey } from '../components/NavigationTabBar';
-import { ControlTab } from '../components/tabs/ControlTab';
-import { TrackpadTab } from '../components/tabs/TrackpadTab';
-import { LauncherTab } from '../components/tabs/LauncherTab';
-import { ToolsTab } from '../components/tabs/ToolsTab';
+import { LiveScreenTab } from '../components/tabs/LiveScreenTab';
+import { MonitorTab } from '../components/tabs/MonitorTab';
+import { FilesTab } from '../components/tabs/FilesTab';
+import { PowerToolsTab } from '../components/tabs/PowerToolsTab';
 import {
-  supabase,
-  sendDeviceCommand,
-  fetchLatestTelemetry,
-} from '../lib/supabase';
-import { DeviceTelemetry } from '../lib/types';
+  fetchLiveTunnelUrl,
+  subscribeToTunnelUpdates,
+  initControlWebSocket,
+  checkPing,
+  sendControlCommand,
+} from '../lib/tunnelClient';
 
 export default function MobileRemotePage() {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [hasMounted, setHasMounted] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('control');
+  const [activeTab, setActiveTab] = useState<TabKey>('screen');
+  const [tunnelUrl, setTunnelUrl] = useState<string>('');
+  const [isConnectingTunnel, setIsConnectingTunnel] = useState<boolean>(true);
+  const [pingMs, setPingMs] = useState<number | null>(null);
+  const [activeWindow, setActiveWindow] = useState<string>('');
 
-  const [telemetry, setTelemetry] = useState<DeviceTelemetry | null>(null);
   const [powerModalState, setPowerModalState] = useState<{
     isOpen: boolean;
     action: 'shutdown' | 'restart';
@@ -33,9 +36,9 @@ export default function MobileRemotePage() {
     isExecuting: false,
   });
 
-  const [isScreenshotModalOpen, setIsScreenshotModalOpen] = useState<boolean>(false);
-  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'info' | 'success' | 'error' } | null>(null);
+
+  const PIN = process.env.NEXT_PUBLIC_ACCESS_PIN || '123456';
 
   const showToast = useCallback((text: string, type: 'info' | 'success' | 'error' = 'info') => {
     setToastMessage({ text, type });
@@ -44,7 +47,7 @@ export default function MobileRemotePage() {
     }, 3000);
   }, []);
 
-  // Restore session asynchronously on mount
+  // Restore session
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined') {
@@ -58,53 +61,60 @@ export default function MobileRemotePage() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Load telemetry
-  const loadTelemetry = useCallback(async () => {
+  // Discover Cloudflare Tunnel URL from Supabase
+  const discoverTunnel = useCallback(async () => {
+    setIsConnectingTunnel(true);
     try {
-      const data = await fetchLatestTelemetry();
-      if (data) {
-        setTelemetry(data);
+      const url = await fetchLiveTunnelUrl();
+      if (url) {
+        setTunnelUrl(url);
+        initControlWebSocket(url, PIN);
+        try {
+          const pingRes = await checkPing(url, PIN);
+          setPingMs(pingRes.latencyMs);
+          if (pingRes.activeWindow) setActiveWindow(pingRes.activeWindow);
+        } catch {
+          // Handled
+        }
       }
     } catch {
-      // Handled silently
+      // Ignored
+    } finally {
+      setIsConnectingTunnel(false);
     }
-  }, []);
+  }, [PIN]);
 
   useEffect(() => {
     if (!isUnlocked) return;
 
     const timer = setTimeout(() => {
-      loadTelemetry();
+      discoverTunnel();
     }, 0);
 
-    // Subscribe to Postgres changes on device_telemetry
-    const telemetrySub = supabase
-      .channel('public:device_telemetry_live')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'device_telemetry',
-          filter: 'id=eq.1',
-        },
-        (payload) => {
-          if (payload.new) {
-            setTelemetry(payload.new as DeviceTelemetry);
-          }
-        }
-      )
-      .subscribe();
+    const unsub = subscribeToTunnelUpdates((newUrl) => {
+      setTunnelUrl(newUrl);
+      initControlWebSocket(newUrl, PIN);
+      showToast('New Live Tunnel connected!', 'success');
+    });
 
-    // Fallback polling every 5s
-    const poller = setInterval(loadTelemetry, 5000);
+    const pingInterval = setInterval(async () => {
+      if (tunnelUrl) {
+        try {
+          const res = await checkPing(tunnelUrl, PIN);
+          setPingMs(res.latencyMs);
+          if (res.activeWindow) setActiveWindow(res.activeWindow);
+        } catch {
+          setPingMs(null);
+        }
+      }
+    }, 6000);
 
     return () => {
       clearTimeout(timer);
-      clearInterval(poller);
-      supabase.removeChannel(telemetrySub);
+      unsub();
+      clearInterval(pingInterval);
     };
-  }, [isUnlocked, loadTelemetry]);
+  }, [isUnlocked, tunnelUrl, PIN, discoverTunnel, showToast]);
 
   const handleUnlock = () => {
     setIsUnlocked(true);
@@ -122,31 +132,12 @@ export default function MobileRemotePage() {
     showToast('Session locked', 'info');
   };
 
-  // Trigger screenshot capture
-  const handleTriggerScreenshot = async () => {
-    setIsCapturingScreenshot(true);
-    showToast('Capturing Dell screen...', 'info');
-    try {
-      await sendDeviceCommand('SCREENSHOT');
-      setTimeout(async () => {
-        await loadTelemetry();
-        setIsCapturingScreenshot(false);
-        setIsScreenshotModalOpen(true);
-        showToast('Screen view captured!', 'success');
-      }, 1800);
-    } catch {
-      setIsCapturingScreenshot(false);
-      showToast('Screenshot capture failed', 'error');
-    }
-  };
-
-  // Power action confirm
   const handleConfirmPower = async () => {
     setPowerModalState((prev) => ({ ...prev, isExecuting: true }));
-    const cmd = powerModalState.action === 'shutdown' ? 'SHUTDOWN' : 'RESTART';
+    const cmd = powerModalState.action;
     try {
-      await sendDeviceCommand(cmd);
-      showToast(`${cmd} dispatched in 5s!`, 'success');
+      sendControlCommand({ type: cmd });
+      showToast(`${cmd.toUpperCase()} command sent!`, 'success');
     } catch {
       showToast(`Failed to dispatch ${cmd}`, 'error');
     } finally {
@@ -171,29 +162,48 @@ export default function MobileRemotePage() {
   return (
     <div className="min-h-screen bg-[#080a0f] text-zinc-100 flex flex-col justify-between selection:bg-cyan-500/30">
       {/* Top Header Bar */}
-      <header className="sticky top-0 z-30 px-4 pt-safe pb-2 bg-[#080a0f]/80 backdrop-blur-xl border-b border-white/[0.06]">
+      <header className="sticky top-0 z-30 px-3 pt-safe pb-2 bg-[#080a0f]/85 backdrop-blur-xl border-b border-white/[0.06]">
         <div className="max-w-md mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 flex-shrink-0">
               <Laptop className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-xs tracking-wider uppercase text-zinc-100">
+                <span className="font-bold text-xs tracking-wider uppercase text-zinc-100 truncate">
                   DELL × HONOR WIN
                 </span>
-                <span className="text-[10px] bg-gradient-to-r from-cyan-400 to-blue-500 text-black font-extrabold px-1.5 py-0.2 rounded">
-                  V2.0 PRO
+                <span className="text-[10px] bg-gradient-to-r from-cyan-400 to-blue-500 text-black font-extrabold px-1.5 py-0.2 rounded flex-shrink-0">
+                  V3.0 PRO
                 </span>
               </div>
-              <p className="text-[10px] text-zinc-500">Ultra-Low Latency Broadcast</p>
+              <p className="text-[10px] text-zinc-500 truncate">
+                {activeWindow ? `Open: ${activeWindow}` : 'Live Direct Streaming'}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Live Connection Pill */}
+            {tunnelUrl ? (
+              <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-mono">
+                <Wifi className="w-3 h-3 animate-pulse" />
+                <span>{pingMs !== null ? `${pingMs}ms` : 'Tunnel OK'}</span>
+              </span>
+            ) : (
+              <button
+                onClick={discoverTunnel}
+                disabled={isConnectingTunnel}
+                className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20"
+              >
+                <RefreshCw className={`w-3 h-3 ${isConnectingTunnel ? 'animate-spin' : ''}`} />
+                <span>{isConnectingTunnel ? 'Discovering...' : 'Connect'}</span>
+              </button>
+            )}
+
             <button
               onClick={handleLockSession}
-              className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-zinc-200 border border-white/[0.06] transition-colors"
+              className="p-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-zinc-200 border border-white/[0.06] transition-colors"
               title="Lock remote session"
             >
               <Lock className="w-3.5 h-3.5" />
@@ -218,34 +228,23 @@ export default function MobileRemotePage() {
       </header>
 
       {/* Main Tab Content */}
-      <main className="flex-1 max-w-md w-full mx-auto px-3.5 pt-3">
-        {activeTab === 'control' && (
-          <ControlTab
-            telemetry={telemetry}
-            onOpenScreenshot={() => setIsScreenshotModalOpen(true)}
+      <main className="flex-1 max-w-md w-full mx-auto px-3 pt-2">
+        {activeTab === 'screen' && <LiveScreenTab tunnelUrl={tunnelUrl} pin={PIN} />}
+
+        {activeTab === 'monitor' && <MonitorTab tunnelUrl={tunnelUrl} pin={PIN} />}
+
+        {activeTab === 'files' && <FilesTab tunnelUrl={tunnelUrl} pin={PIN} />}
+
+        {activeTab === 'tools' && (
+          <PowerToolsTab
+            tunnelUrl={tunnelUrl}
+            pin={PIN}
             onRequestPowerAction={(action) =>
               setPowerModalState({ isOpen: true, action, isExecuting: false })
             }
-            onTriggerScreenshot={handleTriggerScreenshot}
-            isScreenshotting={isCapturingScreenshot}
           />
         )}
-
-        {activeTab === 'trackpad' && <TrackpadTab />}
-
-        {activeTab === 'launcher' && <LauncherTab />}
-
-        {activeTab === 'tools' && <ToolsTab />}
       </main>
-
-      {/* Screenshot Modal with Tap-to-Click */}
-      <ScreenshotModal
-        isOpen={isScreenshotModalOpen}
-        onClose={() => setIsScreenshotModalOpen(false)}
-        screenshotUrl={telemetry?.screenshot_url ?? null}
-        onRefresh={handleTriggerScreenshot}
-        isRefreshing={isCapturingScreenshot}
-      />
 
       {/* Power Confirm Modal (Shutdown / Restart) */}
       <PowerConfirmModal
@@ -258,7 +257,7 @@ export default function MobileRemotePage() {
         }
       />
 
-      {/* Bottom Fixed Navigation Bar */}
+      {/* Fixed 4-Tab Bottom Navigation Bar */}
       <NavigationTabBar activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );
