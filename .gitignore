@@ -75,3 +75,6 @@ android-offline-spike/models/*.gguf
 android-offline-spike/python_libs/
 
 cloudflared.exe
+
+*.log
+pc_server.log

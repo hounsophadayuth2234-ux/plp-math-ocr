@@ -1,9 +1,45 @@
 import { supabase } from './supabase';
 import { FilesResponse } from './types';
 
+export type ConnectionStatus = 'connected' | 'connecting' | 'offline';
+
+let currentStatus: ConnectionStatus = 'connecting';
+const statusListeners = new Set<(status: ConnectionStatus) => void>();
+
 let controlSocket: WebSocket | null = null;
 const controlQueue: string[] = [];
 let onControlResponseCallback: ((data: Record<string, unknown>) => void) | null = null;
+
+let activeTunnelUrl: string | null = null;
+let currentPin: string = '123456';
+let reconnectTimer: NodeJS.Timeout | null = null;
+let connectTimeoutTimer: NodeJS.Timeout | null = null;
+let reconnectAttempts = 0;
+
+export function getConnectionStatus(): ConnectionStatus {
+  return currentStatus;
+}
+
+function setConnectionStatus(status: ConnectionStatus) {
+  if (currentStatus !== status) {
+    currentStatus = status;
+    statusListeners.forEach((cb) => {
+      try {
+        cb(status);
+      } catch (err) {
+        console.warn('Status listener error:', err);
+      }
+    });
+  }
+}
+
+export function onConnectionStatusChange(cb: (status: ConnectionStatus) => void): () => void {
+  statusListeners.add(cb);
+  cb(currentStatus);
+  return () => {
+    statusListeners.delete(cb);
+  };
+}
 
 export async function fetchLiveTunnelUrl(): Promise<string | null> {
   try {
@@ -37,7 +73,11 @@ export function subscribeToTunnelUpdates(onNewTunnel: (url: string) => void): ()
       (payload) => {
         const newUrl = payload.new?.payload;
         if (newUrl) {
-          onNewTunnel((newUrl as string).replace(/\/$/, ''));
+          const clean = (newUrl as string).replace(/\/$/, '');
+          activeTunnelUrl = clean;
+          onNewTunnel(clean);
+          // Auto-reconnect with new URL
+          initControlWebSocket(clean, currentPin);
         }
       }
     )
@@ -54,17 +94,56 @@ export function initControlWebSocket(
   onResponse?: (data: Record<string, unknown>) => void
 ): WebSocket {
   if (onResponse) onControlResponseCallback = onResponse;
+  activeTunnelUrl = tunnelUrl;
+  currentPin = pin;
 
-  if (controlSocket && (controlSocket.readyState === WebSocket.OPEN || controlSocket.readyState === WebSocket.CONNECTING)) {
-    return controlSocket;
+  if (controlSocket) {
+    if (controlSocket.readyState === WebSocket.OPEN) {
+      setConnectionStatus('connected');
+      return controlSocket;
+    }
+    if (controlSocket.readyState === WebSocket.CONNECTING) {
+      setConnectionStatus('connecting');
+      return controlSocket;
+    }
+    try {
+      controlSocket.close();
+    } catch {
+      // Ignored
+    }
   }
 
-  const wsUrl = tunnelUrl.replace('https://', 'wss://').replace('http://', 'ws://') + `/ws/control?pin=${encodeURIComponent(pin)}`;
+  setConnectionStatus('connecting');
+
+  if (connectTimeoutTimer) {
+    clearTimeout(connectTimeoutTimer);
+  }
+
+  const wsUrl =
+    tunnelUrl.replace('https://', 'wss://').replace('http://', 'ws://') +
+    `/ws/control?pin=${encodeURIComponent(pin)}`;
 
   const ws = new WebSocket(wsUrl);
 
+  // 4-second connection timeout: if socket doesn't open within 4s, trigger reconnect
+  connectTimeoutTimer = setTimeout(() => {
+    if (ws.readyState !== WebSocket.OPEN) {
+      console.warn('[Control WS] Connection timed out after 4000ms.');
+      try {
+        ws.close();
+      } catch {
+        // Ignored
+      }
+      handleDisconnect();
+    }
+  }, 4000);
+
   ws.onopen = () => {
+    if (connectTimeoutTimer) clearTimeout(connectTimeoutTimer);
     console.log('[Control WS] Connected to live PC control channel.');
+    reconnectAttempts = 0;
+    setConnectionStatus('connected');
+
     // Flush queued messages
     while (controlQueue.length > 0) {
       const msg = controlQueue.shift();
@@ -84,16 +163,70 @@ export function initControlWebSocket(
   };
 
   ws.onclose = () => {
+    if (connectTimeoutTimer) clearTimeout(connectTimeoutTimer);
     controlSocket = null;
     console.log('[Control WS] Disconnected.');
+    handleDisconnect();
   };
 
   ws.onerror = (err) => {
     console.warn('[Control WS] Error:', err);
+    // Onerror will naturally trigger onclose
   };
 
   controlSocket = ws;
   return ws;
+}
+
+function handleDisconnect() {
+  setConnectionStatus('offline');
+
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+
+  // Exponential backoff: 2s, 4s, 8s, max 10s
+  const delay = Math.min(10000, 2000 * Math.pow(1.5, reconnectAttempts));
+  reconnectAttempts++;
+
+  console.log(`[Auto-Reconnect] Scheduling retry in ${delay}ms (attempt #${reconnectAttempts})...`);
+  reconnectTimer = setTimeout(async () => {
+    try {
+      console.log('[Auto-Reconnect] Querying Supabase for latest TUNNEL_URL...');
+      const freshUrl = await fetchLiveTunnelUrl();
+      if (freshUrl) {
+        activeTunnelUrl = freshUrl;
+        initControlWebSocket(freshUrl, currentPin);
+      } else {
+        handleDisconnect();
+      }
+    } catch (err) {
+      console.warn('[Auto-Reconnect] Error during retry:', err);
+      handleDisconnect();
+    }
+  }, delay);
+}
+
+export async function forceReconnect(pin?: string): Promise<string | null> {
+  if (pin) currentPin = pin;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  if (connectTimeoutTimer) clearTimeout(connectTimeoutTimer);
+
+  setConnectionStatus('connecting');
+  reconnectAttempts = 0;
+
+  try {
+    const url = await fetchLiveTunnelUrl();
+    if (url) {
+      activeTunnelUrl = url;
+      initControlWebSocket(url, currentPin);
+      return url;
+    }
+    setConnectionStatus('offline');
+    return null;
+  } catch (err) {
+    console.warn('Manual reconnect failed:', err);
+    setConnectionStatus('offline');
+    return null;
+  }
 }
 
 export function sendControlCommand(cmd: Record<string, unknown>, tunnelUrl?: string, pin?: string): void {
@@ -102,21 +235,32 @@ export function sendControlCommand(cmd: Record<string, unknown>, tunnelUrl?: str
     controlSocket.send(msg);
   } else {
     controlQueue.push(msg);
-    if (tunnelUrl && pin && (!controlSocket || controlSocket.readyState === WebSocket.CLOSED)) {
-      initControlWebSocket(tunnelUrl, pin);
+    if ((tunnelUrl || activeTunnelUrl) && (pin || currentPin)) {
+      initControlWebSocket(tunnelUrl || activeTunnelUrl!, pin || currentPin);
     }
   }
 }
 
 export async function checkPing(tunnelUrl: string, pin: string): Promise<{ latencyMs: number; activeWindow?: string }> {
-  const t0 = performance.now();
-  const resp = await fetch(`${tunnelUrl}/api/ping?pin=${encodeURIComponent(pin)}`);
-  const dt = Math.round(performance.now() - t0);
-  if (!resp.ok) {
-    throw new Error(`Ping failed with status ${resp.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+  try {
+    const t0 = performance.now();
+    const resp = await fetch(`${tunnelUrl}/api/ping?pin=${encodeURIComponent(pin)}`, {
+      signal: controller.signal,
+    });
+    const dt = Math.round(performance.now() - t0);
+    clearTimeout(timeoutId);
+    if (!resp.ok) {
+      throw new Error(`Ping failed with status ${resp.status}`);
+    }
+    const data = await resp.json();
+    return { latencyMs: dt, activeWindow: data.active_window };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
-  const data = await resp.json();
-  return { latencyMs: dt, activeWindow: data.active_window };
 }
 
 export async function fetchFiles(tunnelUrl: string, pin: string, dirPath?: string): Promise<FilesResponse> {

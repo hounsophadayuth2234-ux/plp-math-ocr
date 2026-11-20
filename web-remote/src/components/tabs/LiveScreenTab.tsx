@@ -9,22 +9,26 @@ import {
   Keyboard,
   Send,
   Radio,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react';
 import { sendControlCommand } from '@/lib/tunnelClient';
 
 interface LiveScreenTabProps {
   tunnelUrl: string;
   pin: string;
+  onRetry?: () => void;
 }
 
 type ControlMode = 'touch' | 'cursor';
 type QualityPreset = 'low' | 'medium' | 'high';
 
-export function LiveScreenTab({ tunnelUrl, pin }: LiveScreenTabProps) {
+export function LiveScreenTab({ tunnelUrl, pin, onRetry }: LiveScreenTabProps) {
   const [controlMode, setControlMode] = useState<ControlMode>('touch');
   const [quality, setQuality] = useState<QualityPreset>('medium');
   const [fps, setFps] = useState<number>(0);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isTimedOut, setIsTimedOut] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showKeyboard, setShowKeyboard] = useState<boolean>(false);
   const [inputText, setInputText] = useState<string>('');
@@ -49,7 +53,17 @@ export function LiveScreenTab({ tunnelUrl, pin }: LiveScreenTabProps) {
 
   // Connect to live screen WebSocket
   useEffect(() => {
-    if (!tunnelUrl) return;
+    if (!tunnelUrl) {
+      const resetTimer = setTimeout(() => {
+        setIsConnected(false);
+        setIsTimedOut(true);
+      }, 0);
+      return () => clearTimeout(resetTimer);
+    }
+
+    const resetTimeoutTimer = setTimeout(() => {
+      setIsTimedOut(false);
+    }, 0);
 
     const wsUrl = tunnelUrl.replace('https://', 'wss://').replace('http://', 'ws://') +
       `/ws/screen?pin=${encodeURIComponent(pin)}&quality=${quality}`;
@@ -58,8 +72,17 @@ export function LiveScreenTab({ tunnelUrl, pin }: LiveScreenTabProps) {
     ws.binaryType = 'blob';
     screenWsRef.current = ws;
 
+    const timeoutTimer = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        setIsConnected(false);
+        setIsTimedOut(true);
+      }
+    }, 4000);
+
     ws.onopen = () => {
+      clearTimeout(timeoutTimer);
       setIsConnected(true);
+      setIsTimedOut(false);
       lastFpsTimeRef.current = Date.now();
       console.log('[Screen WS] Connected to live desktop video feed.');
     };
@@ -97,15 +120,22 @@ export function LiveScreenTab({ tunnelUrl, pin }: LiveScreenTabProps) {
     };
 
     ws.onclose = () => {
+      clearTimeout(timeoutTimer);
       setIsConnected(false);
+      setIsTimedOut(true);
       setFps(0);
     };
 
     ws.onerror = (err) => {
+      clearTimeout(timeoutTimer);
+      setIsConnected(false);
+      setIsTimedOut(true);
       console.warn('[Screen WS] Error:', err);
     };
 
     return () => {
+      clearTimeout(resetTimeoutTimer);
+      clearTimeout(timeoutTimer);
       ws.close();
       screenWsRef.current = null;
     };
@@ -372,10 +402,38 @@ export function LiveScreenTab({ tunnelUrl, pin }: LiveScreenTabProps) {
         />
 
         {!isConnected && (
-          <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
-            <Radio className="w-8 h-8 text-cyan-400 animate-spin mb-2" />
-            <p className="text-sm font-semibold text-zinc-200">Connecting to Live Dell Stream...</p>
-            <p className="text-xs text-zinc-500 mt-1">Streaming over Cloudflare Tunnel</p>
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center text-center p-6 select-none z-10">
+            {isTimedOut || !tunnelUrl ? (
+              <div className="flex flex-col items-center">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-3 shadow-lg shadow-rose-500/10 animate-pulse">
+                  <WifiOff className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-zinc-100 tracking-wide uppercase">
+                  PC Offline / Reconnecting...
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1 max-w-[260px] leading-relaxed">
+                  Lost live video signal to Dell screen. Auto-reconnecting in background...
+                </p>
+                {onRetry && (
+                  <button
+                    onClick={() => {
+                      triggerHaptic(20);
+                      onRetry();
+                    }}
+                    className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-bold text-xs tracking-wider shadow-lg shadow-cyan-500/20 active:scale-95 transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>RETRY NOW</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center">
+                <Radio className="w-8 h-8 text-cyan-400 animate-spin mb-3" />
+                <p className="text-sm font-semibold text-zinc-200">Connecting to Live Dell Stream...</p>
+                <p className="text-xs text-zinc-500 mt-1">Establishing Cloudflare WebSocket</p>
+              </div>
+            )}
           </div>
         )}
 

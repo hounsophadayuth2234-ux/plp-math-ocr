@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Lock, Laptop, Wifi, RefreshCw } from 'lucide-react';
+import { Lock, Laptop, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import PinLockScreen from '../components/PinLockScreen';
 import PowerConfirmModal from '../components/ShutdownConfirmModal';
 import { NavigationTabBar, TabKey } from '../components/NavigationTabBar';
@@ -15,6 +15,9 @@ import {
   initControlWebSocket,
   checkPing,
   sendControlCommand,
+  onConnectionStatusChange,
+  forceReconnect,
+  ConnectionStatus,
 } from '../lib/tunnelClient';
 
 export default function MobileRemotePage() {
@@ -22,7 +25,8 @@ export default function MobileRemotePage() {
   const [hasMounted, setHasMounted] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabKey>('screen');
   const [tunnelUrl, setTunnelUrl] = useState<string>('');
-  const [isConnectingTunnel, setIsConnectingTunnel] = useState<boolean>(true);
+  const [connStatus, setConnStatus] = useState<ConnectionStatus>('connecting');
+  const [isConnectingTunnel, setIsConnectingTunnel] = useState<boolean>(false);
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [activeWindow, setActiveWindow] = useState<string>('');
 
@@ -84,12 +88,39 @@ export default function MobileRemotePage() {
     }
   }, [PIN]);
 
+  const handleManualRetry = useCallback(async () => {
+    showToast('Re-discovering Dell tunnel...', 'info');
+    setIsConnectingTunnel(true);
+    try {
+      const fresh = await forceReconnect(PIN);
+      if (fresh) {
+        setTunnelUrl(fresh);
+        try {
+          const ping = await checkPing(fresh, PIN);
+          setPingMs(ping.latencyMs);
+          if (ping.activeWindow) setActiveWindow(ping.activeWindow);
+          showToast('Live connection restored!', 'success');
+        } catch {
+          showToast('Dell is currently unreachable. Retrying in background...', 'error');
+        }
+      } else {
+        showToast('No active tunnel found in Supabase.', 'error');
+      }
+    } finally {
+      setIsConnectingTunnel(false);
+    }
+  }, [PIN, showToast]);
+
   useEffect(() => {
     if (!isUnlocked) return;
 
     const timer = setTimeout(() => {
       discoverTunnel();
     }, 0);
+
+    const unsubStatus = onConnectionStatusChange((status) => {
+      setConnStatus(status);
+    });
 
     const unsub = subscribeToTunnelUpdates((newUrl) => {
       setTunnelUrl(newUrl);
@@ -98,7 +129,7 @@ export default function MobileRemotePage() {
     });
 
     const pingInterval = setInterval(async () => {
-      if (tunnelUrl) {
+      if (tunnelUrl && connStatus === 'connected') {
         try {
           const res = await checkPing(tunnelUrl, PIN);
           setPingMs(res.latencyMs);
@@ -111,10 +142,11 @@ export default function MobileRemotePage() {
 
     return () => {
       clearTimeout(timer);
+      unsubStatus();
       unsub();
       clearInterval(pingInterval);
     };
-  }, [isUnlocked, tunnelUrl, PIN, discoverTunnel, showToast]);
+  }, [isUnlocked, tunnelUrl, connStatus, PIN, discoverTunnel, showToast]);
 
   const handleUnlock = () => {
     setIsUnlocked(true);
@@ -178,26 +210,36 @@ export default function MobileRemotePage() {
                 </span>
               </div>
               <p className="text-[10px] text-zinc-500 truncate">
-                {activeWindow ? `Open: ${activeWindow}` : 'Live Direct Streaming'}
+                {connStatus === 'connected'
+                  ? (activeWindow ? `Open: ${activeWindow}` : 'Live Connected')
+                  : connStatus === 'connecting'
+                  ? 'Reconnecting to Dell...'
+                  : 'PC Offline / Signal Lost'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {/* Live Connection Pill */}
-            {tunnelUrl ? (
+            {connStatus === 'connected' ? (
               <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-mono">
                 <Wifi className="w-3 h-3 animate-pulse" />
-                <span>{pingMs !== null ? `${pingMs}ms` : 'Tunnel OK'}</span>
+                <span>{pingMs !== null ? `${pingMs}ms` : 'Live Connected'}</span>
+              </span>
+            ) : connStatus === 'connecting' ? (
+              <span className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 font-mono">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Reconnecting...</span>
               </span>
             ) : (
               <button
-                onClick={discoverTunnel}
+                onClick={handleManualRetry}
                 disabled={isConnectingTunnel}
-                className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20"
+                className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/30 hover:bg-rose-500/20 transition-all font-mono"
+                title="Click to reconnect to Dell"
               >
-                <RefreshCw className={`w-3 h-3 ${isConnectingTunnel ? 'animate-spin' : ''}`} />
-                <span>{isConnectingTunnel ? 'Discovering...' : 'Connect'}</span>
+                <WifiOff className="w-3 h-3" />
+                <span>{isConnectingTunnel ? 'Connecting...' : 'PC Offline • Retry'}</span>
               </button>
             )}
 
@@ -229,7 +271,9 @@ export default function MobileRemotePage() {
 
       {/* Main Tab Content */}
       <main className="flex-1 max-w-md w-full mx-auto px-3 pt-2">
-        {activeTab === 'screen' && <LiveScreenTab tunnelUrl={tunnelUrl} pin={PIN} />}
+        {activeTab === 'screen' && (
+          <LiveScreenTab tunnelUrl={tunnelUrl} pin={PIN} onRetry={handleManualRetry} />
+        )}
 
         {activeTab === 'monitor' && <MonitorTab tunnelUrl={tunnelUrl} pin={PIN} />}
 

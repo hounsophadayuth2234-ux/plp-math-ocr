@@ -1,14 +1,17 @@
 """
-Cross-Device Remote Control System - PC Server V3.0 PRO (Windows 10/11)
+Cross-Device Remote Desktop System - PC Server V3.0 PRO (Windows 10/11)
 Dell Latitude 7490 Automation & Live Streaming Backend
 
-FastAPI + Uvicorn + WebSockets + Cloudflare Tunnel Subprocess
-- Direct Live Screen Streaming over WebSockets (/ws/screen) using mss/Pillow at 10-15 FPS.
-- Direct Touch & Precision Mouse/Keyboard Control (/ws/control) with <100ms latency.
+Engineered to run as a 100% independent Windows Service / Scheduled Task
+- Survives Antigravity IDE closures, Chrome closures, and Windows restarts.
+- Compatible with pythonw.exe (zero black console window, file logging fallback).
+- Built-in Cloudflare Tunnel Watchdog: auto-starts, auto-restarts on crash or network loss,
+  and automatically publishes new public URL to Supabase 'device_commands'.
+- Real-time Screen Video Stream (/ws/screen) using mss/Pillow at 10-18 FPS.
+- Interactive Touch & Precision Remote Input (/ws/control) with <100ms latency.
 - Full PC Telemetry Streaming (/ws/telemetry) every 2s: CPU, RAM, Disk (C:, D:),
   live Network Down/Up speeds, Battery, Uptime, Active Window Title, and Top 20 Processes.
 - Remote File Explorer (/api/files, /api/download, /api/open-file).
-- Automatic Cloudflare Tunneling (downloads binary if needed) and Supabase registration.
 - PIN Security on all HTTP and WebSocket endpoints (default: 123456).
 """
 
@@ -29,24 +32,34 @@ import webbrowser
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
-from dotenv import load_dotenv
-import psutil
-import pyperclip
-from PIL import Image
-import pyautogui
-import mss
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Header, Depends, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
-import uvicorn
-from supabase import create_client, Client
+# Always guarantee working directory is the script directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(BASE_DIR)
 
-# Configure logging
+# Handle pythonw.exe execution where stdout/stderr are None
+log_file = os.path.join(BASE_DIR, "pc_server.log")
+if sys.stdout is None:
+    try:
+        sys.stdout = open(log_file, "a", encoding="utf-8", buffering=1)
+    except Exception:
+        sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    try:
+        sys.stderr = open(log_file, "a", encoding="utf-8", buffering=1)
+    except Exception:
+        sys.stderr = open(os.devnull, "w")
+
+from dotenv import load_dotenv
+
+handlers: List[logging.Handler] = [
+    logging.FileHandler(log_file, encoding="utf-8"),
+    logging.StreamHandler(sys.stdout)
+]
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=handlers
 )
 logger = logging.getLogger("pc_server_v3")
 
@@ -62,12 +75,25 @@ if sys.platform == "win32":
         except Exception as e:
             logger.warning(f"Could not enable DPI awareness: {e}")
 
+# Load dependencies
+import psutil
+import pyperclip
+from PIL import Image
+import pyautogui
+import mss
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Header, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
+import uvicorn
+from supabase import create_client, Client
+
 # Ultra-low latency settings for pyautogui
 pyautogui.PAUSE = 0.0
 pyautogui.FAILSAFE = False
 
 # Load environment variables
-load_dotenv()
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 ACCESS_PIN = os.getenv("ACCESS_PIN", "123456")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -86,7 +112,7 @@ supabase_client: Optional[Client] = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        logger.info("Supabase sync client initialized successfully.")
+        logger.info("Supabase client initialized successfully.")
     except Exception as e:
         logger.warning(f"Could not initialize Supabase client: {e}")
 
@@ -187,7 +213,6 @@ async def websocket_screen_stream(
 
     current_preset = QUALITY_PRESETS.get(quality, QUALITY_PRESETS["medium"]).copy()
 
-    # Dynamic command listener for changing preset/fps on the fly
     async def listen_client_commands():
         nonlocal current_preset
         try:
@@ -280,7 +305,11 @@ async def websocket_control(websocket: WebSocket, pin: Optional[str] = Query(Non
             action_type = data.get("type", "").lower()
 
             if action_type == "ping":
-                await websocket.send_text(json.dumps({"type": "pong", "time": time.time()}))
+                await websocket.send_text(json.dumps({
+                    "type": "pong",
+                    "time": time.time(),
+                    "active_window": get_active_window_title()
+                }))
                 continue
 
             # Direct Touch Screen Actions (Ratio Mapped)
@@ -590,7 +619,8 @@ def api_ping(authenticated: bool = Depends(verify_http_pin)):
         "status": "ok",
         "device_name": DEVICE_NAME,
         "active_window": get_active_window_title(),
-        "uptime": int(time.time() - psutil.boot_time())
+        "uptime": int(time.time() - psutil.boot_time()),
+        "timestamp": int(time.time() * 1000)
     }
 
 
@@ -600,7 +630,6 @@ def api_list_files(
     authenticated: bool = Depends(verify_http_pin)
 ):
     """Browse drives, system shortcuts, or directories."""
-    # Root view: return drives and user shortcuts
     if not path or path.strip() in ("", "root", "/"):
         drives = []
         for p in psutil.disk_partitions():
@@ -740,13 +769,13 @@ def api_remote_alert(
 
 
 # =============================================================================
-# 5. AUTOMATIC CLOUDFLARE TUNNEL SUBPROCESS
+# 5. BUILT-IN CLOUDFLARE TUNNEL WATCHDOG
 # =============================================================================
 
 def ensure_cloudflared_binary() -> str:
     """Check for cloudflared.exe, download if missing, and return path."""
     exe_name = "cloudflared.exe" if sys.platform == "win32" else "cloudflared"
-    local_path = os.path.abspath(exe_name)
+    local_path = os.path.join(BASE_DIR, exe_name)
 
     if os.path.exists(local_path):
         return local_path
@@ -755,7 +784,6 @@ def ensure_cloudflared_binary() -> str:
     if system_path:
         return system_path
 
-    # Download official Windows binary
     url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
     logger.info(f"Downloading official cloudflared binary from: {url}...")
     urllib.request.urlretrieve(url, local_path)
@@ -763,28 +791,54 @@ def ensure_cloudflared_binary() -> str:
     return local_path
 
 
-def run_cloudflared_tunnel():
-    """Managed background thread to launch and auto-restart cloudflared tunnel."""
+def cloudflared_watchdog_loop():
+    """
+    Continuous watchdog: runs cloudflared.exe, restarts on crash/network drops,
+    and publishes the live https://*.trycloudflare.com URL to Supabase.
+    """
     global current_tunnel_url, tunnel_process
 
     bin_path = ensure_cloudflared_binary()
+
+    # Clean up any lingering cloudflared instances from previous runs
+    try:
+        for proc in psutil.process_iter(['name', 'cmdline']):
+            if proc.info['name'] and 'cloudflared' in proc.info['name'].lower():
+                cmdline = ' '.join(proc.info.get('cmdline') or [])
+                if str(SERVER_PORT) in cmdline or 'tunnel' in cmdline:
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
     while server_running:
         try:
             logger.info("Starting Cloudflare Tunnel subprocess...")
             cmd = [bin_path, "tunnel", "--url", f"http://127.0.0.1:{SERVER_PORT}"]
+            flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
             tunnel_process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                cwd=BASE_DIR,
+                creationflags=flags
             )
 
             # Read stderr to extract the public URL
             while server_running and tunnel_process.poll() is None:
-                line = tunnel_process.stderr.readline()
+                if tunnel_process.stderr:
+                    line = tunnel_process.stderr.readline()
+                else:
+                    line = ""
                 if not line:
+                    time.sleep(0.05)
                     continue
                 match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
                 if match:
@@ -792,11 +846,10 @@ def run_cloudflared_tunnel():
                     if found_url != current_tunnel_url:
                         current_tunnel_url = found_url
                         logger.info("=" * 65)
-                        logger.info(f"LIVE CLOUDFLARE PUBLIC TUNNEL ESTABLISHED:")
-                        logger.info(f"PUBLIC URL: {current_tunnel_url}")
+                        logger.info(f"LIVE CLOUDFLARE PUBLIC TUNNEL ESTABLISHED: {current_tunnel_url}")
                         logger.info("=" * 65)
 
-                        # Publish to Supabase device_commands table for zero-migration auto-discovery
+                        # Publish to Supabase device_commands
                         if supabase_client:
                             try:
                                 supabase_client.table("device_commands").insert({
@@ -808,14 +861,17 @@ def run_cloudflared_tunnel():
                             except Exception as sub_err:
                                 logger.warning(f"Could not publish TUNNEL_URL to Supabase: {sub_err}")
 
-            time.sleep(2)
-        except Exception as e:
-            logger.warning(f"Cloudflare Tunnel loop exception: {e}")
+            exit_code = tunnel_process.poll() if tunnel_process else None
+            logger.warning(f"Cloudflare Tunnel exited with code {exit_code}. Restarting in 3 seconds...")
             time.sleep(3)
+
+        except Exception as e:
+            logger.warning(f"Cloudflare Tunnel watchdog exception: {e}. Retrying in 5 seconds...")
+            time.sleep(5)
 
 
 def background_heartbeat_loop():
-    """Update device_telemetry in Supabase every 5 seconds with live stats & tunnel URL."""
+    """Update device_telemetry in Supabase every 5 seconds so phone knows PC is alive."""
     while server_running:
         try:
             if supabase_client:
@@ -846,12 +902,13 @@ def background_heartbeat_loop():
 def main():
     logger.info("=" * 65)
     logger.info("DELL LATITUDE 7490 - V3.0 PRO LIVE STREAMING SERVER")
-    logger.info(f"Local Server: http://{SERVER_HOST}:{SERVER_PORT}")
-    logger.info(f"Security PIN: {ACCESS_PIN}")
+    logger.info(f"Base Directory : {BASE_DIR}")
+    logger.info(f"Local Server   : http://{SERVER_HOST}:{SERVER_PORT}")
+    logger.info(f"Security PIN   : {ACCESS_PIN}")
     logger.info("=" * 65)
 
-    # 1. Start Cloudflare Tunnel in background thread
-    tunnel_thread = threading.Thread(target=run_cloudflared_tunnel, daemon=True, name="CloudflaredTunnel")
+    # 1. Start Cloudflare Watchdog in background thread
+    tunnel_thread = threading.Thread(target=cloudflared_watchdog_loop, daemon=True, name="CloudflaredWatchdog")
     tunnel_thread.start()
 
     # 2. Start Supabase Heartbeat in background thread
