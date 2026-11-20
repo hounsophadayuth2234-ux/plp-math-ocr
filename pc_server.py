@@ -83,7 +83,7 @@ import pyautogui
 import mss
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Header, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 import uvicorn
 from supabase import create_client, Client
@@ -163,10 +163,11 @@ def get_active_window_title() -> str:
 
 app = FastAPI(title="Dell Remote Server V3.0 PRO", version="3.0.0")
 
+# Mobile 5G & Cross-Origin Safe CORS Configuration (allow_credentials=False for wildcard origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -184,6 +185,45 @@ def verify_http_pin(
             detail="Unauthorized: Invalid access PIN."
         )
     return True
+
+
+@app.get("/api/frame")
+async def api_frame(
+    authenticated: bool = Depends(verify_http_pin),
+    quality: int = Query(60),
+    width: int = Query(960)
+):
+    """
+    HTTP Single-Frame JPEG Snapshot Fallback.
+    Used when mobile 5G or carrier networks throttle or block WebSockets.
+    """
+    ensure_desktop_attached()
+    try:
+        def capture_jpeg():
+            with mss.mss() as sct:
+                monitor = sct.monitors[1]
+                raw = sct.grab(monitor)
+                img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+                orig_w, orig_h = img.size
+                if orig_w > width:
+                    target_h = int(width * orig_h / orig_w)
+                    img = img.resize((width, target_h), Image.Resampling.BILINEAR)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=max(20, min(95, quality)), optimize=False)
+                return buf.getvalue()
+
+        frame_bytes = await asyncio.to_thread(capture_jpeg)
+        return Response(
+            content=frame_bytes,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Access-Control-Allow-Origin": "*",
+            }
+        )
+    except Exception as e:
+        logger.warning(f"Frame snapshot capture error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =============================================================================
@@ -815,8 +855,8 @@ def cloudflared_watchdog_loop():
 
     while server_running:
         try:
-            logger.info("Starting Cloudflare Tunnel subprocess...")
-            cmd = [bin_path, "tunnel", "--url", f"http://127.0.0.1:{SERVER_PORT}"]
+            logger.info("Starting Cloudflare Tunnel subprocess (HTTP/2 mode)...")
+            cmd = [bin_path, "tunnel", "--protocol", "http2", "--url", f"http://127.0.0.1:{SERVER_PORT}"]
             flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
             tunnel_process = subprocess.Popen(
@@ -849,15 +889,21 @@ def cloudflared_watchdog_loop():
                         logger.info(f"LIVE CLOUDFLARE PUBLIC TUNNEL ESTABLISHED: {current_tunnel_url}")
                         logger.info("=" * 65)
 
-                        # Publish to Supabase device_commands
+                        # Publish to Supabase device_commands: expire old active rows first
                         if supabase_client:
                             try:
+                                supabase_client.table("device_commands")\
+                                    .update({"status": "expired"})\
+                                    .eq("command", "TUNNEL_URL")\
+                                    .eq("status", "active")\
+                                    .execute()
+
                                 supabase_client.table("device_commands").insert({
                                     "command": "TUNNEL_URL",
                                     "payload": current_tunnel_url,
                                     "status": "active"
                                 }).execute()
-                                logger.info("TUNNEL_URL published to Supabase 'device_commands'.")
+                                logger.info("TUNNEL_URL published to Supabase; prior active rows marked expired.")
                             except Exception as sub_err:
                                 logger.warning(f"Could not publish TUNNEL_URL to Supabase: {sub_err}")
 

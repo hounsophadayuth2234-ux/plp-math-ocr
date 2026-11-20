@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Maximize,
   Minimize,
@@ -11,8 +11,9 @@ import {
   Radio,
   WifiOff,
   RefreshCw,
+  Camera,
 } from 'lucide-react';
-import { sendControlCommand } from '@/lib/tunnelClient';
+import { sendControlCommand, onDiagnosticChange, DiagnosticInfo } from '@/lib/tunnelClient';
 
 interface LiveScreenTabProps {
   tunnelUrl: string;
@@ -32,11 +33,21 @@ export function LiveScreenTab({ tunnelUrl, pin, onRetry }: LiveScreenTabProps) {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showKeyboard, setShowKeyboard] = useState<boolean>(false);
   const [inputText, setInputText] = useState<string>('');
+  const [diagInfo, setDiagInfo] = useState<DiagnosticInfo | null>(null);
+  const [isFetchingSnapshot, setIsFetchingSnapshot] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const screenWsRef = useRef<WebSocket | null>(null);
   const frameCountRef = useRef<number>(0);
   const lastFpsTimeRef = useRef<number>(0);
+
+  // Subscribe to live diagnostics
+  useEffect(() => {
+    const unsub = onDiagnosticChange((diag) => {
+      setDiagInfo(diag);
+    });
+    return () => unsub();
+  }, []);
 
   // Touch tracking refs
   const touchStartRef = useRef<{ x: number; y: number; time: number; fingerCount: number } | null>(null);
@@ -50,6 +61,36 @@ export function LiveScreenTab({ tunnelUrl, pin, onRetry }: LiveScreenTabProps) {
       navigator.vibrate(ms);
     }
   };
+
+  // HTTP snapshot fallback fetcher
+  const fetchFallbackSnapshot = useCallback(async () => {
+    if (!tunnelUrl) return;
+    setIsFetchingSnapshot(true);
+    try {
+      const resp = await fetch(`${tunnelUrl}/api/frame?pin=${encodeURIComponent(pin)}&t=${Date.now()}`, {
+        cache: 'no-store',
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const blob = await resp.blob();
+      const img = new Image();
+      const objUrl = URL.createObjectURL(blob);
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) ctx.drawImage(img, 0, 0);
+        }
+        URL.revokeObjectURL(objUrl);
+      };
+      img.src = objUrl;
+    } catch (err) {
+      console.warn('Fallback snapshot error:', err);
+    } finally {
+      setIsFetchingSnapshot(false);
+    }
+  }, [tunnelUrl, pin]);
 
   // Connect to live screen WebSocket
   useEffect(() => {
@@ -72,12 +113,13 @@ export function LiveScreenTab({ tunnelUrl, pin, onRetry }: LiveScreenTabProps) {
     ws.binaryType = 'blob';
     screenWsRef.current = ws;
 
+    // 15-second connection timeout: accounts for 5G DNS lookup + TLS handshake
     const timeoutTimer = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
         setIsConnected(false);
         setIsTimedOut(true);
       }
-    }, 4000);
+    }, 15000);
 
     ws.onopen = () => {
       clearTimeout(timeoutTimer);
@@ -402,36 +444,82 @@ export function LiveScreenTab({ tunnelUrl, pin, onRetry }: LiveScreenTabProps) {
         />
 
         {!isConnected && (
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center text-center p-6 select-none z-10">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center text-center p-4 select-none z-10 overflow-y-auto">
             {isTimedOut || !tunnelUrl ? (
-              <div className="flex flex-col items-center">
-                <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-3 shadow-lg shadow-rose-500/10 animate-pulse">
-                  <WifiOff className="w-6 h-6" />
+              <div className="flex flex-col items-center w-full max-w-[340px]">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-2 shadow-lg shadow-rose-500/10 animate-pulse">
+                  <WifiOff className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-zinc-100 tracking-wide uppercase">
-                  PC Offline / Reconnecting...
+                <h3 className="text-xs font-bold text-zinc-100 tracking-wider uppercase">
+                  PC OFFLINE / RECONNECTING...
                 </h3>
-                <p className="text-xs text-zinc-400 mt-1 max-w-[260px] leading-relaxed">
-                  Lost live video signal to Dell screen. Auto-reconnecting in background...
+                <p className="text-[11px] text-zinc-400 mt-0.5 max-w-[280px] leading-relaxed">
+                  WebSocket signal interrupted over 5G. Auto-reconnecting in background...
                 </p>
-                {onRetry && (
+
+                {/* Live Diagnostic Box */}
+                <div className="mt-3 w-full rounded-xl bg-white/[0.03] border border-white/10 p-2.5 text-left font-mono text-[10px] space-y-1 backdrop-blur-md">
+                  <div className="flex justify-between items-center text-zinc-400 border-b border-white/5 pb-1 mb-1">
+                    <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[9px]">LIVE 5G DIAGNOSTICS</span>
+                    <span className="text-cyan-400 font-medium">Dell Latitude Link</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-300">
+                    <span className="text-zinc-500">Attempted URL:</span>
+                    <span className="truncate max-w-[170px] text-zinc-200" title={tunnelUrl || 'None'}>
+                      {tunnelUrl ? tunnelUrl.replace('https://', '').replace('.trycloudflare.com', '') : 'None'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-zinc-300">
+                    <span className="text-zinc-500">Dell Heartbeat:</span>
+                    <span className={diagInfo?.heartbeatAgeSec !== null && diagInfo?.heartbeatAgeSec !== undefined && diagInfo.heartbeatAgeSec < 20 ? 'text-emerald-400' : 'text-amber-400'}>
+                      {diagInfo?.heartbeatAgeSec !== null && diagInfo?.heartbeatAgeSec !== undefined ? `${diagInfo.heartbeatAgeSec}s ago` : 'Checking...'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-zinc-300">
+                    <span className="text-zinc-500">Failure Reason:</span>
+                    <span className="text-rose-400 font-medium truncate max-w-[170px]" title={diagInfo?.lastErrorReason || 'Handshake Pending'}>
+                      {diagInfo?.lastErrorReason || 'Handshake Pending'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-zinc-300">
+                    <span className="text-zinc-500">Retries:</span>
+                    <span className="text-zinc-400">{diagInfo?.reconnectAttempts || 0}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 mt-3 w-full">
+                  {onRetry && (
+                    <button
+                      onClick={() => {
+                        triggerHaptic(20);
+                        onRetry();
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-bold text-xs tracking-wider shadow-lg shadow-cyan-500/20 active:scale-95 transition-all"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>RETRY NOW</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => {
-                      triggerHaptic(20);
-                      onRetry();
+                      triggerHaptic(15);
+                      fetchFallbackSnapshot();
                     }}
-                    className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-bold text-xs tracking-wider shadow-lg shadow-cyan-500/20 active:scale-95 transition-all"
+                    disabled={isFetchingSnapshot}
+                    className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-zinc-200 border border-white/10 font-medium text-xs active:scale-95 transition-all"
+                    title="Fetch single JPEG frame over standard HTTP"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>RETRY NOW</span>
+                    <Camera className={`w-3.5 h-3.5 ${isFetchingSnapshot ? 'animate-spin' : ''}`} />
+                    <span>{isFetchingSnapshot ? 'GRABBING...' : 'SNAPSHOT'}</span>
                   </button>
-                )}
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center">
                 <Radio className="w-8 h-8 text-cyan-400 animate-spin mb-3" />
                 <p className="text-sm font-semibold text-zinc-200">Connecting to Live Dell Stream...</p>
-                <p className="text-xs text-zinc-500 mt-1">Establishing Cloudflare WebSocket</p>
+                <p className="text-xs text-zinc-500 mt-1">Negotiating 5G / Cloudflare WebSocket</p>
               </div>
             )}
           </div>
