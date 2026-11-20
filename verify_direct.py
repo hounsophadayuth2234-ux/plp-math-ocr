@@ -15,6 +15,8 @@ import asyncio
 PIN = "123456"
 LOCAL_URL = "http://127.0.0.1:8765"
 LAN_URL = "http://10.75.33.100:8765"
+TAILSCALE_URL = "http://100.66.161.59:8765"
+TAILSCALE_HOST = "100.66.161.59:8765"
 
 def test_http_endpoint(url: str, description: str, expected_type: str = "json") -> bool:
     print(f"[*] Testing {description}: {url}")
@@ -121,6 +123,14 @@ async def run_all():
 
     # 10. Test WS Screen LAN
     results.append(("WS Screen (LAN) ", await test_screen_websocket("10.75.33.100:8765")))
+
+    # 11. Test Tailscale (100.66.161.59)
+    print("\n[*] Checking Tailscale Static IP Direct Access (100.66.161.59):")
+    results.append(("Tailscale SPA (/) ", test_http_endpoint(f"{TAILSCALE_URL}/", "Tailscale SPA Root", "html")))
+    results.append(("Tailscale Ping (/api/ping) ", test_http_endpoint(f"{TAILSCALE_URL}/api/ping?pin={PIN}", "Tailscale Ping API", "json")))
+    results.append(("Tailscale Frame (/api/frame) ", test_http_endpoint(f"{TAILSCALE_URL}/api/frame?pin={PIN}", "Tailscale Snapshot API", "image")))
+    results.append(("Tailscale WS Control ", await test_control_websocket(TAILSCALE_HOST)))
+    results.append(("Tailscale WS Screen ", await test_screen_websocket(TAILSCALE_HOST)))
 
     print("\n" + "=" * 65)
     print("VERIFICATION SUMMARY:")

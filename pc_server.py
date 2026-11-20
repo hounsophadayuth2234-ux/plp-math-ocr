@@ -838,7 +838,12 @@ def get_network_ips() -> Dict[str, str]:
     """Detect Tailscale, LAN, and Loopback IP addresses."""
     ips = {"localhost": "127.0.0.1"}
 
-    # 1. Try tailscale CLI
+    # 1. Environment override (e.g. TAILSCALE_IP=100.66.161.59)
+    tailscale_env = os.getenv("TAILSCALE_IP")
+    if tailscale_env:
+        ips["tailscale"] = tailscale_env.strip()
+
+    # 2. Try tailscale CLI
     tailscale_exe = r"C:\Program Files\Tailscale\tailscale.exe"
     if os.path.exists(tailscale_exe):
         try:
@@ -848,7 +853,7 @@ def get_network_ips() -> Dict[str, str]:
         except Exception:
             pass
 
-    # 2. Inspect psutil network interfaces
+    # 3. Inspect psutil network interfaces
     try:
         addrs = psutil.net_if_addrs()
         for iface_name, addr_list in addrs.items():
@@ -1034,6 +1039,17 @@ def background_heartbeat_loop():
 # =============================================================================
 
 def main():
+    # Clean up any lingering cloudflared instances from previous runs so RAM stays low
+    try:
+        for proc in psutil.process_iter(['name', 'cmdline']):
+            if proc.info['name'] and 'cloudflared' in proc.info['name'].lower():
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     ips = get_network_ips()
     logger.info("=" * 65)
     logger.info("DELL LATITUDE 7490 - V3.0 PRO LIVE STREAMING SERVER")
